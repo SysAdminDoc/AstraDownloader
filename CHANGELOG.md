@@ -12,6 +12,17 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A failure can be retried once you have fixed what it was waiting for.**
+  Eight of the thirteen classified failures — missing JavaScript runtime,
+  missing FFmpeg, sign-in required — refused Retry with "this failure needs
+  its recovery action before it can be retried", and nothing re-checked after
+  you performed it. Installing Deno left the download stuck and the only way
+  forward was to re-paste the URL. The queue now re-evaluates the actual
+  precondition, so Retry appears on the card as soon as it is satisfied, and
+  a refusal names what is still missing instead of repeating itself.
+
 ### Security
 
 - **yt-dlp no longer loads plugins from your profile.** `--ignore-config`

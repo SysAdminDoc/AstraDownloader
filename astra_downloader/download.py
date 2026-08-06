@@ -1375,6 +1375,8 @@ class DownloadManagerCore:
         # must not be failed — but silence here means the user's record of it
         # simply does not exist, which is how a full disk presents.
         self._history_error = ""
+        # (requirement, url, requires_auth) -> (checked_at, (satisfied, message))
+        self._precondition_cache = {}
         self._persistence_compatible = True
         self.intake_paused = False
         self._closing = False
@@ -2785,7 +2787,11 @@ class DownloadManagerCore:
             if dl.status not in ('failed', 'skipped'):
                 return False, 'Only failed or skipped downloads can be retried.'
             if dl.status == 'failed' and dl.error_code not in DOWNLOAD_RETRYABLE_ERROR_CODES:
-                return False, 'This failure needs its recovery action before it can be retried.'
+                # Not "never retryable" — "not yet". Re-check the thing the
+                # failure was waiting for instead of refusing on the code alone.
+                satisfied, still_missing = self.recovery_precondition(dl)
+                if not satisfied:
+                    return False, still_missing
             if self._capacity_locked()['total'] >= MAX_QUEUED_TOTAL:
                 return False, (
                     f"Download queue is full ({MAX_QUEUED_TOTAL}/{MAX_QUEUED_TOTAL}). "
@@ -3222,6 +3228,9 @@ class DownloadManagerCore:
                     self.downloads.values(),
                     key=lambda item: (item.queue_order, item.start_time, item.id)):
                 payload = dl.to_dict()
+                # Download.to_dict answers this from the code alone; only the
+                # manager can see whether the recovery action has been done.
+                payload['retryable'] = self.is_retryable(dl)
                 if dl.id in pending_positions:
                     payload['queuePosition'] = pending_positions[dl.id]
                 items.append(payload)
@@ -3280,6 +3289,98 @@ class DownloadManagerCore:
         except OSError:
             # reason: sweeping is cleanup, never part of the download result
             pass
+
+    # Failure codes whose fix is an action the user performs outside the queue.
+    # They are not in DOWNLOAD_RETRYABLE_ERROR_CODES because retrying before the
+    # action is done just reproduces the failure — but once it *is* done the
+    # download is perfectly retryable, and nothing used to re-check.
+    _RECOVERABLE_PRECONDITIONS = {
+        'js-runtime-missing': 'runtime',
+        'js-runtime-unsupported': 'runtime',
+        'js-runtime-unverified': 'runtime',
+        'ejs-runtime-not-ready': 'runtime',
+        'deno-runtime-missing': 'runtime',
+        'deno-runtime-unsupported': 'runtime',
+        'ffmpeg-missing-or-stale': 'ffmpeg',
+        'sign-in-required': 'sign-in',
+    }
+
+    # The GUI asks this for every failed card on every refresh, and the
+    # sign-in branch reads the site-login index off disk. Two seconds is short
+    # enough that Retry appears almost immediately after the user installs a
+    # runtime, and long enough that a queue of failed cards cannot turn a
+    # 500 ms UI tick into a burst of index reads.
+    _PRECONDITION_TTL_SECONDS = 2.0
+
+    def recovery_precondition(self, dl):
+        """Whether the thing this failure was waiting for has been done.
+
+        Returns (satisfied, still_missing_message). A code with no known
+        precondition is reported as unsatisfied so behaviour cannot loosen by
+        accident when a new failure code is added.
+        """
+        requirement = self._RECOVERABLE_PRECONDITIONS.get(dl.error_code)
+        if requirement is None:
+            return False, 'This failure needs its recovery action before it can be retried.'
+        cache_key = (requirement, dl.url if requirement == 'sign-in' else '',
+                     bool(dl.requires_auth))
+        now = time.time()
+        cached = self._precondition_cache.get(cache_key)
+        if cached is not None and now - cached[0] < self._PRECONDITION_TTL_SECONDS:
+            return cached[1]
+        answer = self._evaluate_recovery_precondition(dl, requirement)
+        self._precondition_cache[cache_key] = (now, answer)
+        return answer
+
+    def _evaluate_recovery_precondition(self, dl, requirement):
+        if requirement == 'runtime':
+            try:
+                runtime = self._dependencies['probe_javascript_runtime'](
+                    configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
+                )
+            except Exception:
+                # reason: an unavailable probe must not turn into a retry
+                return False, 'The JavaScript runtime could not be checked. Try again in a moment.'
+            if runtime.get('supported') is True and runtime.get('ejsReady') is True:
+                return True, None
+            return False, (
+                'A supported JavaScript runtime is still not ready. Install or '
+                'repair Deno or Node, then retry.'
+            )
+        if requirement == 'ffmpeg':
+            try:
+                ffmpeg = Path(self._dependencies['FFMPEG_PATH']())
+                ready = ffmpeg.exists() and ffmpeg.stat().st_size > 0
+            except OSError:
+                ready = False
+            if ready:
+                return True, None
+            return False, 'FFmpeg is still missing. Refresh it from Settings, then retry.'
+        if requirement == 'sign-in':
+            if dl.requires_auth:
+                # The extension's YouTube bridge supplies cookies per attempt;
+                # `retry(cookies=...)` is the path for that, not this one.
+                return False, (
+                    'Fresh sign-in is required. Retry from Astra Deck so the '
+                    'browser can authorize this download.'
+                )
+            if self.site_logins.has_login_for(dl.url):
+                return True, None
+            return False, (
+                'No stored sign-in covers this site yet. Add one on the '
+                'Sign-ins page, then retry.'
+            )
+        return False, 'This failure needs its recovery action before it can be retried.'
+
+    def is_retryable(self, dl):
+        """Whether Retry would be accepted for this download right now."""
+        if dl.status == 'skipped':
+            return True
+        if dl.status != 'failed':
+            return False
+        if dl.error_code in DOWNLOAD_RETRYABLE_ERROR_CODES:
+            return True
+        return self.recovery_precondition(dl)[0]
 
     def persistence_notice(self):
         """The durability problem the user most needs to know about, if any.

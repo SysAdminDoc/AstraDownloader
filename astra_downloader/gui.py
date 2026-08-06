@@ -3097,11 +3097,24 @@ class MainWindowCore(QMainWindow):
             elif item.layout():
                 self._clear_layout(item.layout())
 
+    def _is_retryable(self, dl):
+        """Ask the manager, which knows whether the recovery action was done.
+
+        A runtime-missing failure stops being permanent the moment the runtime
+        is installed; the failure code alone cannot see that.
+        """
+        ask = getattr(self.dl_manager, 'is_retryable', None)
+        if callable(ask):
+            return bool(ask(dl))
+        return (dl.status == "skipped" or (
+            dl.status == "failed"
+            and dl.error_code in self._value('DOWNLOAD_RETRYABLE_ERROR_CODES')
+        ))
+
     def _download_card_structure(self, dl, recent=False):
         """Return the widget structure needed for a download's current state."""
         if recent:
-            if dl.status == "failed" and dl.error_code in self._value(
-                    'DOWNLOAD_RETRYABLE_ERROR_CODES'):
+            if dl.status == "failed" and self._is_retryable(dl):
                 action = "retry"
             elif dl.status == "skipped":
                 # Nothing was written, so the whole recovery is "change the
@@ -3238,8 +3251,7 @@ class MainWindowCore(QMainWindow):
             btn_cancel.clicked.connect(lambda checked=False, dl_id=dl.id: self.dl_manager.cancel(dl_id))
             top.addWidget(btn_cancel)
         elif recent and (
-            (dl.status == "failed"
-             and dl.error_code in self._value('DOWNLOAD_RETRYABLE_ERROR_CODES'))
+            (dl.status == "failed" and self._is_retryable(dl))
             or dl.status == "skipped"
         ):
             btn_retry = self._make_tool_button("Retry", "ghost", card_target)
