@@ -18,11 +18,6 @@ history and `CHANGELOG.md`.
   box should be able to override the destination for one download without
   changing the default.
 
-- **Drag and drop onto the window.** A downloader should accept a dropped
-  link or a dropped text file of links. `_start_quick_download` already takes
-  a whitespace-separated batch, so this is a `dragEnterEvent` /
-  `dropEvent` pair on the Download page plus the existing batch path.
-
 ## P3 — Unaudited — needs a pass
 
 Carried over from the Astra Deck audit backlog: these companion areas were
@@ -47,7 +42,6 @@ Notes on the items above, from the same pass:
 - *Per-download destination* — corroborated; Stacher and YTPTube both ship
   per-item destinations and 4K Video Downloader paywalls the related URL-list
   import/export.
-- *Drag and drop* — corroborated as table-stakes (Tartube, media-downloader).
 - *Light-theme behaviour* — no theme key exists in `DEFAULT_CONFIG`, so the
   work is "build a light theme", not "audit the existing one".
 - *Subscriptions unaudited* — corroborated from the other direction:

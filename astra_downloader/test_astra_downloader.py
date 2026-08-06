@@ -1526,6 +1526,116 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 _retire_test_window(window)
 
 
+class DragAndDropTests(unittest.TestCase):
+    def _window(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            return ad.MainWindow(FakeConfig(), manager, FakeHistory()), manager
+
+    def _drop(self, text=None, urls=()):
+        from PyQt6.QtCore import QMimeData, QUrl, QPointF, Qt
+        from PyQt6.QtGui import QDropEvent
+
+        mime = QMimeData()
+        if text is not None:
+            mime.setText(text)
+        if urls:
+            mime.setUrls([QUrl(url) for url in urls])
+        # QDropEvent does not take ownership of the mime data. Without this
+        # reference Python frees it and the C++ side reads freed memory.
+        self._retained_mime = mime
+        return QDropEvent(
+            QPointF(10, 10),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+    def test_a_dropped_link_is_queued(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window, manager = self._window()
+        try:
+            self.assertTrue(window.acceptDrops())
+            with mock.patch.object(
+                manager, "start_download", return_value=("dl_dropped", None)
+            ) as start:
+                window.dropEvent(self._drop("https://example.com/video"))
+                QApplication.processEvents()
+
+            start.assert_called_once()
+            self.assertEqual(
+                start.call_args.kwargs["url"], "https://example.com/video")
+            self.assertEqual(
+                window.tabs.currentIndex(), window._page_names.index("Download"),
+                "a drop must land the user on the page showing the queue",
+            )
+        finally:
+            _retire_test_window(window)
+
+    def test_a_dropped_text_file_of_links_becomes_a_batch(self):
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window, manager = self._window()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                listing = Path(tmp) / "links.txt"
+                listing.write_text(
+                    "https://example.com/one\n"
+                    "not a url\n"
+                    "https://example.com/two\n"
+                    "https://example.com/one\n",
+                    encoding="utf-8",
+                )
+                with mock.patch.object(
+                    manager, "start_download", return_value=("dl_batch", None)
+                ) as start:
+                    window.dropEvent(self._drop(
+                        urls=[QUrl.fromLocalFile(str(listing)).toString()]))
+                    QApplication.processEvents()
+
+            queued = [call.kwargs["url"] for call in start.call_args_list]
+            self.assertEqual(
+                queued, ["https://example.com/one", "https://example.com/two"],
+                "junk lines are dropped and duplicates collapse",
+            )
+        finally:
+            _retire_test_window(window)
+
+    def test_an_oversized_link_file_is_ignored(self):
+        from PyQt6.QtCore import QUrl
+
+        _get_qapp_or_skip(self)
+        window, _manager = self._window()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                huge = Path(tmp) / "links.txt"
+                huge.write_bytes(
+                    b"https://example.com/x\n"
+                    * (ad.MainWindow.MAX_DROPPED_LINK_FILE_BYTES // 10)
+                )
+                event = self._drop(urls=[QUrl.fromLocalFile(str(huge)).toString()])
+                self.assertEqual(window._links_from_mime(event.mimeData()), [])
+        finally:
+            _retire_test_window(window)
+
+    def test_a_drop_with_nothing_downloadable_is_refused(self):
+        _get_qapp_or_skip(self)
+        window, manager = self._window()
+        try:
+            with mock.patch.object(manager, "start_download") as start:
+                window.dropEvent(self._drop("just some prose"))
+            start.assert_not_called()
+        finally:
+            _retire_test_window(window)
+
+
 class IntermediateFileSweepTests(unittest.TestCase):
     """"3/4 files and a folder when downloading, I want just 1 file." """
 
