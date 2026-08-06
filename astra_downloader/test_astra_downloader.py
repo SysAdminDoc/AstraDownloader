@@ -6333,12 +6333,12 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_2_0(self):
-        # v2.2.0: yt-dlp no longer loads plugins from the user profile, a
-        # failure becomes retryable once its recovery action is done, and the
-        # transfer gains throttle recovery, timeouts, request pacing and a
-        # real HTTP 429 classification.
-        self.assertEqual(ad.APP_VERSION, "2.2.0")
+    def test_app_version_bumped_to_2_3_0(self):
+        # v2.3.0: the quality picker is probed against the pasted link, codec
+        # and frame-rate preference compile to --format-sort, a playlist can
+        # be bounded, a quarantined binary is re-fetched instead of trusted,
+        # and a SABR-only link says what it cannot honour.
+        self.assertEqual(ad.APP_VERSION, "2.3.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
@@ -6403,6 +6403,22 @@ class EndToEndDownloadTests(unittest.TestCase):
         deadline = time.time() + timeout
         while time.time() < deadline:
             if dl.status in ad.DOWNLOAD_TERMINAL_STATES:
+                return True
+            time.sleep(0.01)
+        return False
+
+    def _wait_for_history(self, history, count=1, timeout=2.0):
+        """Wait for the history write that follows a terminal status.
+
+        `_run_download` sets the terminal status inside its `finally` and
+        writes history after it, deliberately: joining the watchdog first
+        would add latency between the two. So a status observer can arrive
+        while history is still empty, and waiting on the status alone made
+        this a one-in-five flake rather than an assertion about behaviour.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if len(history.entries) >= count:
                 return True
             time.sleep(0.01)
         return False
@@ -6614,6 +6630,8 @@ class EndToEndDownloadTests(unittest.TestCase):
                 dl = manager.downloads[dl_id]
                 self.assertTrue(self._wait_for_terminal(dl),
                     f"download must reach a terminal state within timeout; status={dl.status}")
+                self.assertTrue(self._wait_for_history(history),
+                    "history write must follow the terminal status")
 
             self.assertEqual(dl.status, "complete",
                 f"download must terminate as complete; got {dl.status} (error={dl.error})")

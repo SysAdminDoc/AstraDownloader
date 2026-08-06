@@ -10,6 +10,67 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [2.3.0] - 2026-08-06
+
+### Added
+
+- **The quality picker knows what the link actually offers.** It was a fixed
+  ladder that knew nothing about the pasted URL, so you could ask for 2160p
+  on a 720p video and learn the truth only from the result. A settled single
+  link is now probed off the GUI thread, debounced, and the ladder is cut to
+  what the link can serve. A video that tops out below the lowest rung keeps
+  none of them — measured against a real 240p upload, every rung would have
+  named a resolution it cannot serve, so Best is the only honest offer. The
+  narrowing is undone the moment the URL leaves the box, a probe that lands
+  after you have typed on is discarded, and a probe that fails says nothing.
+- **Codec and frame-rate preference, as `--format-sort`.** The picker is a
+  resolution ladder and could not express "1080p H.264, never AV1". Three
+  settings now compile into one sort. Resolution always leads it: yt-dlp puts
+  the fields it is given ahead of its own defaults, so a bare codec
+  preference reorders across resolutions — verified against the installed
+  binary, `--format-sort vcodec:h264` on a 4K source selects 1080p. The MP4
+  container remains a hard H.264 + AAC constraint; these order what it leaves
+  open, and the defaults send no flag at all.
+- **Playlist bounds.** A pasted playlist queued everything it contained.
+  Settings can now cap the item count and filter by upload date and by item
+  duration — the way a channel's shorts or its multi-hour streams get left
+  behind. They apply only to a run that walks a playlist, so a bound meant
+  for a playlist never silently skips the one video you asked for.
+  `--download-archive` stays out: the subscription archive keys are this
+  project's answer to "already seen", and a second one would make a
+  deliberate re-download report "already downloaded" and do nothing.
+- **A right-to-left locale is rendered in the smoke set.** Arabic is
+  advertised and flips the whole layout, and nothing had ever rendered it, so
+  no gate could see what mirroring did to a page. The new scenario pins that
+  the hero row reverses and the navigation rail moves to the right half.
+
+### Fixed
+
+- **A quarantined yt-dlp or ffmpeg is re-fetched instead of trusted.**
+  Antivirus removing them is the largest single support burden for
+  downloaders of this shape, and the damaging case is not removal but a
+  quarantine that leaves a zero-byte stub behind. Every gate was an existence
+  check, which a stub satisfies, so launch skipped setup, setup reported
+  "already installed", and the first download failed with WinError 193 and no
+  explanation. A managed binary is now classified against a size floor, and a
+  damaged one is re-fetched while the log and the readiness row say antivirus
+  may be responsible and name the directory to exclude.
+- **A SABR-only link says what it cannot honour, before the run.** yt-dlp
+  ignores clip ranges, the bandwidth cap and concurrent fragments on a SABR
+  stream, so a clip range typed against one was accepted and quietly produced
+  the whole video. Such a link is now recognised from the format probe, its
+  clip fields are disabled, and the hint names all three voided options. One
+  ordinary format is enough to be unlimited — that format is what gets
+  downloaded, so nothing is void.
+
+### Changed
+
+- The translation builder reports per-locale coverage. A missing entry is
+  written out as its own English source, which Qt needs for a clean fallback
+  but which also made an empty catalogue indistinguishable from a finished
+  one: nine advertised locales ship five of twenty-one strings and every
+  check passed. The incomplete locales are now named in a test.
+
 ## [2.2.0] - 2026-08-06
 
 ### Added
