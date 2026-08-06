@@ -41,7 +41,7 @@ __all__ = (
     "validate_download_request_body",
     "allowed_output_roots", "clean_text", "clean_path_text", "coerce_bool",
     "clamp_int", "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
-    "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
+    "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
@@ -151,6 +151,11 @@ DEFAULT_CONFIG = {
     "PlaylistDateAfter": "",
     "PlaylistMinDurationSeconds": 0,
     "PlaylistMaxDurationSeconds": 0,
+    # Browser TLS/HTTP fingerprint to imitate, from the targets the installed
+    # yt-dlp reports. Empty is off. The standard remedy for a Cloudflare or
+    # fingerprint 403 — but it can itself provoke a 429 on some sites, so it
+    # is opt-in rather than a default.
+    "ImpersonateTarget": "",
     # Below this rate yt-dlp assumes the CDN is throttling and re-extracts the
     # video rather than crawling to the stall watchdog. Empty disables it.
     "ThrottledRate": "",
@@ -267,6 +272,18 @@ def normalize_playlist_date(value):
     ):
         return cleaned
     return ""
+
+
+def normalize_impersonate_target(value):
+    """Accept a `Client-Version` target shape, else nothing.
+
+    Shape only — this module never runs yt-dlp, so it cannot know which
+    targets the installed binary actually has. The argv builder gates on the
+    probed list, because yt-dlp aborts the whole download with an unhandled
+    exception when given a target it does not support.
+    """
+    cleaned = clean_text(value, "", 40)
+    return cleaned if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*-[0-9][A-Za-z0-9.]*", cleaned) else ""
 
 
 def normalize_proxy(value):
@@ -812,6 +829,7 @@ def sanitize_config(raw):
             data["MaxSleepIntervalSeconds"] < data["SleepIntervalSeconds"]):
         data["MaxSleepIntervalSeconds"] = data["SleepIntervalSeconds"]
     data["SleepRequestsSeconds"] = clamp_int(data.get("SleepRequestsSeconds"), 0, 0, 60)
+    data["ImpersonateTarget"] = normalize_impersonate_target(data.get("ImpersonateTarget"))
     data["Proxy"] = normalize_proxy(data.get("Proxy"))
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
     allowed_languages = {

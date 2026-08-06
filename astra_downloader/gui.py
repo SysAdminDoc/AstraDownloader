@@ -897,6 +897,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_download_section',
     'normalize_output_template',
     'normalize_playlist_date',
+    'normalize_impersonate_target',
+    'probe_impersonate_targets',
     'normalize_proxy',
     'normalize_rate_limit',
     'normalize_sponsorblock_categories',
@@ -2951,6 +2953,34 @@ class MainWindowCore(QMainWindow):
         self.cfg_proxy.setMinimumWidth(260)
         proxy_row.addWidget(self.cfg_proxy)
         perf_l.addLayout(proxy_row)
+        # Impersonation. Built from what the installed binary reports, because
+        # yt-dlp aborts the download outright on an unknown target.
+        impersonate_row = QHBoxLayout()
+        impersonate_copy = QVBoxLayout()
+        impersonate_copy.setSpacing(2)
+        impersonate_copy.addWidget(make_label("Imitate a browser", "fieldLabel"))
+        impersonate_copy.addWidget(make_label(
+            "Sends a real browser's TLS fingerprint. The usual fix for a site "
+            "that returns 403, though it can itself trigger rate limiting.",
+            "fieldHint", word_wrap=True,
+        ))
+        impersonate_row.addLayout(impersonate_copy, 1)
+        self.cfg_impersonate = QComboBox()
+        self.cfg_impersonate.setAccessibleName("Imitate a browser")
+        self.cfg_impersonate.addItem(tr("Off"), "")
+        configured = self._dependencies['normalize_impersonate_target'](
+            self.config.get("ImpersonateTarget", ""))
+        for target in self._dependencies['probe_impersonate_targets']():
+            self.cfg_impersonate.addItem(target, target)
+        if configured and self.cfg_impersonate.findData(configured) < 0:
+            # A target the installed binary no longer reports. Keep it
+            # selectable and say so, rather than silently resetting a choice
+            # the user made.
+            self.cfg_impersonate.addItem(f"{configured} (unavailable)", configured)
+        restored = self.cfg_impersonate.findData(configured)
+        self.cfg_impersonate.setCurrentIndex(restored if restored >= 0 else 0)
+        impersonate_row.addWidget(self.cfg_impersonate)
+        perf_l.addLayout(impersonate_row)
         perf_l.addWidget(make_divider())
         runtime_row = QHBoxLayout()
         runtime_copy = QVBoxLayout()
@@ -3125,6 +3155,7 @@ class MainWindowCore(QMainWindow):
             self.cfg_playlist_dateafter.textChanged,
             self.cfg_playlist_min_duration.valueChanged,
             self.cfg_playlist_max_duration.valueChanged,
+            self.cfg_impersonate.currentIndexChanged,
             self.cfg_sleep_interval.valueChanged,
             self.cfg_sleep_max.valueChanged,
             self.cfg_sleep_requests.valueChanged,
@@ -4368,6 +4399,7 @@ class MainWindowCore(QMainWindow):
                 self.cfg_playlist_dateafter.text()),
             "PlaylistMinDurationSeconds": self.cfg_playlist_min_duration.value(),
             "PlaylistMaxDurationSeconds": self.cfg_playlist_max_duration.value(),
+            "ImpersonateTarget": self.cfg_impersonate.currentData() or "",
             "ThrottledRate": self.cfg_throttled.text().strip(),
             "SocketTimeoutSeconds": self.cfg_socket_timeout.value(),
             "ExtractorRetries": self.cfg_extractor_retries.value(),

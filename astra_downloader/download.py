@@ -32,6 +32,7 @@ __all__ = (
     "DOWNLOAD_RUNNING_STATES", "DOWNLOAD_PENDING_STATES",
     "DOWNLOAD_TERMINAL_STATES", "DOWNLOAD_RETRYABLE_ERROR_CODES",
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
+    "build_impersonate_args",
     "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
     "snapshot_download_fields", "restore_download_fields",
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
@@ -160,6 +161,15 @@ DOWNLOAD_FAILURE_RECOVERY = {
         'error': 'Astra Downloader could not create a protected YouTube cookie jar.',
         'advice': 'Retry from Astra Deck so fresh cookies can be supplied.',
         'next_action': 'sign-in-and-retry',
+    },
+    'blocked-by-site': {
+        'error': 'The site refused the request (HTTP 403).',
+        'advice': (
+            'Set a browser to imitate in Settings — this is the usual remedy '
+            'for a Cloudflare or TLS-fingerprint block. A stored sign-in for '
+            'the site also helps.'
+        ),
+        'next_action': 'impersonate-and-retry',
     },
     'rate-limited': {
         'error': 'The site refused further requests for now (HTTP 429).',
@@ -963,6 +973,26 @@ def build_format_sort_args(config):
     return ['--format-sort', ','.join(['res'] + fields)]
 
 
+def build_impersonate_args(config, available_targets):
+    """Compile the impersonation target, gated on what the binary really has.
+
+    Verified against the installed yt-dlp: an unknown target does not warn,
+    it raises YoutubeDLError and the download dies. So a configured value
+    that the binary does not report is dropped rather than passed through —
+    a stale setting must not break every download.
+    """
+    read = getattr(config, 'get', None)
+    if not callable(read):
+        return []
+    target = str(read('ImpersonateTarget') or '').strip()
+    if not target:
+        return []
+    known = {str(item) for item in (available_targets or ())}
+    if target not in known:
+        return []
+    return ['--impersonate', target]
+
+
 def build_playlist_bound_args(config):
     """Compile the bounds that keep a pasted playlist from queueing all of it.
 
@@ -1295,6 +1325,12 @@ def _classify_failure_text(text):
         'http error 429', 'too many requests', 'rate-limited', 'rate limited',
     )):
         return 'rate-limited'
+    # Before the network bucket: a 403 is a refusal, not a broken connection,
+    # and "check your firewall" is wrong advice for it.
+    if any(marker in text for marker in (
+        'http error 403', 'forbidden', 'cloudflare', 'blocked by',
+    )):
+        return 'blocked-by-site'
     if any(marker in text for marker in (
         'network is unreachable', 'failed to establish a new connection',
         'connection refused', 'connection reset', 'connection timed out',
@@ -1539,6 +1575,8 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'normalize_url',
     'probe_javascript_runtime',
     'probe_po_token_provider',
+    'probe_impersonate_targets',
+    'normalize_impersonate_target',
     'quarantined_state_files',
     'spawn_media_process',
     'spawn_ytdlp',
@@ -2590,6 +2628,9 @@ class DownloadManagerCore:
             configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
         )
         args += self._dependencies['build_javascript_runtime_args'](runtime)
+        args += build_impersonate_args(
+            self.config, self._dependencies['probe_impersonate_targets'](),
+        )
 
         args.append(dl.url)
 
@@ -3576,6 +3617,7 @@ class DownloadManagerCore:
         'deno-runtime-unsupported': 'runtime',
         'ffmpeg-missing-or-stale': 'ffmpeg',
         'sign-in-required': 'sign-in',
+        'blocked-by-site': 'impersonate',
     }
 
     # The GUI asks this for every failed card on every refresh, and the
@@ -3629,6 +3671,22 @@ class DownloadManagerCore:
             if ready:
                 return True, None
             return False, 'FFmpeg is still missing. Refresh it from Settings, then retry.'
+        if requirement == 'impersonate':
+            target = self._dependencies['normalize_impersonate_target'](
+                self.config.get('ImpersonateTarget', '')
+            )
+            available = self._dependencies['probe_impersonate_targets']()
+            if target and target in set(available):
+                return True, None
+            if target:
+                return False, (
+                    f'The installed yt-dlp cannot imitate {target}. Choose a '
+                    'different browser in Settings, then retry.'
+                )
+            return False, (
+                'Choose a browser to imitate in Settings — the usual remedy '
+                'for this refusal — then retry.'
+            )
         if requirement == 'sign-in':
             if dl.requires_auth:
                 # The extension's YouTube bridge supplies cookies per attempt;

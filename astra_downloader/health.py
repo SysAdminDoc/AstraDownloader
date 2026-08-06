@@ -15,6 +15,8 @@ except ImportError:  # Flat source-path compatibility.
 
 __all__ = (
     "get_ytdlp_version", "get_ffmpeg_version", "_run_captured",
+    "parse_impersonate_targets", "ImpersonateTargetsProbe",
+    "IMPERSONATE_TARGET_RE",
     "probe_po_token_provider", "reset_po_token_provider_cache",
     "PO_TOKEN_PROVIDER_PORT", "BGUTIL_POT_MIN_VERSION", "probe_deno_runtime",
     "probe_javascript_runtime", "build_javascript_runtime_args",
@@ -148,6 +150,75 @@ def managed_binary_state(path, minimum_bytes=MANAGED_BINARY_MIN_BYTES):
 def managed_binary_usable(path, minimum_bytes=MANAGED_BINARY_MIN_BYTES):
     """Whether a managed helper binary is present and plausibly whole."""
     return managed_binary_state(path, minimum_bytes) == 'ok'
+
+
+# yt-dlp aborts the whole download with an unhandled exception when handed an
+# impersonate target it does not have — verified against the installed binary:
+# `--impersonate NotAReal-1` exits with YoutubeDLError, not a warning. So the
+# offer is built from what the binary reports, and the argv is gated on it.
+IMPERSONATE_TARGET_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-[0-9][A-Za-z0-9.]*$")
+
+
+def parse_impersonate_targets(output):
+    """Read `--list-impersonate-targets` output into a list of client names.
+
+    The table is `Client  OS  Source`, preceded by an `[info]` line and a
+    dashed rule. Only the first column is a target; the rest is provenance.
+    """
+    targets = []
+    for line in str(output or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("[") or set(stripped) <= {"-"}:
+            continue
+        first = stripped.split()[0]
+        if first.lower() == "client" or not IMPERSONATE_TARGET_RE.match(first):
+            continue
+        if first not in targets:
+            targets.append(first)
+    return targets
+
+
+class ImpersonateTargetsProbe:
+    """Thread-safe TTL cache over `yt-dlp --list-impersonate-targets`."""
+
+    def __init__(self, *, path, runner, clock=time.time, ttl_seconds=3600):
+        self._path = path
+        self._runner = runner
+        self._clock = clock
+        self._ttl_seconds = max(0, float(ttl_seconds))
+        self._value = None
+        self._checked_at = 0.0
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _resolve(value):
+        return value() if callable(value) else value
+
+    def get(self, force=False):
+        path = Path(self._resolve(self._path))
+        if not path.exists():
+            return []
+        with self._lock:
+            now = self._clock()
+            if (
+                not force
+                and self._value is not None
+                and (now - self._checked_at) < self._ttl_seconds
+            ):
+                return list(self._value)
+        # Spawning yt-dlp outside the lock, as the other probes here do.
+        targets = parse_impersonate_targets(
+            self._runner([str(path), "--list-impersonate-targets"])
+        )
+        with self._lock:
+            self._value = targets
+            self._checked_at = self._clock()
+            return list(self._value)
+
+    def reset(self):
+        with self._lock:
+            self._value = None
+            self._checked_at = 0.0
 
 
 def _parse_ytdlp_release_date(version_string):
@@ -541,6 +612,8 @@ _OWNED_EXPORTS = {
     "ytdlp_needs_external_runtime", "build_javascript_runtime_args",
     "build_youtube_extractor_args", "parse_ffmpeg_major",
     "_run_captured", "ExecutableVersionProbe", "parse_ytdlp_version_output",
+    "parse_impersonate_targets", "ImpersonateTargetsProbe",
+    "IMPERSONATE_TARGET_RE",
     "parse_ffmpeg_version_output",
     "PoTokenProviderProbe",
     "FfmpegCapabilitiesProbe",
