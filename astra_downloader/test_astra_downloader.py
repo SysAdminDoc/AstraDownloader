@@ -11793,6 +11793,295 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
             )
 
 
+class RevealInExplorerTests(unittest.TestCase):
+    """Showing a finished file selects it, and the quoting is exact."""
+
+    def test_the_path_is_quoted_but_the_switch_is_not(self):
+        # Measured against the real shell: `explorer.exe "/select,C:\dir\My
+        # File.mp4"` — one fully-quoted argument, which is what building this
+        # as a list and letting Python quote it produces — opened the user's
+        # Documents folder. The quotes have to wrap the path alone.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "Astra reveal probe.mp4"
+            target.write_bytes(b"\0" * 16)
+            command = ad.build_reveal_command(str(target))
+        self.assertIsInstance(command, str)
+        self.assertTrue(command.startswith("explorer.exe /select,\""), command)
+        self.assertTrue(command.endswith("\""), command)
+        self.assertNotIn("\"/select", command)
+
+    def test_a_path_with_spaces_survives_intact(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "two words.mp4"
+            target.write_bytes(b"\0" * 16)
+            command = ad.build_reveal_command(str(target))
+            self.assertIn(f'/select,"{target.resolve()}"', command)
+
+    def test_nothing_is_revealed_for_a_file_that_is_gone(self):
+        # A history row outlives the file it names; asking Explorer to select
+        # a path that no longer exists opens an unrelated folder.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertIsNone(
+                ad.build_reveal_command(str(Path(tmpdir) / "deleted.mp4")))
+        self.assertIsNone(ad.build_reveal_command(""))
+        self.assertIsNone(ad.build_reveal_command(None))
+
+    def test_a_directory_is_not_revealed_as_a_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertIsNone(ad.build_reveal_command(tmpdir))
+
+    def test_a_quote_in_the_name_is_refused_rather_than_escaped(self):
+        with mock.patch.object(ad.Path, "is_file", lambda _self: True), \
+             mock.patch.object(ad.Path, "resolve",
+                               lambda _self: Path('C:/x/we"ird.mp4')):
+            self.assertIsNone(ad.build_reveal_command("anything"))
+
+    def test_the_window_reveals_rather_than_opening_the_folder(self):
+        gui = gui_module_for_tests()
+        spawned = []
+        window = types.SimpleNamespace(
+            logs=[],
+            _dependencies={
+                "build_reveal_command": lambda path: f'explorer.exe /select,"{path}"',
+                "spawn_detached": lambda command: spawned.append(command),
+            },
+        )
+        window._append_log = window.logs.append
+        window._open_folder = lambda: spawned.append("FOLDER")
+        gui.MainWindowCore._show_download_location(window, r"C:\Videos\clip.mp4")
+        self.assertEqual(spawned, [r'explorer.exe /select,"C:\Videos\clip.mp4"'])
+
+    def test_a_shell_that_refuses_select_still_opens_the_folder(self):
+        gui = gui_module_for_tests()
+        opened = []
+        window = types.SimpleNamespace(
+            logs=[],
+            _dependencies={
+                "build_reveal_command": lambda _path: "explorer.exe /select,x",
+                "spawn_detached": lambda _command: (_ for _ in ()).throw(
+                    OSError("no shell")),
+            },
+        )
+        window._append_log = window.logs.append
+        window._open_folder = lambda: opened.append("FOLDER")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "clip.mp4"
+            target.write_bytes(b"\0")
+            with mock.patch.object(gui.os, "startfile",
+                                   lambda path: opened.append(path)):
+                gui.MainWindowCore._show_download_location(window, str(target))
+        self.assertEqual(opened, [tmpdir])
+        self.assertTrue(any("Explorer" in line for line in window.logs))
+
+
+class TaskbarIdentityTests(unittest.TestCase):
+    """The process claims a stable taskbar identity."""
+
+    def test_the_identity_carries_no_version(self):
+        # Windows keys a pinned shortcut on this string. A version in it
+        # would orphan the user's pin at every release.
+        self.assertNotIn(ad.APP_VERSION, ad.APP_USER_MODEL_ID)
+        self.assertRegex(ad.APP_USER_MODEL_ID, r"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")
+
+    def test_a_shell_that_refuses_the_id_does_not_stop_the_app(self):
+        import ctypes
+
+        logged = []
+        # E_INVALIDARG. The call succeeds at the C level and reports failure
+        # through the HRESULT, which is the case a bare try/except misses.
+        with mock.patch.object(ad, "write_persistent_log", logged.append), \
+             mock.patch.object(ctypes.windll.shell32,
+                               "SetCurrentProcessExplicitAppUserModelID",
+                               lambda _app_id: -2147024809):
+            self.assertFalse(ad.set_app_user_model_id())
+        self.assertTrue(logged)
+        self.assertIn("refused", logged[0])
+
+    def test_a_host_without_the_shell_export_does_not_stop_the_app(self):
+        import ctypes
+
+        def explode(_app_id):
+            raise AttributeError("no such export")
+
+        logged = []
+        with mock.patch.object(ad, "write_persistent_log", logged.append), \
+             mock.patch.object(ctypes.windll.shell32,
+                               "SetCurrentProcessExplicitAppUserModelID",
+                               explode):
+            self.assertFalse(ad.set_app_user_model_id())
+        self.assertTrue(logged)
+
+    def test_the_real_shell_accepts_it(self):
+        self.assertTrue(ad.set_app_user_model_id())
+
+
+class TaskbarProgressSummaryTests(unittest.TestCase):
+    """Many downloads reduce to the one bar Windows gives a button."""
+
+    RUNNING = ("downloading", "processing")
+    TERMINAL = ("complete", "failed", "cancelled", "skipped")
+
+    def _summarize(self, *downloads):
+        return ad.summarize_taskbar_progress(
+            [types.SimpleNamespace(**d) for d in downloads],
+            self.RUNNING, self.TERMINAL,
+        )
+
+    def test_an_idle_queue_shows_no_bar(self):
+        # An empty bar over an idle app is worse than no bar.
+        self.assertEqual(
+            self._summarize({"status": "complete", "progress": 100}),
+            (ad.TASKBAR_PROGRESS_NONE, 0, 0),
+        )
+        self.assertEqual(self._summarize(), (ad.TASKBAR_PROGRESS_NONE, 0, 0))
+
+    def test_one_download_reports_its_own_percentage(self):
+        state, done, total = self._summarize({"status": "downloading", "progress": 42})
+        self.assertEqual((state, done, total), (ad.TASKBAR_PROGRESS_NORMAL, 42, 100))
+
+    def test_several_downloads_average_rather_than_counting_finished_ones(self):
+        # Five jobs at 20% is 20% of the work, not "none of five done".
+        state, done, total = self._summarize(
+            *[{"status": "downloading", "progress": 20}] * 5
+        )
+        self.assertEqual(state, ad.TASKBAR_PROGRESS_NORMAL)
+        self.assertEqual((done, total), (100, 500))
+
+    def test_work_with_no_progress_yet_is_indeterminate(self):
+        # Before the first progress line there is nothing to show but the
+        # fact that something is happening.
+        self.assertEqual(
+            self._summarize({"status": "downloading", "progress": 0}),
+            (ad.TASKBAR_PROGRESS_INDETERMINATE, 0, 100),
+        )
+
+    def test_a_past_failure_does_not_colour_a_running_queue(self):
+        state, _done, _total = self._summarize(
+            {"status": "failed", "progress": 0},
+            {"status": "downloading", "progress": 50},
+        )
+        self.assertEqual(state, ad.TASKBAR_PROGRESS_NORMAL)
+
+    def test_pending_work_is_not_counted_as_running(self):
+        state, done, total = self._summarize(
+            {"status": "downloading", "progress": 50},
+            {"status": "pending", "progress": 0},
+        )
+        self.assertEqual((state, done, total), (ad.TASKBAR_PROGRESS_NORMAL, 50, 100))
+
+    def test_a_nonsense_progress_value_cannot_break_the_bar(self):
+        for value in (None, "", "abc", -20, 500, float("nan")):
+            with self.subTest(value=value):
+                _state, done, total = self._summarize(
+                    {"status": "downloading", "progress": value})
+                self.assertGreaterEqual(done, 0)
+                self.assertLessEqual(done, total)
+
+    def test_an_unchanged_value_is_not_pushed_to_the_shell_twice(self):
+        # The UI tick runs twice a second and the shell does not need to
+        # hear the same number again.
+        applied = []
+        taskbar = ad.TaskbarProgress(logger=lambda _m: None)
+        taskbar._taskbar = object()
+        taskbar._call = lambda *args, **kwargs: applied.append(args)
+        taskbar.apply(1234, ad.TASKBAR_PROGRESS_NORMAL, 40, 100)
+        first = len(applied)
+        taskbar.apply(1234, ad.TASKBAR_PROGRESS_NORMAL, 40, 100)
+        self.assertEqual(len(applied), first)
+        taskbar.apply(1234, ad.TASKBAR_PROGRESS_NORMAL, 41, 100)
+        self.assertGreater(len(applied), first)
+
+    def test_an_unavailable_shell_interface_is_not_retried_forever(self):
+        logged = []
+        taskbar = ad.TaskbarProgress(logger=logged.append)
+        with mock.patch.object(ad, "_guid_from_string",
+                               side_effect=OSError("no ole32")):
+            self.assertFalse(taskbar.apply(99, ad.TASKBAR_PROGRESS_NORMAL, 1, 2))
+            self.assertFalse(taskbar.apply(99, ad.TASKBAR_PROGRESS_NORMAL, 3, 4))
+        self.assertEqual(len(logged), 1, "the failure should be reported once")
+
+    def test_no_window_means_no_call(self):
+        taskbar = ad.TaskbarProgress(logger=lambda _m: None)
+        self.assertFalse(taskbar.apply(0, ad.TASKBAR_PROGRESS_NORMAL, 1, 2))
+
+
+class CompletionNotificationTests(unittest.TestCase):
+    """A completion toast can be clicked, and it leads to the file."""
+
+    def _window(self, notified=""):
+        gui = gui_module_for_tests()
+        window = types.SimpleNamespace(
+            _last_notified_file=notified, shown=[], revealed=[])
+        window._show_from_tray = lambda: window.shown.append("shown")
+        window._show_download_location = window.revealed.append
+        window._notification_clicked = types.MethodType(
+            gui.MainWindowCore._notification_clicked, window)
+        return window
+
+    def test_clicking_a_toast_reveals_the_file_it_announced(self):
+        window = self._window(r"C:\Videos\clip.mp4")
+        self.assertTrue(window._notification_clicked())
+        self.assertEqual(window.revealed, [r"C:\Videos\clip.mp4"])
+        self.assertEqual(window.shown, ["shown"])
+
+    def test_a_toast_with_no_file_still_raises_the_window(self):
+        window = self._window("")
+        self.assertFalse(window._notification_clicked())
+        self.assertEqual(window.revealed, [])
+        self.assertEqual(window.shown, ["shown"])
+
+    def test_the_signal_is_connected(self):
+        source = inspect.getsource(gui_module_for_tests().MainWindowCore)
+        self.assertIn("messageClicked.connect", source)
+
+
+class DownloadCardMenuTests(unittest.TestCase):
+    """A finished card offers what you might want to do with the file."""
+
+    def _window(self):
+        gui = gui_module_for_tests()
+        window = types.SimpleNamespace(
+            logs=[], statuses=[], navigated=[],
+            quick_download_url=QuickDownloadBatchTests._TextWidget(),
+        )
+        window._append_log = window.logs.append
+        window._nav_click = window.navigated.append
+        window._set_quick_download_status = (
+            lambda message, tone="neutral": window.statuses.append((message, tone))
+        )
+        for name in ("_redownload", "_copy_download_url", "_play_download"):
+            setattr(window, name,
+                    types.MethodType(getattr(gui.MainWindowCore, name), window))
+        return window
+
+    def test_download_again_stages_the_link_instead_of_queueing_it(self):
+        # Re-running the original request silently would ignore whatever the
+        # user has changed in the format and quality pickers since.
+        window = self._window()
+        self.assertTrue(window._redownload(
+            types.SimpleNamespace(url="https://vimeo.com/1")))
+        self.assertEqual(window.quick_download_url.text(), "https://vimeo.com/1")
+        self.assertEqual(window.navigated, ["Download"])
+        self.assertIn("Download", window.statuses[-1][0])
+
+    def test_download_again_on_a_record_with_no_link_does_nothing(self):
+        window = self._window()
+        self.assertFalse(window._redownload(types.SimpleNamespace(url="")))
+        self.assertEqual(window.quick_download_url.text(), "")
+
+    def test_playing_a_missing_file_reports_instead_of_failing_silently(self):
+        window = self._window()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertFalse(
+                window._play_download(str(Path(tmpdir) / "gone.mp4")))
+        self.assertTrue(any("no longer" in line for line in window.logs))
+
+    def test_the_menu_is_only_attached_to_a_finished_card(self):
+        source = inspect.getsource(
+            gui_module_for_tests().MainWindowCore._download_card)
+        self.assertIn('if recent and dl.status == "complete":', source)
+        self.assertIn("_download_card_menu", source)
+
 class QuickJsRuntimeTests(unittest.TestCase):
     """The runtime the app can fetch for itself when Deno is not there."""
 

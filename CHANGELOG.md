@@ -42,8 +42,26 @@ repository's git log.
   available, matching yt-dlp's own priority; QuickJS is also selectable
   outright in Settings.
 
+- **Progress on the taskbar button.** A download runs for minutes and the
+  window is usually not what the user is looking at, so the queue's overall
+  progress now shows on the taskbar. Several downloads reduce to percent of
+  all the work rather than a count of finished ones. Qt 6 dropped
+  QtWinExtras, so this talks to the shell's own interface; where that is
+  unavailable there is simply no bar.
+- **A completion notification can be clicked.** Clicking it raises the window
+  and shows the finished file.
+- **Right-click a finished download** to play it, show it in the folder, copy
+  its link, or stage it for downloading again.
+
 ### Changed
 
+- **"Show" now selects the file rather than opening its folder.** In a busy
+  Downloads folder the old behaviour still left the user hunting for what had
+  just finished.
+- **The app claims an explicit taskbar identity.** Without one Windows guesses
+  from the executable path, which is what makes a pinned shortcut open a
+  second, separate taskbar button, and it is also the identity notifications
+  are attributed to.
 - The "Embed subtitles" checkbox is now "Download subtitles", which is what it
   does — it fetches sidecar tracks as well as embedding them.
 
