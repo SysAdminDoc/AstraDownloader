@@ -85,13 +85,6 @@ Notes on the items above, from the same pass:
   Acceptance: A bundled `qjs` binary is detected and used automatically when no Deno or Node is present, with a version floor enforced as for the others; the readiness row names the runtime in use; a fresh install downloads a YouTube video with no user-installed runtime.
   Complexity: M
 
-- [ ] P2 — Make the `ytdl://` and `mediadl://` handlers download the URL they were given
-  Why: The handlers are registered but the payload is discarded — the URL maps to the literal command `start`, so clicking such a link launches the app and never queues the video.
-  Evidence: `astra_downloader.py:2483-2496` registers the handler as `<exe> "%1"`; `astra_downloader.py:2372-2380` maps any such argument to `start`; nothing parses the payload.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: `ytdl://<encoded url>` enqueues that URL through the same policy checks as the paste box, including `media_url_block_reason`, and reports the result; a bare `ytdl://start` keeps the current start-the-server behaviour.
-  Complexity: M
-
 - [ ] P2 — Sort formats instead of guessing quality
   Why: The quality picker is a fixed ladder that cannot express codec, frame-rate or HDR preference, so users cannot ask for "1080p H.264 60fps, never AV1" — the most common power-user need in this class.
   Evidence: no `--format-sort` anywhere in `astra_downloader/`; `build_video_format_args` (`download.py:897-918`) encodes preferences as a hand-built cascade. yt-dlp added `--format-sort-reset` and `--compat-options 2025` in 2026.01.29. Pairs with the existing "Format probing before download" item.

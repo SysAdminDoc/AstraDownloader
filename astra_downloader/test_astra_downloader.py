@@ -1111,6 +1111,76 @@ class InstanceCommandTests(unittest.TestCase):
         self.assertEqual(ad.startup_command_from_argv(["--start-server"]), "start")
         self.assertEqual(ad.startup_command_from_argv(["--uninstall"]), "")
 
+    def test_protocol_links_carry_their_url(self):
+        # The handler is registered as `<exe> "%1"`, and every one of those
+        # links used to map to the literal command 'start' — the app opened
+        # and queued nothing.
+        cases = (
+            ("ytdl://https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc",
+             "https://www.youtube.com/watch?v=abc"),
+            ("mediadl://https://vimeo.com/123456789",
+             "https://vimeo.com/123456789"),
+            ("ytdl://www.youtube.com/watch?v=abc",
+             "https://www.youtube.com/watch?v=abc"),
+            ("ytdl://start", ""),
+            ("ytdl://", ""),
+            ("ytdl://not a url", ""),
+        )
+        for argument, expected in cases:
+            with self.subTest(argument=argument):
+                self.assertEqual(
+                    ad.download_url_from_protocol_argv([argument]), expected)
+
+        self.assertEqual(
+            ad.startup_command_from_argv(["ytdl://https://vimeo.com/1"]),
+            "download https://vimeo.com/1",
+        )
+        self.assertEqual(ad.startup_command_from_argv(["ytdl://start"]), "start")
+
+    def test_a_download_command_reaches_the_paste_box(self):
+        class Window:
+            pass
+
+        window = Window()
+        events = []
+        window._append_log = events.append
+        window.enqueue_protocol_download = lambda url: events.append(f"queued {url}")
+
+        ad.MainWindow._handle_instance_command(
+            window, "download https://www.youtube.com/watch?v=AbCdEf")
+
+        self.assertEqual(events[-1], "queued https://www.youtube.com/watch?v=AbCdEf")
+
+    def test_send_instance_command_carries_a_download_url_intact(self):
+        ready = threading.Event()
+        received = []
+        port_holder = []
+
+        def run_server():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+                server.bind(("127.0.0.1", 0))
+                port_holder.append(server.getsockname()[1])
+                server.listen(1)
+                ready.set()
+                conn, _addr = server.accept()
+                with conn:
+                    received.append(conn.recv(512).decode("ascii").strip())
+
+        thread = threading.Thread(target=run_server, daemon=True)
+        thread.start()
+        self.assertTrue(ready.wait(2))
+        self.assertTrue(ad.send_instance_command(
+            "download https://www.youtube.com/watch?v=AbCdEf",
+            port=port_holder[0], attempts=1, token="d" * 32,
+        ))
+        thread.join(2)
+        # The token is split off on the FIRST space, so the URL survives whole
+        # and its case is not folded.
+        self.assertEqual(
+            received,
+            ["d" * 32 + " download https://www.youtube.com/watch?v=AbCdEf"],
+        )
+
     def test_send_instance_command_posts_start_to_listener(self):
         ready = threading.Event()
         received = []

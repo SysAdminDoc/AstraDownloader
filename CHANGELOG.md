@@ -34,6 +34,12 @@ repository's git log.
 
 ### Added
 
+- **`ytdl://` and `mediadl://` links download the video they name.** The
+  handlers were registered and the URL was thrown away — every such link
+  mapped to the literal command "start", so clicking one opened the app and
+  queued nothing. The link now goes through the same URL policy a typed link
+  does, whether the app was already running or is starting because of it.
+  A bare `ytdl://start` still just brings the app up.
 - **Send one download somewhere else.** A "Save to" button beside the paste
   box overrides the destination for the next download only; it names the
   folder it will use, says so again in the queued message, and reverts to the

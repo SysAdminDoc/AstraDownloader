@@ -10,7 +10,7 @@ import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, tra
 import queue
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 # The pinned yt-dlp (2026.7.4) requires Python 3.11; on 3.10 the install of
 # requirements.txt fails before this guard would ever run, so the guard has to
@@ -2460,14 +2460,51 @@ def command_line(parts):
     return subprocess.list2cmdline([str(p) for p in parts])
 
 
+PROTOCOL_SCHEMES = ('ytdl://', 'mediadl://')
+
+
+def download_url_from_protocol_argv(argv=None):
+    """The URL a `ytdl://` or `mediadl://` launch is asking us to download.
+
+    The handlers are registered as `<exe> "%1"`, so the browser hands over the
+    whole link. Returns '' for a bare `ytdl://start`, which means "just bring
+    the app up", and for anything the URL policy rejects.
+    """
+    args = sys.argv[1:] if argv is None else list(argv)
+    for arg in args:
+        raw = str(arg).strip()
+        lowered = raw.lower()
+        for scheme in PROTOCOL_SCHEMES:
+            if not lowered.startswith(scheme):
+                continue
+            payload = raw[len(scheme):].strip()
+            if not payload or payload.strip('/').lower() == 'start':
+                return ''
+            payload = unquote(payload)
+            if '://' not in payload:
+                # A bare word is one of the legacy "just open the app" forms
+                # (ytdl://start, ytdl://download), not a host.
+                host = payload.lstrip('/').split('/', 1)[0].split('?', 1)[0]
+                if '.' not in host:
+                    return ''
+                payload = 'https://' + payload.lstrip('/')
+            normalized, error = normalize_url(payload)
+            return '' if error else normalized
+    return ''
+
+
 def startup_command_from_argv(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
     for arg in args:
         value = str(arg).strip().lower()
         if value in ('--start-server', '-start-server', 'start'):
             return 'start'
-        if value.startswith('mediadl://') or value.startswith('ytdl://'):
-            return 'start'
+        if value.startswith(PROTOCOL_SCHEMES):
+            url = download_url_from_protocol_argv([arg])
+            # A protocol link naming a video is a request to download it; the
+            # handler used to map every one of them to 'start', so clicking a
+            # ytdl:// link launched the app and queued nothing.
+            return f'download {url}' if url else 'start'
     return ''
 
 
@@ -2488,8 +2525,11 @@ def instance_control_token():
 
 def send_instance_command(command, host=INSTANCE_CONTROL_HOST, port=INSTANCE_CONTROL_PORT,
                           attempts=5, delay=0.2, token=None):
-    command = str(command or '').strip().lower()
-    if command not in {'show', 'start', 'shutdown'}:
+    command = str(command or '').strip()
+    if command.lower() in {'show', 'start', 'shutdown'}:
+        command = command.lower()
+    elif not command.lower().startswith('download '):
+        # A download command carries a URL, whose case must survive.
         return False
     if token is None:
         token = instance_control_token()
@@ -3725,6 +3765,13 @@ def main():
     install_unhandled_exception_hooks(
         notify=lambda text: window.log_message.emit(f"Unhandled error: {text}")
     )
+
+    # A ytdl:// link clicked while nothing was running launches this process
+    # with the URL as argv. The already-running case travels the instance
+    # control socket instead; both land in enqueue_protocol_download.
+    protocol_url = download_url_from_protocol_argv()
+    if protocol_url and not visual_smoke:
+        QTimer.singleShot(0, lambda: window.enqueue_protocol_download(protocol_url))
 
     # The visual-smoke path exercises the frozen UI without installing system
     # integrations, starting the local server, or bootstrapping helper tools.
