@@ -2520,17 +2520,66 @@ class DownloadManagerTests(unittest.TestCase):
         transient.status = 'failed'
         transient.error_code = 'network-unreachable'
         transient.mark_terminal()
-        permanent = ad.Download('permanent', 'https://example.com/permanent')
-        permanent.status = 'failed'
-        permanent.error_code = 'ffmpeg-missing-or-stale'
-        permanent.mark_terminal()
+        # A failure whose recovery action has NOT been performed. No stored
+        # sign-in covers this site, so the precondition is genuinely unmet.
+        blocked = ad.Download('blocked', 'https://example.com/members-only')
+        blocked.status = 'failed'
+        blocked.error_code = 'sign-in-required'
+        blocked.mark_terminal()
         manager.downloads[transient.id] = transient
-        manager.downloads[permanent.id] = permanent
+        manager.downloads[blocked.id] = blocked
 
         ok, err = manager.retry(transient.id)
         self.assertTrue(ok, err)
         self.assertEqual(transient.status, 'pending')
-        ok, err = manager.retry(permanent.id)
+
+        ok, err = manager.retry(blocked.id)
+        self.assertFalse(ok)
+        # The refusal has to name what is still missing, not just refuse.
+        self.assertIn('stored sign-in', err)
+        self.assertFalse(manager.is_retryable(blocked))
+
+    def test_a_failure_becomes_retryable_once_its_precondition_is_met(self):
+        # The refusal message promises "needs its recovery action before it can
+        # be retried". Nothing used to re-check, so performing the action left
+        # the download stuck and the only way forward was to re-paste the URL.
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        manager.pause_intake()
+        stalled = ad.Download('stalled', 'https://www.youtube.com/watch?v=abc')
+        stalled.status = 'failed'
+        stalled.error_code = 'js-runtime-missing'
+        stalled.mark_terminal()
+        manager.downloads[stalled.id] = stalled
+
+        unusable = {'supported': False, 'ejsReady': False, 'reason': 'runtime-not-installed'}
+        with mock.patch.object(ad, 'probe_javascript_runtime', return_value=unusable):
+            manager._precondition_cache.clear()
+            self.assertFalse(manager.is_retryable(stalled))
+            ok, err = manager.retry(stalled.id)
+            self.assertFalse(ok)
+            self.assertIn('JavaScript runtime', err)
+
+        # The user installs the runtime; the readiness probe now reports it.
+        usable = {'supported': True, 'ejsReady': True, 'runtime': 'deno'}
+        with mock.patch.object(ad, 'probe_javascript_runtime', return_value=usable):
+            manager._precondition_cache.clear()
+            self.assertTrue(manager.is_retryable(stalled))
+            ok, err = manager.retry(stalled.id)
+            self.assertTrue(ok, err)
+            self.assertEqual(stalled.status, 'pending')
+
+    def test_an_unknown_failure_code_stays_unretryable(self):
+        # New codes must default to refusing rather than to allowing.
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        manager.pause_intake()
+        unknown = ad.Download('unknown', 'https://example.com/x')
+        unknown.status = 'failed'
+        unknown.error_code = 'something-invented-later'
+        unknown.mark_terminal()
+        manager.downloads[unknown.id] = unknown
+
+        self.assertFalse(manager.is_retryable(unknown))
+        ok, err = manager.retry(unknown.id)
         self.assertFalse(ok)
         self.assertIn('recovery action', err)
 

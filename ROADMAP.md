@@ -41,13 +41,6 @@ Notes on the items above, from the same pass:
 
 ### P1
 
-- [ ] P1 — Let a failure be retried once its recovery action has been performed
-  Why: The message on a non-retryable failure says "This failure needs its recovery action before it can be retried", promising a path that does not exist — nothing re-evaluates after the user installs Deno, refreshes ffmpeg or stores a sign-in, so the only way forward is to re-paste the URL and lose the queue entry.
-  Evidence: `DOWNLOAD_FAILURE_RECOVERY` classifies 13 codes; `DOWNLOAD_RETRYABLE_ERROR_CODES` (`download.py:64-70`) contains 5. The 8 excluded are precisely the user-fixable ones — `js-runtime-missing`, `js-runtime-unsupported`, `js-runtime-unverified`, `ejs-runtime-not-ready`, `deno-runtime-missing`, `deno-runtime-unsupported`, `ffmpeg-missing-or-stale`, `sign-in-required`. `retry()` refuses them at `download.py:2758`. The readiness probe already knows when a runtime became usable, and `SiteLoginStore.has_login_for` already answers the sign-in question.
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: a failure whose precondition is now satisfied becomes retryable and its card offers Retry; one whose precondition is still unmet keeps the current refusal and says what is still missing; a test fails a download with `js-runtime-missing`, reports a usable runtime, and asserts the retry is accepted.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 — Make a right-to-left locale render correctly, and render one in the smoke
