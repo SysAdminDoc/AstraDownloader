@@ -438,7 +438,8 @@ class SubscriptionTests(unittest.TestCase):
                 "title": "First upload",
             }
             key = ad.subscription_archive_key(candidate)
-            self.assertTrue(store.reserve_archive(key, candidate, record["id"]))
+            self.assertEqual(store.reserve_archive(key, candidate, record["id"]),
+                             subscriptions_module().RESERVE_OK)
             self.assertTrue(store.mark_archive_queued(key, "dl_subscription_1"))
             self.assertEqual(store.mark_download("dl_subscription_1", "complete"), 1)
 
@@ -505,7 +506,8 @@ class SubscriptionTests(unittest.TestCase):
                 "title": "Interrupted upload",
             }
             key = ad.subscription_archive_key(candidate)
-            self.assertTrue(store.reserve_archive(key, candidate, record["id"]))
+            self.assertEqual(store.reserve_archive(key, candidate, record["id"]),
+                             subscriptions_module().RESERVE_OK)
             download = ad.Download(
                 "dl_subscription_3",
                 candidate["url"],
@@ -10001,6 +10003,11 @@ class QuickDownloadBatchTests(unittest.TestCase):
         self.assertIn("Paste a video link", window.quick_download_status.text())
 
 
+def subscriptions_module():
+    import subscriptions as subscriptions_mod
+    return subscriptions_mod
+
+
 def gui_module_for_tests():
     import gui as gui_module
     return gui_module
@@ -10760,6 +10767,7 @@ class FormatProbeTests(unittest.TestCase):
                 "Clip ranges apply to a single link."
             ),
             _sabr_limited=False,
+            _force_exit=False,
             _probed_format_url=probed,
             _format_probe_generation=0,
             _dependencies={
@@ -11754,6 +11762,201 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
                 "every text-carrying QLabel must pin PlainText near construction",
             )
 
+
+class SubscriptionScanReportingTests(unittest.TestCase):
+    """A scan that cannot write says so instead of reporting a quiet skip."""
+
+    ENTRIES = [
+        {"id": "vid0000001", "title": "First",
+         "url": "https://www.youtube.com/watch?v=vid0000001"},
+        {"id": "vid0000002", "title": "Second",
+         "url": "https://www.youtube.com/watch?v=vid0000002"},
+    ]
+
+    def _manager(self, tmpdir, name, failing_after=None):
+        subs = subscriptions_module()
+        store = subs.SubscriptionStore(path=Path(tmpdir) / name)
+        record, error = store.add_subscription("https://www.youtube.com/@astra")
+        self.assertIsNone(error)
+        if failing_after is not None:
+            original = store._save_locked
+            calls = {"n": 0}
+
+            def failing_save():
+                calls["n"] += 1
+                return original() if calls["n"] <= failing_after else False
+
+            store._save_locked = failing_save
+        manager = subs.SubscriptionManager(
+            store=store,
+            probe=lambda _url: (self.ENTRIES, None),
+            enqueue=lambda _sub, candidate, _key: (f"dl_{candidate['id']}", None),
+        )
+        return manager, record
+
+    def test_a_healthy_scan_queues_everything(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager, record = self._manager(tmpdir, "ok.json")
+            result = manager.scan_subscription(record["id"])
+        self.assertEqual((result["queued"], result["skipped"], result["error"]),
+                         (2, 0, ""))
+
+    def test_a_second_scan_skips_what_it_already_has(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager, record = self._manager(tmpdir, "seen.json")
+            manager.scan_subscription(record["id"])
+            result = manager.scan_subscription(record["id"])
+        self.assertEqual((result["queued"], result["skipped"], result["error"]),
+                         (0, 2, ""))
+
+    def test_an_unwritable_archive_is_an_error_not_a_skip(self):
+        # This is the case a single boolean collapsed into the one above: the
+        # scheduler runs unattended, so a channel that silently stopped
+        # downloading reported itself as fully up to date.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager, record = self._manager(tmpdir, "full.json", failing_after=1)
+            result = manager.scan_subscription(record["id"])
+        self.assertEqual(result["queued"], 0)
+        self.assertEqual(result["skipped"], 0)
+        self.assertIn("disk space", result["error"])
+
+    def test_a_repeated_failure_is_reported_once(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager, record = self._manager(tmpdir, "dupe.json", failing_after=1)
+            result = manager.scan_subscription(record["id"])
+        self.assertEqual(result["error"].count("disk space"), 1)
+
+    def test_the_reserve_outcomes_are_three_distinct_values(self):
+        subs = subscriptions_module()
+        self.assertEqual(
+            len({subs.RESERVE_OK, subs.RESERVE_ALREADY_PRESENT,
+                 subs.RESERVE_SAVE_FAILED}),
+            3,
+        )
+
+
+class DownloadPageFeedbackTests(unittest.TestCase):
+    """Download-page controls report where the user is standing."""
+
+    def _window(self):
+        window = types.SimpleNamespace(
+            quick_download_status=QuickDownloadBatchTests._TextWidget(),
+            logs=[],
+        )
+        window._append_log = window.logs.append
+        window._nav_click = lambda _page: None
+        window._set_quick_download_status = types.MethodType(
+            gui_module_for_tests().MainWindowCore._set_quick_download_status, window
+        )
+        for name in ("_retry_download", "_toggle_queue_intake",
+                     "_resume_download_queue", "_move_pending_download",
+                     "_resume_one_download"):
+            setattr(window, name, types.MethodType(
+                getattr(gui_module_for_tests().MainWindowCore, name), window))
+        return window
+
+    def test_a_refused_retry_is_reported_on_the_page(self):
+        window = self._window()
+        window.dl_manager = types.SimpleNamespace(
+            retry=lambda _id: (False, "Queue is full."))
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._retry_download(types.SimpleNamespace(
+                id="dl_1", title="Unknown", url="https://example.com/v"))
+        self.assertEqual(window.quick_download_status.text(), "Queue is full.")
+        self.assertEqual(window.quick_download_status.properties["state"], "error")
+
+    def test_a_refused_reorder_is_reported_on_the_page(self):
+        window = self._window()
+        window.dl_manager = types.SimpleNamespace(
+            move_pending_by=lambda _id, _offset: (False, "Only pending downloads can be reordered."))
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._move_pending_download("dl_1", -1)
+        self.assertIn("reordered", window.quick_download_status.text())
+
+    def test_a_failed_pause_is_reported_on_the_page(self):
+        window = self._window()
+        window.dl_manager = types.SimpleNamespace(
+            capacity=lambda: {"intakePaused": False},
+            pause_intake=lambda: False)
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._toggle_queue_intake()
+        self.assertIn("Could not pause", window.quick_download_status.text())
+
+    def test_resuming_one_card_does_not_resume_the_queue(self):
+        # The card button used to call resume_intake(), which clears the
+        # global pause and starts every paused download at once.
+        window = self._window()
+        calls = []
+        window.dl_manager = types.SimpleNamespace(
+            resume_download=lambda dl_id: (calls.append(dl_id), (True, None))[1],
+            resume_intake=lambda: calls.append("INTAKE") or True,
+        )
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._resume_one_download("dl_2")
+        self.assertEqual(calls, ["dl_2"])
+        self.assertNotIn("INTAKE", calls)
+
+    def test_the_card_button_is_bound_to_the_per_item_resume(self):
+        import inspect
+        source = inspect.getsource(gui_module_for_tests().MainWindowCore._download_card)
+        self.assertIn("_resume_one_download", source)
+        self.assertNotIn("clicked.connect(self._resume_download_queue)", source)
+
+
+class WindowTeardownTests(unittest.TestCase):
+    """Nothing the window scheduled outlives it."""
+
+    def test_close_stops_every_timer_it_owns(self):
+        import inspect
+        source = inspect.getsource(gui_module_for_tests().MainWindowCore.closeEvent)
+        for timer in ("tools_status_timer", "update_timer", "cleanup_timer",
+                      "_format_probe_timer", "_ui_refresh_timer",
+                      "_history_filter_timer"):
+            with self.subTest(timer=timer):
+                self.assertIn(f"self.{timer}.stop()", source)
+
+    def test_a_probe_already_in_flight_is_abandoned_on_exit(self):
+        # closeEvent can be called while the debounce is mid-flight, so the
+        # timer stop alone is not enough.
+        window = types.SimpleNamespace(
+            _force_exit=True,
+            quick_download_url=QuickDownloadBatchTests._TextWidget(
+                "https://vimeo.com/1"),
+        )
+        started = []
+        window._probe_quick_download_formats = types.MethodType(
+            gui_module_for_tests().MainWindowCore._probe_quick_download_formats,
+            window,
+        )
+        with mock.patch.object(
+            gui_module_for_tests().threading, "Thread",
+            lambda **kwargs: types.SimpleNamespace(
+                start=lambda: started.append(kwargs)),
+        ):
+            window._probe_quick_download_formats()
+        self.assertEqual(started, [])
+
+
+class ButtonLabelCaseTests(unittest.TestCase):
+    """Labels are sentence case, matching the rest of the product."""
+
+    def test_no_tool_button_label_is_title_case(self):
+        import inspect
+        import re
+        source = inspect.getsource(gui_module_for_tests())
+        labels = set(re.findall(r'_make_tool_button\(\s*"([^"]+)"', source))
+        self.assertTrue(labels, "expected to find tool button labels")
+        offenders = []
+        for label in labels:
+            words = [w for w in label.split() if w and w[0].isalpha()]
+            # Sentence case: only the first word may start with a capital.
+            capitals = [w for w in words[1:] if w[0].isupper()]
+            # Proper nouns and file names keep their own casing.
+            capitals = [w for w in capitals
+                        if w not in {"Server", "Deck", "Astra", "SponsorBlock"}]
+            if capitals:
+                offenders.append((label, capitals))
+        self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
 
 class QueueRollbackTests(unittest.TestCase):
     """A rejected queue mutation puts the download back exactly as it was."""

@@ -24,6 +24,9 @@ __all__ = (
     "SUBSCRIPTION_MAX_INTERVAL_MINUTES",
     "SUBSCRIPTION_MAX_RECORDS",
     "SUBSCRIPTION_MAX_ARCHIVE_ENTRIES",
+    "RESERVE_OK",
+    "RESERVE_ALREADY_PRESENT",
+    "RESERVE_SAVE_FAILED",
     "SubscriptionStore",
     "SubscriptionManager",
     "normalize_subscription_candidate",
@@ -36,6 +39,12 @@ SUBSCRIPTION_MIN_INTERVAL_MINUTES = 5
 SUBSCRIPTION_MAX_INTERVAL_MINUTES = 7 * 24 * 60
 SUBSCRIPTION_MAX_RECORDS = 100
 SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000
+# reserve_archive outcomes. "already present" is the ordinary nothing-to-do
+# case; "save failed" means the archive could not be written and the scan has
+# a real problem to report rather than a quiet skip.
+RESERVE_OK = "reserved"
+RESERVE_ALREADY_PRESENT = "already-present"
+RESERVE_SAVE_FAILED = "save-failed"
 _TEXT_LIMIT = 500
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 _YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "youtube-nocookie.com")
@@ -516,14 +525,23 @@ class SubscriptionStore:
             return True
 
     def reserve_archive(self, key, candidate, subscription_id, now=None):
+        """Claim an archive key.
+
+        Returns one of ``RESERVE_OK``, ``RESERVE_ALREADY_PRESENT`` or
+        ``RESERVE_SAVE_FAILED``. A single boolean collapsed the last two, so a
+        subscription that could no longer write its archive reported exactly
+        what a healthy scan with nothing new reports — and the scheduler runs
+        unattended, so the channel silently stopped downloading while every
+        reading said it was up to date.
+        """
         key = self._clean(key, "", 430)
         if not key or not isinstance(candidate, dict):
-            return False
+            return RESERVE_SAVE_FAILED
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             existing = self._data["archive"].get(key)
             if existing and existing.get("status") in {"reserved", "queued", "complete"}:
-                return False
+                return RESERVE_ALREADY_PRESENT
             before = _copy(self._data)
             self._data["archive"][key] = {
                 "url": self._clean(candidate.get("url"), "", 4096),
@@ -539,8 +557,8 @@ class SubscriptionStore:
             self._trim_archive_locked()
             if not self._save_locked():
                 self._data = before
-                return False
-            return True
+                return RESERVE_SAVE_FAILED
+            return RESERVE_OK
 
     def mark_archive_queued(self, key, download_id, now=None):
         return self._update_archive(
@@ -822,8 +840,15 @@ class SubscriptionManager:
             errors = []
             for candidate in candidates:
                 key = subscription_archive_key(candidate)
-                if not self.store.reserve_archive(key, candidate, sub_id, now=now):
+                reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
+                if reserved == RESERVE_ALREADY_PRESENT:
                     skipped += 1
+                    continue
+                if reserved != RESERVE_OK:
+                    errors.append(
+                        "Could not record the scheduled download; check disk "
+                        "space and permissions."
+                    )
                     continue
                 try:
                     result = self._enqueue(started, candidate, key)
@@ -842,7 +867,10 @@ class SubscriptionManager:
                     errors.append("Could not save scheduled download archive state.")
                 queued += 1
 
-            error = "; ".join(errors[:3])
+            # Identical failures repeat once per candidate; the user needs
+            # the cause, not the count.
+            unique_errors = list(dict.fromkeys(errors))
+            error = "; ".join(unique_errors[:3])
             self.store.finish_scan(
                 sub_id,
                 queued=queued,
