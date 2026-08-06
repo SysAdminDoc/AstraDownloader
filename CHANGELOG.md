@@ -40,6 +40,14 @@ repository's git log.
 
 ### Fixed
 
+- **Repeated row buttons are distinguishable to a screen reader.** Tabbing the
+  History list announced "Show, Show, Show"; each control is now named for the
+  file, site, subscription or download it acts on. The visible labels are
+  unchanged.
+- **Keyboard focus survives a download card rebuild.** A card is destroyed and
+  rebuilt on every status transition, so a keyboard user sitting on Cancel lost
+  focus to nowhere the moment the download finished. Focus now lands on the
+  same action, or on the card, whichever still exists.
 - **History reports its own failures on the History page.** Clear, Undo and
   Export wrote their results to the log panel, which lives on the Browser
   extension page — so a permissions error produced no visible response at all.

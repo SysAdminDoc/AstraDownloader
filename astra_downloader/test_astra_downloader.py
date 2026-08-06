@@ -1481,6 +1481,97 @@ class QuarantinedStateFileTests(unittest.TestCase):
                     _retire_test_window(window)
 
 
+class RepeatedRowAccessibilityTests(unittest.TestCase):
+    """"Show, Show, Show" tells a screen-reader user nothing about which file."""
+
+    def test_every_history_row_action_names_its_own_file(self):
+        from PyQt6.QtWidgets import QApplication, QPushButton
+
+        _get_qapp_or_skip(self)
+
+        class ThreeRowHistory(FakeHistory):
+            def load(self):
+                return [
+                    {
+                        "id": f"h{index}", "url": f"https://example.com/{index}",
+                        "title": f"Video {index}", "filename": f"C:/Videos/clip{index}.mp4",
+                        "format": "mp4", "quality": "1080", "status": "complete",
+                        "date": "2026-08-06 10:00:00", "duration": 12,
+                    }
+                    for index in range(3)
+                ]
+
+        history = ThreeRowHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                window._refresh_history()
+                QApplication.processEvents()
+
+                names = [
+                    button.accessibleName()
+                    for button in window.findChildren(QPushButton)
+                    if button.text() == "Show"
+                ]
+                self.assertEqual(len(names), 3, names)
+                self.assertEqual(len(set(names)), 3,
+                                 f"repeated row actions must be distinguishable: {names}")
+                for index, name in enumerate(sorted(names)):
+                    self.assertIn(f"clip{index}.mp4", name)
+            finally:
+                _retire_test_window(window)
+
+
+class DownloadCardFocusTests(unittest.TestCase):
+    def test_focus_survives_a_card_rebuild_on_status_change(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QApplication, QPushButton
+
+        _get_qapp_or_skip(self)
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        download = ad.Download("dl_focus", "https://example.com/video", title="Clip")
+        download.status = "downloading"
+        manager.downloads[download.id] = download
+
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+            try:
+                window.show()
+                window._update_ui()
+                QApplication.processEvents()
+
+                card = window._download_widgets[("download", download.id)]
+                cancel = next(button for button in card.findChildren(QPushButton)
+                              if button.text() == "Cancel")
+                cancel.setFocus(Qt.FocusReason.OtherFocusReason)
+                QApplication.processEvents()
+                self.assertIs(QApplication.focusWidget(), cancel)
+
+                # Completing the download changes the card's structure, so the
+                # widget holding focus is destroyed and rebuilt.
+                download.status = "complete"
+                download.filename = "C:/Videos/clip.mp4"
+                download.mark_terminal()
+                window._update_ui()
+                QApplication.processEvents()
+
+                rebuilt = window._download_widgets[("download", download.id)]
+                self.assertIsNot(rebuilt, card, "the card must have been rebuilt")
+                focus = QApplication.focusWidget()
+                self.assertIsNotNone(focus, "focus must not be lost to nowhere")
+                self.assertTrue(
+                    focus is rebuilt or rebuilt.isAncestorOf(focus),
+                    "focus must stay on the download the user was working with",
+                )
+            finally:
+                _retire_test_window(window)
+
+
 class SiteLoginImportBoundTests(unittest.TestCase):
     def test_an_oversized_cookie_file_is_rejected_before_it_is_read(self):
         # The 1 MB cap lives downstream of the read, and the read is on the
