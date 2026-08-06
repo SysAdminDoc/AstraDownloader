@@ -2399,11 +2399,29 @@ def startup_command_from_argv(argv=None):
     return ''
 
 
-def send_instance_command(command, host=INSTANCE_CONTROL_HOST, port=INSTANCE_CONTROL_PORT, attempts=5, delay=0.2):
+def instance_control_token():
+    """Shared secret for the loopback instance-control port.
+
+    The only legitimate senders are a second copy of this program and the
+    uninstaller, and both can read the config the running instance wrote. No
+    other local process can, which is the point: without a secret, anything
+    running as this user could send `shutdown` and kill a download in flight.
+    """
+    try:
+        return str(Config(read_only=True).get("ServerToken") or '')
+    except Exception as error:
+        write_persistent_log(f"Could not read the instance control token: {error}")
+        return ''
+
+
+def send_instance_command(command, host=INSTANCE_CONTROL_HOST, port=INSTANCE_CONTROL_PORT,
+                          attempts=5, delay=0.2, token=None):
     command = str(command or '').strip().lower()
     if command not in {'show', 'start', 'shutdown'}:
         return False
-    payload = (command + '\n').encode('ascii')
+    if token is None:
+        token = instance_control_token()
+    payload = (f"{token} {command}" + '\n').encode('ascii', errors='ignore')
     for attempt in range(max(1, int(attempts))):
         try:
             with socket.create_connection((host, int(port)), timeout=0.5) as conn:

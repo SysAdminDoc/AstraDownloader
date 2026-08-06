@@ -62,13 +62,6 @@ Notes on the items above, from the same pass:
   Acceptance: Quarantining a file raises a persistent, dismissible in-app notice naming the file and its backup path, with a one-click restore that swaps the backup back and reloads; corrupt and empty queue files are distinguished.
   Complexity: M
 
-- [ ] P1 — Authenticate the local instance-control socket
-  Why: Any local process can send `shutdown` to `127.0.0.1:9752` and force-close the app mid-download, or `start` to bring up the API; `SO_REUSEADDR` additionally lets another process steal the listener on Windows.
-  Evidence: `gui.py:3867-3894` — no token and no peer check, in contrast with the HTTP surface's `hmac.compare_digest` bearer auth (`routes.py:260-262`).
-  Touches: `astra_downloader/gui.py`, `astra_downloader/astra_downloader.py` (uninstall handshake at line 3192), `astra_downloader/test_astra_downloader.py`
-  Acceptance: Control commands carry the session token and are rejected without it; `SO_REUSEADDR` is removed or replaced with `SO_EXCLUSIVEADDRUSE` so a second binder fails rather than hijacking; the uninstall handshake still works.
-  Complexity: M
-
 - [ ] P1 — Make fatal startup and slot exceptions visible
   Why: For a windowed exe, a fatal startup error means double-clicking the icon does nothing at all, forever; and with no `sys.excepthook` or Qt hook, an exception inside a slot aborts the process without even a crash-log line.
   Evidence: `astra_downloader.py:3620-3626` logs and swallows; no `excepthook` exists anywhere in `astra_downloader/`.

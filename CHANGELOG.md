@@ -14,6 +14,12 @@ repository's git log.
 
 ### Security
 
+- **The instance-control port requires the session token.** Any local process
+  could send `shutdown` to `127.0.0.1:9752` and force-close the app in the
+  middle of a download, or `start` to bring the local API up. Commands now
+  carry the token that the HTTP surface already required, and the listener
+  drops `SO_REUSEADDR` for `SO_EXCLUSIVEADDRUSE` so a second binder fails
+  instead of taking the port.
 - **`/health` no longer hands the subscription list to unauthenticated local
   callers.** The endpoint already gated recent log entries behind the bearer
   token; the channel URLs and titles a user follows are the same class of
