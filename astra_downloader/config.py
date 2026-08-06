@@ -41,6 +41,7 @@ __all__ = (
     "validate_download_request_body",
     "allowed_output_roots", "clean_text", "clean_path_text", "coerce_bool",
     "clamp_int", "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
+    "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
@@ -55,6 +56,7 @@ __all__ = (
 _OWNED_EXPORTS = {
     "clean_text", "clean_path_text", "coerce_bool", "clamp_int",
     "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
+    "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "bound_output_template_fields",
     "normalize_output_template",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
@@ -118,6 +120,10 @@ DEFAULT_CONFIG = {
     "SubLangs": "en",
     "SponsorBlock": False,
     "SponsorBlockAction": "remove",
+    # Which SponsorBlock categories to act on. Empty means every category,
+    # which is what the app used to send unconditionally — enabling it to skip
+    # sponsors also stripped intros, outros and self-promo.
+    "SponsorBlockCategories": "sponsor,selfpromo,interaction",
     "ConcurrentFragments": 4,
     # How many downloads run at once (was the hardcoded MAX_CONCURRENT=3).
     "MaxConcurrentDownloads": 3,
@@ -213,6 +219,35 @@ def normalize_sublangs(value):
     cleaned = clean_text(value, "en", 80)
     cleaned = re.sub(r"[^a-zA-Z0-9,\-]", "", cleaned)
     return cleaned or "en"
+
+
+# yt-dlp's SponsorBlock category names. An unknown name is dropped rather than
+# passed through: these reach a subprocess argument.
+SPONSORBLOCK_CATEGORIES = (
+    "sponsor", "intro", "outro", "selfpromo", "preview", "filler",
+    "interaction", "music_offtopic", "poi_highlight", "chapter",
+)
+
+
+def normalize_sponsorblock_categories(value):
+    """Return a comma-joined subset of the known SponsorBlock categories.
+
+    An empty result means "all", which is what the app used to send
+    unconditionally — enabling SponsorBlock to skip sponsors also removed
+    intros, outros and self-promo with no way to say otherwise.
+    """
+    if isinstance(value, (list, tuple, set)):
+        raw = ",".join(str(item) for item in value)
+    else:
+        raw = clean_text(value, "", 240)
+    if raw.strip().lower() == "all":
+        return ""
+    known = []
+    for name in raw.split(","):
+        name = re.sub(r"[^a-z_]", "", name.strip().lower())
+        if name in SPONSORBLOCK_CATEGORIES and name not in known:
+            known.append(name)
+    return ",".join(known)
 
 
 _SAFE_OUTPUT_FIELDS = frozenset({
@@ -669,6 +704,9 @@ def sanitize_config(raw):
         data[key] = coerce_bool(data.get(key), DEFAULT_CONFIG[key])
     data["SubLangs"] = normalize_sublangs(data.get("SubLangs"))
     data["SponsorBlockAction"] = "mark" if data.get("SponsorBlockAction") == "mark" else "remove"
+    data["SponsorBlockCategories"] = normalize_sponsorblock_categories(
+        data.get("SponsorBlockCategories")
+    )
     data["ConcurrentFragments"] = clamp_int(data.get("ConcurrentFragments"), 4, 1, 32)
     data["MaxConcurrentDownloads"] = clamp_int(data.get("MaxConcurrentDownloads"), 3, 1, 10)
     data["DownloadRetries"] = clamp_int(data.get("DownloadRetries"), 10, 0, 50)

@@ -812,8 +812,11 @@ class CompanionGuiPolicyTests(unittest.TestCase):
                 return self.number
 
         class CheckField:
+            def __init__(self, checked=False):
+                self.checked = checked
+
             def isChecked(self):
-                return False
+                return self.checked
 
         class ComboField:
             def __init__(self, value="remove"):
@@ -854,6 +857,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_subs = CheckField()
         window.cfg_keep_intermediates = CheckField()
         window.cfg_sponsorblock = CheckField()
+        window.cfg_sb_categories = {"sponsor": CheckField(True)}
         window.cfg_sb_action = ComboField()
         window.cfg_js_runtime = ComboField("auto")
         window.cfg_ytdlp_channel = ComboField("nightly")
@@ -1594,6 +1598,78 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                     self.assertIn(f"clip{index}.mp4", name)
             finally:
                 _retire_test_window(window)
+
+
+class SponsorBlockCategoryTests(unittest.TestCase):
+    def test_unknown_categories_are_dropped_and_all_means_all(self):
+        # These names reach a subprocess argument.
+        self.assertEqual(
+            ad.normalize_sponsorblock_categories("sponsor, outro, nonsense"),
+            "sponsor,outro",
+        )
+        self.assertEqual(ad.normalize_sponsorblock_categories("all"), "")
+        self.assertEqual(ad.normalize_sponsorblock_categories(""), "")
+        self.assertEqual(
+            ad.normalize_sponsorblock_categories(["intro", "intro", "sponsor"]),
+            "intro,sponsor",
+        )
+        # A token carrying anything but a category name is dropped whole
+        # rather than salvaged down to the part that happens to match.
+        self.assertEqual(
+            ad.normalize_sponsorblock_categories("sponsor; rm -rf /"), "")
+
+    def _argv_for(self, categories):
+        captured = []
+        manager = ad.DownloadManager(
+            FakeConfig({
+                "SponsorBlock": True,
+                "SponsorBlockAction": "remove",
+                "SponsorBlockCategories": categories,
+            }),
+            FakeHistory(),
+        )
+        download = ad.Download("dl_sb", "https://www.youtube.com/watch?v=abc")
+
+        class Proc:
+            returncode = 0
+
+            def __init__(self, args, **_kwargs):
+                captured.append(list(args))
+                self.stdout = iter(["[download] Destination: clip.mp4\n"])
+
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return 0
+
+            def terminate(self):
+                # reason: satisfy the API the cancel path expects
+                pass
+
+            def kill(self):
+                # reason: same as terminate
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            download.output_dir = tmpdir
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", Proc), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+        runs = [args for args in captured if download.url in args]
+        self.assertEqual(len(runs), 1)
+        return runs[0]
+
+    def test_selected_categories_reach_ytdlp(self):
+        args = self._argv_for("sponsor,selfpromo")
+        self.assertEqual(args[args.index("--sponsorblock-remove") + 1],
+                         "sponsor,selfpromo")
+
+    def test_no_selection_still_means_every_category(self):
+        args = self._argv_for("")
+        self.assertEqual(args[args.index("--sponsorblock-remove") + 1], "all")
 
 
 class PerDownloadDestinationTests(unittest.TestCase):
