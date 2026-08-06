@@ -43,7 +43,7 @@ __all__ = (
     "clamp_int", "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
-    "SUBTITLE_MODES", "SUBTITLE_FORMATS",
+    "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
@@ -60,7 +60,7 @@ _OWNED_EXPORTS = {
     "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
-    "SUBTITLE_MODES", "SUBTITLE_FORMATS",
+    "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
     "bound_output_template_fields",
     "normalize_output_template",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
@@ -111,6 +111,8 @@ def _env_bool(name, default=False):
 # the mapping from these tokens to yt-dlp `--format-sort` fields lives in
 # download.py, which owns argv, and a test pins the two vocabularies together
 # so neither can gain a value the other does not know.
+JAVASCRIPT_RUNTIME_CHOICES = frozenset({"auto", "deno", "node", "quickjs"})
+
 FORMAT_SORT_VIDEO_CODECS = frozenset({"auto", "h264", "vp9", "av1"})
 FORMAT_SORT_AUDIO_CODECS = frozenset({"auto", "aac", "opus"})
 FORMAT_SORT_FRAME_RATES = (0, 30, 60)
@@ -190,6 +192,8 @@ DEFAULT_CONFIG = {
     # so the shipped value preserves current behavior while letting users on
     # flaky networks raise it.
     "DownloadRetries": 10,
+    # "auto" walks deno, then node, then the QuickJS build the app can fetch
+    # for itself, which is yt-dlp's own priority order.
     "JavaScriptRuntime": "auto",
     "AutoUpdateYtDlp": True,
     # yt-dlp release channel the self-updater tracks. Nightly is yt-dlp's own
@@ -827,7 +831,7 @@ def sanitize_config(raw):
     data["MaxConcurrentDownloads"] = clamp_int(data.get("MaxConcurrentDownloads"), 3, 1, 10)
     data["DownloadRetries"] = clamp_int(data.get("DownloadRetries"), 10, 0, 50)
     runtime = clean_text(data.get("JavaScriptRuntime"), "auto", 16).lower()
-    data["JavaScriptRuntime"] = runtime if runtime in {"auto", "deno", "node"} else "auto"
+    data["JavaScriptRuntime"] = runtime if runtime in JAVASCRIPT_RUNTIME_CHOICES else "auto"
     channel = clean_text(data.get("YtDlpUpdateChannel"), "nightly", 16).lower()
     data["YtDlpUpdateChannel"] = channel if channel in {"stable", "nightly"} else "nightly"
     data["RateLimit"] = normalize_rate_limit(data.get("RateLimit"))

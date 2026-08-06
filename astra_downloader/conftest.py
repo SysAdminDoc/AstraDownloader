@@ -15,9 +15,26 @@ builds a real manager and imports a fixture cookie wrote
 that would then be listed in the GUI and attached to real downloads for that
 site. The dependency reads the module global on each call, so redirecting it
 here covers every manager the suite constructs.
+
+The JavaScript runtime paths are redirected too, and they need their own
+line because redirecting ``INSTALL_DIR`` does not reach them: ``DENO_PATH``
+and ``QUICKJS_PATH`` are derived from it at import, so they keep pointing at
+the live install. That made runtime tests depend on whether the developer's
+own machine happened to have a runtime provisioned — a test asserting "no
+runtime is available" passed only because this box had none.
 """
 
 import pytest
+
+
+# Module globals the suite redirects, and the subdirectory each one takes
+# under the temporary install.
+_REDIRECTED_INSTALL_PATHS = (
+    ("DENO_DIR", ("deno",)),
+    ("DENO_PATH", ("deno", "deno.exe")),
+    ("QUICKJS_DIR", ("quickjs",)),
+    ("QUICKJS_PATH", ("quickjs", "qjs.exe")),
+)
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -28,10 +45,15 @@ def _redirect_persistent_state(tmp_path_factory):
     install_dir = tmp_path_factory.mktemp("astra-test-install")
     original_log, original_crash = ad.LOG_PATH, ad.CRASH_LOG_PATH
     original_install = ad.INSTALL_DIR
+    originals = {name: getattr(ad, name) for name, _ in _REDIRECTED_INSTALL_PATHS}
     ad.LOG_PATH = log_dir / "server.log"
     ad.CRASH_LOG_PATH = log_dir / "crash.log"
     ad.INSTALL_DIR = install_dir
+    for name, parts in _REDIRECTED_INSTALL_PATHS:
+        setattr(ad, name, install_dir.joinpath(*parts))
     yield
     ad.LOG_PATH = original_log
     ad.CRASH_LOG_PATH = original_crash
     ad.INSTALL_DIR = original_install
+    for name, value in originals.items():
+        setattr(ad, name, value)

@@ -555,6 +555,7 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'log_crash',
     'probe_javascript_runtime',
     'provision_deno',
+    'provision_quickjs',
     'register_desktop_shortcut',
     'register_protocol_handlers',
     'register_startup_task',
@@ -651,6 +652,44 @@ class SetupWorkerCore(QThread):
             raise
         self.log.emit(f"  {label} checksum OK")
         return True
+
+    def _provision_javascript_runtime(self):
+        """Make sure some JavaScript runtime exists, preferring Deno.
+
+        yt-dlp's own priority is deno > node > quickjs, so an install that
+        can have Deno gets Deno. QuickJS is the fallback: the 40 MB Deno
+        archive is the part of setup most likely to fail, and QuickJS is a
+        2 MB executable, so a failed Deno fetch no longer leaves the install
+        with no runtime at all — which meant every YouTube download failed.
+        """
+        runtime = self._dependencies['probe_javascript_runtime'](
+            force=True, configured_runtime=self.configured_runtime
+        )
+        if runtime.get('ejsReady'):
+            label = str(runtime.get('runtime') or 'JavaScript').title()
+            self.log.emit(f"{label} runtime ready: {runtime.get('path')}")
+            return True
+        ready = False
+        if runtime.get('canProvisionDeno'):
+            self.log.emit("Downloading Deno runtime...")
+            ready = bool(self._dependencies['provision_deno']())
+            self.log.emit(
+                "  Done" if ready else "  Deno download failed; trying QuickJS"
+            )
+        # An explicit Deno or Node choice is a choice; only Auto and QuickJS
+        # may reach for it.
+        if not ready and self.configured_runtime in ('auto', 'quickjs'):
+            self.log.emit("Downloading QuickJS runtime...")
+            ready = bool(self._dependencies['provision_quickjs']())
+            self.log.emit(
+                "  Done" if ready else "  QuickJS download failed (non-critical)"
+            )
+        if not ready:
+            self.log.emit(
+                "No JavaScript runtime is available; YouTube downloads may "
+                "fail until one is installed"
+            )
+        return ready
 
     def run(self):
         try:
@@ -756,21 +795,7 @@ class SetupWorkerCore(QThread):
             # JavaScript runtime (56-60% — only when yt-dlp needs one).
             ytdlp_ver = self._dependencies['get_ytdlp_version']()
             if self._dependencies['ytdlp_needs_external_runtime'](ytdlp_ver or ''):
-                runtime = self._dependencies['probe_javascript_runtime'](
-                    force=True, configured_runtime=self.configured_runtime
-                )
-                if not runtime.get('ejsReady') and runtime.get('canProvisionDeno'):
-                    self.log.emit("Downloading Deno runtime...")
-                    result = self._dependencies['provision_deno']()
-                    if result:
-                        self.log.emit("  Done")
-                    else:
-                        self.log.emit("  Deno download failed (non-critical)")
-                elif runtime.get('ejsReady'):
-                    label = str(runtime.get('runtime') or 'JavaScript').title()
-                    self.log.emit(f"{label} runtime ready: {runtime.get('path')}")
-                else:
-                    self.log.emit("Configured Node runtime is unavailable or unsupported")
+                self._provision_javascript_runtime()
             self.progress.emit(60)
 
             # Icon
@@ -3154,7 +3179,8 @@ class MainWindowCore(QMainWindow):
         runtime_copy.setSpacing(2)
         runtime_copy.addWidget(make_label("JavaScript runtime", "fieldLabel"))
         runtime_copy.addWidget(make_label(
-            "Auto prefers Deno, then Node 22+.",
+            "Auto prefers Deno, then Node 22+, then the QuickJS runtime the "
+            "app downloads for itself (2 MB).",
             "fieldHint", word_wrap=True,
         ))
         runtime_row.addLayout(runtime_copy, 1)
@@ -3163,6 +3189,7 @@ class MainWindowCore(QMainWindow):
         self.cfg_js_runtime.addItem(tr("Auto"), "auto")
         self.cfg_js_runtime.addItem("Deno", "deno")
         self.cfg_js_runtime.addItem("Node 22+", "node")
+        self.cfg_js_runtime.addItem("QuickJS", "quickjs")
         selected_runtime = self.config.get("JavaScriptRuntime", "auto")
         self.cfg_js_runtime.setCurrentIndex(max(0, self.cfg_js_runtime.findData(selected_runtime)))
         runtime_row.addWidget(self.cfg_js_runtime)

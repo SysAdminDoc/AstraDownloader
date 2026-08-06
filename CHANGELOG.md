@@ -32,6 +32,16 @@ repository's git log.
   checkboxes; the field beside them still accepts any code yt-dlp knows, and a
   code with no checkbox is never dropped when you untick another.
 
+- **A JavaScript runtime the app can fetch for itself.** YouTube needs one,
+  and until now the only one setup could obtain was Deno — a 40 MB archive
+  whose download is the part of setup most likely to fail, leaving the install
+  with no runtime and every YouTube download broken. QuickJS is 2 MB, yt-dlp
+  accepts it, and it is now the automatic fallback. Verified end to end
+  against yt-dlp 2026.08.04: a real YouTube download completes with QuickJS
+  as the only enabled runtime. Deno stays the first choice when it is
+  available, matching yt-dlp's own priority; QuickJS is also selectable
+  outright in Settings.
+
 ### Changed
 
 - The "Embed subtitles" checkbox is now "Download subtitles", which is what it
@@ -44,6 +54,10 @@ repository's git log.
   have finished with nothing to reveal in the folder; the written-subtitle
   line is now read instead, and a converted track is named by its new
   extension.
+- **Tests no longer depend on what is installed on the machine running them.**
+  `INSTALL_DIR` was redirected for the test run but the runtime paths derived
+  from it were not, so a check asserting "no JavaScript runtime is available"
+  passed only on a machine that happened to have none.
 - **The last positional rollback tuple is gone.** `start_download` reuses a
   waiting-for-sign-in record rather than queueing a duplicate, and restored
   the previous request from a sixteen-field tuple — the same shape as the

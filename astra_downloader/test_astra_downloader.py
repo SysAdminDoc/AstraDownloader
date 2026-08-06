@@ -3,6 +3,7 @@ import inspect
 import io
 import json
 import os
+import shutil
 import socket
 import struct
 import subprocess
@@ -11791,6 +11792,283 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
                 "every text-carrying QLabel must pin PlainText near construction",
             )
 
+
+class QuickJsRuntimeTests(unittest.TestCase):
+    """The runtime the app can fetch for itself when Deno is not there."""
+
+    # -- The pin ----------------------------------------------------------
+
+    def test_the_pinned_version_and_the_floor_agree(self):
+        # The floor is the version this project ships and has verified. If a
+        # bump moves one and not the other, the app would either refuse its
+        # own binary or accept an unverified one.
+        self.assertEqual(ad.QUICKJS_VERSION, ad.QUICKJS_MIN_VERSION)
+
+    def test_the_download_url_names_the_pinned_version(self):
+        # The digest below is only meaningful for the release it was taken
+        # from; a URL that drifted to "latest" would verify nothing.
+        self.assertIn(f"/v{ad.QUICKJS_VERSION}/", ad.QUICKJS_EXE_URL)
+        self.assertNotIn("/latest/", ad.QUICKJS_EXE_URL)
+
+    def test_the_digest_is_a_real_sha256(self):
+        self.assertRegex(ad.QUICKJS_SHA256, r"^[0-9a-f]{64}$")
+
+    def test_the_licence_policy_records_the_same_release(self):
+        # The inventory gate reports what is distributed; a policy entry that
+        # named a different version would attest to the wrong artifact.
+        policy = json.loads(
+            (Path(ad.__file__).parent / "license-policy.json")
+            .read_text(encoding="utf-8")
+        )
+        entry = next(h for h in policy["runtimeHelpers"] if h["key"] == "quickjs")
+        self.assertEqual(entry["version"], ad.QUICKJS_VERSION)
+        self.assertEqual(entry["licenseExpression"], "MIT")
+        self.assertIn(ad.QUICKJS_VERSION, entry["distributionUrl"])
+
+    # -- The vocabulary ---------------------------------------------------
+
+    def test_config_accepts_exactly_the_runtimes_the_prober_knows(self):
+        self.assertEqual(
+            ad.JAVASCRIPT_RUNTIME_CHOICES - {"auto"},
+            set(ad.JS_RUNTIMES),
+        )
+
+    def test_a_stored_runtime_outside_the_list_falls_back_to_auto(self):
+        for value in ("bun", "; calc", "deno2"):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    ad.sanitize_config({"JavaScriptRuntime": value})["JavaScriptRuntime"],
+                    "auto",
+                )
+        self.assertEqual(
+            ad.sanitize_config({"JavaScriptRuntime": "quickjs"})["JavaScriptRuntime"],
+            "quickjs",
+        )
+
+    # -- Selection --------------------------------------------------------
+
+    def test_quickjs_compiles_into_the_runtime_argv(self):
+        self.assertEqual(
+            ad.build_javascript_runtime_args({
+                "supported": True, "ejsReady": True,
+                "runtime": "quickjs", "path": r"C:\\qjs.exe",
+            }),
+            ["--no-js-runtimes", "--js-runtimes", r"quickjs:C:\\qjs.exe"],
+        )
+
+    def test_a_runtime_the_app_cannot_probe_is_never_sent(self):
+        # yt-dlp also accepts bun. Nothing here provisions or probes it, so
+        # offering it would be a claim without evidence.
+        self.assertEqual(
+            ad.build_javascript_runtime_args({
+                "supported": True, "ejsReady": True,
+                "runtime": "bun", "path": r"C:\\bun.exe",
+            }),
+            [],
+        )
+
+    def test_the_version_floor_is_enforced_for_quickjs_too(self):
+        self.assertTrue(
+            ad._javascript_runtime_supported("quickjs", ad.QUICKJS_MIN_VERSION))
+        self.assertFalse(ad._javascript_runtime_supported("quickjs", "0.1.0"))
+
+    def test_the_execution_probe_uses_the_flag_quickjs_understands(self):
+        # Verified against the shipped build: `qjs -e` evaluates and prints.
+        # deno's `eval` subcommand and node's --input-type are both rejected.
+        seen = []
+
+        def runner(args, timeout=None):
+            seen.append(args)
+            return "MARKER"
+
+        self.assertTrue(ad._owned_probe_javascript_execution(
+            "quickjs", "qjs.exe", runner=runner, marker="MARKER"))
+        self.assertEqual(seen[0][:2], ["qjs.exe", "-e"])
+        # And the wrapper the app actually calls reaches the same branch.
+        with mock.patch.object(ad, "_run_captured",
+                               lambda args, timeout=None: (
+                                   seen.append(args),
+                                   ad.JS_RUNTIME_CAPABILITY_MARKER)[1]):
+            self.assertTrue(ad._probe_javascript_execution("quickjs", "qjs.exe"))
+        self.assertEqual(seen[-1][:2], ["qjs.exe", "-e"])
+
+    def test_quickjs_is_offered_after_deno_and_node(self):
+        # yt-dlp's own priority is deno > node > quickjs. An install that
+        # already has Deno should keep using it.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake = Path(tmpdir) / "qjs.exe"
+            fake.write_bytes(b"\0" * (2 * 1024 * 1024))
+            with mock.patch.object(ad, "QUICKJS_PATH", fake), \
+                 mock.patch.object(ad.shutil, "which", lambda name: (
+                     f"C:\\{name}.exe" if name in ("deno", "node") else None)):
+                order = [
+                    runtime for runtime, _path, _source
+                    in ad._javascript_runtime_candidates("auto")
+                ]
+        self.assertEqual(order[-1], "quickjs")
+        self.assertLess(order.index("deno"), order.index("quickjs"))
+        self.assertLess(order.index("node"), order.index("quickjs"))
+
+    def test_only_the_provisioned_copy_is_offered(self):
+        # Nothing on PATH is pinned to a digest or verified end-to-end, so a
+        # system qjs is not a candidate.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "absent" / "qjs.exe"
+            with mock.patch.object(ad, "QUICKJS_PATH", missing), \
+                 mock.patch.object(ad.shutil, "which",
+                                   lambda name: f"C:\\{name}.exe"):
+                runtimes = [
+                    runtime for runtime, _path, _source
+                    in ad._javascript_runtime_candidates("auto")
+                ]
+        self.assertNotIn("quickjs", runtimes)
+
+    def test_a_truncated_binary_is_not_offered(self):
+        # The antivirus-stub case: present, so every exists() check passes,
+        # but far too small to be the real runtime.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            stub = Path(tmpdir) / "qjs.exe"
+            stub.write_bytes(b"")
+            with mock.patch.object(ad, "QUICKJS_PATH", stub), \
+                 mock.patch.object(ad.shutil, "which", lambda _name: None):
+                runtimes = [
+                    runtime for runtime, _path, _source
+                    in ad._javascript_runtime_candidates("auto")
+                ]
+        self.assertEqual(runtimes, [])
+
+
+class QuickJsProvisioningTests(unittest.TestCase):
+    """Provisioning verifies before it keeps, and does not re-fetch."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
+        self.path = Path(self.tmpdir) / "quickjs" / "qjs.exe"
+        self.enterContext(mock.patch.object(ad, "QUICKJS_PATH", self.path))
+        self.enterContext(mock.patch.object(ad, "QUICKJS_DIR", self.path.parent))
+        self.enterContext(mock.patch.object(ad, "write_persistent_log",
+                                            lambda *_a, **_k: None))
+
+    def _plant(self, payload=b"\0" * (2 * 1024 * 1024)):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_bytes(payload)
+
+    def test_a_mismatched_digest_is_deleted_rather_than_kept(self):
+        # The whole point of pinning: a substituted binary must not survive
+        # the download and become the runtime every YouTube job executes.
+        def fake_download(_url, destination, **_kwargs):
+            Path(destination).parent.mkdir(parents=True, exist_ok=True)
+            Path(destination).write_bytes(b"\0" * (2 * 1024 * 1024))
+
+        with mock.patch.object(ad, "download_file_atomic", fake_download):
+            result = ad.provision_quickjs()
+        self.assertIsNone(result)
+        self.assertFalse(self.path.exists(),
+                         "an unverified runtime must not be left on disk")
+
+    def test_a_failed_download_leaves_nothing_behind(self):
+        def fake_download(*_args, **_kwargs):
+            raise RuntimeError("network unreachable")
+
+        with mock.patch.object(ad, "download_file_atomic", fake_download):
+            self.assertIsNone(ad.provision_quickjs())
+        self.assertFalse(self.path.exists())
+
+    def test_a_good_binary_is_not_fetched_again(self):
+        # This regressed once: the version probe called a name that does not
+        # exist in this module, the bare except swallowed the NameError, and
+        # every call re-downloaded 2 MB.
+        self._plant()
+        calls = []
+        with mock.patch.object(ad, "download_file_atomic",
+                               lambda *a, **k: calls.append(a)), \
+             mock.patch.object(ad, "_probe_quickjs_binary_version",
+                               lambda _path: ad.QUICKJS_VERSION):
+            result = ad.provision_quickjs()
+        self.assertEqual(result, str(self.path))
+        self.assertEqual(calls, [], "an already-verified runtime was re-fetched")
+
+    def test_the_version_probe_reports_a_real_version(self):
+        # Guards the swallowed-NameError shape directly: the helper must
+        # return the parsed version, not None, for output the binary emits.
+        with mock.patch.object(ad, "_run_captured", lambda *_a, **_k: "0.16.1\n"):
+            self.assertEqual(
+                ad._probe_quickjs_binary_version(Path("qjs.exe")), "0.16.1")
+
+    def test_a_binary_below_the_floor_is_replaced(self):
+        self._plant()
+        calls = []
+
+        def fake_download(_url, destination, **_kwargs):
+            calls.append(destination)
+            Path(destination).write_bytes(b"\0" * (2 * 1024 * 1024))
+
+        with mock.patch.object(ad, "download_file_atomic", fake_download), \
+             mock.patch.object(ad, "_probe_quickjs_binary_version",
+                               lambda _path: "0.1.0"), \
+             mock.patch.object(ad, "verify_file_sha256", lambda *_a: True):
+            result = ad.provision_quickjs()
+        self.assertEqual(result, str(self.path))
+        self.assertEqual(len(calls), 1)
+
+
+class QuickJsSetupFallbackTests(unittest.TestCase):
+    """Setup falls back to QuickJS when Deno cannot be had."""
+
+    def _worker(self, *, deno_ok, runtime_ready=False, configured="auto"):
+        gui = gui_module_for_tests()
+        worker = gui.SetupWorkerCore.__new__(gui.SetupWorkerCore)
+        worker.configured_runtime = configured
+        messages = []
+        calls = []
+        worker.log = types.SimpleNamespace(emit=messages.append)
+        worker.progress = types.SimpleNamespace(emit=lambda _value: None)
+        worker._dependencies = {
+            "get_ytdlp_version": lambda: "2026.08.04",
+            "ytdlp_needs_external_runtime": lambda _v: True,
+            "probe_javascript_runtime": lambda **_k: {
+                "ejsReady": runtime_ready, "canProvisionDeno": True,
+                "runtime": "deno", "path": "C:/deno.exe",
+            },
+            "provision_deno": lambda: (calls.append("deno"),
+                                       "C:/deno.exe" if deno_ok else None)[1],
+            "provision_quickjs": lambda: (calls.append("quickjs"),
+                                          "C:/qjs.exe")[1],
+        }
+        return worker, messages, calls
+
+    def test_a_failed_deno_download_falls_back_to_quickjs(self):
+        # The 40 MB archive is the part of setup most likely to fail. Before
+        # this, that left the install with no runtime at all.
+        worker, messages, calls = self._worker(deno_ok=False)
+        gui_module_for_tests().SetupWorkerCore._provision_javascript_runtime(worker)
+        self.assertEqual(calls, ["deno", "quickjs"])
+        self.assertTrue(any("QuickJS" in message for message in messages))
+
+    def test_a_working_deno_is_not_second_guessed(self):
+        worker, _messages, calls = self._worker(deno_ok=True)
+        gui_module_for_tests().SetupWorkerCore._provision_javascript_runtime(worker)
+        self.assertEqual(calls, ["deno"])
+
+    def test_an_existing_runtime_downloads_nothing(self):
+        worker, _messages, calls = self._worker(deno_ok=True, runtime_ready=True)
+        gui_module_for_tests().SetupWorkerCore._provision_javascript_runtime(worker)
+        self.assertEqual(calls, [])
+
+    def test_choosing_node_does_not_silently_install_quickjs(self):
+        # An explicit choice is a choice; only Auto and QuickJS may fetch it.
+        worker, _messages, calls = self._worker(deno_ok=False, configured="node")
+        gui_module_for_tests().SetupWorkerCore._provision_javascript_runtime(worker)
+        self.assertNotIn("quickjs", calls)
+
+    def test_the_user_is_told_when_no_runtime_could_be_had(self):
+        worker, messages, _calls = self._worker(deno_ok=False, configured="node")
+        gui_module_for_tests().SetupWorkerCore._provision_javascript_runtime(worker)
+        self.assertTrue(
+            any("No JavaScript runtime" in message for message in messages),
+            messages,
+        )
 
 class SubtitleRequestTests(unittest.TestCase):
     """Which subtitle tracks are asked for, and what happens to them."""
