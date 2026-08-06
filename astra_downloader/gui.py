@@ -4234,8 +4234,10 @@ class MainWindowCore(QMainWindow):
                         # `<token> <command>`. Without the token any local
                         # process could stop a download mid-flight or bring the
                         # local API up behind the user's back.
+                        # Split on the FIRST space: the token never contains
+                        # one, and `download <url>` carries its own.
                         presented, _, command = (
-                            raw.decode('ascii', errors='ignore').strip().rpartition(' ')
+                            raw.decode('ascii', errors='ignore').strip().partition(' ')
                         )
                         expected = str(self.config.get('ServerToken', '') or '')
                         if not expected or not hmac.compare_digest(presented, expected):
@@ -4272,7 +4274,13 @@ class MainWindowCore(QMainWindow):
         self._instance_command_thread = None
 
     def _handle_instance_command(self, command):
-        command = str(command).strip().lower()
+        command = str(command).strip()
+        if command.lower().startswith('download '):
+            # A ytdl:// or mediadl:// link. It goes through the paste box so it
+            # meets exactly the same URL policy a typed link does.
+            self.enqueue_protocol_download(command.split(' ', 1)[1].strip())
+            return
+        command = command.lower()
         if command == 'show':
             self._append_log("Received request to show the existing window.")
             self._show_from_tray()
@@ -4291,6 +4299,21 @@ class MainWindowCore(QMainWindow):
             self._append_log("Setup is running. The server will start when setup finishes.")
             return
         self._start_server()
+
+    def enqueue_protocol_download(self, url):
+        """Queue a URL handed over by the ytdl:// / mediadl:// handler."""
+        url = str(url or '').strip()
+        if not url:
+            self._append_log("Received a protocol link with no URL.")
+            return False
+        self._append_log(f"Received a protocol download request for {url}")
+        self._show_from_tray()
+        self._nav_click("Download")
+        self.quick_download_url.setText(url)
+        self.quick_download_start.clear()
+        self.quick_download_end.clear()
+        self._start_quick_download()
+        return True
 
     # ── Tray ──
     def _tray_activated(self, reason):
