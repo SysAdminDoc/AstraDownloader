@@ -34,6 +34,10 @@ repository's git log.
 
 ### Added
 
+- **Send one download somewhere else.** A "Save to" button beside the paste
+  box overrides the destination for the next download only; it names the
+  folder it will use, says so again in the queued message, and reverts to the
+  default afterwards. Clicking it while an override is set clears it.
 - **Drop a link on the window and it downloads.** A dragged link, a selection
   of text containing links, or a dropped `.txt` list all land in the paste
   box's batch path — junk lines are ignored, duplicates collapse, and the

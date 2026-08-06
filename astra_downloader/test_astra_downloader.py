@@ -1526,6 +1526,73 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 _retire_test_window(window)
 
 
+class PerDownloadDestinationTests(unittest.TestCase):
+    def _window(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            return ad.MainWindow(FakeConfig(), manager, FakeHistory()), manager
+
+    def test_a_chosen_folder_applies_to_one_download_then_clears(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window, manager = self._window()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with mock.patch.object(
+                    ad.QFileDialog, "getExistingDirectory", return_value=tmp
+                ):
+                    window.btn_quick_download_dest.click()
+                QApplication.processEvents()
+                self.assertEqual(window._quick_download_dir, tmp)
+                self.assertIn(tmp, window.btn_quick_download_dest.accessibleName())
+
+                window.quick_download_url.setText("https://example.com/video")
+                with mock.patch.object(
+                    manager, "start_download", return_value=("dl_dest", None)
+                ) as start:
+                    window._start_quick_download()
+
+                self.assertEqual(start.call_args.kwargs["output_dir"], tmp)
+                self.assertIn(tmp, window.quick_download_status.text())
+                self.assertEqual(
+                    window._quick_download_dir, "",
+                    "the override is for one download, not a new default",
+                )
+
+                window.quick_download_url.setText("https://example.com/second")
+                with mock.patch.object(
+                    manager, "start_download", return_value=("dl_default", None)
+                ) as start:
+                    window._start_quick_download()
+                self.assertIsNone(start.call_args.kwargs["output_dir"])
+        finally:
+            _retire_test_window(window)
+
+    def test_clicking_the_destination_again_clears_it(self):
+        _get_qapp_or_skip(self)
+        window, _manager = self._window()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with mock.patch.object(
+                    ad.QFileDialog, "getExistingDirectory", return_value=tmp
+                ):
+                    window.btn_quick_download_dest.click()
+                self.assertEqual(window._quick_download_dir, tmp)
+
+                # No dialog this time: a second click means "never mind".
+                with mock.patch.object(
+                    ad.QFileDialog, "getExistingDirectory",
+                    side_effect=AssertionError("must not reopen the picker"),
+                ):
+                    window.btn_quick_download_dest.click()
+                self.assertEqual(window._quick_download_dir, "")
+        finally:
+            _retire_test_window(window)
+
+
 class DragAndDropTests(unittest.TestCase):
     def _window(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
@@ -9414,6 +9481,8 @@ class QuickDownloadBatchTests(unittest.TestCase):
                 "normalize_download_section": ad.normalize_download_section,
             },
             _clipboard_staged_url="",
+            _quick_download_dir="",
+            _set_quick_download_dir=lambda _path: None,
             _append_log=lambda *_args: None,
             _update_ui=lambda: None,
         )
