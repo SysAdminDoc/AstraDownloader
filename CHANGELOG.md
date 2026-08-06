@@ -10,6 +10,60 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [2.4.0] - 2026-08-06
+
+### Fixed
+
+- **A retry that cannot be saved is put back, not left half-done.** The
+  rollback in the sign-in branch of a retry packed fifteen fields and
+  restored fourteen, so when the queue write failed the rollback itself
+  raised — nothing was restored, the error escaped into the API and the
+  window, and the download was stranded waiting for a sign-in with none of it
+  written to disk. The lists could disagree because they were positional;
+  every rollback now names its fields.
+- **A `ytdl://` link works when the app is already open.** The link handler
+  built the right command and the window knew how to receive it, but the
+  listener in between only recognised three fixed words and dropped anything
+  carrying a URL. Clicking such a link with the app running opened nothing and
+  queued nothing; it only ever worked from a cold start.
+- **Resume on a paused download resumes that download.** It called the
+  queue-wide resume, so recovering one item started every paused one.
+- **A subscription says when it cannot write its archive.** That failure was
+  counted as "already downloaded", which is what a healthy scan with nothing
+  new reports — so a channel that had silently stopped downloading looked
+  completely up to date. Subscriptions run unattended, which is exactly why
+  this needed to be visible.
+- **Retry, reorder, pause and resume report on the Download page.** Their only
+  feedback went to the log panel on the Browser extension page, so a refused
+  action produced no visible response where the button was.
+- **Nothing the window scheduled outlives it.** A link typed just before
+  closing started a format probe afterwards, spawning a `yt-dlp` the shutdown
+  path does not track and leaving it running for up to a minute after quitting.
+
+### Added
+
+- **Imitate a browser.** The bundled yt-dlp can send a real browser's TLS
+  fingerprint, which is the usual way past a site that answers 403, and none
+  of it was reachable. Settings now lists the targets the installed binary
+  actually reports. Off by default, because impersonation can itself provoke
+  rate limiting. A target the binary does not have is refused rather than
+  passed through — yt-dlp aborts the whole download on an unknown one.
+- **A 403 is its own failure.** It used to fall into "network unreachable",
+  whose advice is to check the firewall. It now names the refusal and points
+  at the browser setting, and becomes retryable once one is chosen.
+
+### Changed
+
+- **Controls have a boundary you can see.** Input borders measured 1.79:1
+  against the page where the accessibility floor for a control outline is
+  3:1, and the fill was 1.07:1, so on a bright screen there was nothing
+  marking where a field was. Secondary buttons had no background and no
+  border, making them indistinguishable from the labels beside them until
+  hovered — "Save to" looked exactly like "Clip from". Text contrast was
+  measured at the same time and was already fine, so it is unchanged.
+- "Start Server", "Stop Server" and "Check yt-dlp Update" are now sentence
+  case, matching every other label.
+
 ## [2.3.0] - 2026-08-06
 
 ### Added

@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.3.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.4.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.12-3776ab)](astra_downloader/requirements.txt)
@@ -36,8 +36,10 @@ pasting a link never needs it.
 - **Durable queue.** Downloads survive a restart. Pause intake, retry a
   failure, cancel a run.
 - **It tells you why.** A failure names its cause — missing JavaScript
-  runtime, expired sign-in, size cap, SABR-limited formats — and offers the
-  control that fixes it.
+  runtime, expired sign-in, size cap, SABR-limited formats, a site refusing
+  the request — and offers the control that fixes it.
+- **Get past a block.** Imitate a real browser's TLS fingerprint, chosen from
+  the targets your yt-dlp actually ships, for sites that answer 403.
 - **Sets itself up.** First launch fetches yt-dlp and ffmpeg. No separate
   installer, no PATH surgery. yt-dlp keeps itself current.
 - **Stays out of the way.** Tray icon, optional logon start, Start Menu and
@@ -94,7 +96,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 565 tests
+py -3.12 -m pytest          # 601 tests
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

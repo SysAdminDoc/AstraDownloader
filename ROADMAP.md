@@ -51,13 +51,6 @@ Notes on the items above, from the same pass:
   Acceptance: The user chooses manual, auto, or prefer-manual-else-auto; picks languages from a multi-select; can request `--convert-subs srt`; and can run a subtitles-only job that skips the media.
   Complexity: M
 
-- [ ] P2 — Expose `--impersonate`
-  Why: The vendored yt-dlp already ships curl_cffi with at least nine impersonation targets and nothing surfaces them, leaving the standard remedy for Cloudflare and TLS-fingerprint 403s unavailable.
-  Evidence: `yt-dlp.exe --list-impersonate-targets` on the installed 2026.08.04 build returns Chrome, Safari, Edge and Tor targets (run 2026-08-06); no `impersonate` reference exists anywhere in `astra_downloader/`. Caveat to surface in the UI: impersonation can itself trigger 429 on some sites (yt-dlp #10422).
-  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/health.py`
-  Acceptance: A per-site impersonation target can be chosen, defaulting to off; the target list is read from `--list-impersonate-targets` rather than hardcoded; `classify_download_failure` suggests it on a 403.
-  Complexity: M
-
 - [ ] P2 — Bundle QuickJS so YouTube works without a Deno install
   Why: Installing Deno is the biggest first-run blocker for full YouTube support, and yt-dlp accepts QuickJS — roughly a 1 MB binary — through plumbing this app already has.
   Evidence: `--js-runtimes RUNTIME[:PATH]` supports deno, node, quickjs and bun (`yt-dlp.exe --help`, verified 2026-08-06); `build_javascript_runtime_args` already emits `--no-js-runtimes --js-runtimes <runtime>:<path>` but gates on `runtime not in {'deno', 'node'}` (`health.py:131`); the picker offers only Deno and Node (`gui.py:2395-2396`). yt-dlp #15012 confirms quickjs is supported but disabled by default.
@@ -122,3 +115,29 @@ Notes on the items above, from the same pass:
   Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/build.py`, `README.md`
   Acceptance: A silent install path exists and is documented; a portable mode keeps all state beside the executable; a winget manifest is published. Resolve the open question in `RESEARCH.md` about one-folder versus single-file packaging before choosing the installer shape.
   Complexity: L
+
+## Audit Findings — 2026-08-06
+
+### Notes on existing roadmap items
+
+- *Light-theme behaviour* (the P3 "Unaudited" bullet) — confirmed and refined, not duplicated. There is no theme key in `DEFAULT_CONFIG` and `STYLESHEET` is applied unconditionally at `astra_downloader.py:3786`, so the work is indeed "build a light theme". Add one detail the existing note misses: the app already renders mixed-theme surfaces today, because `QFileDialog` (`gui.py:1863`, 2368, 3883, 4417) and the folder-picker service use the **system** palette rather than the app stylesheet. On a light Windows theme those dialogs render light against the dark window regardless of whether a light theme is ever built, so the item should cover native dialog surfaces explicitly.
+- *Give `subscriptions.py` a real test surface* (P3) — the disk-full reporting defect logged above is a concrete instance of what that missing coverage hides; the lifecycle tests that item calls for should include it.
+
+### Measured and found clean (do not re-investigate)
+
+These were suspected, measured, and are **not** defects. Recorded so a later pass does not spend time on them again:
+
+- **Text contrast** — every foreground measured on real pixels passes AA: `fieldHint` 6.57:1, placeholder 4.73:1, readiness values 14.26:1, queue meta 6.57:1. Only the *non-text* borders fail (logged above).
+- **Accessible names** — 0 of 32 interactive controls lack both an accessible name and a text label; the focus chain from the paste box is in visual order. The v2.1.0 a11y work holds.
+- **Subscription refresh cost** — `_refresh_subscriptions` runs on the 500 ms tick and calls `archive_summary()`, which walks the whole archive. Measured at the 20,000-entry cap: 3.88 ms per call, plus 0.07 ms for the subscription deepcopy and 0.04 ms for the JSON signature. Roughly 0.8% of one core; not worth optimising.
+- **`/health` unauthenticated payload** — `read_update_recovery_status` (`astra_downloader.py:1388`) allowlists five string fields and truncates each to 80 chars; no paths or digests leak. `_public_runtime_status` (`routes.py:47`) strips the runtime path. Subscriptions and `recentErrors` are already behind `check_auth()`.
+- **`build_format_sort_args` on audio-only downloads** — applied unconditionally including the `-f bestaudio` branch (`download.py:2535-2540`). The leading `res` field is inert for audio formats and `vcodec` matches nothing, so it is a no-op; `acodec` preference correctly still applies. Not a defect.
+
+### Unaudited — needs a pass
+
+Areas this pass did not cover, listed honestly so the gap is visible:
+
+- **The native-messaging host bootstrap** (`astra_downloader.py:2715-2810`, `read_native_message`, manifest generation and the HKCU registry writes). Read but not exercised; it needs a browser to drive.
+- **The self-update transaction** (`_run_companion_self_update`, `_run_ytdlp_self_update`, the staged-rollback updater, roughly `astra_downloader.py:1480-2350`). The largest untraced surface in the repo; it replaces a running executable and deserves its own dedicated pass.
+- **`scripts/audit-python-deps.js` and `scripts/companion-license-inventory.js`** (402 and 437 lines). Both gates pass; neither was read closely enough to say whether they can fail for the right reasons.
+- **Playwright/browser-driven verification of the Astra Deck extension contract.** The port catalogue gate checks the two copies agree, but no test in this repository exercises a real extension against the local API.
