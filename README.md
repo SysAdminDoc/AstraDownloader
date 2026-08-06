@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.4.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.5.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.12-3776ab)](astra_downloader/requirements.txt)
@@ -40,10 +40,20 @@ pasting a link never needs it.
   the request — and offers the control that fixes it.
 - **Get past a block.** Imitate a real browser's TLS fingerprint, chosen from
   the targets your yt-dlp actually ships, for sites that answer 403.
-- **Sets itself up.** First launch fetches yt-dlp and ffmpeg. No separate
-  installer, no PATH surgery. yt-dlp keeps itself current.
+- **Subtitles, the ones you asked for.** Creator captions, the machine
+  transcript, or the former falling back to the latter. Pick languages from a
+  list, normalise everything to SRT, or fetch subtitles without the video.
+- **Sets itself up.** First launch fetches yt-dlp and ffmpeg, plus a
+  JavaScript runtime if YouTube needs one — Deno if it can be had, otherwise a
+  2 MB QuickJS build. No separate installer, no PATH surgery. yt-dlp keeps
+  itself current.
+- **Move it, or put it back.** Export settings and subscriptions to one JSON
+  bundle and import it on another machine. Stored sign-ins are listed by site
+  but never exported; cookies stay where they are.
 - **Stays out of the way.** Tray icon, optional logon start, Start Menu and
   desktop entries, and a clipboard watcher that can stage copied links.
+  Queue progress shows on the taskbar button, and a completion notification
+  can be clicked to reveal the file.
 
 ## Install
 
@@ -96,7 +106,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 601 tests
+py -3.12 -m pytest          # 712 tests
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

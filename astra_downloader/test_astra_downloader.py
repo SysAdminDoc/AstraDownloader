@@ -6352,12 +6352,13 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_4_0(self):
-        # v2.4.0: a rejected retry rolls back instead of raising, a ytdl://
-        # link reaches a running window, per-card actions are per-card, a
-        # subscription reports an unwritable archive, control boundaries meet
-        # the contrast floor, and a browser can be imitated to get past a 403.
-        self.assertEqual(ad.APP_VERSION, "2.4.0")
+    def test_app_version_bumped_to_2_5_0(self):
+        # v2.5.0: subtitle tracks can be chosen and fetched without the video,
+        # QuickJS is a 2 MB fallback when Deno cannot be had, the taskbar shows
+        # queue progress under an explicit app identity, settings and
+        # subscriptions export to a portable bundle, and the UI strings are
+        # extracted from the source rather than listed by hand.
+        self.assertEqual(ad.APP_VERSION, "2.5.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
