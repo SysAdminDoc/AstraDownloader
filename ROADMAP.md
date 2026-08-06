@@ -41,7 +41,42 @@ Notes on the items above, from the same pass:
 
 ### P1
 
+- [ ] P1 — Let a failure be retried once its recovery action has been performed
+  Why: The message on a non-retryable failure says "This failure needs its recovery action before it can be retried", promising a path that does not exist — nothing re-evaluates after the user installs Deno, refreshes ffmpeg or stores a sign-in, so the only way forward is to re-paste the URL and lose the queue entry.
+  Evidence: `DOWNLOAD_FAILURE_RECOVERY` classifies 13 codes; `DOWNLOAD_RETRYABLE_ERROR_CODES` (`download.py:64-70`) contains 5. The 8 excluded are precisely the user-fixable ones — `js-runtime-missing`, `js-runtime-unsupported`, `js-runtime-unverified`, `ejs-runtime-not-ready`, `deno-runtime-missing`, `deno-runtime-unsupported`, `ffmpeg-missing-or-stale`, `sign-in-required`. `retry()` refuses them at `download.py:2758`. The readiness probe already knows when a runtime became usable, and `SiteLoginStore.has_login_for` already answers the sign-in question.
+  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
+  Acceptance: a failure whose precondition is now satisfied becomes retryable and its card offers Retry; one whose precondition is still unmet keeps the current refusal and says what is still missing; a test fails a download with `js-runtime-missing`, reports a usable runtime, and asserts the retry is accepted.
+  Complexity: M
+
 ### P2
+
+- [ ] P2 — Make a right-to-left locale render correctly, and render one in the smoke
+  Why: Arabic is advertised and flips the whole layout to RTL, but 84% of the window is still English, so an Arabic user gets mirrored chrome wrapped around left-aligned English — worse than plain English. No gate could have caught it because no RTL locale is ever rendered.
+  Evidence: measured 2026-08-06 by rendering the real window under `ar` offscreen — 121 of 144 visible strings were pure ASCII. `i18n.py:62-66` sets `Qt.LayoutDirection.RightToLeft` for `ar`. `scripts/render-companion-gui.py` has 19 scenarios and no RTL one; its only locale scenario is `dashboard-german`, which asserts on the nav rail — the one surface Arabic does translate, except *Subscriptions*, which stays English. In the capture the hero Download button renders at a fraction of its LTR width with its icon against the frame edge. Details and the measurement in `RESEARCH.md` (Second Pass).
+  Touches: `scripts/render-companion-gui.py`, `astra_downloader/gui.py`, `astra_downloader/translations/`
+  Acceptance: an `ar` scenario joins the smoke set and captures the Download page; the hero button keeps its LTR proportions under RTL; the German rail assertion is extended to a body string on the same page so a rail-only translation can no longer pass. Pairs with "Finish the localisation" — this item is the RTL correctness half, not the bulk-translation half.
+  Complexity: M
+
+- [ ] P2 — Adopt yt-dlp's throttling and transient-failure recovery knobs
+  Why: The app sets `--retries` and `--fragment-retries` and stops there, so a CDN that silently throttles to a trickle, a stalled socket, or a flaky extractor all present as the stall watchdog eventually killing a download that yt-dlp could have recovered on its own.
+  Evidence: none of `--throttled-rate`, `--http-chunk-size`, `--socket-timeout`, `--extractor-retries`, `--retry-sleep` or `--file-access-retries` appears anywhere in `astra_downloader/` (verified against the full 276-option `--help` inventory, 2026-08-06). `--throttled-rate` re-extracts the video when the rate drops below a floor, which is the documented remedy for the YouTube throttling this class of tool hits most. Distinct from the pacing item above: that one is about not provoking 429s, this one is about surviving a slow or flaky transfer.
+  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`
+  Acceptance: a throttle floor, socket timeout and extractor-retry count are settings compiled into the argv with conservative defaults; the stall watchdog's timeout is documented as the backstop for when they fail; a test asserts the flags appear and that the defaults do not change existing argv expectations.
+  Complexity: M
+
+- [ ] P2 — Fetch a playlist or subscription incrementally instead of whole
+  Why: A subscription scan and a playlist download both re-walk everything every time. yt-dlp has the selection primitives to stop at the first already-seen item, bound a run, and filter by date or duration; none is used, so the subscription scheduler does the most expensive possible thing on every tick.
+  Evidence: the selection theme is the single largest unused group — 29 options — and none of `--break-on-existing`, `--dateafter`, `--datebefore`, `--max-downloads`, `--match-filters`, `--min-filesize` or `--lazy-playlist` appears in `astra_downloader/` (verified 2026-08-06). `--download-archive` is deliberately excluded and pinned by test, and must stay excluded — the archive-key mechanism in `subscriptions.py` is this project's answer to the same problem, so the new flags must complement it rather than reintroduce it.
+  Touches: `astra_downloader/subscriptions.py`, `astra_downloader/download.py`, `astra_downloader/config.py`, `astra_downloader/gui.py`
+  Acceptance: a subscription scan bounds itself by count and by date and stops early once it reaches known items, without `--download-archive`; a playlist download can be capped; the existing no-archive tests still pass.
+  Complexity: M
+
+- [ ] P2 — Verify a format is actually downloadable before committing to it
+  Why: The selector picks a format from the manifest and finds out at transfer time whether it works, which is one of the ways a download fails with no useful reason attached.
+  Evidence: neither `--check-formats` nor `--ignore-no-formats-error` appears in `astra_downloader/` (verified 2026-08-06). Pairs directly with "Format probing before download" and "Sort formats instead of guessing quality" — all three read the same format table, so they should share one probe rather than three.
+  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`
+  Acceptance: format verification is opt-in with its cost documented (it fetches a byte range per candidate); a failure to verify is classified into the existing taxonomy rather than surfacing as raw yt-dlp text.
+  Complexity: S
 
 - [ ] P2 — Finish the localisation
   Why: The app advertises 11 locales but ships translations for about a tenth of its strings, so choosing German yields a mostly-English window. This is also the only feature any external user has ever requested.
@@ -114,6 +149,20 @@ Notes on the items above, from the same pass:
   Complexity: M
 
 ### P3
+
+- [ ] P3 — Give `subscriptions.py` a real test surface
+  Why: The scheduling core is 872 lines behind a single test class, and it is the one subsystem that runs unattended — a defect there is discovered by a user whose channel silently stopped downloading.
+  Evidence: measured 2026-08-06 — 25 methods are never named anywhere in `test_astra_downloader.py`, including `due_subscriptions`, `begin_scan`, `finish_scan`, `_trim_archive_locked`, `release_archive` and `handle_download_completed`, which is the entire scan lifecycle. `routes.py` shows a similar count but is a false alarm: its handlers are exercised through the Flask test client by URL rather than by name.
+  Touches: `astra_downloader/test_astra_downloader.py`
+  Acceptance: the scan lifecycle has tests asserting effects — a due subscription becomes not-due after `begin_scan`, an interrupted scan is recoverable, the archive trims at its bound, and a completed download updates the right subscription — each mutation-checked.
+  Complexity: M
+
+- [ ] P3 — Geo and network-path workarounds for the failures a proxy cannot fix
+  Why: A geo-blocked video and an IPv6-routing failure are both common, both have one-flag remedies upstream, and neither is reachable here; the only network control offered is a whole-session proxy.
+  Evidence: none of `--xff`, `--force-ipv4`, `--force-ipv6`, `--source-address` or `--geo-verification-proxy` appears in `astra_downloader/` (verified 2026-08-06). `--force-ipv4` in particular is a long-standing remedy for YouTube 403s on dual-stack hosts.
+  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`
+  Acceptance: the options are settings defaulting to off; `classify_download_failure` suggests `--force-ipv4` on the 403 shape it already recognises and `--xff` on a geo-restriction message.
+  Complexity: S
 
 - [ ] P3 — Close the highest-risk test gaps
   Why: The P0 uninstall defect shipped because the only test asserted the argv shape rather than the outcome, and several other security-relevant paths have the same shape of coverage.

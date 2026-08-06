@@ -414,14 +414,37 @@ YTDLP_FORBIDDEN_LINK_FLAGS = frozenset({
 })
 
 
+# Applied to every yt-dlp spawn, not to any single builder.
+#
+# --ignore-config stops configuration *files*; yt-dlp's plugin directories are
+# a separate mechanism with their own defaults, so without --no-plugin-dirs
+# arbitrary Python under %APPDATA%\yt-dlp\plugins is imported — and executed —
+# inside the process this program spawns. Verified 2026-08-06: a marker plugin
+# ran under exactly the flags used here, and the debug line read
+# "Plugin directories: <path>"; with --no-plugin-dirs it reads
+# "none (disabled)". Refusing --exec and the external downloaders at this same
+# boundary while leaving that path open would be decorative.
+#
+# --no-remote-components is belt-and-braces: official builds, which is what
+# this program downloads and manages, do not fetch remote components anyway.
+#
+# Both options require a current yt-dlp. That is already this program's floor:
+# requirements.txt pins 2026.7.4 and YouTube extraction needs a build newer
+# than YTDLP_EXTERNAL_RUNTIME_CUTOFF regardless.
+YTDLP_HARDENING_FLAGS = ('--no-plugin-dirs', '--no-remote-components')
+
+
 def validate_ytdlp_spawn_args(args):
     """Fail closed if an out-of-policy flag reaches the process boundary.
 
     Request fields and persisted settings are allowlisted earlier, but this
     final guard also catches future builder regressions and yt-dlp's accepted
-    long-option abbreviations. Everything here either creates files or runs
-    commands from remote metadata, or hands the transfer to a process this
-    program does not control; each entry names its advisory above.
+    long-option abbreviations. Everything in the denylist either creates files
+    or runs commands from remote metadata, or hands the transfer to a process
+    this program does not control; each entry names its advisory above.
+
+    This is also where the hardening flags are added, so a yt-dlp invocation
+    added later cannot forget them.
     """
     safe_args = list(args)
     for raw_arg in safe_args[1:]:
@@ -431,7 +454,8 @@ def validate_ytdlp_spawn_args(args):
         if option.startswith('--') and any(
                 forbidden.startswith(option) for forbidden in YTDLP_FORBIDDEN_LINK_FLAGS):
             raise ValueError(f'Refusing unsafe yt-dlp flag: {option}')
-    return safe_args
+    missing = [flag for flag in YTDLP_HARDENING_FLAGS if flag not in safe_args]
+    return safe_args[:1] + missing + safe_args[1:]
 
 
 def spawn_ytdlp(args, **kwargs):

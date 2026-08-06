@@ -6936,6 +6936,42 @@ class YtDlpLinkFilePolicyTests(unittest.TestCase):
             with self.subTest(option=option):
                 self.assertIn(option, ad.YTDLP_FORBIDDEN_LINK_FLAGS)
 
+    def test_every_spawn_disables_the_plugin_auto_load_path(self):
+        # --ignore-config stops config FILES. Plugin directories are separate,
+        # and module-level code in one executes inside the spawned process —
+        # reproduced against the real binary on 2026-08-06. Refusing --exec at
+        # this boundary while leaving that open would be decorative.
+        sentinel = object()
+        with mock.patch.object(ad.subprocess, 'Popen', return_value=sentinel) as popen:
+            ad.spawn_ytdlp([
+                'yt-dlp.exe', '--ignore-config', '--no-config',
+                'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            ])
+        argv = popen.call_args.args[0]
+        self.assertEqual(argv[0], 'yt-dlp.exe', 'the executable must stay first')
+        self.assertIn('--no-plugin-dirs', argv)
+        self.assertIn('--no-remote-components', argv)
+        self.assertEqual(argv[-1], 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                         'the URL must stay last')
+
+    def test_hardening_flags_are_not_duplicated(self):
+        argv = ad.validate_ytdlp_spawn_args(
+            ['yt-dlp.exe', '--no-plugin-dirs', 'https://example.test'])
+        self.assertEqual(argv.count('--no-plugin-dirs'), 1)
+        self.assertEqual(argv.count('--no-remote-components'), 1)
+
+    def test_the_real_binary_accepts_the_hardening_flags(self):
+        # A flag the installed yt-dlp rejects would break every download, so
+        # this is checked against the binary rather than assumed.
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest('yt-dlp is not installed in this environment')
+        result = subprocess.run(
+            [str(ytdlp), *ad.YTDLP_HARDENING_FLAGS, '--help'],
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-400:])
+
     def test_process_boundary_allows_reviewed_download_args(self):
         sentinel = object()
         with mock.patch.object(ad.subprocess, 'Popen', return_value=sentinel) as popen:
