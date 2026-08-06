@@ -9864,6 +9864,66 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         self.assertIn('_make_readiness_row("server"', server_page)
         self.assertNotIn('_make_readiness_row("server"', download_page)
 
+    def test_every_readiness_key_the_probe_writes_has_a_row(self):
+        # _set_readiness returns silently for an unregistered key, so a state
+        # the probe computes can be discarded with no error anywhere. The PO
+        # provider status was invisible from the day it was written because of
+        # exactly this, while failure advice referred the user to it.
+        import gui as gui_module
+        import re as _re
+
+        source = inspect.getsource(gui_module.MainWindowCore._apply_readiness)
+        written = set(_re.findall(r'_set_readiness\(\s*"([^"]+)"', source))
+        for block in _re.findall(r'for key in \(([^)]*)\)', source):
+            written.update(_re.findall(r'"([^"]+)"', block))
+        self.assertIn("provider", written, "the probe must still compute a provider state")
+
+        # Compare against a real window rather than the page source: the rows
+        # are built from a table, and a source scan would start passing for
+        # the wrong reason the next time that construction is refactored.
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+            try:
+                registered = set(window.readiness_values)
+            finally:
+                window.close()
+                window.deleteLater()
+                QApplication.processEvents()
+
+        self.assertEqual(
+            written - registered, set(),
+            "every readiness key the probe writes needs a row to write it into",
+        )
+
+    def test_provider_readiness_row_is_built_on_the_download_page(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+            try:
+                self.assertIn("provider", window.readiness_values)
+                window._apply_readiness({"provider": {"ok": True, "version": "1.3.0"}})
+                _dot, value = window.readiness_values["provider"]
+                self.assertEqual(value.text(), "1.3.0")
+                self.assertIn("proof-of-origin", value.toolTip())
+
+                window._apply_readiness({})
+                self.assertEqual(window.readiness_values["provider"][1].text(), "Fallback")
+            finally:
+                window.close()
+                window.deleteLater()
+                QApplication.processEvents()
+
     def test_empty_queue_points_at_the_paste_box_not_the_server(self):
         import gui as gui_module
         import inspect

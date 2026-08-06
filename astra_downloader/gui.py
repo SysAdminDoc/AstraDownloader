@@ -1465,17 +1465,35 @@ class MainWindowCore(QMainWindow):
         # readiness probe (_apply_readiness) — never probe yt-dlp --version
         # synchronously here: this runs on the GUI thread before first paint
         # and a cold probe costs up to 5s.
-        tools_row = QHBoxLayout()
-        tools_row.setSpacing(18)
-        tools_row.addWidget(self._make_readiness_row("ytDlp", "yt-dlp"), 1)
-        tools_row.addWidget(make_vertical_divider())
-        tools_row.addWidget(self._make_readiness_row("ffmpeg", "FFmpeg"), 1)
-        tools_row.addWidget(make_vertical_divider())
-        tools_row.addWidget(
-            self._make_readiness_row("deno", "JavaScript runtime"), 1)
-        tools_row.addWidget(make_vertical_divider())
-        tools_row.addWidget(self._make_readiness_row("sabr", "SABR", "Limited"), 1)
-        layout.addLayout(tools_row)
+        # Three per line: a QLabel will not shrink below its text, so a fourth
+        # and fifth entry on one line overlap their neighbours on a narrow
+        # window at a large font rather than eliding.
+        #
+        # 'provider' is the PO-token provider. _apply_readiness has always
+        # computed its state and the 'po-provider' failure advice refers to
+        # it; with no row here _set_readiness discarded every update, so the
+        # status was never visible.
+        tools_grid = QVBoxLayout()
+        tools_grid.setSpacing(0)
+        readiness_rows = [
+            ("ytDlp", "yt-dlp", "Checking"),
+            ("ffmpeg", "FFmpeg", "Checking"),
+            ("deno", "JavaScript runtime", "Checking"),
+            ("sabr", "SABR", "Limited"),
+            ("provider", "PO provider", "Fallback"),
+        ]
+        for start in range(0, len(readiness_rows), 3):
+            line = QHBoxLayout()
+            line.setSpacing(18)
+            chunk = readiness_rows[start:start + 3]
+            for index, (key, label_text, initial) in enumerate(chunk):
+                if index:
+                    line.addWidget(make_vertical_divider())
+                line.addWidget(self._make_readiness_row(key, label_text, initial), 1)
+            for _ in range(3 - len(chunk)):
+                line.addStretch(1)
+            tools_grid.addLayout(line)
+        layout.addLayout(tools_grid)
         self._set_readiness("sabr", "Limited", "warning")
         layout.addWidget(make_divider())
 
