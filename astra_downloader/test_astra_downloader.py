@@ -586,16 +586,30 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertEqual(gui_module.sanitize_csv_cell("safe title"), "safe title")
         self.assertEqual(gui_module.sanitize_csv_cell(42), 42)
 
-    def test_companion_qt_catalogues_match_extension_locales_and_load_german(self):
+    def test_companion_qt_catalogues_cover_every_supported_locale_and_load_german(self):
+        """Every advertised locale ships a compiled catalogue, and nothing ships
+        a catalogue the app cannot select.
+
+        This used to compare SUPPORTED_LOCALES against the browser
+        extension's ``_locales`` directory. Astra Downloader is its own
+        product now, so the invariant is stated against its own shipped
+        files instead of another repository's.
+        """
         import i18n as i18n_module
         from PyQt6.QtCore import QTranslator
 
-        extension_locales = {
-            path.name
-            for path in (Path(ad.__file__).parents[1] / "extension" / "_locales").iterdir()
-            if path.is_dir()
+        translations = i18n_module.companion_translations_dir()
+        shipped = {
+            path.stem.replace("astra_downloader_", "")
+            for path in translations.glob("astra_downloader_*.qm")
         }
-        self.assertEqual(set(i18n_module.SUPPORTED_LOCALES), extension_locales)
+        self.assertEqual(set(i18n_module.SUPPORTED_LOCALES), shipped)
+        for locale in i18n_module.SUPPORTED_LOCALES:
+            with self.subTest(locale=locale):
+                self.assertTrue(
+                    (translations / f"astra_downloader_{locale}.ts").exists(),
+                    f"{locale} ships a compiled .qm with no .ts source",
+                )
         self.assertEqual(i18n_module.normalize_companion_locale("de-DE"), "de")
         self.assertEqual(i18n_module.normalize_companion_locale("pt-BR"), "pt_BR")
         self.assertEqual(i18n_module.normalize_companion_locale("xx-YY"), "en")
@@ -607,8 +621,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         )
         self.assertTrue(translator.load(str(catalog)))
         self.assertEqual(
-            translator.translate("AstraDownloader", "Dashboard"),
-            "Übersicht",
+            translator.translate("AstraDownloader", "Browser extension"),
+            "Browser-Erweiterung",
         )
 
     def test_companion_build_packages_qm_catalogues_and_gui_uses_translation(self):
@@ -674,7 +688,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn("btn.setCheckable(True)", source)
         self.assertIn("btn.setAutoExclusive(True)", source)
         self.assertIn('self._show_settings_status("Unsaved changes", "warning")', source)
-        self.assertIn('make_line_icon("Downloads" if "Queue" in title else "History", size=36)', gui_source)
+        self.assertIn('make_line_icon("Download" if "Queue" in title else "History", size=36)', gui_source)
         self.assertIn('QFrame[class="settingsGroup"]', ad.STYLESHEET)
         self.assertIn('QLabel[class="stateLabel"]', ad.STYLESHEET)
         self.assertIn("window.grab().toImage()", renderer_source)
@@ -692,7 +706,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn('os.environ.setdefault("QT_SCALE_FACTOR", "2")', renderer_source)
         self.assertTrue(callable(ad.make_line_icon))
         self.assertIn("self.btn_clear_history.setEnabled(bool(data))", source)
-        self.assertIn('"Open dashboard"', source)
+        self.assertIn('"Paste a link"', source)
         self.assertIn('"View download queue"', source)
 
     def test_companion_status_palette_meets_wcag_aa_on_its_real_surfaces(self):
@@ -5091,12 +5105,13 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_1_10_0(self):
-        # v1.9.0 site sign-ins: a per-site cookie store (import a cookies.txt,
-        # post extension-shaped records, or read a browser profile) so sites
-        # that only serve media to signed-in viewers download. Each jar is
-        # filtered to one registrable domain and attached to that site alone.
-        self.assertEqual(ad.APP_VERSION, "1.10.0")
+    def test_app_version_bumped_to_2_0_0(self):
+        # v2.0.0: Astra Downloader became its own product in its own
+        # repository. The window opens on Download rather than a server
+        # dashboard, the local API that serves the Astra Deck browser
+        # extension moved to its own page, and the self-update URLs point at
+        # this repository's releases instead of the extension's.
+        self.assertEqual(ad.APP_VERSION, "2.0.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
@@ -6115,7 +6130,7 @@ class GuiSmokeTests(unittest.TestCase):
             try:
                 window.resize(900, 620)
                 window.show()
-                window._nav_click("Downloads")
+                window._nav_click("Download")
                 window._update_ui()
                 QApplication.processEvents()
 
@@ -6828,11 +6843,11 @@ class SabrReadinessTests(unittest.TestCase):
         ad.MainWindow._apply_readiness(win, {"ytDlp": "2026.07.04", "ffmpeg": "8.1.2"})
         self.assertIn(("sabr", "Limited", "warning"), calls)
 
-    def test_dashboard_build_never_probes_ytdlp_synchronously_for_sabr(self):
+    def test_download_page_build_never_probes_ytdlp_synchronously_for_sabr(self):
         import inspect
 
         gui_module = __import__("gui")
-        source = inspect.getsource(gui_module.MainWindowCore._build_dashboard)
+        source = inspect.getsource(gui_module.MainWindowCore._build_download)
         self.assertNotIn("evaluate_sabr_support", source,
                          "SABR must come from the async readiness probe, not a cold GUI-thread subprocess")
 
@@ -9074,7 +9089,7 @@ skipped.error = "Nothing was downloaded: every available format is larger than t
 skipped.mark_terminal()
 manager.downloads["dl_skip"] = skipped
 
-window._nav_click("Downloads")
+window._nav_click("Download")
 window._downloads_signature = None
 window._update_ui()
 app_instance.processEvents()
@@ -9204,7 +9219,7 @@ def focus_changes_pixels(widget):
     return before != after
 
 
-window._nav_click("Downloads")
+window._nav_click("Download")
 qt_app.processEvents()
 
 ghosts = [b for b in window.findChildren(QPushButton)
@@ -9389,7 +9404,7 @@ assert reloaded.cfg_maxsize.value() == 250, "max file size must reload"
 reloaded.close()
 
 def row_actions():
-    window._nav_click("Downloads")
+    window._nav_click("Download")
     window._downloads_signature = None
     window._update_ui()
     qt.processEvents()
@@ -9629,6 +9644,71 @@ class StartMenuIntegrationTests(unittest.TestCase):
 
                 lnk.unlink()
                 self.assertFalse(lnk.exists())
+
+
+class DownloaderFirstLayoutTests(unittest.TestCase):
+    """The product is a video downloader; the extension server is a feature
+    of it. That ordering is a design decision, so it is pinned rather than
+    left to whoever next edits the rail.
+    """
+
+    def test_download_is_the_first_page_and_the_landing_page(self):
+        import gui as gui_module
+        import inspect
+
+        source = inspect.getsource(gui_module.MainWindowCore.__init__)
+        names_at = source.index("self._page_names")
+        page_block = source[names_at:source.index("]", names_at)]
+        self.assertIn('"Download"', page_block)
+        first = page_block.split('[', 1)[1].strip().split(',')[0].strip()
+        self.assertEqual(
+            first, '"Download"',
+            "Download must be the first rail entry - the paste box is the "
+            "product, not a page you navigate to",
+        )
+        # The nav loop also contains a _nav_click lambda, so match the
+        # landing call by its literal argument rather than by position.
+        self.assertIn(
+            'self._nav_click("Download")', source,
+            "the window must open on Download",
+        )
+
+    def test_server_page_is_named_for_the_extension_it_serves(self):
+        import gui as gui_module
+        import inspect
+
+        source = inspect.getsource(gui_module.MainWindowCore._build_extension)
+        self.assertIn('"Browser extension"', source)
+        self.assertIn(
+            "by pasting a link never needs this server.", source,
+            "the server page must say the downloader works without it",
+        )
+
+    def test_download_tool_readiness_lives_with_the_paste_box(self):
+        import gui as gui_module
+        import inspect
+
+        download_page = inspect.getsource(gui_module.MainWindowCore._build_download)
+        server_page = inspect.getsource(gui_module.MainWindowCore._build_extension)
+        for key in ("ytDlp", "ffmpeg", "deno", "sabr"):
+            with self.subTest(key=key):
+                self.assertIn(
+                    f'"{key}"', download_page,
+                    f"{key} readiness explains why a download failed and "
+                    "belongs on the download page",
+                )
+                self.assertNotIn(f'_make_readiness_row("{key}"', server_page)
+        self.assertIn('_make_readiness_row("server"', server_page)
+        self.assertNotIn('_make_readiness_row("server"', download_page)
+
+    def test_empty_queue_points_at_the_paste_box_not_the_server(self):
+        import gui as gui_module
+        import inspect
+
+        source = inspect.getsource(gui_module.MainWindowCore._reconcile_download_list)
+        self.assertIn("Nothing downloading yet", source)
+        self.assertIn("self._focus_download_url", source)
+        self.assertNotIn("Open dashboard", source)
 
 
 if __name__ == "__main__":

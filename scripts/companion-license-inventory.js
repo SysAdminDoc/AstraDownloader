@@ -332,7 +332,7 @@ function buildCompanionInventory(repoRoot, buildDir) {
             property(PROPERTY.artifactSha256, artifactSha256),
             property(PROPERTY.decision, 'approved'),
             property(PROPERTY.evidence, 'repository LICENSE'),
-            property(PROPERTY.sourceUrl, 'https://github.com/SysAdminDoc/Astra-Deck'),
+            property(PROPERTY.sourceUrl, 'https://github.com/SysAdminDoc/AstraDownloader'),
             property(PROPERTY.noticeUrl, 'LICENSE'),
             property(PROPERTY.obligations, JSON.stringify(['Retain the repository MIT license with the binary distribution.'])),
             property(PROPERTY.resolution, '')

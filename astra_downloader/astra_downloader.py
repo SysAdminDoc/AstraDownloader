@@ -220,7 +220,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "1.10.0"
+APP_VERSION = "2.0.0"
 SERVICE_ID = "astra-downloader"
 # SERVICE_API_VERSION is the wire-schema version. 1.2.0 adds /health fields
 # (ytDlpVersion, ffmpegVersion, rateLimit); 1.4.0 adds /health.poTokenProvider
@@ -263,14 +263,14 @@ DEFAULT_FIREFOX_EXTENSION_IDS = ("ytkit@sysadmindoc.github.io",)
 DENO_ZIP_URL = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
 DENO_SHA256_URL = DENO_ZIP_URL + ".sha256sum"
 DENO_SHA256_ASSET = Path(urlparse(DENO_ZIP_URL).path).name
-ICON_URL = "https://raw.githubusercontent.com/SysAdminDoc/Astra-Deck/main/AstraDownloader.ico"
+ICON_URL = "https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/main/AstraDownloader.ico"
 # The published Release is the only thing an update can actually install, so it
 # is also what decides whether one is available. Reading `main` meant a version
 # bump with no published release drove the update logic (branch trust).
-COMPANION_UPDATE_RELEASE_API_URL = "https://api.github.com/repos/SysAdminDoc/Astra-Deck/releases/latest"
-COMPANION_UPDATE_VERSION_URL_TEMPLATE = "https://raw.githubusercontent.com/SysAdminDoc/Astra-Deck/{tag}/astra_downloader/astra_downloader.py"
-COMPANION_UPDATE_EXE_URL = "https://github.com/SysAdminDoc/Astra-Deck/releases/latest/download/AstraDownloader.exe"
-COMPANION_UPDATE_SHA256_URL = "https://github.com/SysAdminDoc/Astra-Deck/releases/latest/download/AstraDownloader.exe.sha256"
+COMPANION_UPDATE_RELEASE_API_URL = "https://api.github.com/repos/SysAdminDoc/AstraDownloader/releases/latest"
+COMPANION_UPDATE_VERSION_URL_TEMPLATE = "https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/{tag}/astra_downloader/astra_downloader.py"
+COMPANION_UPDATE_EXE_URL = "https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe"
+COMPANION_UPDATE_SHA256_URL = "https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe.sha256"
 COMPANION_UPDATE_TIMEOUT_SECONDS = 120
 COMPANION_UPDATE_MIN_BYTES = 1024
 COMPANION_VERSION_SOURCE_MAX_BYTES = 256 * 1024
@@ -2778,6 +2778,17 @@ QLineEdit, QSpinBox, QComboBox {
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #ff7664; background: #151b23; }
 QLineEdit[state="error"], QSpinBox[state="error"] { border-color: #c9675f; background: #1a1214; }
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: #687381; background: #0e1319; border-color: #252d37; }
+/* The paste box is the product's front door, so it is sized like one.
+   An attribute selector outranks a pseudo-class in Qt's CSS2 cascade, so
+   the focus state has to be restated here or the hero field would render
+   no focus ring at all (the same trap the nav buttons hit). */
+QLineEdit[class="heroUrl"] {
+    font-size: 15px;
+    min-height: 46px;
+    padding: 10px 14px;
+    border-color: #3f4a58;
+}
+QLineEdit[class="heroUrl"]:focus { border-color: #ff7664; background: #151b23; }
 QComboBox::drop-down { border: none; width: 24px; }
 QSpinBox::up-button, QSpinBox::down-button { width: 18px; border: none; background: transparent; }
 QCheckBox { color: #d7dce2; font-size: 13px; spacing: 10px; min-height: 26px; }
