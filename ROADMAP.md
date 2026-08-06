@@ -53,22 +53,6 @@ Notes on the items above, from the same pass:
 - *Subscriptions unaudited* — corroborated from the other direction:
   `subscriptions.py` is 866 lines behind a single test class.
 
-### P0
-
-- [ ] P0 — Make `--uninstall` actually delete the install directory
-  Why: The delayed removal is a silent no-op, so an uninstall that reports success leaves live per-site session cookie jars, the server token, history and subscriptions on disk.
-  Evidence: `astra_downloader.py:3227-3233` runs `powershell -Command "<script>" <target>`, which does not populate `$args` (only `-File` does). Reproduced 2026-08-06: the directory survives and stderr reads "Cannot bind argument to parameter 'LiteralPath' because it is null". `run_uninstall` (`astra_downloader.py:3176-3186`) always reaches this path because `shutil.rmtree` cannot remove the directory holding the running exe.
-  Touches: `astra_downloader/astra_downloader.py` (`spawn_delayed_install_dir_removal`, `run_uninstall`), `astra_downloader/test_astra_downloader.py:1225-1238`
-  Acceptance: After `--uninstall`, `%LOCALAPPDATA%\AstraDownloader` no longer exists, proven by a test that creates a real temp directory with a canary file, runs the real removal command, and asserts the directory is gone. The existing argv-shape test is replaced rather than kept — it currently pins the broken string as correct.
-  Complexity: S
-
-- [ ] P0 — Resolve the YouTube host check by parsed hostname, not string match
-  Why: `https://evil.com?x=.youtube.com/` is currently classified as YouTube, defeating the cookie-scoping invariant the project documents and handing the YouTube jar to a process aimed at an attacker-chosen host on a `--cookies` write path.
-  Evidence: `health.py:46-54` — the `[^/]+` subpattern spans `?` and `#`. Verified 2026-08-06 against the real pattern. This predicate gates `_cookie_jar_matches_target` (`download.py:2095-2105`), the `--cookies` append (`download.py:2228`), PO-token args (`download.py:2258-2262`), the JS-runtime gate, SponsorBlock (`download.py:2202`) and `--no-playlist` (`download.py:2234`). Correct logic already exists in `site_login_key` (`download.py:396-410`).
-  Touches: `astra_downloader/health.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: `is_youtube_url` parses with `urlparse(...).hostname` and compares host labels; a table test covering `evil.com?x=.youtube.com/`, `evil.com#.youtube.com/`, `notyoutube.com`, `youtube.com.evil.com`, `youtu.be` and userinfo-bearing authorities returns the correct verdict for each, and is mutation-checked by confirming it fails against the current regex.
-  Complexity: S
-
 ### P1
 
 - [ ] P1 — Stop `--force-overwrites` from destroying partial-download resume

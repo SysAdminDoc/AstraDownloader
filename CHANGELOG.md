@@ -10,6 +10,21 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased]
+
+### Fixed
+
+- **`--uninstall` now actually removes the install directory.** The delayed
+  removal ran `powershell -Command "<script>" <path>`, which never populates
+  `$args`, so the command was well-formed, reported success and deleted
+  nothing — leaving per-site cookie jars, the server token, history and
+  subscriptions on disk after an uninstall that said it had finished.
+- **YouTube URLs are recognised by parsed host, not by pattern match.**
+  `https://evil.com?x=.youtube.com/` was classified as YouTube because the
+  host pattern could be satisfied from a query string or fragment. That
+  predicate selects the cookie jar handed to yt-dlp on a `--cookies` write
+  path, so it now compares host labels from `urlparse().hostname`.
+
 ## [2.0.0] - 2026-08-05
 
 Astra Downloader is its own product, in its own repository, designed around

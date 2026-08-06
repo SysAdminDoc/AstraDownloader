@@ -1222,20 +1222,49 @@ class UninstallCleanupTests(unittest.TestCase):
             self.assertFalse(ad.is_safe_install_dir_for_removal(Path(tmp) / "NotAstraDownloader"))
             self.assertFalse(ad.is_safe_install_dir_for_removal(Path(tmp)))
 
-    def test_delayed_install_dir_removal_uses_literal_path_not_cmd_rmdir(self):
+    @unittest.skipUnless(sys.platform == "win32", "the delayed removal is a Windows path")
+    def test_delayed_install_dir_removal_actually_deletes_the_directory(self):
+        # The outcome is the contract. An argv-shape assertion let a version
+        # ship that spawned a well-formed command which removed nothing:
+        # `powershell -Command <script> <path>` never populates $args.
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "AstraDownloader"
-            target.mkdir()
+            (target / "site-logins").mkdir(parents=True)
+            (target / "site-logins" / "youtube.com.txt").write_text("canary", encoding="utf-8")
+
+            spawned = []
+            real_popen = ad.subprocess.Popen
+
+            def capture(*args, **kwargs):
+                process = real_popen(*args, **kwargs)
+                spawned.append(process)
+                return process
+
+            with mock.patch.object(ad.subprocess, "Popen", capture):
+                self.assertTrue(ad.spawn_delayed_install_dir_removal(target))
+
+            self.assertEqual(len(spawned), 1)
+            spawned[0].wait(timeout=30)
+            self.assertFalse(
+                target.exists(),
+                "the delayed removal reported success and left the install directory behind",
+            )
+
+    def test_delayed_install_dir_removal_quotes_a_path_containing_a_quote(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            awkward = Path(tmp) / "o'brien's data" / "AstraDownloader"
+            awkward.mkdir(parents=True)
             with mock.patch.object(ad.sys, "platform", "win32"), \
                     mock.patch.object(ad.subprocess, "Popen") as popen:
-                self.assertTrue(ad.spawn_delayed_install_dir_removal(target))
+                self.assertTrue(ad.spawn_delayed_install_dir_removal(awkward))
                 args = popen.call_args.args[0]
 
+        script = args[-1]
         self.assertEqual(args[0], "powershell")
-        self.assertTrue(any("Remove-Item -LiteralPath $args[0]" in part for part in args))
+        self.assertNotIn("$args", script)
+        self.assertIn(str(awkward.resolve()).replace("'", "''"), script)
         self.assertNotIn("cmd", args)
         self.assertNotIn("rmdir", args)
-        self.assertEqual(args[-1], str(target.resolve()))
 
 
 class DownloadManagerTests(unittest.TestCase):
@@ -4320,6 +4349,44 @@ class PoTokenProviderTests(unittest.TestCase):
         ):
             with self.subTest(url=url):
                 self.assertFalse(ad.is_youtube_url(url))
+
+    def test_is_youtube_url_resolves_the_host_not_the_url_text(self):
+        # This predicate decides which cookie jar a yt-dlp process receives on a
+        # `--cookies` write path, so anything that merely *contains* a YouTube
+        # host must be refused. Each case here defeats a substring match.
+        cases = (
+            ("https://evil.com?x=.youtube.com/", False),
+            ("https://evil.com#.youtube.com/", False),
+            ("https://evil.com/?redirect=https://youtube.com/", False),
+            ("https://youtube.com@evil.com/", False),
+            ("https://user:youtube.com@evil.com/watch", False),
+            ("https://youtube.com.evil.com/", False),
+            ("https://notyoutube.com/", False),
+            ("https://youtube.com.", True),
+            ("https://WWW.YouTube.COM/watch?v=abc", True),
+            ("https://youtu.be/abcdefghijk", True),
+            ("https://music.youtube.com/watch?v=abc", True),
+        )
+        for url, expected in cases:
+            with self.subTest(url=url):
+                self.assertEqual(ad.is_youtube_url(url), expected)
+
+    def test_subscription_default_youtube_predicate_matches_health(self):
+        # subscriptions.py keeps its own fallback copy because module
+        # boundaries never cross-import; the two must not drift.
+        import subscriptions as _subscriptions
+
+        for url in (
+            "https://evil.com?x=.youtube.com/",
+            "https://youtube.com@evil.com/",
+            "https://www.youtube.com/@channel",
+            "https://notyoutube.com/",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(
+                    _subscriptions._default_is_youtube_url(url),
+                    ad.is_youtube_url(url),
+                )
 
     def test_build_youtube_extractor_args_empty_for_non_youtube(self):
         # Non-YouTube URLs must never receive YouTube-specific extractor args
