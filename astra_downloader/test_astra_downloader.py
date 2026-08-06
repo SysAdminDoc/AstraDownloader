@@ -1271,16 +1271,24 @@ class InstanceCommandTests(unittest.TestCase):
 
             self.assertTrue(ad.send_instance_command(
                 "shutdown", port=port, attempts=10, token="wrong-token"))
+            # A protocol link is the command most likely to be dropped: it is
+            # the only one carrying an argument, and asserting solely that an
+            # untokened command never arrives passes just as happily against a
+            # listener that forwards nothing but "show".
+            url = "https://www.youtube.com/watch?v=AbCdEf"
+            self.assertTrue(ad.send_instance_command(
+                f"download {url}", port=port, attempts=10, token=token))
             self.assertTrue(ad.send_instance_command(
                 "show", port=port, attempts=10, token=token))
 
             deadline = time.monotonic() + 3
-            while not commands and time.monotonic() < deadline:
+            while len(commands) < 2 and time.monotonic() < deadline:
                 QApplication.processEvents()
                 time.sleep(0.02)
 
             self.assertEqual(
-                commands, ["show"],
+                commands, [f"download {url}", "show"],
+                "a tokened download must arrive with its URL case intact, and "
                 "an unauthenticated shutdown must never reach the window",
             )
         finally:

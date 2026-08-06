@@ -4762,9 +4762,17 @@ class MainWindowCore(QMainWindow):
                                 "Rejected an instance command without a valid token."
                             )
                             continue
-                        command = command.strip().lower()
-                        if command in {'show', 'start', 'shutdown'}:
+                        command = command.strip()
+                        # A download command carries a URL, whose case must
+                        # survive — `send_instance_command` splits the token
+                        # off on the first space for exactly this reason. The
+                        # fixed verbs are matched case-insensitively; folding
+                        # the whole line used to drop every ytdl:// link,
+                        # because `download https://…` matched nothing here.
+                        if command.lower().startswith('download '):
                             self.instance_command.emit(command)
+                        elif command.lower() in {'show', 'start', 'shutdown'}:
+                            self.instance_command.emit(command.lower())
             except OSError as e:
                 if not self._instance_command_stop.is_set():
                     self.log_message.emit(f"Instance command listener unavailable: {e}")
