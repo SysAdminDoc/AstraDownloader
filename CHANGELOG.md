@@ -42,6 +42,17 @@ repository's git log.
   available, matching yt-dlp's own priority; QuickJS is also selectable
   outright in Settings.
 
+- **The German translation is actually complete, and the rest are measured.**
+  The catalogue's source list was a hand-written tuple of 21 strings against a
+  window that shows 219, and nothing connected the two — so every string added
+  after the tuple was written never reached a translator, while the
+  catalogues reported themselves finished. The strings are now extracted from
+  the GUI's syntax tree, `npm run check` fails when one reaches the UI without
+  reaching the catalogues, and German is complete at 219/219 with the render
+  scenario asserting translated copy on all six pages rather than the
+  navigation rail alone. The nine remaining locales still declare only their
+  five navigation strings; that gap is now visible and reported per locale
+  instead of hidden.
 - **Export and import settings.** A single versioned JSON bundle carries
   settings and subscriptions, so an install can be moved to another machine
   and a config you cannot open can be restored without hand-editing JSON. The

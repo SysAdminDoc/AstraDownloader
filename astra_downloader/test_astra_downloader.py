@@ -10168,12 +10168,59 @@ class RightToLeftLayoutTests(unittest.TestCase):
         source = self._renderer_source()
         self.assertIn("check_rtl_hero_proportions", source)
 
-    def test_the_german_scenario_asserts_more_than_the_navigation_rail(self):
-        # The rail is the one surface every locale translates, so a rail-only
-        # assertion passes against a catalogue with nothing else in it.
+    def _german_scenario_block(self):
         source = self._renderer_source()
-        self.assertIn("Video herunterladen", source)
-        self.assertIn("Clip von", source)
+        start = source.index('if scenario == "dashboard-german":')
+        end = source.index('elif scenario == "dashboard-starting":', start)
+        return source[start:end]
+
+    def test_the_german_scenario_covers_every_page(self):
+        # The rail is the one surface every locale translates, so a rail-only
+        # assertion passes against a catalogue with nothing else in it —
+        # which is exactly what nine of the eleven locales still are.
+        block = self._german_scenario_block()
+        for page in ("Download", "History", "Sign-ins", "Subscriptions",
+                     "Browser extension", "Settings"):
+            with self.subTest(page=page):
+                self.assertIn(f'"{page}"', block)
+
+    def test_the_german_strings_it_asserts_are_really_in_the_catalogue(self):
+        # A scenario asserting a translation that no longer exists would fail
+        # for the wrong reason, and one asserting an English string would
+        # pass while proving nothing.
+        import ast
+        import re
+        import xml.etree.ElementTree as ET
+
+        catalogue = (
+            Path(ad.__file__).parent / "translations" / "astra_downloader_de.ts"
+        )
+        german = {
+            element.text or ""
+            for element in ET.parse(catalogue).getroot().iter("translation")
+        }
+        block = self._german_scenario_block()
+        # The sets asserted per page, as written in the scenario.
+        asserted = set()
+        for chunk in re.findall(r"\{([^{}]*)\}", block):
+            for literal in re.findall(r'"((?:[^"\\]|\\.)*)"', chunk):
+                # ast, not unicode_escape: the scenario mixes literal
+                # UTF-8 with \u escapes, and encode/decode round-tripping
+                # the former turns 'für' into mojibake.
+                try:
+                    value = ast.literal_eval(f'"{literal}"')
+                except (SyntaxError, ValueError):
+                    continue
+                if value and not value.isascii():
+                    asserted.add(value)
+        self.assertGreaterEqual(
+            len(asserted), 3,
+            "the scenario should assert several translated strings",
+        )
+        self.assertEqual(
+            sorted(asserted - german), [],
+            "these asserted strings are not in the German catalogue",
+        )
 
     def test_arabic_is_the_only_right_to_left_locale_advertised(self):
         import i18n as i18n_module
