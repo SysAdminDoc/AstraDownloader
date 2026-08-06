@@ -8234,7 +8234,20 @@ class SabrReadinessTests(unittest.TestCase):
         calls = []
         win = types.SimpleNamespace(
             _set_readiness=lambda key, text, tone="neutral", tooltip="": calls.append((key, text, tone)),
-            _dependencies={'evaluate_sabr_support': lambda v: self._sabr_result},
+            _dependencies={
+                'evaluate_sabr_support': lambda v: self._sabr_result,
+                'managed_binary_state': lambda _path: 'ok',
+                'MANAGED_BINARY_ANTIVIRUS_ADVICE': ad.MANAGED_BINARY_ANTIVIRUS_ADVICE,
+                'INSTALL_DIR': ad.INSTALL_DIR,
+                'YTDLP_PATH': ad.YTDLP_PATH,
+                'FFMPEG_PATH': ad.FFMPEG_PATH,
+            },
+        )
+        win._value = types.MethodType(
+            gui_module_for_tests().MainWindowCore._value, win
+        )
+        win._set_tool_readiness = types.MethodType(
+            gui_module_for_tests().MainWindowCore._set_tool_readiness, win
         )
         return win, calls
 
@@ -9960,6 +9973,159 @@ def gui_module_for_tests():
     import gui as gui_module
     return gui_module
 
+
+class QuarantinedBinaryTests(unittest.TestCase):
+    """A quarantine stub is present, unusable, and must not read as installed."""
+
+    def _binary(self, tmpdir, name, size):
+        path = Path(tmpdir) / name
+        path.write_bytes(b"\0" * size)
+        return path
+
+    # ── The classification ───────────────────────────────────────────────
+
+    def test_a_zero_byte_stub_is_damaged_not_missing(self):
+        # The distinction is the whole point: `.exists()` is true for a stub,
+        # so every gate written against it lets an unusable tool through.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            stub = self._binary(tmpdir, "yt-dlp.exe", 0)
+            self.assertTrue(stub.exists())
+            self.assertEqual(ad.managed_binary_state(stub), "damaged")
+            self.assertFalse(ad.managed_binary_usable(stub))
+
+    def test_a_truncated_binary_is_damaged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            stub = self._binary(tmpdir, "ffmpeg.exe", 4096)
+            self.assertEqual(ad.managed_binary_state(stub), "damaged")
+
+    def test_a_whole_binary_is_ok(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real = self._binary(tmpdir, "yt-dlp.exe", ad.MANAGED_BINARY_MIN_BYTES)
+            self.assertEqual(ad.managed_binary_state(real), "ok")
+            self.assertTrue(ad.managed_binary_usable(real))
+
+    def test_an_absent_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertEqual(
+                ad.managed_binary_state(Path(tmpdir) / "nothing.exe"), "missing"
+            )
+
+    def test_a_directory_is_not_a_binary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertEqual(ad.managed_binary_state(tmpdir), "missing")
+
+    def test_the_installed_binaries_clear_the_floor(self):
+        # The floor must not be so high that a real install reads as damaged.
+        for path in (ad.YTDLP_PATH, ad.FFMPEG_PATH):
+            if not Path(path).exists():
+                continue
+            with self.subTest(binary=Path(path).name):
+                self.assertEqual(ad.managed_binary_state(path), "ok")
+
+    # ── What setup does about it ─────────────────────────────────────────
+
+    def test_setup_refetches_a_stub_and_names_antivirus(self):
+        logged = []
+        persisted = []
+        worker = types.SimpleNamespace(
+            log=types.SimpleNamespace(emit=logged.append),
+            _dependencies={
+                'managed_binary_state': ad.managed_binary_state,
+                'write_persistent_log': persisted.append,
+            },
+        )
+        core = gui_module_for_tests().SetupWorkerCore
+        worker._value = types.MethodType(core._value, worker)
+        worker._report_managed_binary = types.MethodType(
+            core._report_managed_binary, worker
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            worker._dependencies['MANAGED_BINARY_ANTIVIRUS_ADVICE'] = (
+                ad.MANAGED_BINARY_ANTIVIRUS_ADVICE
+            )
+            worker._dependencies['INSTALL_DIR'] = tmpdir
+            stub = self._binary(tmpdir, "yt-dlp.exe", 0)
+            state = worker._report_managed_binary(stub, "yt-dlp")
+        self.assertEqual(state, "damaged")
+        message = " ".join(logged)
+        self.assertIn("present but unusable", message)
+        self.assertIn("Antivirus", message)
+        self.assertIn(tmpdir, message)
+        # The explanation has to outlive the session's log panel.
+        self.assertEqual(len(persisted), 1)
+
+    def test_setup_says_nothing_about_antivirus_for_a_clean_install(self):
+        logged = []
+        worker = types.SimpleNamespace(
+            log=types.SimpleNamespace(emit=logged.append),
+            _dependencies={
+                'managed_binary_state': ad.managed_binary_state,
+                'write_persistent_log': lambda *_args: None,
+                'MANAGED_BINARY_ANTIVIRUS_ADVICE': ad.MANAGED_BINARY_ANTIVIRUS_ADVICE,
+                'INSTALL_DIR': '',
+            },
+        )
+        core = gui_module_for_tests().SetupWorkerCore
+        worker._value = types.MethodType(core._value, worker)
+        worker._report_managed_binary = types.MethodType(
+            core._report_managed_binary, worker
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "yt-dlp.exe"
+            self.assertEqual(worker._report_managed_binary(missing, "yt-dlp"),
+                             "missing")
+        self.assertEqual(logged, [])
+
+    def test_setup_refetches_rather_than_reporting_already_installed(self):
+        # The gate itself, read from source: an existence check here is what
+        # let a stub through, and it must not come back.
+        import inspect
+        source = inspect.getsource(gui_module_for_tests().SetupWorkerCore.run)
+        self.assertNotIn("YTDLP_PATH').exists()", source)
+        self.assertNotIn("FFMPEG_PATH').exists()", source)
+        self.assertIn("_report_managed_binary", source)
+
+    # ── What the readiness row says ──────────────────────────────────────
+
+    def _readiness_window(self, state):
+        calls = []
+        win = types.SimpleNamespace(
+            _set_readiness=lambda key, text, tone="neutral", tooltip="":
+                calls.append((key, text, tone, tooltip)),
+            _dependencies={
+                'managed_binary_state': lambda _path: state,
+                'MANAGED_BINARY_ANTIVIRUS_ADVICE': ad.MANAGED_BINARY_ANTIVIRUS_ADVICE,
+                'INSTALL_DIR': r"C:\Install\Dir",
+            },
+        )
+        core = gui_module_for_tests().MainWindowCore
+        win._value = types.MethodType(core._value, win)
+        win._set_tool_readiness = types.MethodType(core._set_tool_readiness, win)
+        return win, calls
+
+    def test_a_stub_reads_as_removed_and_names_the_exclusion_path(self):
+        win, calls = self._readiness_window("damaged")
+        win._set_tool_readiness("ytDlp", "", "ignored")
+        key, text, tone, tooltip = calls[0]
+        self.assertEqual((key, text, tone), ("ytDlp", "Removed?", "danger"))
+        self.assertIn("Antivirus", tooltip)
+        self.assertIn(r"C:\Install\Dir", tooltip)
+
+    def test_a_tool_that_was_never_installed_still_reads_as_missing(self):
+        win, calls = self._readiness_window("missing")
+        win._set_tool_readiness("ffmpeg", "", "ignored")
+        self.assertEqual(calls[0][:3], ("ffmpeg", "Missing", "danger"))
+
+    def test_a_working_tool_reports_its_version(self):
+        win, calls = self._readiness_window("ok")
+        win._set_tool_readiness("ytDlp", "2026.08.04", "ignored")
+        self.assertEqual(calls[0][:3], ("ytDlp", "2026.08.04", "success"))
+
+    def test_launch_does_not_gate_setup_on_mere_existence(self):
+        import inspect
+        source = inspect.getsource(ad.main)
+        self.assertIn("managed_binary_usable(YTDLP_PATH)", source)
+        self.assertNotIn("not YTDLP_PATH.exists()", source)
 
 class FormatSortTests(unittest.TestCase):
     """Codec and frame-rate preferences compile to one --format-sort."""
