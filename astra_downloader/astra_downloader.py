@@ -12,15 +12,17 @@ from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse
 
-# v1.4.0 (NX9): yt-dlp dropped Python 3.9 in release 2025.10.22.
-# Source runs need 3.10+; packaged builds carry their own interpreter.
-_MIN_PYTHON = (3, 10)
+# The pinned yt-dlp (2026.7.4) requires Python 3.11; on 3.10 the install of
+# requirements.txt fails before this guard would ever run, so the guard has to
+# agree with the pin or it explains nothing. Packaged builds carry their own
+# interpreter and build.py already restricts them to 3.11 and 3.12.
+_MIN_PYTHON = (3, 11)
 if sys.version_info < _MIN_PYTHON:
     sys.stderr.write(
         f"[Astra Downloader] Python {_MIN_PYTHON[0]}.{_MIN_PYTHON[1]}+ "
         f"required (you're on "
         f"{sys.version_info.major}.{sys.version_info.minor}). yt-dlp "
-        f"dropped Python 3.9 support in 2025.10.22.\n"
+        f"raised its minimum to Python 3.11 in release 2026.07.04.\n"
     )
     sys.exit(1)
 

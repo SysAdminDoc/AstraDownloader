@@ -26,6 +26,12 @@ repository's git log.
   handling. None of these are ever built into an argv — the guard exists to
   catch a future regression that does.
 
+### Changed
+
+- **Running from source needs Python 3.11.** The pinned yt-dlp raised its
+  minimum in 2026.07.04, so on 3.10 the dependency install failed before the
+  version guard written to explain the problem ever ran.
+
 ### Fixed
 
 - **A download that finishes but cannot be recorded says so.** `history.add`

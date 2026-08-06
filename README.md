@@ -57,6 +57,8 @@ protocol handlers:
 
 ## Run from source
 
+Python 3.11 or newer — the pinned yt-dlp raised its minimum in 2026.07.04.
+
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --require-virtualenv -r astra_downloader/requirements.txt
@@ -79,7 +81,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 436 tests
+py -3.12 -m pytest          # 450 tests
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

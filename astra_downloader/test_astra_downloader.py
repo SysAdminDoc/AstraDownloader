@@ -4265,6 +4265,16 @@ class NoArchiveLockTests(unittest.TestCase):
     re-introduced via a stray flag, config key, or yt-dlp argv branch.
     """
 
+    def test_source_python_floor_matches_the_pinned_ytdlp(self):
+        # A floor below the pin means pip fails at resolve time and the guard
+        # written to explain the problem never gets to run.
+        self.assertEqual(ad._MIN_PYTHON, (3, 11))
+        requirements = (
+            Path(ad.__file__).with_name("requirements.txt")
+            .read_text(encoding="utf-8")
+        )
+        self.assertIn("Floor: Python 3.11", requirements)
+
     def test_default_config_has_no_download_archive_key(self):
         self.assertNotIn('DownloadArchive', ad.DEFAULT_CONFIG,
                          'DownloadArchive must not be a default config key.')
