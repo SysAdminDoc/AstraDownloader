@@ -367,15 +367,6 @@ class SubscriptionStore:
             self._logger(f"Subscription state save failed: {error}")
             return False
 
-    def _mutate(self, callback):
-        with self._lock:
-            before = _copy(self._data)
-            result = callback(self._data)
-            if self._save_locked():
-                return result
-            self._data = before
-            return None
-
     def _find_locked(self, sub_id):
         return next(
             (item for item in self._data["subscriptions"] if item["id"] == sub_id),

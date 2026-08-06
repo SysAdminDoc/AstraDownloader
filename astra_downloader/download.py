@@ -3116,41 +3116,56 @@ class DownloadManagerCore:
 
     def move_pending(self, dl_id, position):
         with self._lock:
-            pending = self._ordered_pending_locked()
-            current = next((index for index, dl in enumerate(pending) if dl.id == dl_id), None)
-            if current is None:
-                return False, 'Only pending downloads can be reordered.'
-            if isinstance(position, bool):
-                return False, 'Queue position must be an integer.'
-            if isinstance(position, int):
-                target = position
-            elif isinstance(position, str) and re.fullmatch(r'-?\d+', position.strip()):
-                target = int(position.strip())
-            else:
-                return False, 'Queue position must be an integer.'
-            target = max(0, min(target, len(pending) - 1))
-            if target == current:
-                return True, None
-            previous_orders = {dl.id: dl.queue_order for dl in pending}
-            item = pending.pop(current)
-            pending.insert(target, item)
-            for index, dl in enumerate(pending, start=1):
-                dl.queue_order = index
-            self._next_order = max(self._next_order, len(pending))
-            if not self._persist_locked():
-                for dl in pending:
-                    dl.queue_order = previous_orders[dl.id]
-                return False, self._persistence_error
-        self.progress_updated.emit()
+            ok, error = self._move_pending_locked(dl_id, position)
+        if ok:
+            self.progress_updated.emit()
+        return ok, error
+
+    def _move_pending_locked(self, dl_id, position):
+        """Reorder one pending download. The caller must hold the lock.
+
+        Split out so `move_pending_by` can derive an index and apply the move
+        under a single acquisition. It used to release the lock between the
+        two, so a download finishing in the gap left the absolute position
+        meaning something other than the ordering it was derived from.
+        """
+        pending = self._ordered_pending_locked()
+        current = next((index for index, dl in enumerate(pending) if dl.id == dl_id), None)
+        if current is None:
+            return False, 'Only pending downloads can be reordered.'
+        if isinstance(position, bool):
+            return False, 'Queue position must be an integer.'
+        if isinstance(position, int):
+            target = position
+        elif isinstance(position, str) and re.fullmatch(r'-?\d+', position.strip()):
+            target = int(position.strip())
+        else:
+            return False, 'Queue position must be an integer.'
+        target = max(0, min(target, len(pending) - 1))
+        if target == current:
+            return True, None
+        previous_orders = {dl.id: dl.queue_order for dl in pending}
+        item = pending.pop(current)
+        pending.insert(target, item)
+        for index, dl in enumerate(pending, start=1):
+            dl.queue_order = index
+        self._next_order = max(self._next_order, len(pending))
+        if not self._persist_locked():
+            for dl in pending:
+                dl.queue_order = previous_orders[dl.id]
+            return False, self._persistence_error
         return True, None
 
     def move_pending_by(self, dl_id, offset):
         with self._lock:
             pending = self._ordered_pending_locked()
             current = next((index for index, dl in enumerate(pending) if dl.id == dl_id), None)
-        if current is None:
-            return False, 'Only pending downloads can be reordered.'
-        return self.move_pending(dl_id, current + int(offset))
+            if current is None:
+                return False, 'Only pending downloads can be reordered.'
+            ok, error = self._move_pending_locked(dl_id, current + int(offset))
+        if ok:
+            self.progress_updated.emit()
+        return ok, error
 
     def cancel(self, dl_id):
         with self._lock:
