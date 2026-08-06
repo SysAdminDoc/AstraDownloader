@@ -99,6 +99,7 @@ try:
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
         cleanup_stale_cookie_jars as _owned_cleanup_stale_cookie_jars,
         download_error_payload, is_playlist_url,
+        QUALITY_LADDER, probed_video_heights, quality_choices_for_heights,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
     )
@@ -184,6 +185,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
         cleanup_stale_cookie_jars as _owned_cleanup_stale_cookie_jars,
         download_error_payload, is_playlist_url,
+        QUALITY_LADDER, probed_video_heights, quality_choices_for_heights,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
     )
@@ -3479,7 +3481,11 @@ class MainWindow(MainWindowCore):
                 'get_recent_log_entries': lambda *args, **kwargs: get_recent_log_entries(*args, **kwargs),
                 'get_ytdlp_version': lambda *args, **kwargs: get_ytdlp_version(*args, **kwargs),
                 'SITE_LOGIN_BROWSERS': lambda: SITE_LOGIN_BROWSERS,
+                'QUALITY_LADDER': lambda: QUALITY_LADDER,
+                'is_playlist_url': lambda *args, **kwargs: is_playlist_url(*args, **kwargs),
                 'is_youtube_url': lambda *args, **kwargs: is_youtube_url(*args, **kwargs),
+                'probed_video_heights': lambda *args, **kwargs: probed_video_heights(*args, **kwargs),
+                'quality_choices_for_heights': lambda *args, **kwargs: quality_choices_for_heights(*args, **kwargs),
                 'looks_like_media_link': lambda *args, **kwargs: looks_like_media_link(*args, **kwargs),
                 'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
                 'maybe_auto_update_ytdlp': lambda *args, **kwargs: maybe_auto_update_ytdlp(*args, **kwargs),
