@@ -868,6 +868,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_retries = NumberField(10)
         window.cfg_socket_timeout = NumberField(0)
         window.cfg_extractor_retries = NumberField(0)
+        window.cfg_sleep_interval = NumberField(0)
+        window.cfg_sleep_max = NumberField(0)
+        window.cfg_sleep_requests = NumberField(0)
         window.cfg_maxsize = NumberField(0)
         window.cfg_autoupdate = CheckField()
         window.cfg_closetotray = CheckField()
@@ -1674,6 +1677,47 @@ class TransferReliabilityArgvTests(unittest.TestCase):
         # These land in a subprocess argument.
         argv = self._argv({"ThrottledRate": "fast; rm -rf /"})
         self.assertNotIn("--throttled-rate", argv)
+
+    def test_pacing_compiles_and_a_stray_maximum_is_normalised(self):
+        argv = self._argv({
+            "SleepIntervalSeconds": 5,
+            "MaxSleepIntervalSeconds": 12,
+            "SleepRequestsSeconds": 2,
+        })
+        self.assertEqual(argv[argv.index("--sleep-interval") + 1], "5")
+        self.assertEqual(argv[argv.index("--max-sleep-interval") + 1], "12")
+        self.assertEqual(argv[argv.index("--sleep-requests") + 1], "2")
+
+        # yt-dlp refuses a maximum below the minimum, which would fail the
+        # whole download rather than the setting.
+        argv = self._argv({"SleepIntervalSeconds": 9, "MaxSleepIntervalSeconds": 3})
+        self.assertEqual(argv[argv.index("--sleep-interval") + 1], "9")
+        self.assertNotIn("--max-sleep-interval", argv)
+
+    def test_a_429_is_classified_as_rate_limited_not_as_a_dead_network(self):
+        self.assertEqual(
+            ad.classify_download_failure('ERROR: HTTP Error 429: Too Many Requests'),
+            'rate-limited',
+        )
+        self.assertEqual(
+            ad.classify_download_failure('ERROR: Connection reset by peer'),
+            'network-unreachable',
+        )
+        advice = ad.DOWNLOAD_FAILURE_RECOVERY['rate-limited']
+        self.assertIn('pacing', advice['advice'])
+        self.assertIn('rate-limited', ad.DOWNLOAD_RETRYABLE_ERROR_CODES)
+
+    def test_a_paced_download_reads_as_waiting_rather_than_hung(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        download = ad.Download("dl_paced", "https://example.com/video")
+        download.status = "downloading"
+        download.speed = "8.2MiB/s"
+        class Proc:
+            stdout = iter(["[download] Sleeping 7.00 seconds as required by the site...\n"])
+
+        manager._consume_ytdlp_output(download, Proc(), {'at': 0.0})
+        self.assertEqual(download.speed, "waiting 7s")
+        self.assertEqual(download.eta, "")
 
     def test_the_real_binary_accepts_the_reliability_flags(self):
         ytdlp = ad.YTDLP_PATH

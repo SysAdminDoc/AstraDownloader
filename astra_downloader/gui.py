@@ -2670,6 +2670,59 @@ class MainWindowCore(QMainWindow):
         self.cfg_verify_formats.setChecked(self.config.get("VerifyFormats", False))
         perf_l.addWidget(self.cfg_verify_formats)
         perf_l.addWidget(make_divider())
+        pace_row = QHBoxLayout()
+        pace_copy = QVBoxLayout()
+        pace_copy.setSpacing(2)
+        pace_copy.addWidget(make_label("Pause between downloads", "fieldLabel"))
+        pace_copy.addWidget(make_label(
+            "Seconds to wait before each download. A bandwidth cap does not "
+            "prevent an HTTP 429; spacing the requests does. 0 disables it.",
+            "fieldHint", word_wrap=True,
+        ))
+        pace_row.addLayout(pace_copy, 1)
+        self.cfg_sleep_interval = QSpinBox()
+        self.cfg_sleep_interval.setAccessibleName("Pause between downloads in seconds")
+        self.cfg_sleep_interval.setRange(0, 600)
+        self.cfg_sleep_interval.setValue(self._dependencies['clamp_int'](
+            self.config.get("SleepIntervalSeconds", 0), 0, 0, 600))
+        self.cfg_sleep_interval.setFixedWidth(86)
+        pace_row.addWidget(self.cfg_sleep_interval)
+        perf_l.addLayout(pace_row)
+        pace_max_row = QHBoxLayout()
+        pace_max_copy = QVBoxLayout()
+        pace_max_copy.setSpacing(2)
+        pace_max_copy.addWidget(make_label("Longest pause", "fieldLabel"))
+        pace_max_copy.addWidget(make_label(
+            "Upper bound when the pause is randomised. Ignored below the "
+            "pause above.", "fieldHint", word_wrap=True,
+        ))
+        pace_max_row.addLayout(pace_max_copy, 1)
+        self.cfg_sleep_max = QSpinBox()
+        self.cfg_sleep_max.setAccessibleName("Longest pause in seconds")
+        self.cfg_sleep_max.setRange(0, 600)
+        self.cfg_sleep_max.setValue(self._dependencies['clamp_int'](
+            self.config.get("MaxSleepIntervalSeconds", 0), 0, 0, 600))
+        self.cfg_sleep_max.setFixedWidth(86)
+        pace_max_row.addWidget(self.cfg_sleep_max)
+        perf_l.addLayout(pace_max_row)
+        pace_req_row = QHBoxLayout()
+        pace_req_copy = QVBoxLayout()
+        pace_req_copy.setSpacing(2)
+        pace_req_copy.addWidget(make_label("Pause between requests", "fieldLabel"))
+        pace_req_copy.addWidget(make_label(
+            "Seconds between the data requests inside one download.",
+            "fieldHint", word_wrap=True,
+        ))
+        pace_req_row.addLayout(pace_req_copy, 1)
+        self.cfg_sleep_requests = QSpinBox()
+        self.cfg_sleep_requests.setAccessibleName("Pause between requests in seconds")
+        self.cfg_sleep_requests.setRange(0, 60)
+        self.cfg_sleep_requests.setValue(self._dependencies['clamp_int'](
+            self.config.get("SleepRequestsSeconds", 0), 0, 0, 60))
+        self.cfg_sleep_requests.setFixedWidth(86)
+        pace_req_row.addWidget(self.cfg_sleep_requests)
+        perf_l.addLayout(pace_req_row)
+        perf_l.addWidget(make_divider())
         # MaxFileSizeMB blocks downloads outright — a run that trips it exits
         # cleanly having written nothing and reports `skipped`, whose message
         # tells the user to change this. It needs a control to change.
@@ -2871,6 +2924,9 @@ class MainWindowCore(QMainWindow):
             self.cfg_socket_timeout.valueChanged,
             self.cfg_extractor_retries.valueChanged,
             self.cfg_verify_formats.toggled,
+            self.cfg_sleep_interval.valueChanged,
+            self.cfg_sleep_max.valueChanged,
+            self.cfg_sleep_requests.valueChanged,
             self.cfg_proxy.textChanged,
             self.cfg_js_runtime.currentIndexChanged,
             self.cfg_ytdlp_channel.currentIndexChanged,
@@ -4072,6 +4128,9 @@ class MainWindowCore(QMainWindow):
             "ThrottledRate": self.cfg_throttled.text().strip(),
             "SocketTimeoutSeconds": self.cfg_socket_timeout.value(),
             "ExtractorRetries": self.cfg_extractor_retries.value(),
+            "SleepIntervalSeconds": self.cfg_sleep_interval.value(),
+            "MaxSleepIntervalSeconds": self.cfg_sleep_max.value(),
+            "SleepRequestsSeconds": self.cfg_sleep_requests.value(),
             "SubLangs": sublangs,
             "SponsorBlock": self.cfg_sponsorblock.isChecked(),
             "SponsorBlockAction": self.cfg_sb_action.currentData(),
