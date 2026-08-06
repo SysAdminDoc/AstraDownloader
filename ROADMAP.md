@@ -13,11 +13,6 @@ history and `CHANGELOG.md`.
   the truth from the result. Probe on paste (debounced, cancellable) and
   reduce the picker to what exists.
 
-- **Per-download destination.** `DownloadPath` / `AudioDownloadPath` are
-  global settings and `/pick-folder` already opens a native picker. The paste
-  box should be able to override the destination for one download without
-  changing the default.
-
 ## P3 — Unaudited — needs a pass
 
 Carried over from the Astra Deck audit backlog: these companion areas were
@@ -39,9 +34,6 @@ Notes on the items above, from the same pass:
   in this software class (MeTube #1032, ytDownloader #231) and a prerequisite
   for audio-track and codec selection. It should land together with "Sort
   formats instead of guessing quality" below.
-- *Per-download destination* — corroborated; Stacher and YTPTube both ship
-  per-item destinations and 4K Video Downloader paywalls the related URL-list
-  import/export.
 - *Light-theme behaviour* — no theme key exists in `DEFAULT_CONFIG`, so the
   work is "build a light theme", not "audit the existing one".
 - *Subscriptions unaudited* — corroborated from the other direction:

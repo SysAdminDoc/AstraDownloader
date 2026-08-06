@@ -1438,6 +1438,15 @@ class MainWindowCore(QMainWindow):
         ):
             self.quick_download_quality.addItem(label, value)
         options_row.addWidget(self.quick_download_quality)
+        # A one-off destination for this download, without disturbing the
+        # default in Settings. Cleared once the download is queued.
+        self._quick_download_dir = ""
+        self.btn_quick_download_dest = self._make_tool_button("Save to", "ghost")
+        self.btn_quick_download_dest.setToolTip(
+            "Send this download somewhere other than the default folder."
+        )
+        self.btn_quick_download_dest.clicked.connect(self._pick_quick_download_dir)
+        options_row.addWidget(self.btn_quick_download_dest)
         options_row.addStretch()
         options_row.addWidget(make_label("Clip from", "fieldHint"))
         self.quick_download_start = QLineEdit()
@@ -1637,6 +1646,7 @@ class MainWindowCore(QMainWindow):
                 fmt=self.quick_download_format.currentData(),
                 quality=self.quick_download_quality.currentData() or "best",
                 section=section,
+                output_dir=self._quick_download_dir or None,
             )
             if error:
                 failures.append((url, error))
@@ -1650,6 +1660,8 @@ class MainWindowCore(QMainWindow):
                 )
             else:
                 message = f"Queued {len(queued)} downloads."
+            if self._quick_download_dir:
+                message += f" Saving to {self._quick_download_dir}."
             if failures:
                 message += " " + describe_rejected_links(failures)
             self._set_quick_download_status(
@@ -1659,6 +1671,8 @@ class MainWindowCore(QMainWindow):
             self.quick_download_url.clear()
             self.quick_download_start.clear()
             self.quick_download_end.clear()
+            # The override was for this download; the default takes over again.
+            self._set_quick_download_dir("")
             self._append_log(
                 f"Queued {len(queued)} download"
                 f"{'' if len(queued) == 1 else 's'} from the quick download box."
@@ -1726,6 +1740,43 @@ class MainWindowCore(QMainWindow):
             self.quick_download_start.clear()
             self.quick_download_end.clear()
         self._start_quick_download()
+
+    def _pick_quick_download_dir(self):
+        """Choose a destination for the next download only.
+
+        Clicking again with an override already set clears it, so there is no
+        second control and no way to end up not knowing where a download went.
+        """
+        if self._quick_download_dir:
+            self._set_quick_download_dir("")
+            return
+        current = self._quick_download_dir or self.config.get(
+            "AudioDownloadPath" if self.quick_download_type.currentData()
+            else "DownloadPath",
+            str(Path.home()),
+        )
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Save this download to", str(current))
+        if chosen:
+            self._set_quick_download_dir(chosen)
+
+    def _set_quick_download_dir(self, path):
+        self._quick_download_dir = str(path or "")
+        if self._quick_download_dir:
+            name = Path(self._quick_download_dir).name or self._quick_download_dir
+            self.btn_quick_download_dest.setText(name)
+            self.btn_quick_download_dest.setToolTip(
+                f"This download goes to {self._quick_download_dir}. "
+                "Click to use the default folder again."
+            )
+            self.btn_quick_download_dest.setAccessibleName(
+                f"{tr('Save to')}: {self._quick_download_dir}")
+        else:
+            self.btn_quick_download_dest.setText(tr("Save to"))
+            self.btn_quick_download_dest.setToolTip(
+                "Send this download somewhere other than the default folder."
+            )
+            self.btn_quick_download_dest.setAccessibleName(tr("Save to"))
 
     def _set_quick_download_status(self, message, state):
         self.quick_download_status.setText(message)
