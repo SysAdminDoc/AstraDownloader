@@ -32,6 +32,8 @@ __all__ = (
     "DOWNLOAD_RUNNING_STATES", "DOWNLOAD_PENDING_STATES",
     "DOWNLOAD_TERMINAL_STATES", "DOWNLOAD_RETRYABLE_ERROR_CODES",
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
+    "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
+    "snapshot_download_fields", "restore_download_fields",
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
@@ -1417,6 +1419,37 @@ class Download:
         if self.subscription_id:
             payload["subscriptionId"] = self.subscription_id
         return payload
+
+
+# Fields a rejected queue mutation has to put back.
+#
+# These were positional tuples, and the two lists drifted: retry()'s
+# needs-auth rollback packed 15 fields and unpacked 14, so a failed queue
+# write raised `ValueError: too many values to unpack` *instead of* rolling
+# back, leaving the download stranded in needs-auth with its order bumped.
+# Naming the fields makes the snapshot and the restore the same list by
+# construction, so they cannot disagree again.
+RESUME_ROLLBACK_FIELDS = (
+    'status', 'error', 'error_code', 'error_advice', 'error_action',
+    'requires_auth', '_cookies', 'resume_partial',
+)
+RETRY_ROLLBACK_FIELDS = (
+    'status', 'progress', 'speed', 'eta', 'filename',
+    'error', 'error_code', 'error_advice', 'error_action',
+    'finished_time', 'start_time', 'queue_order',
+    'requires_auth', '_cookies', 'resume_partial',
+)
+
+
+def snapshot_download_fields(download, fields):
+    """Capture the named attributes so a failed persist can undo the change."""
+    return {name: getattr(download, name) for name in fields}
+
+
+def restore_download_fields(download, snapshot):
+    """Put a `snapshot_download_fields` result back onto the download."""
+    for name, value in snapshot.items():
+        setattr(download, name, value)
 
 
 class DownloadQueueStore:
@@ -2992,11 +3025,7 @@ class DownloadManagerCore:
                     'Fresh YouTube cookies are required. Retry from Astra Deck so the '
                     'browser can authorize this download.'
                 )
-            previous = (
-                dl.status, dl.error, dl.error_code, dl.error_advice,
-                dl.error_action, dl.requires_auth, dl._cookies,
-                dl.resume_partial,
-            )
+            previous = snapshot_download_fields(dl, RESUME_ROLLBACK_FIELDS)
             if cookies:
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
@@ -3007,11 +3036,7 @@ class DownloadManagerCore:
             dl.error_action = ''
             dl.resume_partial = True
             if not self._persist_locked():
-                (
-                    dl.status, dl.error, dl.error_code, dl.error_advice,
-                    dl.error_action, dl.requires_auth, dl._cookies,
-                    dl.resume_partial,
-                ) = previous
+                restore_download_fields(dl, previous)
                 return False, self._persistence_error
         self.progress_updated.emit()
         self._schedule()
@@ -3045,12 +3070,7 @@ class DownloadManagerCore:
                     f"Download queue is full ({MAX_QUEUED_TOTAL}/{MAX_QUEUED_TOTAL}). "
                     "Cancel a pending item or wait for a running download to finish, then retry."
                 )
-            previous = (
-                dl.status, dl.progress, dl.speed, dl.eta, dl.filename,
-                dl.error, dl.error_code, dl.error_advice, dl.error_action,
-                dl.finished_time, dl.start_time, dl.queue_order,
-                dl.requires_auth, dl._cookies, dl.resume_partial,
-            )
+            previous = snapshot_download_fields(dl, RETRY_ROLLBACK_FIELDS)
             if dl.requires_auth and not cookies:
                 dl.status = 'needs-auth'
                 dl.error = (
@@ -3063,12 +3083,7 @@ class DownloadManagerCore:
                 self._next_order += 1
                 dl.queue_order = self._next_order
                 if not self._persist_locked():
-                    (
-                        dl.status, dl.progress, dl.speed, dl.eta, dl.filename,
-                        dl.error, dl.error_code, dl.error_advice, dl.error_action,
-                        dl.finished_time, dl.start_time, dl.queue_order,
-                        dl.requires_auth, dl._cookies,
-                    ) = previous
+                    restore_download_fields(dl, previous)
                     return False, self._persistence_error
                 return False, (
                     'Fresh YouTube cookies are required. Retry from Astra Deck so the '
@@ -3093,12 +3108,7 @@ class DownloadManagerCore:
             self._next_order += 1
             dl.queue_order = self._next_order
             if not self._persist_locked():
-                (
-                    dl.status, dl.progress, dl.speed, dl.eta, dl.filename,
-                    dl.error, dl.error_code, dl.error_advice, dl.error_action,
-                    dl.finished_time, dl.start_time, dl.queue_order,
-                    dl.requires_auth, dl._cookies, dl.resume_partial,
-                ) = previous
+                restore_download_fields(dl, previous)
                 return False, self._persistence_error
         self.progress_updated.emit()
         self._schedule()

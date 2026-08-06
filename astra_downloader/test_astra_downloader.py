@@ -11747,6 +11747,109 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
             )
 
 
+class QueueRollbackTests(unittest.TestCase):
+    """A rejected queue mutation puts the download back exactly as it was."""
+
+    def _manager(self, tmpdir):
+        return ad.DownloadManager(
+            FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+            FakeHistory(),
+        )
+
+    def _failed(self, manager, *, code="network-unreachable", requires_auth=False):
+        dl = ad.Download("dl_rollback", "https://www.youtube.com/watch?v=abc12345678")
+        dl.status = "failed"
+        dl.error = "boom"
+        dl.error_code = code
+        dl.error_advice = "advice"
+        dl.error_action = "retry"
+        dl.requires_auth = requires_auth
+        dl.progress = 42.0
+        dl.filename = "half.mp4"
+        manager.downloads[dl.id] = dl
+        return dl
+
+    def test_a_failed_write_on_the_needs_auth_path_rolls_back(self):
+        # The rollback here used to unpack 14 of 15 packed fields and raise
+        # ValueError *instead of* restoring, stranding the download in
+        # needs-auth with its queue order already bumped. A retryable code is
+        # required to reach the branch at all — a non-retryable one is
+        # rejected earlier by the precondition gate.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir)
+            dl = self._failed(manager, requires_auth=True)
+            before = {
+                name: getattr(dl, name) for name in ad.RETRY_ROLLBACK_FIELDS
+            }
+            manager._persist_locked = lambda: False
+
+            ok, err = manager.retry(dl.id)
+
+            self.assertFalse(ok)
+            self.assertIsNotNone(err)
+            for name, value in before.items():
+                with self.subTest(field=name):
+                    self.assertEqual(getattr(dl, name), value)
+
+    def test_a_failed_write_on_the_ordinary_retry_path_rolls_back(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir)
+            dl = self._failed(manager)
+            before = {
+                name: getattr(dl, name) for name in ad.RETRY_ROLLBACK_FIELDS
+            }
+            manager._persist_locked = lambda: False
+
+            ok, _err = manager.retry(dl.id)
+
+            self.assertFalse(ok)
+            for name, value in before.items():
+                with self.subTest(field=name):
+                    self.assertEqual(getattr(dl, name), value)
+
+    def test_a_failed_write_on_resume_rolls_back(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir)
+            dl = self._failed(manager)
+            dl.status = "paused"
+            before = {
+                name: getattr(dl, name) for name in ad.RESUME_ROLLBACK_FIELDS
+            }
+            manager._persist_locked = lambda: False
+
+            ok, _err = manager.resume_download(dl.id)
+
+            self.assertFalse(ok)
+            for name, value in before.items():
+                with self.subTest(field=name):
+                    self.assertEqual(getattr(dl, name), value)
+
+    def test_the_snapshot_covers_every_field_each_path_mutates(self):
+        # The drift this replaced was a field present in the snapshot and
+        # absent from the restore. Assert the lists cover what the methods
+        # actually write, read from the source rather than restated here.
+        import inspect
+        source = inspect.getsource(ad.DownloadManagerCore.retry)
+        written = {
+            line.split("=")[0].strip().removeprefix("dl.")
+            for line in source.splitlines()
+            if line.strip().startswith("dl.") and "=" in line
+            and "==" not in line and not line.strip().startswith("dl.id")
+        }
+        missing = sorted(written - set(ad.RETRY_ROLLBACK_FIELDS))
+        self.assertEqual(missing, [], f"retry() mutates unrestored fields: {missing}")
+
+    def test_restore_is_the_inverse_of_snapshot(self):
+        dl = ad.Download("dl_x", "https://example.com/v")
+        dl.status = "failed"
+        dl.progress = 12.5
+        snapshot = ad.snapshot_download_fields(dl, ad.RETRY_ROLLBACK_FIELDS)
+        dl.status = "pending"
+        dl.progress = 0.0
+        ad.restore_download_fields(dl, snapshot)
+        self.assertEqual(dl.status, "failed")
+        self.assertEqual(dl.progress, 12.5)
+
 class BlockedDownloadRecoveryTests(unittest.TestCase):
     """The states that block a download must offer the control that fixes them."""
 
