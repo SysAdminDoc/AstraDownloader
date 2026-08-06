@@ -117,6 +117,15 @@ DEFAULT_CONFIG = {
     # Leftover .part / .f### / .ytdl files are swept after a download
     # succeeds. Turn this on to keep them when diagnosing a merge problem.
     "KeepIntermediateFiles": False,
+    # Verify a chosen format is actually downloadable before committing to it.
+    # Off by default: it costs an extra request per candidate format.
+    "VerifyFormats": False,
+    # Below this rate yt-dlp assumes the CDN is throttling and re-extracts the
+    # video rather than crawling to the stall watchdog. Empty disables it.
+    "ThrottledRate": "",
+    # 0 leaves yt-dlp's own defaults in place for both of these.
+    "SocketTimeoutSeconds": 0,
+    "ExtractorRetries": 0,
     "SubLangs": "en",
     "SponsorBlock": False,
     "SponsorBlockAction": "remove",
@@ -697,7 +706,7 @@ def sanitize_config(raw):
     data["ServerToken"] = token if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", token) else uuid.uuid4().hex
     for key in (
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
-        "KeepIntermediateFiles",
+        "KeepIntermediateFiles", "VerifyFormats",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "NotifyOnComplete", "ClipboardLinkGrabber", "LegacyHealthTokenEcho",
     ):
@@ -715,6 +724,9 @@ def sanitize_config(raw):
     channel = clean_text(data.get("YtDlpUpdateChannel"), "nightly", 16).lower()
     data["YtDlpUpdateChannel"] = channel if channel in {"stable", "nightly"} else "nightly"
     data["RateLimit"] = normalize_rate_limit(data.get("RateLimit"))
+    data["ThrottledRate"] = normalize_rate_limit(data.get("ThrottledRate"))
+    data["SocketTimeoutSeconds"] = clamp_int(data.get("SocketTimeoutSeconds"), 0, 0, 300)
+    data["ExtractorRetries"] = clamp_int(data.get("ExtractorRetries"), 0, 0, 20)
     data["Proxy"] = normalize_proxy(data.get("Proxy"))
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
     allowed_languages = {

@@ -850,7 +850,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_outtmpl = TextField("")
         window.cfg_sublangs = TextField("en")
         window.cfg_ratelimit = TextField("")
+        window.cfg_throttled = TextField("")
         window.cfg_proxy = TextField("")
+        window.cfg_verify_formats = CheckField()
         window.cfg_metadata = CheckField()
         window.cfg_thumbnail = CheckField()
         window.cfg_chapters = CheckField()
@@ -864,6 +866,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_fragments = NumberField(4)
         window.cfg_maxconcurrent = NumberField(3)
         window.cfg_retries = NumberField(10)
+        window.cfg_socket_timeout = NumberField(0)
+        window.cfg_extractor_retries = NumberField(0)
         window.cfg_maxsize = NumberField(0)
         window.cfg_autoupdate = CheckField()
         window.cfg_closetotray = CheckField()
@@ -1598,6 +1602,89 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                     self.assertIn(f"clip{index}.mp4", name)
             finally:
                 _retire_test_window(window)
+
+
+class TransferReliabilityArgvTests(unittest.TestCase):
+    """Throttle recovery, timeouts and format verification reach the argv."""
+
+    def setUp(self):
+        self.addCleanup(ad.reset_deno_runtime_cache)
+        self.addCleanup(ad.reset_ffmpeg_capabilities_cache)
+        self.addCleanup(ad.reset_po_token_provider_cache)
+
+    def _argv(self, overrides):
+        captured = []
+
+        class Proc:
+            returncode = 0
+
+            def __init__(self, args, **_kwargs):
+                captured.append(list(args))
+                self.stdout = iter(["[download] Destination: clip.mp4\n"])
+
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return 0
+
+            def terminate(self):
+                # reason: satisfy the API the cancel path expects
+                pass
+
+            def kill(self):
+                # reason: same as terminate
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}
+            settings.update(overrides)
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            download = ad.Download("dl_reliability", "https://example.com/video",
+                                   output_dir=tmpdir)
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", Proc), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+        runs = [args for args in captured if download.url in args]
+        self.assertEqual(len(runs), 1)
+        return runs[0]
+
+    def test_defaults_add_none_of_the_new_flags(self):
+        argv = self._argv({})
+        for flag in ("--throttled-rate", "--socket-timeout",
+                     "--extractor-retries", "--check-formats"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, argv, "defaults must not change the argv")
+
+    def test_configured_values_compile_into_the_argv(self):
+        argv = self._argv({
+            "ThrottledRate": "100K",
+            "SocketTimeoutSeconds": 30,
+            "ExtractorRetries": 5,
+            "VerifyFormats": True,
+        })
+        self.assertEqual(argv[argv.index("--throttled-rate") + 1], "100K")
+        self.assertEqual(argv[argv.index("--socket-timeout") + 1], "30")
+        self.assertEqual(argv[argv.index("--extractor-retries") + 1], "5")
+        self.assertIn("--check-formats", argv)
+
+    def test_a_junk_throttle_floor_is_dropped_rather_than_passed(self):
+        # These land in a subprocess argument.
+        argv = self._argv({"ThrottledRate": "fast; rm -rf /"})
+        self.assertNotIn("--throttled-rate", argv)
+
+    def test_the_real_binary_accepts_the_reliability_flags(self):
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest("yt-dlp is not installed in this environment")
+        result = subprocess.run(
+            [str(ytdlp), "--throttled-rate", "100K", "--socket-timeout", "30",
+             "--extractor-retries", "5", "--check-formats", "--help"],
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-400:])
 
 
 class SponsorBlockCategoryTests(unittest.TestCase):

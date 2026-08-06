@@ -2609,6 +2609,67 @@ class MainWindowCore(QMainWindow):
         rate_row.addWidget(self.cfg_ratelimit)
         perf_l.addLayout(rate_row)
         perf_l.addWidget(make_divider())
+        throttle_row = QHBoxLayout()
+        throttle_copy = QVBoxLayout()
+        throttle_copy.setSpacing(2)
+        throttle_copy.addWidget(make_label("Throttle floor", "fieldLabel"))
+        throttle_copy.addWidget(make_label(
+            "Below this rate the server is assumed to be throttling and the "
+            "video is re-extracted. Empty disables it.",
+            "fieldHint", word_wrap=True,
+        ))
+        throttle_row.addLayout(throttle_copy, 1)
+        self.cfg_throttled = QLineEdit(self.config.get("ThrottledRate", ""))
+        self.cfg_throttled.setAccessibleName("Throttle floor")
+        self.cfg_throttled.setPlaceholderText("Off")
+        self.cfg_throttled.setFixedWidth(120)
+        throttle_row.addWidget(self.cfg_throttled)
+        perf_l.addLayout(throttle_row)
+        perf_l.addWidget(make_divider())
+        socket_row = QHBoxLayout()
+        socket_copy = QVBoxLayout()
+        socket_copy.setSpacing(2)
+        socket_copy.addWidget(make_label("Socket timeout", "fieldLabel"))
+        socket_copy.addWidget(make_label(
+            "Seconds before a stalled connection is abandoned. 0 uses yt-dlp's "
+            "own default.", "fieldHint", word_wrap=True,
+        ))
+        socket_row.addLayout(socket_copy, 1)
+        self.cfg_socket_timeout = QSpinBox()
+        self.cfg_socket_timeout.setAccessibleName("Socket timeout in seconds")
+        self.cfg_socket_timeout.setRange(0, 300)
+        self.cfg_socket_timeout.setValue(self._dependencies['clamp_int'](
+            self.config.get("SocketTimeoutSeconds", 0), 0, 0, 300))
+        self.cfg_socket_timeout.setFixedWidth(86)
+        socket_row.addWidget(self.cfg_socket_timeout)
+        perf_l.addLayout(socket_row)
+        perf_l.addWidget(make_divider())
+        extractor_row = QHBoxLayout()
+        extractor_copy = QVBoxLayout()
+        extractor_copy.setSpacing(2)
+        extractor_copy.addWidget(make_label("Extractor retries", "fieldLabel"))
+        extractor_copy.addWidget(make_label(
+            "Retries while reading the page, before any transfer starts. "
+            "0 uses yt-dlp's own default.", "fieldHint", word_wrap=True,
+        ))
+        extractor_row.addLayout(extractor_copy, 1)
+        self.cfg_extractor_retries = QSpinBox()
+        self.cfg_extractor_retries.setAccessibleName("Extractor retries")
+        self.cfg_extractor_retries.setRange(0, 20)
+        self.cfg_extractor_retries.setValue(self._dependencies['clamp_int'](
+            self.config.get("ExtractorRetries", 0), 0, 0, 20))
+        self.cfg_extractor_retries.setFixedWidth(86)
+        extractor_row.addWidget(self.cfg_extractor_retries)
+        perf_l.addLayout(extractor_row)
+        perf_l.addWidget(make_divider())
+        self.cfg_verify_formats = QCheckBox(tr("Verify formats before downloading"))
+        self.cfg_verify_formats.setToolTip(
+            "Check that a chosen format can actually be downloaded before "
+            "committing to it. Costs an extra request per candidate format."
+        )
+        self.cfg_verify_formats.setChecked(self.config.get("VerifyFormats", False))
+        perf_l.addWidget(self.cfg_verify_formats)
+        perf_l.addWidget(make_divider())
         # MaxFileSizeMB blocks downloads outright — a run that trips it exits
         # cleanly having written nothing and reports `skipped`, whose message
         # tells the user to change this. It needs a control to change.
@@ -2806,6 +2867,10 @@ class MainWindowCore(QMainWindow):
             self.cfg_retries.valueChanged,
             self.cfg_maxsize.valueChanged,
             self.cfg_ratelimit.textChanged,
+            self.cfg_throttled.textChanged,
+            self.cfg_socket_timeout.valueChanged,
+            self.cfg_extractor_retries.valueChanged,
+            self.cfg_verify_formats.toggled,
             self.cfg_proxy.textChanged,
             self.cfg_js_runtime.currentIndexChanged,
             self.cfg_ytdlp_channel.currentIndexChanged,
@@ -4003,6 +4068,10 @@ class MainWindowCore(QMainWindow):
             "EmbedChapters": self.cfg_chapters.isChecked(),
             "EmbedSubs": self.cfg_subs.isChecked(),
             "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
+            "VerifyFormats": self.cfg_verify_formats.isChecked(),
+            "ThrottledRate": self.cfg_throttled.text().strip(),
+            "SocketTimeoutSeconds": self.cfg_socket_timeout.value(),
+            "ExtractorRetries": self.cfg_extractor_retries.value(),
             "SubLangs": sublangs,
             "SponsorBlock": self.cfg_sponsorblock.isChecked(),
             "SponsorBlockAction": self.cfg_sb_action.currentData(),

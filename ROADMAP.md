@@ -50,26 +50,12 @@ Notes on the items above, from the same pass:
   Acceptance: an `ar` scenario joins the smoke set and captures the Download page; the hero button keeps its LTR proportions under RTL; the German rail assertion is extended to a body string on the same page so a rail-only translation can no longer pass. Pairs with "Finish the localisation" — this item is the RTL correctness half, not the bulk-translation half.
   Complexity: M
 
-- [ ] P2 — Adopt yt-dlp's throttling and transient-failure recovery knobs
-  Why: The app sets `--retries` and `--fragment-retries` and stops there, so a CDN that silently throttles to a trickle, a stalled socket, or a flaky extractor all present as the stall watchdog eventually killing a download that yt-dlp could have recovered on its own.
-  Evidence: none of `--throttled-rate`, `--http-chunk-size`, `--socket-timeout`, `--extractor-retries`, `--retry-sleep` or `--file-access-retries` appears anywhere in `astra_downloader/` (verified against the full 276-option `--help` inventory, 2026-08-06). `--throttled-rate` re-extracts the video when the rate drops below a floor, which is the documented remedy for the YouTube throttling this class of tool hits most. Distinct from the pacing item above: that one is about not provoking 429s, this one is about surviving a slow or flaky transfer.
-  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: a throttle floor, socket timeout and extractor-retry count are settings compiled into the argv with conservative defaults; the stall watchdog's timeout is documented as the backstop for when they fail; a test asserts the flags appear and that the defaults do not change existing argv expectations.
-  Complexity: M
-
 - [ ] P2 — Fetch a playlist or subscription incrementally instead of whole
   Why: A subscription scan and a playlist download both re-walk everything every time. yt-dlp has the selection primitives to stop at the first already-seen item, bound a run, and filter by date or duration; none is used, so the subscription scheduler does the most expensive possible thing on every tick.
   Evidence: the selection theme is the single largest unused group — 29 options — and none of `--break-on-existing`, `--dateafter`, `--datebefore`, `--max-downloads`, `--match-filters`, `--min-filesize` or `--lazy-playlist` appears in `astra_downloader/` (verified 2026-08-06). `--download-archive` is deliberately excluded and pinned by test, and must stay excluded — the archive-key mechanism in `subscriptions.py` is this project's answer to the same problem, so the new flags must complement it rather than reintroduce it.
   Touches: `astra_downloader/subscriptions.py`, `astra_downloader/download.py`, `astra_downloader/config.py`, `astra_downloader/gui.py`
   Acceptance: a subscription scan bounds itself by count and by date and stops early once it reaches known items, without `--download-archive`; a playlist download can be capped; the existing no-archive tests still pass.
   Complexity: M
-
-- [ ] P2 — Verify a format is actually downloadable before committing to it
-  Why: The selector picks a format from the manifest and finds out at transfer time whether it works, which is one of the ways a download fails with no useful reason attached.
-  Evidence: neither `--check-formats` nor `--ignore-no-formats-error` appears in `astra_downloader/` (verified 2026-08-06). Pairs directly with "Format probing before download" and "Sort formats instead of guessing quality" — all three read the same format table, so they should share one probe rather than three.
-  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`
-  Acceptance: format verification is opt-in with its cost documented (it fetches a byte range per candidate); a failure to verify is classified into the existing taxonomy rather than surfacing as raw yt-dlp text.
-  Complexity: S
 
 - [ ] P2 — Finish the localisation
   Why: The app advertises 11 locales but ships translations for about a tenth of its strings, so choosing German yields a mostly-English window. This is also the only feature any external user has ever requested.

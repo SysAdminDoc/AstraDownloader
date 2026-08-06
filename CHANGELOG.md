@@ -12,6 +12,19 @@ repository's git log.
 
 ## [Unreleased]
 
+### Added
+
+- **Throttle recovery, socket timeout and extractor retries.** The only
+  transfer controls were a bandwidth cap and a retry count, so a CDN that
+  throttled to a trickle ran until the stall watchdog killed it. Settings now
+  exposes a throttle floor — below it yt-dlp re-extracts the video rather than
+  crawling — plus a socket timeout and a separate retry count for the page
+  read that happens before any transfer starts. All three default to off,
+  leaving the argv byte-identical until you change something.
+- **Optional format verification.** yt-dlp can confirm a chosen format is
+  actually downloadable before committing to it. Off by default, because it
+  costs a request per candidate format.
+
 ### Fixed
 
 - **A failure can be retried once you have fixed what it was waiting for.**
