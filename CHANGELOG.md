@@ -14,6 +14,11 @@ repository's git log.
 
 ### Security
 
+- **`/health` no longer hands the subscription list to unauthenticated local
+  callers.** The endpoint already gated recent log entries behind the bearer
+  token; the channel URLs and titles a user follows are the same class of
+  thing and now sit behind the same check. The identity and version fields the
+  extension needs to discover the server stay open.
 - **The yt-dlp process-boundary guard covers the 2026 advisories.** It refused
   the four link-file flags from CVE-2026-55404; it now also refuses `--exec`,
   `--exec-before-download`, the `--netrc` family and every spelling of the

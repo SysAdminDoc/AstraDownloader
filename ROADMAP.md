@@ -69,13 +69,6 @@ Notes on the items above, from the same pass:
   Acceptance: Control commands carry the session token and are rejected without it; `SO_REUSEADDR` is removed or replaced with `SO_EXCLUSIVEADDRUSE` so a second binder fails rather than hijacking; the uninstall handshake still works.
   Complexity: M
 
-- [ ] P1 — Stop `/health` disclosing the subscription list to unauthenticated callers
-  Why: `/health` deliberately auth-gates `recentErrors` with a comment explaining the threat model, then returns every subscribed channel URL and title two lines later to any local caller.
-  Evidence: `routes.py:408` against `routes.py:410-412`; `snapshot()` reaches `subscriptions.py:698` and `370-372`.
-  Touches: `astra_downloader/routes.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: `subscriptions` is present only when `check_auth()` passes, matching the sibling field; an unauthenticated `/health` still returns the identity and version fields the extension needs for discovery.
-  Complexity: S
-
 - [ ] P1 — Raise the source-run Python floor to 3.11
   Why: `requirements.txt` pins `yt-dlp==2026.7.4`, whose release raised the minimum Python to 3.11, but the module-load guard still admits 3.10 — so a 3.10 checkout fails at dependency resolution instead of at the guard that exists to explain it.
   Evidence: `astra_downloader.py:16-17` (`_MIN_PYTHON = (3, 10)`, with a comment citing the older 3.9 drop); yt-dlp 2026.07.04 release notes. `build.py:43` already restricts release builds to 3.11 and 3.12.
