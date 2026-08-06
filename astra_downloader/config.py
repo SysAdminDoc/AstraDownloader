@@ -138,6 +138,19 @@ DEFAULT_CONFIG = {
     # Preferred frame rate, as a target rather than a cap: 60 puts 60fps
     # first and falls back rather than failing. 0 expresses no preference.
     "PreferredFrameRate": 0,
+    # Bounds for a playlist or channel download. A pasted playlist otherwise
+    # queues every item it contains. These apply only to a run that walks a
+    # playlist — a single video is never filtered by them. 0 and "" disable
+    # each independently.
+    #
+    # Deliberately NOT --download-archive: the archive-key mechanism in
+    # subscriptions.py is this project's answer to "already seen", and a
+    # second one would make a re-download report "already downloaded".
+    "PlaylistMaxItems": 0,
+    # An absolute YYYYMMDD, or a yt-dlp relative date like "today-30days".
+    "PlaylistDateAfter": "",
+    "PlaylistMinDurationSeconds": 0,
+    "PlaylistMaxDurationSeconds": 0,
     # Below this rate yt-dlp assumes the CDN is throttling and re-extracts the
     # video rather than crawling to the stall watchdog. Empty disables it.
     "ThrottledRate": "",
@@ -236,6 +249,24 @@ def clamp_int(value, default, minimum, maximum):
 def normalize_rate_limit(value):
     cleaned = clean_text(value, "", 32).upper()
     return cleaned if re.fullmatch(r"\d+[KMG]?", cleaned) else ""
+
+
+def normalize_playlist_date(value):
+    """Accept an absolute YYYYMMDD or a yt-dlp relative date, else nothing.
+
+    This lands in a subprocess argument, so the grammar is allow-listed
+    rather than sanitised: an unparseable value would make yt-dlp reject the
+    whole download instead of the one setting the user got wrong.
+    """
+    cleaned = clean_text(value, "", 32).lower().replace(" ", "")
+    if re.fullmatch(r"\d{8}", cleaned):
+        return cleaned
+    if re.fullmatch(
+        r"(now|today)[-+]\d{1,4}(microsecond|second|minute|hour|day|week|month|year)s?",
+        cleaned,
+    ):
+        return cleaned
+    return ""
 
 
 def normalize_proxy(value):
@@ -762,6 +793,17 @@ def sanitize_config(raw):
     data["PreferredFrameRate"] = (
         frame_rate if frame_rate in FORMAT_SORT_FRAME_RATES else 0
     )
+    data["PlaylistMaxItems"] = clamp_int(data.get("PlaylistMaxItems"), 0, 0, 1000)
+    data["PlaylistDateAfter"] = normalize_playlist_date(data.get("PlaylistDateAfter"))
+    data["PlaylistMinDurationSeconds"] = clamp_int(
+        data.get("PlaylistMinDurationSeconds"), 0, 0, 86400)
+    data["PlaylistMaxDurationSeconds"] = clamp_int(
+        data.get("PlaylistMaxDurationSeconds"), 0, 0, 86400)
+    # A maximum below the minimum matches nothing at all, which reads as a
+    # broken download rather than a filter the user got wrong.
+    if data["PlaylistMaxDurationSeconds"] and (
+            data["PlaylistMaxDurationSeconds"] < data["PlaylistMinDurationSeconds"]):
+        data["PlaylistMaxDurationSeconds"] = data["PlaylistMinDurationSeconds"]
     data["SleepIntervalSeconds"] = clamp_int(data.get("SleepIntervalSeconds"), 0, 0, 600)
     data["MaxSleepIntervalSeconds"] = clamp_int(data.get("MaxSleepIntervalSeconds"), 0, 0, 600)
     # yt-dlp rejects a maximum below the minimum, so the pair is normalised

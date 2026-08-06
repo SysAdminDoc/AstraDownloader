@@ -961,6 +961,49 @@ def build_format_sort_args(config):
     return ['--format-sort', ','.join(['res'] + fields)]
 
 
+def build_playlist_bound_args(config):
+    """Compile the bounds that keep a pasted playlist from queueing all of it.
+
+    Verified against the installed binary on a real channel: `--max-downloads`
+    stops the walk at the cap, and `--dateafter` and a `duration` match-filter
+    each exclude items that fail them.
+
+    `--download-archive` is deliberately absent and must stay absent — the
+    archive-key mechanism in `subscriptions.py` is this project's answer to
+    "already seen", and a second one makes a deliberate re-download report
+    "already downloaded" and do nothing.
+    """
+    read = getattr(config, 'get', None)
+    if not callable(read):
+        return []
+
+    def _int(key):
+        try:
+            return max(0, int(read(key) or 0))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    args = []
+    max_items = _int('PlaylistMaxItems')
+    if max_items > 0:
+        args += ['--max-downloads', str(max_items)]
+    date_after = str(read('PlaylistDateAfter') or '').strip()
+    if date_after:
+        args += ['--dateafter', date_after]
+    minimum = _int('PlaylistMinDurationSeconds')
+    maximum = _int('PlaylistMaxDurationSeconds')
+    clauses = []
+    if minimum > 0:
+        clauses.append(f'duration>={minimum}')
+    if maximum > 0 and maximum >= minimum:
+        clauses.append(f'duration<={maximum}')
+    if clauses:
+        # `& ` is yt-dlp's conjunction; a single filter string keeps the two
+        # bounds one expression so neither can be dropped independently.
+        args += ['--match-filters', ' & '.join(clauses)]
+    return args
+
+
 def build_video_format_args(container, quality):
     """Return editor-compatible yt-dlp format selection arguments."""
     height_filter = '' if quality == 'best' else f'[height<={quality}]'
@@ -2477,6 +2520,9 @@ class DownloadManagerCore:
             args.append('--yes-playlist')
             if dl.playlist_items:
                 args += ['--playlist-items', ','.join(str(item) for item in dl.playlist_items)]
+            # Bounds belong to the run that walks a playlist; a single video
+            # is never filtered by them.
+            args += build_playlist_bound_args(self.config)
         elif not self._dependencies['is_youtube_url'](dl.url):
             # Single-item intent on a non-YouTube URL. Without this, pasting a
             # channel/profile/subreddit link makes yt-dlp walk the whole

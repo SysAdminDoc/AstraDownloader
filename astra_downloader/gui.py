@@ -896,6 +896,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_output_dir',
     'normalize_download_section',
     'normalize_output_template',
+    'normalize_playlist_date',
     'normalize_proxy',
     'normalize_rate_limit',
     'normalize_sponsorblock_categories',
@@ -1162,6 +1163,24 @@ class MainWindowCore(QMainWindow):
         if subtitle:
             header.addWidget(make_label(subtitle, "subtitle", word_wrap=True))
         return header
+
+    def _add_settings_number(self, target, label, hint, accessible,
+                             minimum, maximum, current):
+        """Add one labelled spin box with its explanation to a settings group."""
+        row = QHBoxLayout()
+        copy = QVBoxLayout()
+        copy.setSpacing(2)
+        copy.addWidget(make_label(label, "fieldLabel"))
+        copy.addWidget(make_label(hint, "fieldHint", word_wrap=True))
+        row.addLayout(copy, 1)
+        box = QSpinBox()
+        box.setAccessibleName(accessible)
+        box.setRange(minimum, maximum)
+        box.setValue(current)
+        box.setFixedWidth(86)
+        row.addWidget(box)
+        target.addLayout(row)
+        return box
 
     def _add_format_preference(self, target, label, accessible, choices,
                                current):
@@ -2676,6 +2695,55 @@ class MainWindowCore(QMainWindow):
         )
         layout.addWidget(fmt_card)
 
+        # Playlist bounds. A pasted playlist otherwise queues everything it
+        # contains; these apply only to a run that walks one.
+        pl_card, pl_l = self._make_settings_group("Playlist limits")
+        pl_l.addWidget(make_label(
+            "These apply when you paste a playlist or channel. A single "
+            "video is never filtered by them.",
+            "fieldHint", word_wrap=True,
+        ))
+        self.cfg_playlist_max = self._add_settings_number(
+            pl_l, "Maximum items",
+            "Stop after this many items from one playlist. 0 takes all of them.",
+            "Maximum playlist items", 0, 1000,
+            self._dependencies['clamp_int'](
+                self.config.get("PlaylistMaxItems", 0), 0, 0, 1000),
+        )
+        date_row = QHBoxLayout()
+        date_copy = QVBoxLayout()
+        date_copy.setSpacing(2)
+        date_copy.addWidget(make_label("Uploaded after", "fieldLabel"))
+        date_copy.addWidget(make_label(
+            "A date as YYYYMMDD, or a relative one such as today-30days. "
+            "Empty takes any date.", "fieldHint", word_wrap=True,
+        ))
+        date_row.addLayout(date_copy, 1)
+        self.cfg_playlist_dateafter = QLineEdit(
+            str(self.config.get("PlaylistDateAfter", "") or ""))
+        self.cfg_playlist_dateafter.setAccessibleName("Playlist uploaded after")
+        self.cfg_playlist_dateafter.setPlaceholderText("today-30days")
+        self.cfg_playlist_dateafter.setFixedWidth(160)
+        date_row.addWidget(self.cfg_playlist_dateafter)
+        pl_l.addLayout(date_row)
+        self.cfg_playlist_min_duration = self._add_settings_number(
+            pl_l, "Shortest item (seconds)",
+            "Skip items shorter than this, which is how a channel's shorts "
+            "are left behind. 0 takes any length.",
+            "Shortest playlist item in seconds", 0, 86400,
+            self._dependencies['clamp_int'](
+                self.config.get("PlaylistMinDurationSeconds", 0), 0, 0, 86400),
+        )
+        self.cfg_playlist_max_duration = self._add_settings_number(
+            pl_l, "Longest item (seconds)",
+            "Skip items longer than this, which is how multi-hour streams "
+            "are left behind. 0 takes any length.",
+            "Longest playlist item in seconds", 0, 86400,
+            self._dependencies['clamp_int'](
+                self.config.get("PlaylistMaxDurationSeconds", 0), 0, 0, 86400),
+        )
+        layout.addWidget(pl_card)
+
         # Performance
         perf_card, perf_l = self._make_settings_group("Performance")
         frag_row = QHBoxLayout()
@@ -3053,6 +3121,10 @@ class MainWindowCore(QMainWindow):
             self.cfg_video_codec.currentIndexChanged,
             self.cfg_audio_codec.currentIndexChanged,
             self.cfg_frame_rate.currentIndexChanged,
+            self.cfg_playlist_max.valueChanged,
+            self.cfg_playlist_dateafter.textChanged,
+            self.cfg_playlist_min_duration.valueChanged,
+            self.cfg_playlist_max_duration.valueChanged,
             self.cfg_sleep_interval.valueChanged,
             self.cfg_sleep_max.valueChanged,
             self.cfg_sleep_requests.valueChanged,
@@ -4258,6 +4330,11 @@ class MainWindowCore(QMainWindow):
             "VideoCodecPreference": self.cfg_video_codec.currentData(),
             "AudioCodecPreference": self.cfg_audio_codec.currentData(),
             "PreferredFrameRate": self.cfg_frame_rate.currentData(),
+            "PlaylistMaxItems": self.cfg_playlist_max.value(),
+            "PlaylistDateAfter": self._dependencies['normalize_playlist_date'](
+                self.cfg_playlist_dateafter.text()),
+            "PlaylistMinDurationSeconds": self.cfg_playlist_min_duration.value(),
+            "PlaylistMaxDurationSeconds": self.cfg_playlist_max_duration.value(),
             "ThrottledRate": self.cfg_throttled.text().strip(),
             "SocketTimeoutSeconds": self.cfg_socket_timeout.value(),
             "ExtractorRetries": self.cfg_extractor_retries.value(),

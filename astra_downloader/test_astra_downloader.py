@@ -866,6 +866,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_video_codec = ComboField("auto")
         window.cfg_audio_codec = ComboField("auto")
         window.cfg_frame_rate = ComboField(0)
+        window.cfg_playlist_max = NumberField(0)
+        window.cfg_playlist_dateafter = TextField("")
+        window.cfg_playlist_min_duration = NumberField(0)
+        window.cfg_playlist_max_duration = NumberField(0)
         window.cfg_fragments = NumberField(4)
         window.cfg_maxconcurrent = NumberField(3)
         window.cfg_retries = NumberField(10)
@@ -894,6 +898,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "normalize_output_dir": ad.normalize_output_dir,
             "normalize_proxy": ad.normalize_proxy,
             "normalize_rate_limit": ad.normalize_rate_limit,
+            "normalize_playlist_date": ad.normalize_playlist_date,
             "normalize_sublangs": ad.normalize_sublangs,
         }
         values = {"DEFAULT_CONFIG": ad.DEFAULT_CONFIG, "SERVER_PORT": ad.SERVER_PORT}
@@ -952,6 +957,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "normalize_output_template": ad.normalize_output_template,
             "normalize_proxy": ad.normalize_proxy,
             "normalize_rate_limit": ad.normalize_rate_limit,
+            "normalize_playlist_date": ad.normalize_playlist_date,
             "normalize_sublangs": ad.normalize_sublangs,
         }
         window._value = {"DEFAULT_CONFIG": ad.DEFAULT_CONFIG, "SERVER_PORT": ad.SERVER_PORT}.__getitem__
@@ -9973,6 +9979,171 @@ def gui_module_for_tests():
     import gui as gui_module
     return gui_module
 
+
+class PlaylistBoundTests(unittest.TestCase):
+    """A pasted playlist can be bounded without reintroducing an archive."""
+
+    def test_defaults_bound_nothing(self):
+        self.assertEqual(
+            ad.build_playlist_bound_args(ad.sanitize_config({})), []
+        )
+
+    def test_a_count_cap_compiles(self):
+        self.assertEqual(
+            ad.build_playlist_bound_args({"PlaylistMaxItems": 5}),
+            ["--max-downloads", "5"],
+        )
+
+    def test_a_date_bound_compiles(self):
+        self.assertEqual(
+            ad.build_playlist_bound_args({"PlaylistDateAfter": "today-30days"}),
+            ["--dateafter", "today-30days"],
+        )
+
+    def test_duration_bounds_become_one_match_filter(self):
+        # One expression, so neither bound can be dropped independently.
+        self.assertEqual(
+            ad.build_playlist_bound_args({
+                "PlaylistMinDurationSeconds": 60,
+                "PlaylistMaxDurationSeconds": 3600,
+            }),
+            ["--match-filters", "duration>=60 & duration<=3600"],
+        )
+
+    def test_a_lone_minimum_leaves_the_maximum_out(self):
+        self.assertEqual(
+            ad.build_playlist_bound_args({"PlaylistMinDurationSeconds": 60}),
+            ["--match-filters", "duration>=60"],
+        )
+
+    # ── The date grammar is an allow-list, not a sanitiser ───────────────
+
+    def test_an_absolute_and_a_relative_date_are_accepted(self):
+        # An integer is included deliberately: a config file can carry
+        # 20260101 unquoted, and that is a date, not junk.
+        for value in ("20260101", "today-30days", "now-1year", "TODAY-2 weeks",
+                      20260101):
+            with self.subTest(value=value):
+                self.assertTrue(ad.normalize_playlist_date(value), value)
+
+    def test_anything_else_is_dropped_rather_than_passed(self):
+        # This lands in a subprocess argument, and an unparseable value would
+        # make yt-dlp reject the whole download rather than the one setting.
+        for value in ("2026-01-01", "yesterday", "; rm -rf /", "--exec=calc",
+                      "today-30fortnights", "202601", "", None):
+            with self.subTest(value=value):
+                self.assertEqual(ad.normalize_playlist_date(value), "")
+
+    def test_a_maximum_below_the_minimum_is_normalised(self):
+        # The pair would otherwise match nothing at all, which reads as a
+        # broken download rather than a filter the user got wrong.
+        data = ad.sanitize_config({
+            "PlaylistMinDurationSeconds": 600,
+            "PlaylistMaxDurationSeconds": 60,
+        })
+        self.assertEqual(data["PlaylistMaxDurationSeconds"], 600)
+
+    # ── Where they apply ─────────────────────────────────────────────────
+
+    def test_the_archive_flag_stays_out(self):
+        # subscriptions.py's archive keys are this project's answer to
+        # "already seen"; a second mechanism makes a deliberate re-download
+        # report "already downloaded" and do nothing.
+        args = ad.build_playlist_bound_args({
+            "PlaylistMaxItems": 5, "PlaylistDateAfter": "20260101",
+            "PlaylistMinDurationSeconds": 60,
+        })
+        self.assertNotIn("--download-archive", args)
+
+    def test_the_real_binary_accepts_the_compiled_bounds(self):
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest("yt-dlp is not installed in this environment")
+        args = ad.build_playlist_bound_args({
+            "PlaylistMaxItems": 3,
+            "PlaylistDateAfter": "today-30days",
+            "PlaylistMinDurationSeconds": 60,
+            "PlaylistMaxDurationSeconds": 3600,
+        })
+        proc = subprocess.run(
+            [str(ytdlp), "--ignore-config", "--no-plugin-dirs"] + args
+            + ["--help"],
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(proc.returncode, 0,
+                         (proc.stdout[-400:], proc.stderr[-400:]))
+
+
+class PlaylistBoundArgvTests(unittest.TestCase):
+    """The bounds reach a playlist run, and only a playlist run."""
+
+    def setUp(self):
+        self.addCleanup(ad.reset_deno_runtime_cache)
+        self.addCleanup(ad.reset_ffmpeg_capabilities_cache)
+        self.addCleanup(ad.reset_po_token_provider_cache)
+
+    def _argv(self, url, overrides):
+        captured = []
+
+        class Proc:
+            returncode = 0
+
+            def __init__(self, args, **_kwargs):
+                captured.append(list(args))
+                self.stdout = iter(["[download] Destination: clip.mp4\n"])
+
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return 0
+
+            def terminate(self):
+                # reason: satisfy the API the cancel path expects
+                pass
+
+            def kill(self):
+                # reason: same as terminate
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}
+            settings.update(overrides)
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            download = ad.Download("dl_playlist", url, output_dir=tmpdir)
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", Proc), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+        runs = [args for args in captured if download.url in args]
+        self.assertEqual(len(runs), 1)
+        return runs[0]
+
+    _BOUNDS = {
+        "PlaylistMaxItems": 4,
+        "PlaylistDateAfter": "today-7days",
+        "PlaylistMinDurationSeconds": 90,
+    }
+
+    def test_a_playlist_run_carries_the_bounds(self):
+        argv = self._argv(
+            "https://www.youtube.com/playlist?list=PL123", self._BOUNDS
+        )
+        self.assertIn("--yes-playlist", argv)
+        self.assertEqual(argv[argv.index("--max-downloads") + 1], "4")
+        self.assertEqual(argv[argv.index("--dateafter") + 1], "today-7days")
+        self.assertEqual(argv[argv.index("--match-filters") + 1], "duration>=90")
+
+    def test_a_single_video_is_never_filtered_by_them(self):
+        # A bound meant for a playlist must not silently skip the one video
+        # the user actually asked for.
+        argv = self._argv(
+            "https://www.youtube.com/watch?v=abc12345678", self._BOUNDS
+        )
+        for flag in ("--max-downloads", "--dateafter", "--match-filters"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, argv)
 
 class SabrDisclosureTests(unittest.TestCase):
     """A SABR-only link says what it cannot honour before the run, not after."""
