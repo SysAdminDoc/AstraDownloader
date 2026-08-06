@@ -44,6 +44,8 @@ __all__ = (
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
+    "quarantined_state_files", "restore_quarantined_file",
+    "record_quarantined_file", "forget_quarantined_file",
     "verify_file_sha256", "fetch_expected_sha256", "cleanup_stale_cookie_jars",
     "write_cookies_netscape", "RateLimiter", "Config", "History",
     "DOWNLOAD_REQUEST_ALLOWED_FIELDS", "DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS",
@@ -64,6 +66,8 @@ _OWNED_EXPORTS = {
     "DEFAULT_CONFIG", "sanitize_config",
     "ConfigStore", "HistoryStore", "atomic_write_json", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries",
+    "quarantined_state_files", "restore_quarantined_file",
+    "record_quarantined_file", "forget_quarantined_file",
     "DOWNLOAD_REQUEST_ALLOWED_FIELDS", "DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS",
 }
 _resolve_legacy = make_legacy_resolver(
@@ -731,6 +735,65 @@ def backup_corrupt_file(path, timestamp=None):
         return None
 
 
+_QUARANTINE_LOCK = threading.Lock()
+_quarantined_state_files = []
+
+
+def record_quarantined_file(path, backup):
+    """Remember that a state file was set aside, so someone can be told.
+
+    Quarantine is silent by design at the read site — the caller gets its
+    fallback and carries on. But a config.json set aside here regenerates the
+    server token, which breaks extension pairing, and a queue set aside here
+    is indistinguishable from an empty one. The original bytes are still on
+    disk beside the replacement; this is the record that says so.
+    """
+    entry = {'path': str(path), 'backup': str(backup)}
+    with _QUARANTINE_LOCK:
+        if entry not in _quarantined_state_files:
+            _quarantined_state_files.append(entry)
+    return entry
+
+
+def quarantined_state_files():
+    with _QUARANTINE_LOCK:
+        return [dict(entry) for entry in _quarantined_state_files]
+
+
+def forget_quarantined_file(backup):
+    backup = str(backup)
+    with _QUARANTINE_LOCK:
+        remaining = [e for e in _quarantined_state_files if e['backup'] != backup]
+        removed = len(remaining) != len(_quarantined_state_files)
+        _quarantined_state_files[:] = remaining
+    return removed
+
+
+def restore_quarantined_file(backup):
+    """Put a quarantined file back where it came from.
+
+    Returns the restored path, or None. The caller reloads: this only moves
+    bytes, and every store in this program reads its file once at construction.
+    """
+    backup = str(backup)
+    with _QUARANTINE_LOCK:
+        entry = next(
+            (e for e in _quarantined_state_files if e['backup'] == backup), None)
+    if entry is None:
+        return None
+    source = Path(entry['backup'])
+    target = Path(entry['path'])
+    if not source.exists():
+        forget_quarantined_file(backup)
+        return None
+    try:
+        source.replace(target)
+    except OSError:
+        return None
+    forget_quarantined_file(backup)
+    return target
+
+
 def load_json_file(path, fallback, *, backup=backup_corrupt_file,
                    max_bytes=MAX_LOCAL_JSON_BYTES):
     """Read bounded JSON state, quarantining malformed files before fallback."""
@@ -739,12 +802,16 @@ def load_json_file(path, fallback, *, backup=backup_corrupt_file,
         return fallback
     try:
         if path.stat().st_size > max_bytes:
-            backup(path)
+            saved = backup(path)
+            if saved:
+                record_quarantined_file(path, saved)
             return fallback
         with open(path, 'r', encoding='utf-8') as handle:
             return json.load(handle)
     except (OSError, ValueError, TypeError):
-        backup(path)
+        saved = backup(path)
+        if saved:
+            record_quarantined_file(path, saved)
         return fallback
 
 
@@ -869,6 +936,19 @@ class ConfigStore:
             if key in self._session_overrides:
                 return self._session_overrides[key]
             return self._data.get(key, default)
+
+    def reload(self):
+        """Re-read the file from disk, discarding in-memory state.
+
+        Used after a quarantined config is restored: the store read its file
+        once, at construction, and by then the replacement had already been
+        written with a fresh server token.
+        """
+        with self._lock:
+            self._data = self._sanitizer(self._loader(self._resolve(self._path), {}))
+            self._persisted_data = dict(self._data)
+            self._session_overrides.clear()
+            return True
 
     def get_persisted(self, key, default=None):
         """The durable value, ignoring any session-only override."""

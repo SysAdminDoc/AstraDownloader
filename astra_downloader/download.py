@@ -1300,6 +1300,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'normalize_url',
     'probe_javascript_runtime',
     'probe_po_token_provider',
+    'quarantined_state_files',
     'spawn_media_process',
     'spawn_ytdlp',
     'terminate_process_tree',
@@ -1393,6 +1394,19 @@ class DownloadManagerCore:
         if self._queue_store is None:
             return
         raw, compatible = self._queue_store.load()
+        # An empty dict is what a corrupt file and an empty queue both look
+        # like from here. The quarantine the read just performed is the only
+        # thing that tells them apart, and discarding pending work in silence
+        # is not the same event as starting with nothing.
+        quarantined = {
+            entry['path']
+            for entry in self._dependencies['quarantined_state_files']()
+        }
+        if str(self._queue_store.path) in quarantined:
+            self._persistence_error = (
+                'The pending download queue could not be read and was set aside. '
+                'Any downloads waiting in it were not restored.'
+            )
         if not compatible:
             self._persistence_compatible = False
             self._persistence_error = (

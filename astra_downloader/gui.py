@@ -863,9 +863,11 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_rate_limit',
     'normalize_sublangs',
     'normalize_url',
+    'quarantined_state_files',
     'query_history_entries',
     'reset_deno_runtime_cache',
     'reset_ffmpeg_capabilities_cache',
+    'restore_quarantined_file',
     'write_persistent_log',
 })
 
@@ -1503,6 +1505,33 @@ class MainWindowCore(QMainWindow):
         self.persistence_notice.setAccessibleName("Storage problem")
         self.persistence_notice.hide()
         layout.addWidget(self.persistence_notice)
+
+        # A quarantined state file is set aside silently at the read site, so
+        # this is the only place the user learns that config.json regenerated
+        # its server token, or that a queue of pending work was discarded.
+        # The original bytes are still there; restoring them is one click.
+        self.quarantine_panel = QFrame()
+        self.quarantine_panel.setProperty("class", "readinessRow")
+        quarantine_layout = QVBoxLayout(self.quarantine_panel)
+        quarantine_layout.setContentsMargins(0, 0, 0, 0)
+        quarantine_layout.setSpacing(6)
+        self.quarantine_notice = make_label("", "errorCallout", word_wrap=True)
+        self.quarantine_notice.setAccessibleName("Quarantined state file")
+        quarantine_layout.addWidget(self.quarantine_notice)
+        quarantine_actions = QHBoxLayout()
+        quarantine_actions.addStretch()
+        self.btn_quarantine_restore = self._make_tool_button("Restore", "primary")
+        self.btn_quarantine_restore.clicked.connect(self._restore_quarantined_state)
+        self.btn_quarantine_dismiss = self._make_tool_button("Dismiss")
+        self.btn_quarantine_dismiss.clicked.connect(self._dismiss_quarantine_notice)
+        quarantine_actions.addWidget(self.btn_quarantine_restore)
+        quarantine_actions.addWidget(self.btn_quarantine_dismiss)
+        quarantine_layout.addLayout(quarantine_actions)
+        self.quarantine_panel.hide()
+        layout.addWidget(self.quarantine_panel)
+        self._dismissed_quarantines = set()
+        self._refresh_quarantine_notice()
+
         self._set_readiness("sabr", "Limited", "warning")
         layout.addWidget(make_divider())
 
@@ -2596,6 +2625,62 @@ class MainWindowCore(QMainWindow):
             self._refresh_history()
         elif name == "Subscriptions":
             self._refresh_subscriptions(force=True)
+
+    def _pending_quarantines(self):
+        read = self._dependencies.get('quarantined_state_files')
+        if not callable(read):
+            return []
+        return [entry for entry in read()
+                if entry.get('backup') not in self._dismissed_quarantines]
+
+    def _refresh_quarantine_notice(self):
+        pending = self._pending_quarantines()
+        if not pending:
+            self.quarantine_panel.hide()
+            return
+        entry = pending[0]
+        name = Path(entry['path']).name
+        extra = (
+            " Your server token was regenerated, so the browser extension "
+            "needs pairing again."
+            if name == 'config.json' else ""
+        )
+        self.quarantine_notice.setText(
+            f"{name} could not be read and was set aside as "
+            f"{Path(entry['backup']).name}.{extra} Restore puts the original "
+            "back and reloads it."
+        )
+        self.quarantine_panel.show()
+
+    def _restore_quarantined_state(self):
+        pending = self._pending_quarantines()
+        if not pending:
+            self._refresh_quarantine_notice()
+            return
+        entry = pending[0]
+        restore = self._dependencies.get('restore_quarantined_file')
+        restored = restore(entry['backup']) if callable(restore) else None
+        if not restored:
+            self._append_log(f"Could not restore {Path(entry['path']).name}.")
+            self.quarantine_notice.setText(
+                f"{Path(entry['path']).name} could not be restored. Its backup "
+                f"is at {entry['backup']}."
+            )
+            return
+        reload_config = getattr(self.config, 'reload', None)
+        if Path(entry['path']).name == 'config.json' and callable(reload_config):
+            reload_config()
+            self._append_log("Restored config.json and reloaded settings.")
+        else:
+            self._append_log(
+                f"Restored {Path(entry['path']).name}. It is used from the next start."
+            )
+        self._refresh_quarantine_notice()
+
+    def _dismiss_quarantine_notice(self):
+        for entry in self._pending_quarantines():
+            self._dismissed_quarantines.add(entry['backup'])
+        self._refresh_quarantine_notice()
 
     def _focus_download_url(self):
         """Put the caret in the paste box, wherever the user is."""

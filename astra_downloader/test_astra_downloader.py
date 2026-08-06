@@ -67,6 +67,30 @@ class FakeHistory:
         return list(self.entries)
 
 
+_RETAINED_TEST_WINDOWS = []
+
+
+def _retire_test_window(window):
+    """Close a window without deleting it.
+
+    Deleting a complex Qt window immediately can invalidate queued callbacks
+    that Qt itself still owns; a later processEvents in another test then walks
+    freed memory and the interpreter dies with an access violation. Application
+    shutdown performs the final disposal.
+    """
+    from PyQt6.QtWidgets import QApplication
+
+    try:
+        window.tray.hide()
+    except Exception:
+        # reason: the tray icon is optional and teardown must not fail on it
+        pass
+    window._force_exit = True
+    window.close()
+    QApplication.processEvents()
+    _RETAINED_TEST_WINDOWS.append(window)
+
+
 class NormalizationTests(unittest.TestCase):
     def test_normalize_url_rejects_invalid_or_ambiguous_values(self):
         for value in ("", "https://", "javascript:alert(1)", "https://exa mple.com"):
@@ -1162,9 +1186,7 @@ class InstanceCommandTests(unittest.TestCase):
             )
         finally:
             window._stop_instance_command_listener()
-            window.close()
-            window.deleteLater()
-            QApplication.processEvents()
+            _retire_test_window(window)
 
     def test_occupied_source_lock_delegates_without_killing_existing_instance(self):
         class OccupiedSocket:
@@ -1313,6 +1335,120 @@ class UninstallCleanupTests(unittest.TestCase):
         self.assertIn(str(awkward.resolve()).replace("'", "''"), script)
         self.assertNotIn("cmd", args)
         self.assertNotIn("rmdir", args)
+
+
+class QuarantinedStateFileTests(unittest.TestCase):
+    """A corrupt state file is set aside silently. Something has to say so."""
+
+    def setUp(self):
+        import config as _config
+
+        self.config_module = _config
+        _config._quarantined_state_files[:] = []
+        self.addCleanup(lambda: _config._quarantined_state_files.__setitem__(
+            slice(None), []))
+
+    def test_loading_a_corrupt_file_records_the_quarantine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.json"
+            target.write_text("{ not json", encoding="utf-8")
+
+            self.assertEqual(ad.load_json_file(target, {}), {})
+
+            records = self.config_module.quarantined_state_files()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["path"], str(target))
+            backup = Path(records[0]["backup"])
+            self.assertTrue(backup.exists())
+            self.assertEqual(backup.read_text(encoding="utf-8"), "{ not json")
+
+    def test_restore_puts_the_original_back_and_clears_the_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.json"
+            target.write_text('{"ServerToken": "original", ', encoding="utf-8")
+            ad.load_json_file(target, {})
+            target.write_text('{"ServerToken": "regenerated"}', encoding="utf-8")
+
+            backup = self.config_module.quarantined_state_files()[0]["backup"]
+            restored = self.config_module.restore_quarantined_file(backup)
+
+            self.assertEqual(restored, target)
+            self.assertEqual(
+                target.read_text(encoding="utf-8"), '{"ServerToken": "original", ')
+            self.assertFalse(Path(backup).exists())
+            self.assertEqual(self.config_module.quarantined_state_files(), [])
+
+    def test_a_corrupt_queue_is_distinguished_from_an_empty_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue_path = Path(tmp) / "download-queue.json"
+
+            empty = ad.DownloadManager(
+                FakeConfig(), FakeHistory(), queue_path=queue_path)
+            self.assertEqual(empty.queue_payload()["persistenceError"], None)
+
+            queue_path.write_text("{ truncated", encoding="utf-8")
+            corrupt = ad.DownloadManager(
+                FakeConfig(), FakeHistory(), queue_path=queue_path)
+            notice = corrupt.queue_payload()["persistenceError"]
+            self.assertIsNotNone(notice)
+            self.assertIn("set aside", notice)
+
+    def test_the_download_page_offers_to_restore_a_quarantined_file(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.json"
+            target.write_text("{ not json", encoding="utf-8")
+            ad.load_json_file(target, {})
+            target.write_text('{"ServerToken": "regenerated"}', encoding="utf-8")
+
+            manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+                try:
+                    self.assertFalse(window.quarantine_panel.isHidden())
+                    text = window.quarantine_notice.text()
+                    self.assertIn("config.json", text)
+                    self.assertIn("pairing again", text,
+                                  "a regenerated token is the consequence to name")
+
+                    window.btn_quarantine_restore.click()
+                    QApplication.processEvents()
+
+                    self.assertEqual(
+                        target.read_text(encoding="utf-8"), "{ not json")
+                    self.assertTrue(window.quarantine_panel.isHidden())
+                finally:
+                    _retire_test_window(window)
+
+    def test_dismiss_hides_the_notice_without_restoring(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "download-queue.json"
+            target.write_text("{ not json", encoding="utf-8")
+            ad.load_json_file(target, {})
+
+            manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+                try:
+                    self.assertFalse(window.quarantine_panel.isHidden())
+                    window.btn_quarantine_dismiss.click()
+                    QApplication.processEvents()
+                    self.assertTrue(window.quarantine_panel.isHidden())
+                    self.assertEqual(
+                        len(self.config_module.quarantined_state_files()), 1,
+                        "dismissing must not delete the backup",
+                    )
+                finally:
+                    _retire_test_window(window)
 
 
 class FatalErrorReportingTests(unittest.TestCase):
@@ -10121,9 +10257,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
             try:
                 registered = set(window.readiness_values)
             finally:
-                window.close()
-                window.deleteLater()
-                QApplication.processEvents()
+                _retire_test_window(window)
 
         self.assertEqual(
             written - registered, set(),
@@ -10149,9 +10283,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 window._apply_readiness({})
                 self.assertEqual(window.readiness_values["provider"][1].text(), "Fallback")
             finally:
-                window.close()
-                window.deleteLater()
-                QApplication.processEvents()
+                _retire_test_window(window)
 
     def test_a_storage_failure_is_shown_on_the_download_page(self):
         from PyQt6.QtWidgets import QApplication
@@ -10179,9 +10311,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 QApplication.processEvents()
                 self.assertTrue(window.persistence_notice.isHidden())
             finally:
-                window.close()
-                window.deleteLater()
-                QApplication.processEvents()
+                _retire_test_window(window)
 
     def test_empty_queue_points_at_the_paste_box_not_the_server(self):
         import gui as gui_module
