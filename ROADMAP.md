@@ -44,20 +44,6 @@ Notes on the items above, from the same pass:
   Acceptance: A single versioned JSON bundle round-trips settings and subscriptions; cookie jar contents are excluded by default behind an explicit opt-in that warns, preserving the no-read-path rule; import validates the schema and reports what changed.
   Complexity: M
 
-- [ ] P2 — Separate creator subtitles from auto-generated ones
-  Why: The app passes `--write-subs` and `--write-auto-subs` together with a single language string, so users get both when they wanted "manual if it exists, else auto", and there is no way to fetch subtitles without the video or to normalise the format.
-  Evidence: `download.py:2198` passes both unconditionally. yt-dlp #2262 is the second most-upvoted enhancement upstream; Open Video Downloader #659 asks for subtitle-only downloads; SnapDownloader sells subtitle language coverage as a paid feature.
-  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: The user chooses manual, auto, or prefer-manual-else-auto; picks languages from a multi-select; can request `--convert-subs srt`; and can run a subtitles-only job that skips the media.
-  Complexity: M
-
-- [ ] P2 — Bundle QuickJS so YouTube works without a Deno install
-  Why: Installing Deno is the biggest first-run blocker for full YouTube support, and yt-dlp accepts QuickJS — roughly a 1 MB binary — through plumbing this app already has.
-  Evidence: `--js-runtimes RUNTIME[:PATH]` supports deno, node, quickjs and bun (`yt-dlp.exe --help`, verified 2026-08-06); `build_javascript_runtime_args` already emits `--no-js-runtimes --js-runtimes <runtime>:<path>` but gates on `runtime not in {'deno', 'node'}` (`health.py:131`); the picker offers only Deno and Node (`gui.py:2395-2396`). yt-dlp #15012 confirms quickjs is supported but disabled by default.
-  Touches: `astra_downloader/health.py`, `astra_downloader/gui.py`, `astra_downloader/build.py`, `astra_downloader/config.py`
-  Acceptance: A bundled `qjs` binary is detected and used automatically when no Deno or Node is present, with a version floor enforced as for the others; the readiness row names the runtime in use; a fresh install downloads a YouTube video with no user-installed runtime.
-  Complexity: M
-
 - [ ] P2 — Windows shell integration: AppUserModelID, taskbar progress, notification actions
   Why: Without an explicit AppUserModelID an unpackaged exe has unreliable taskbar-pinning identity and toast attribution; download progress is invisible unless the window is open; and completion notifications cannot be clicked to reach the file.
   Evidence: no `SetCurrentProcessExplicitAppUserModelID` anywhere in `astra_downloader/`; progress exists only in-window (`gui.py:2933`); `QSystemTrayIcon.messageClicked` is never connected, only `activated` (`gui.py:1059`); `_show_download_location` opens the parent folder with `os.startfile` rather than selecting the file (`gui.py:3349-3361`).

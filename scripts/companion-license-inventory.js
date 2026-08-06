@@ -22,6 +22,7 @@ const PROPERTY = Object.freeze({
     artifactName: 'astra:companion:artifact-name',
     artifactSha256: 'astra:companion:artifact-sha256',
     checksumUrl: 'astra:companion:checksum-url',
+    checksumPin: 'astra:companion:checksum-pinned',
     componentKey: 'astra:companion:component-key',
     decision: 'astra:license:decision',
     delivery: 'astra:companion:delivery',
@@ -228,6 +229,7 @@ function helperComponent(helper, artifact) {
             property(PROPERTY.obligations, JSON.stringify(helper.obligations || [])),
             property(PROPERTY.resolution, helper.resolution || ''),
             property(PROPERTY.checksumUrl, helper.checksumUrl || ''),
+            property(PROPERTY.checksumPin, helper.pinnedInSource ? 'source' : ''),
             property(PROPERTY.distributionUrl, helper.distributionUrl || ''),
             property(PROPERTY.downloadSha256, helper.sha256 || '')
         ]
@@ -404,7 +406,16 @@ function inspectCompanionInventory(sbom, artifactSha256) {
             issues.push(`${key}: artifact SHA-256 linkage does not match ${COMPANION_EXE_NAME}`);
         }
         if (delivery === 'runtime-download') {
-            if (!propertyValue(component, PROPERTY.checksumUrl)) issues.push(`${key}: checksum source is missing`);
+            // A helper must have SOMETHING that says the bytes it fetched are
+            // the bytes that were reviewed. Normally that is a published
+            // checksum sidecar. A digest pinned in this repository's own
+            // source is the stronger form of the same evidence — it cannot be
+            // rewritten by whoever controls the release host — so it counts,
+            // but only one of the two may be absent, never both.
+            const pinnedInSource = propertyValue(component, PROPERTY.checksumPin) === 'source';
+            if (!propertyValue(component, PROPERTY.checksumUrl) && !pinnedInSource) {
+                issues.push(`${key}: checksum source is missing`);
+            }
             for (const [label, url] of [
                 ['distribution', propertyValue(component, PROPERTY.distributionUrl)],
                 ['checksum', propertyValue(component, PROPERTY.checksumUrl)],

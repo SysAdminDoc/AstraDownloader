@@ -75,7 +75,7 @@ try:
         normalize_playlist_date,
         normalize_impersonate_target,
         normalize_sublangs, normalize_subtitle_format, normalize_subtitle_mode,
-        SUBTITLE_MODES, SUBTITLE_FORMATS,
+        SUBTITLE_MODES, SUBTITLE_FORMATS, JAVASCRIPT_RUNTIME_CHOICES,
         normalize_url, sanitize_config,
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
@@ -120,6 +120,7 @@ try:
     )
     from .health import (
         BGUTIL_POT_MIN_VERSION, DENO_MIN_VERSION, NODE_MIN_VERSION,
+        QUICKJS_MIN_VERSION, JS_RUNTIMES,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe, PoTokenProviderProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
         PO_TOKEN_PROVIDER_PORT, YTDLP_EXTERNAL_RUNTIME_CUTOFF,
@@ -179,7 +180,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         normalize_playlist_date,
         normalize_impersonate_target,
         normalize_sublangs, normalize_subtitle_format, normalize_subtitle_mode,
-        SUBTITLE_MODES, SUBTITLE_FORMATS,
+        SUBTITLE_MODES, SUBTITLE_FORMATS, JAVASCRIPT_RUNTIME_CHOICES,
         normalize_url, sanitize_config,
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
@@ -224,6 +225,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
     )
     from health import (
         BGUTIL_POT_MIN_VERSION, DENO_MIN_VERSION, NODE_MIN_VERSION,
+        QUICKJS_MIN_VERSION, JS_RUNTIMES,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe, PoTokenProviderProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
         PO_TOKEN_PROVIDER_PORT, YTDLP_EXTERNAL_RUNTIME_CUTOFF,
@@ -311,6 +313,23 @@ DEFAULT_FIREFOX_EXTENSION_IDS = ("ytkit@sysadmindoc.github.io",)
 DENO_ZIP_URL = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
 DENO_SHA256_URL = DENO_ZIP_URL + ".sha256sum"
 DENO_SHA256_ASSET = Path(urlparse(DENO_ZIP_URL).path).name
+# QuickJS, the fallback runtime. yt-dlp accepts deno, node, quickjs and bun;
+# quickjs is by far the smallest, which is what makes it the one this app can
+# fetch on its own rather than telling the user to go and install something.
+#
+# Pinned to an exact release with the digest in source rather than fetched
+# from a sidecar: quickjs-ng publishes no checksum asset, and a digest that
+# ships with the code cannot be moved by whoever controls the release.
+# Verified 2026-08-06 against yt-dlp 2026.08.04 — a real YouTube download
+# completes with quickjs as the only enabled runtime.
+QUICKJS_VERSION = "0.16.1"
+QUICKJS_DIR = INSTALL_DIR / 'quickjs'
+QUICKJS_PATH = QUICKJS_DIR / 'qjs.exe'
+QUICKJS_EXE_URL = (
+    "https://github.com/quickjs-ng/quickjs/releases/download/"
+    f"v{QUICKJS_VERSION}/qjs-windows-x86_64.exe"
+)
+QUICKJS_SHA256 = "55a1b69cd4fdb6b0d3f8fdd910d0e89519f5330e408462084140c7b3b964fdae"
 ICON_URL = "https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/main/AstraDownloader.ico"
 # The published Release is the only thing an update can actually install, so it
 # is also what decides whether one is available. Reading `main` meant a version
@@ -1153,6 +1172,12 @@ def _javascript_runtime_candidates(configured_runtime):
         system_node = shutil.which('node')
         if system_node:
             candidates.append(('node', system_node, 'system'))
+    if configured_runtime in {'auto', 'quickjs'}:
+        # Last, matching yt-dlp's own priority (deno > node > quickjs). Only
+        # the copy this app provisioned is offered: it is pinned to a digest
+        # and verified end-to-end, which nothing on PATH is.
+        if managed_binary_usable(QUICKJS_PATH):
+            candidates.append(('quickjs', str(QUICKJS_PATH), 'bundled'))
     return candidates
 
 
@@ -1250,6 +1275,63 @@ def provision_deno():
             pass
 
 
+def provision_quickjs():
+    """Fetch the pinned QuickJS build into QUICKJS_DIR if it is not there.
+
+    Returns the path to a verified qjs.exe, or None. This is the runtime the
+    app can obtain on its own: a 2 MB executable against Deno's 40 MB
+    archive, so it is what "YouTube works without installing anything" rests
+    on. Deno stays the preferred runtime when it is present.
+
+    Unlike Deno's, the expected digest is pinned in source rather than read
+    from a published sidecar — quickjs-ng ships no checksum asset, and a
+    digest that travels with the code is not something the release host can
+    change. The consequence is that bumping QUICKJS_VERSION requires bumping
+    QUICKJS_SHA256 in the same commit; a test refuses a mismatched pair.
+    """
+    if managed_binary_usable(QUICKJS_PATH):
+        version = _probe_quickjs_binary_version(QUICKJS_PATH)
+        if version and _compare_semver(version, QUICKJS_MIN_VERSION) >= 0:
+            return str(QUICKJS_PATH)
+        write_persistent_log(
+            f"Provisioned QuickJS {version or 'unknown'} is below required "
+            f"{QUICKJS_MIN_VERSION}; refreshing"
+        )
+    QUICKJS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        # download_file_atomic replaces the destination only after the whole
+        # stream lands, so a failed fetch cannot leave a stub behind that
+        # every later existence check would accept.
+        download_file_atomic(
+            QUICKJS_EXE_URL, QUICKJS_PATH, timeout=120,
+            max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
+        )
+        verify_file_sha256(QUICKJS_PATH, QUICKJS_SHA256)
+    except Exception as error:
+        try:
+            QUICKJS_PATH.unlink(missing_ok=True)
+        except OSError:
+            # reason: cleanup of an unverified runtime is best-effort and may
+            # race with antivirus
+            pass
+        write_persistent_log(f"QuickJS provisioning failed: {error}")
+        return None
+    reset_deno_runtime_cache()
+    return str(QUICKJS_PATH)
+
+
+def _probe_quickjs_binary_version(path):
+    try:
+        output = _run_captured(
+            [str(path), '--version'], timeout=DENO_RUNTIME_PROBE_TIMEOUT
+        )
+    except Exception:
+        # reason: an unrunnable binary is treated as an unusable one by the
+        # caller, which re-fetches rather than reporting a version
+        return None
+    return _parse_javascript_runtime_version('quickjs', output)
+
+
 def probe_deno_runtime(force=False, configured_runtime='auto'):
     """Probe the configured yt-dlp JavaScript runtime capability.
 
@@ -1258,7 +1340,7 @@ def probe_deno_runtime(force=False, configured_runtime='auto'):
     select Node 22+ when configured. Unknown and exception states fail closed.
     """
     preference = str(configured_runtime or 'auto').strip().lower()
-    if preference not in {'auto', 'deno', 'node'}:
+    if preference not in {'auto', 'deno', 'node', 'quickjs'}:
         preference = 'auto'
     with _DENO_RUNTIME_CACHE_LOCK:
         cache = _deno_runtime_cache
@@ -1295,7 +1377,9 @@ def probe_deno_runtime(force=False, configured_runtime='auto'):
             'source': None,
             'supported': False,
             'ejsReady': False,
-            'minVersion': NODE_MIN_VERSION if preference == 'node' else DENO_MIN_VERSION,
+            'minVersion': {
+                'node': NODE_MIN_VERSION, 'quickjs': QUICKJS_MIN_VERSION,
+            }.get(preference, DENO_MIN_VERSION),
             'reason': 'runtime-not-installed',
         }
 
@@ -3298,6 +3382,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
         'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
         'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
+        'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
         'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,
@@ -3340,6 +3425,8 @@ class SetupWorker(SetupWorkerCore):
                 'log_crash': lambda *args, **kwargs: log_crash(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
+                'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
+        'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
                 'register_desktop_shortcut': lambda *args, **kwargs: register_desktop_shortcut(*args, **kwargs),
                 'register_protocol_handlers': lambda *args, **kwargs: register_protocol_handlers(*args, **kwargs),
                 'register_startup_task': lambda *args, **kwargs: register_startup_task(*args, **kwargs),

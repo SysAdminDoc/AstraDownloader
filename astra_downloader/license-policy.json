@@ -110,6 +110,24 @@
         "Record the resolved release version and SHA-256 and retain the MIT notice."
       ],
       "resolution": "The moving latest URL must be resolved to an exact release and digest for each companion release."
+    },
+    {
+      "key": "quickjs",
+      "name": "QuickJS-ng runtime",
+      "version": "0.16.1",
+      "licenseExpression": "MIT",
+      "decision": "approved",
+      "approvalEvidence": "MIT notice retained through the generated SBOM notice field; the release is pinned to an exact tag and SHA-256 in astra_downloader.py, so the resolved version and digest are fixed rather than moving.",
+      "distributionUrl": "https://github.com/quickjs-ng/quickjs/releases/download/v0.16.1/qjs-windows-x86_64.exe",
+      "checksumUrl": "",
+      "sourceUrl": "https://github.com/quickjs-ng/quickjs",
+      "noticeUrl": "https://github.com/quickjs-ng/quickjs/blob/master/LICENSE",
+      "obligations": [
+        "Retain the MIT license and copyright notice with the runtime."
+      ],
+      "resolution": "None outstanding. Unlike the other helpers this URL is already an exact release; quickjs-ng publishes no checksum asset, so the digest is pinned in source and bumping the version requires bumping it in the same commit.",
+      "pinnedInSource": true,
+      "sha256": "55a1b69cd4fdb6b0d3f8fdd910d0e89519f5330e408462084140c7b3b964fdae"
     }
   ]
 }

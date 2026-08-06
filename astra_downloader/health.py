@@ -19,6 +19,7 @@ __all__ = (
     "IMPERSONATE_TARGET_RE",
     "probe_po_token_provider", "reset_po_token_provider_cache",
     "PO_TOKEN_PROVIDER_PORT", "BGUTIL_POT_MIN_VERSION", "probe_deno_runtime",
+    "QUICKJS_MIN_VERSION", "JS_RUNTIMES",
     "probe_javascript_runtime", "build_javascript_runtime_args",
     "reset_deno_runtime_cache", "provision_deno", "_parse_ytdlp_release_date",
     "ytdlp_needs_external_runtime", "YTDLP_EXTERNAL_RUNTIME_CUTOFF",
@@ -45,6 +46,24 @@ BGUTIL_POT_MIN_VERSION = "1.3.0"
 YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
 DENO_MIN_VERSION = "2.3.0"
 NODE_MIN_VERSION = "22.0.0"
+# QuickJS is the smallest runtime yt-dlp accepts and the one this app can
+# provision without asking the user to install anything: a 2 MB executable
+# against Deno's 40 MB archive. The floor is the version the app pins and
+# ships, because that is the only one this project has verified end-to-end —
+# a test keeps the two in step.
+QUICKJS_MIN_VERSION = "0.16.1"
+
+# The runtimes yt-dlp accepts that this app knows how to probe and select.
+# yt-dlp also lists `bun`; it is absent here because nothing provisions it and
+# an unprobed name would be offered without evidence it works.
+JS_RUNTIMES = ('deno', 'node', 'quickjs')
+_JS_RUNTIME_FLOOR_ORDER = ('deno', 'node', 'quickjs')
+
+
+def _runtime_minimum(runtime, deno_min, node_min, quickjs_min):
+    return dict(zip(
+        _JS_RUNTIME_FLOOR_ORDER, (deno_min, node_min, quickjs_min)
+    )).get(runtime, deno_min)
 
 YOUTUBE_HOSTS = ('youtube.com', 'youtu.be', 'youtube-nocookie.com')
 
@@ -251,7 +270,7 @@ def build_javascript_runtime_args(readiness):
         return []
     runtime = readiness.get('runtime')
     path = readiness.get('path')
-    if runtime not in {'deno', 'node'} or not path:
+    if runtime not in JS_RUNTIMES or not path:
         return []
     return ['--no-js-runtimes', '--js-runtimes', f'{runtime}:{path}']
 
@@ -309,12 +328,13 @@ def parse_javascript_runtime_version(runtime, output):
 
 
 def javascript_runtime_supported(runtime, version, *, deno_min=DENO_MIN_VERSION,
-                                 node_min=NODE_MIN_VERSION):
-    if runtime not in {'deno', 'node'}:
+                                 node_min=NODE_MIN_VERSION,
+                                 quickjs_min=QUICKJS_MIN_VERSION):
+    if runtime not in JS_RUNTIMES:
         return False
     if not isinstance(version, str) or not re.fullmatch(r'\d+\.\d+\.\d+', version.strip()):
         return False
-    minimum = deno_min if runtime == 'deno' else node_min
+    minimum = _runtime_minimum(runtime, deno_min, node_min, quickjs_min)
     return _compare_semver(version, minimum) >= 0
 
 
@@ -327,6 +347,9 @@ def probe_javascript_execution(runtime, executable, *, runner, marker,
             str(executable), '--input-type=commonjs', '-e',
             f"process.stdout.write('{marker}')",
         ]
+    elif runtime == 'quickjs':
+        # Verified against the shipped build: `qjs -e` evaluates and prints.
+        args = [str(executable), '-e', f"console.log('{marker}')"]
     else:
         return False
     return marker in runner(args, timeout=timeout)
@@ -334,8 +357,9 @@ def probe_javascript_execution(runtime, executable, *, runner, marker,
 
 def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
                                 timeout=1.5, deno_min=DENO_MIN_VERSION,
-                                node_min=NODE_MIN_VERSION):
-    minimum = deno_min if runtime == 'deno' else node_min
+                                node_min=NODE_MIN_VERSION,
+                                quickjs_min=QUICKJS_MIN_VERSION):
+    minimum = _runtime_minimum(runtime, deno_min, node_min, quickjs_min)
     try:
         output = runner([str(path), '--version'], timeout=timeout)
         version = parse_javascript_runtime_version(runtime, output)
@@ -352,7 +376,8 @@ def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
             'reason': 'runtime-version-unparseable',
         }
     supported = javascript_runtime_supported(
-        runtime, version, deno_min=deno_min, node_min=node_min
+        runtime, version, deno_min=deno_min, node_min=node_min,
+        quickjs_min=quickjs_min,
     )
     if not supported:
         return {
