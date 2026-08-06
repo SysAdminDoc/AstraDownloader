@@ -116,6 +116,8 @@ try:
         build_javascript_runtime_args, build_youtube_extractor_args,
         evaluate_javascript_runtime as _owned_evaluate_javascript_runtime,
         is_youtube_url,
+        MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
+        managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
         parse_ffmpeg_major, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
@@ -206,6 +208,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_javascript_runtime_args, build_youtube_extractor_args,
         evaluate_javascript_runtime as _owned_evaluate_javascript_runtime,
         is_youtube_url,
+        MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
+        managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
         parse_ffmpeg_major, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
@@ -634,8 +638,8 @@ def build_diagnostics_bundle(server_running=False, endpoint='', active_downloads
             'completedThisSession': max(0, int(completed_downloads or 0)),
         },
         'dependencies': {
-            'ytDlpInstalled': YTDLP_PATH.exists(),
-            'ffmpegInstalled': FFMPEG_PATH.exists(),
+            'ytDlpInstalled': managed_binary_usable(YTDLP_PATH),
+            'ffmpegInstalled': managed_binary_usable(FFMPEG_PATH),
             'denoInstalled': DENO_PATH.exists() or bool(shutil.which('deno')),
         },
         'recentLog': safe_logs,
@@ -3275,6 +3279,8 @@ class SetupWorker(SetupWorkerCore):
                 'FFMPEG_SHA256_URL': lambda: FFMPEG_SHA256_URL,
                 'FFMPEG_URL': lambda: FFMPEG_URL,
                 'HELPER_DOWNLOAD_MAX_BYTES': lambda: HELPER_DOWNLOAD_MAX_BYTES,
+                'MANAGED_BINARY_ANTIVIRUS_ADVICE': lambda: MANAGED_BINARY_ANTIVIRUS_ADVICE,
+                'managed_binary_state': lambda *args, **kwargs: managed_binary_state(*args, **kwargs),
                 'ICON_PATH': lambda: ICON_PATH,
                 'ICON_URL': lambda: ICON_URL,
                 'INSTALL_DIR': lambda: INSTALL_DIR,
@@ -3495,6 +3501,9 @@ class MainWindow(MainWindowCore):
                 'probed_video_heights': lambda *args, **kwargs: probed_video_heights(*args, **kwargs),
                 'quality_choices_for_heights': lambda *args, **kwargs: quality_choices_for_heights(*args, **kwargs),
                 'looks_like_media_link': lambda *args, **kwargs: looks_like_media_link(*args, **kwargs),
+                'MANAGED_BINARY_ANTIVIRUS_ADVICE': lambda: MANAGED_BINARY_ANTIVIRUS_ADVICE,
+                'managed_binary_state': lambda *args, **kwargs: managed_binary_state(*args, **kwargs),
+                'managed_binary_usable': lambda *args, **kwargs: managed_binary_usable(*args, **kwargs),
                 'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
                 'maybe_auto_update_ytdlp': lambda *args, **kwargs: maybe_auto_update_ytdlp(*args, **kwargs),
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
@@ -3821,7 +3830,10 @@ def main():
 
     # The visual-smoke path exercises the frozen UI without installing system
     # integrations, starting the local server, or bootstrapping helper tools.
-    needs_setup = not YTDLP_PATH.exists() or not FFMPEG_PATH.exists()
+    # Not `.exists()`: a quarantine stub is present but unusable, and the
+    # app would otherwise start the server around a tool it cannot run.
+    needs_setup = not (managed_binary_usable(YTDLP_PATH)
+                       and managed_binary_usable(FFMPEG_PATH))
     if visual_smoke:
         window.show()
     elif needs_setup:

@@ -519,6 +519,8 @@ class FolderPickerService(QObject):
 
 
 _REQUIRED_SETUP_DEPENDENCIES = frozenset({
+    'MANAGED_BINARY_ANTIVIRUS_ADVICE',
+    'managed_binary_state',
     'DEFAULT_CONFIG',
     'FFMPEG_PATH',
     'FFMPEG_SHA256_ASSET',
@@ -588,6 +590,26 @@ class SetupWorkerCore(QThread):
                 self.progress.emit(int(max(low, min(high, pct))))
         return cb
 
+    def _report_managed_binary(self, path, label):
+        """Classify a managed binary and name antivirus when it is damaged.
+
+        A quarantine that leaves a zero-byte stub behind passes every
+        existence check, so setup would report the tool as already installed
+        and the app would run downloads against something it cannot execute.
+        """
+        state = self._dependencies['managed_binary_state'](path)
+        if state == 'damaged':
+            advice = self._value('MANAGED_BINARY_ANTIVIRUS_ADVICE').format(
+                path=self._value('INSTALL_DIR')
+            )
+            message = (
+                f"{label} is present but unusable, so it is being downloaded "
+                f"again. {advice}"
+            )
+            self.log.emit(message)
+            self._dependencies['write_persistent_log'](message)
+        return state
+
     def _verify_required_checksum(self, path, sidecar_url, asset_name=None, label=""):
         """Fetch the SHA-256 sidecar and verify before trusting a helper exe."""
         label = label or Path(path).name
@@ -626,7 +648,9 @@ class SetupWorkerCore(QThread):
             dl_path.mkdir(parents=True, exist_ok=True)
 
             # yt-dlp (10-30% of overall progress)
-            if not self._value('YTDLP_PATH').exists():
+            ytdlp_state = self._report_managed_binary(
+                self._value('YTDLP_PATH'), "yt-dlp")
+            if ytdlp_state != 'ok':
                 self.log.emit("Downloading yt-dlp...")
                 self.progress.emit(10)
                 self._dependencies['download_file_atomic'](
@@ -646,7 +670,9 @@ class SetupWorkerCore(QThread):
             self.progress.emit(30)
 
             # ffmpeg (35-58% — the heaviest step, now byte-level progress)
-            if self.force_ffmpeg or not self._value('FFMPEG_PATH').exists():
+            ffmpeg_state = self._report_managed_binary(
+                self._value('FFMPEG_PATH'), "ffmpeg")
+            if self.force_ffmpeg or ffmpeg_state != 'ok':
                 self.log.emit("Downloading ffmpeg (this may take a moment)...")
                 self.progress.emit(35)
                 tmp_zip = self._value('INSTALL_DIR') / f".ffmpeg.{uuid.uuid4().hex}.zip"
@@ -860,6 +886,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'probed_video_heights',
     'quality_choices_for_heights',
     'looks_like_media_link',
+    'MANAGED_BINARY_ANTIVIRUS_ADVICE',
+    'managed_binary_state',
+    'managed_binary_usable',
     'maybe_auto_update_ytdlp',
     'normalize_output_dir',
     'normalize_download_section',
@@ -1233,6 +1262,26 @@ class MainWindowCore(QMainWindow):
         if thread is not None:
             thread.deleteLater()
 
+    def _set_tool_readiness(self, key, version, path):
+        """Report a managed tool, naming antivirus when a stub was left behind.
+
+        A version that will not report while the file is on disk is the same
+        symptom as a truncated one, and has the same remedy, so both say so.
+        """
+        if version:
+            self._set_readiness(key, version, "success")
+            return
+        state = self._dependencies['managed_binary_state'](path)
+        if state == 'missing':
+            self._set_readiness(key, "Missing", "danger")
+            return
+        self._set_readiness(
+            key, "Removed?", "danger",
+            self._value('MANAGED_BINARY_ANTIVIRUS_ADVICE').format(
+                path=self._value('INSTALL_DIR')
+            ),
+        )
+
     def _apply_readiness(self, payload):
         if payload.get("error"):
             for key in ("ytDlp", "ffmpeg", "deno", "provider"):
@@ -1243,8 +1292,8 @@ class MainWindowCore(QMainWindow):
         ffmpeg = payload.get("ffmpeg")
         runtime = payload.get("runtime") or payload.get("deno") or {}
         provider = payload.get("provider") or {}
-        self._set_readiness("ytDlp", yt_dlp or "Missing", "success" if yt_dlp else "danger")
-        self._set_readiness("ffmpeg", ffmpeg or "Missing", "success" if ffmpeg else "danger")
+        self._set_tool_readiness("ytDlp", yt_dlp, self._value('YTDLP_PATH'))
+        self._set_tool_readiness("ffmpeg", ffmpeg, self._value('FFMPEG_PATH'))
 
         try:
             sabr = self._dependencies['evaluate_sabr_support'](yt_dlp or "")
@@ -3122,8 +3171,9 @@ class MainWindowCore(QMainWindow):
         if self._setup_running:
             self._append_log("Setup is already running. The server will start when it finishes.")
             return
-        if not self._value('YTDLP_PATH').exists() or not self._value('FFMPEG_PATH').exists():
-            self._append_log("Required tools are missing. Starting setup...")
+        if not (self._dependencies['managed_binary_usable'](self._value('YTDLP_PATH'))
+                and self._dependencies['managed_binary_usable'](self._value('FFMPEG_PATH'))):
+            self._append_log("Required download tools are missing or unusable. Starting setup...")
             self._run_setup()
             return
 

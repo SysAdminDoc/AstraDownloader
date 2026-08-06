@@ -111,6 +111,45 @@ def evaluate_sabr_support(ytdlp_version):
     return "supported" if _compare_semver(str(ytdlp_version), SABR_NATIVE_MIN_VERSION) >= 0 else "limited"
 
 
+# Antivirus removing a managed binary is the single largest support burden
+# for downloaders of this shape. Removal is easy to see; the damaging case is
+# a quarantine that leaves a zero-byte or truncated stub behind, because that
+# satisfies every `.exists()` gate and the app carries on with a tool it
+# cannot run. Both real binaries are tens of megabytes, so anything under a
+# megabyte is broken regardless of how it got that way.
+MANAGED_BINARY_MIN_BYTES = 1024 * 1024
+
+MANAGED_BINARY_ANTIVIRUS_ADVICE = (
+    "Antivirus software may have removed or truncated it. Add an exclusion "
+    "for {path} and let setup fetch it again."
+)
+
+
+def managed_binary_state(path, minimum_bytes=MANAGED_BINARY_MIN_BYTES):
+    """Classify a managed helper binary as 'ok', 'missing' or 'damaged'.
+
+    'damaged' is the case worth naming separately: the file is present, so
+    every existence check passes, but it is too small to be the real thing.
+    """
+    if not path:
+        return 'missing'
+    try:
+        candidate = Path(path)
+        if not candidate.is_file():
+            return 'missing'
+        size = candidate.stat().st_size
+    except OSError:
+        # An unreadable file is not a usable one, and re-fetching is the same
+        # remedy as for a missing one.
+        return 'damaged'
+    return 'ok' if size >= max(0, int(minimum_bytes or 0)) else 'damaged'
+
+
+def managed_binary_usable(path, minimum_bytes=MANAGED_BINARY_MIN_BYTES):
+    """Whether a managed helper binary is present and plausibly whole."""
+    return managed_binary_state(path, minimum_bytes) == 'ok'
+
+
 def _parse_ytdlp_release_date(version_string):
     """Parse a yt-dlp date release into a comparable date tuple."""
     if not isinstance(version_string, str):
