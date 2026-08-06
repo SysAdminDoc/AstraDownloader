@@ -164,13 +164,6 @@ Notes on the items above, from the same pass:
   Acceptance: The settings field previews a rendered example filename, flags reserved names and over-length paths before saving, and `--windows-filenames` is passed.
   Complexity: M
 
-- [ ] P3 — Document the security positions the code already takes
-  Why: Two deliberate decisions are invisible to users and to contributors, so both keep being re-litigated as missing features or reported as bugs.
-  Evidence: the aria2c and external-downloader ban is enforced by test (`test_astra_downloader.py:5795`) over CVE-2026-50574 but appears nowhere in `README.md` — Open Video Downloader #49 shows it will be requested. The unsigned build is permanent project policy, and HN 47588658 shows SmartScreen friction is universal for this software class, so it needs an explanation plus the existing SHA-256 sidecar, not a signing plan.
-  Touches: `README.md`, `SECURITY.md`
-  Acceptance: The README states why no external downloader is offered and why the build is unsigned, with the checksum verification steps; `SECURITY.md` lists both as accepted properties rather than open risks.
-  Complexity: S
-
 - [ ] P3 — Package for winget and offer a portable mode
   Why: Every comparable project ships through a package manager, and the install location is hardcoded with no portable option.
   Evidence: `INSTALL_DIR` is unconditionally `%LOCALAPPDATA%\AstraDownloader` (`astra_downloader.py:244`) with no portable flag; the CLI exposes only `--background`, `--uninstall`, `--update-health-check` and `--visual-smoke`, while winget requires a silent-install path. ytDownloader, Open Video Downloader, NeoDLP and media-downloader all ship winget manifests.

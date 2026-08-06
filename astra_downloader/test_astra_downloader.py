@@ -6314,13 +6314,12 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_1_0(self):
-        # v2.1.0: the roadmap drain. --uninstall actually removes the install
-        # directory, YouTube is recognised by parsed host rather than URL
-        # text, interrupted downloads resume, a completed download that cannot
-        # be recorded says so, ytdl:// links download what they name, and the
-        # window accepts a dropped link.
-        self.assertEqual(ad.APP_VERSION, "2.1.0")
+    def test_app_version_bumped_to_2_2_0(self):
+        # v2.2.0: yt-dlp no longer loads plugins from the user profile, a
+        # failure becomes retryable once its recovery action is done, and the
+        # transfer gains throttle recovery, timeouts, request pacing and a
+        # real HTTP 429 classification.
+        self.assertEqual(ad.APP_VERSION, "2.2.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a

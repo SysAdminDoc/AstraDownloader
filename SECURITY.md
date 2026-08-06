@@ -56,6 +56,24 @@ These are known and accepted properties, not vulnerabilities:
   [`docs/yt-dlp-cookie-threat-model.md`](docs/yt-dlp-cookie-threat-model.md).
 - **The executable is unsigned by design.** Verify the published SHA-256
   sidecar against the downloaded binary rather than relying on a signature.
+  SmartScreen will warn on first run; that is expected, not a compromise
+  indicator. See the README for the verification command.
+- **No external downloader is offered, and none can be requested.** aria2c,
+  curl and the rest are refused at the process boundary along with `--exec`,
+  `--exec-before-download` and the `--netrc` family. This is deliberate:
+  those options hand the transfer, or a command line, to a process this
+  program does not control, and 2026 brought code-execution advisories
+  against two of the common choices (CVE-2026-50574, CVE-2026-50019). The
+  refusal is enforced in `validate_ytdlp_spawn_args` and pinned by test, so
+  a future builder change cannot reintroduce one by accident.
+- **yt-dlp is spawned with its plugin directories disabled.**
+  `--ignore-config` stops configuration *files* only; plugin directories are
+  a separate mechanism with their own defaults, so without
+  `--no-plugin-dirs` any Python under `%APPDATA%\yt-dlp\plugins` would be
+  imported and executed inside the spawned process. That is consistent with
+  refusing `--exec`, and it means a yt-dlp plugin you install deliberately
+  will not be loaded by Astra Downloader. `--no-remote-components` is passed
+  alongside it.
 
 ## Third-Party Components
 
