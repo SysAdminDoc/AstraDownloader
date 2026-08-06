@@ -889,6 +889,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'build_reveal_command',
     'spawn_detached',
     'summarize_taskbar_progress',
+    'build_settings_bundle',
+    'read_settings_bundle',
+    'describe_bundle_changes',
     'TaskbarProgress',
     'APP_NAME',
     'APP_VERSION',
@@ -3317,6 +3320,30 @@ class MainWindowCore(QMainWindow):
         tools_row.addWidget(btn_reinstall_ffmpeg)
         tools_row.addStretch()
         tools_l.addLayout(tools_row)
+        tools_l.addWidget(make_divider())
+        tools_l.addWidget(make_label(
+            "Move this install to another machine, or recover from a config "
+            "you cannot open. The bundle carries settings and subscriptions. "
+            "Stored sign-ins are listed by site but never exported — "
+            "cookies stay on this machine.",
+            "fieldHint", word_wrap=True,
+        ))
+        bundle_row = QHBoxLayout()
+        bundle_row.setSpacing(8)
+        self.btn_export_settings = self._make_tool_button("Export settings")
+        self.btn_export_settings.setToolTip(
+            "Write settings and subscriptions to a JSON bundle."
+        )
+        self.btn_export_settings.clicked.connect(self._export_settings_bundle)
+        bundle_row.addWidget(self.btn_export_settings)
+        self.btn_import_settings = self._make_tool_button("Import settings")
+        self.btn_import_settings.setToolTip(
+            "Read a bundle written by Export settings and apply it."
+        )
+        self.btn_import_settings.clicked.connect(self._import_settings_bundle)
+        bundle_row.addWidget(self.btn_import_settings)
+        bundle_row.addStretch()
+        tools_l.addLayout(bundle_row)
         layout.addWidget(tools_card)
 
         save_row = QHBoxLayout()
@@ -4127,6 +4154,211 @@ class MainWindowCore(QMainWindow):
         next_offset = self._history_offset + (direction * self._history_page_size)
         self._history_offset = max(0, next_offset)
         self._refresh_history()
+
+    # Every settings widget, the config key behind it, and how to write a
+    # value into it. An import replaces the stored settings underneath a form
+    # that is already on screen, and a stale form is not merely cosmetic: the
+    # next Save would write the pre-import values straight back over the
+    # import. This is also the one place that knows the full list, so a new
+    # setting missing from it shows up as a field the import cannot refresh.
+    _SETTINGS_FORM_FIELDS = (
+        ("cfg_dl_path", "DownloadPath", "text"),
+        ("cfg_audio_path", "AudioDownloadPath", "text"),
+        ("cfg_outtmpl", "OutputTemplate", "text"),
+        ("cfg_sublangs", "SubLangs", "text"),
+        ("cfg_ratelimit", "RateLimit", "text"),
+        ("cfg_throttled", "ThrottledRate", "text"),
+        ("cfg_proxy", "Proxy", "text"),
+        ("cfg_playlist_dateafter", "PlaylistDateAfter", "text"),
+        ("cfg_metadata", "EmbedMetadata", "check"),
+        ("cfg_thumbnail", "EmbedThumbnail", "check"),
+        ("cfg_chapters", "EmbedChapters", "check"),
+        ("cfg_subs", "EmbedSubs", "check"),
+        ("cfg_keep_intermediates", "KeepIntermediateFiles", "check"),
+        ("cfg_verify_formats", "VerifyFormats", "check"),
+        ("cfg_sponsorblock", "SponsorBlock", "check"),
+        ("cfg_autoupdate", "AutoUpdateYtDlp", "check"),
+        ("cfg_closetotray", "CloseToTray", "check"),
+        ("cfg_startmin", "StartMinimized", "check"),
+        ("cfg_notify", "NotifyOnComplete", "check"),
+        ("cfg_clipboard", "ClipboardLinkGrabber", "check"),
+        ("cfg_port", "ServerPort", "number"),
+        ("cfg_fragments", "ConcurrentFragments", "number"),
+        ("cfg_maxconcurrent", "MaxConcurrentDownloads", "number"),
+        ("cfg_retries", "DownloadRetries", "number"),
+        ("cfg_socket_timeout", "SocketTimeoutSeconds", "number"),
+        ("cfg_extractor_retries", "ExtractorRetries", "number"),
+        ("cfg_sleep_interval", "SleepIntervalSeconds", "number"),
+        ("cfg_sleep_max", "MaxSleepIntervalSeconds", "number"),
+        ("cfg_sleep_requests", "SleepRequestsSeconds", "number"),
+        ("cfg_playlist_max", "PlaylistMaxItems", "number"),
+        ("cfg_playlist_min_duration", "PlaylistMinDurationSeconds", "number"),
+        ("cfg_playlist_max_duration", "PlaylistMaxDurationSeconds", "number"),
+        ("cfg_maxsize", "MaxFileSizeMB", "number"),
+        ("cfg_sb_action", "SponsorBlockAction", "combo"),
+        ("cfg_js_runtime", "JavaScriptRuntime", "combo"),
+        ("cfg_ytdlp_channel", "YtDlpUpdateChannel", "combo"),
+        ("cfg_video_codec", "VideoCodecPreference", "combo"),
+        ("cfg_audio_codec", "AudioCodecPreference", "combo"),
+        ("cfg_frame_rate", "PreferredFrameRate", "combo"),
+        ("cfg_impersonate", "ImpersonateTarget", "combo"),
+        ("cfg_subtitle_mode", "SubtitleMode", "combo"),
+        ("cfg_subtitle_format", "SubtitleFormat", "combo"),
+        ("cfg_language", "Language", "combo"),
+    )
+
+    def _reload_settings_form(self):
+        """Redraw the settings form from the stored config."""
+        refreshed = 0
+        for attribute, key, kind in self._SETTINGS_FORM_FIELDS:
+            widget = getattr(self, attribute, None)
+            if widget is None:
+                continue
+            value = self.config.get(key, self._value('DEFAULT_CONFIG').get(key))
+            widget.blockSignals(True)
+            try:
+                if kind == "text":
+                    widget.setText(str(value or ""))
+                elif kind == "check":
+                    widget.setChecked(bool(value))
+                elif kind == "number":
+                    widget.setValue(int(value or 0))
+                elif kind == "combo":
+                    index = widget.findData(value)
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                refreshed += 1
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not refresh {key}: {error}")
+            finally:
+                widget.blockSignals(False)
+        # SponsorBlock categories are a dict of checkboxes rather than one
+        # widget, so they do not fit the table above.
+        selected = {
+            item.strip() for item in
+            str(self.config.get("SponsorBlockCategories", "") or "").split(",")
+            if item.strip()
+        }
+        for name, box in getattr(self, "cfg_sb_categories", {}).items():
+            box.blockSignals(True)
+            box.setChecked(not selected or name in selected)
+            box.blockSignals(False)
+        self._sync_sublang_checkboxes(self.cfg_sublangs.text())
+        # Signals stay blocked throughout, so refreshing the form does not
+        # mark it dirty — the import's own status line is left standing.
+        return refreshed
+
+    def _export_settings_bundle(self):
+        """Write settings and subscriptions to a portable JSON bundle."""
+        manager = self._subscription_manager()
+        subscriptions = []
+        if manager is not None:
+            try:
+                subscriptions = manager.list_subscriptions()
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not read subscriptions: {error}")
+        sites = []
+        try:
+            sites = self.dl_manager.site_logins.entries()
+        except Exception as error:
+            self._append_log(f"Could not read stored sign-ins: {error}")
+        bundle = self._dependencies['build_settings_bundle'](
+            self.config, subscriptions, sites,
+            app_version=self._value('APP_VERSION'),
+            now=time.time(),
+        )
+        suggested = Path(
+            self.config.get("DownloadPath", str(Path.home()))
+        ) / "astra-downloader-settings.json"
+        path, _selected = QFileDialog.getSaveFileName(
+            self, "Export Settings", str(suggested), "JSON files (*.json)"
+        )
+        if not path:
+            return False
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as output:
+                json.dump(bundle, output, indent=2, ensure_ascii=False)
+        except OSError as error:
+            self._show_settings_status(
+                f"Could not write the bundle: {error}", "danger")
+            return False
+        summary = (
+            f"Exported {len(bundle['settings'])} settings and "
+            f"{len(bundle['subscriptions'])} subscriptions."
+        )
+        if bundle["siteLoginSites"]:
+            # Say it plainly rather than letting the user discover it on the
+            # other machine: this file will not sign them back in.
+            summary += (
+                f" {len(bundle['siteLoginSites'])} stored sign-ins are listed "
+                "by site only — add them again after importing."
+            )
+        self._show_settings_status(summary, "success")
+        self._append_log(f"Settings bundle written to {path}")
+        return True
+
+    def _import_settings_bundle(self):
+        """Apply a bundle, then say what it actually changed."""
+        path, _selected = QFileDialog.getOpenFileName(
+            self, "Import Settings",
+            str(Path(self.config.get("DownloadPath", str(Path.home())))),
+            "JSON files (*.json)",
+        )
+        if not path:
+            return False
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError) as error:
+            self._show_settings_status(
+                f"Could not read that bundle: {error}", "danger")
+            return False
+        bundle, error = self._dependencies['read_settings_bundle'](payload)
+        if error:
+            self._show_settings_status(error, "danger")
+            return False
+        changes = self._dependencies['describe_bundle_changes'](
+            self.config, bundle)
+        if not self.config.update(bundle["settings"]):
+            self._show_settings_status(
+                "Could not save the imported settings. Check disk space and "
+                "permissions, then retry.",
+                "danger",
+            )
+            return False
+        manager = self._subscription_manager()
+        added, skipped = 0, 0
+        for record in bundle["subscriptions"]:
+            if manager is None:
+                break
+            _created, add_error = manager.add_subscription(
+                record["url"],
+                interval_minutes=record["intervalMinutes"],
+                enabled=record["enabled"],
+                title=record["title"],
+            )
+            if add_error:
+                # A subscription already present is the ordinary case when
+                # re-importing onto a machine that has some of them.
+                skipped += 1
+            else:
+                added += 1
+        parts = [f"Imported {len(changes['settings'])} changed settings"]
+        if added or skipped:
+            parts.append(f"{added} subscriptions added, {skipped} already present")
+        if changes["siteLoginSites"]:
+            parts.append(
+                "sign-ins still needed for "
+                + ", ".join(changes["siteLoginSites"][:5])
+            )
+        self._show_settings_status(". ".join(parts) + ".", "success")
+        self._append_log(
+            f"Imported settings bundle from {path}: "
+            f"{', '.join(changes['settings']) or 'no setting changes'}"
+        )
+        # The form still shows the pre-import values until it is rebuilt.
+        self._reload_settings_form()
+        return True
 
     def _export_history(self):
         result = self._history_query(offset=0, limit=500)
