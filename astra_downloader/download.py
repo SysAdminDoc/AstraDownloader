@@ -2256,6 +2256,23 @@ class DownloadManagerCore:
         rate = str(self.config.get("RateLimit", "")).strip().upper()
         if rate and re.match(r'^\d+[KMG]?$', rate):
             args += ['--limit-rate', rate]
+        # A CDN that throttles to a trickle otherwise runs until the stall
+        # watchdog kills it; yt-dlp can notice and re-extract instead.
+        throttled = str(self.config.get("ThrottledRate", "")).strip().upper()
+        if throttled and re.match(r'^\d+[KMG]?$', throttled):
+            args += ['--throttled-rate', throttled]
+        socket_timeout = int(self.config.get("SocketTimeoutSeconds", 0) or 0)
+        if socket_timeout > 0:
+            args += ['--socket-timeout', str(socket_timeout)]
+        # Distinct from --retries, which covers the transfer: this covers the
+        # extractor giving up before a transfer ever starts.
+        extractor_retries = int(self.config.get("ExtractorRetries", 0) or 0)
+        if extractor_retries > 0:
+            args += ['--extractor-retries', str(extractor_retries)]
+        # Costs a request per candidate format, so it is opt-in. A format that
+        # fails verification classifies through the existing taxonomy.
+        if self.config.get("VerifyFormats"):
+            args.append('--check-formats')
         proxy = self.config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
