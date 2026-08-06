@@ -34,6 +34,8 @@ TODO.md
 NOTES.md
 AUDIT*.md
 SESSION*.md
+# Research output is regenerated each pass; ROADMAP.md stays tracked.
+RESEARCH.md
 PROJECT_CONTEXT.md
 
 # Credentials and captured session state must never be staged.
