@@ -126,6 +126,11 @@ DEFAULT_CONFIG = {
     # 0 leaves yt-dlp's own defaults in place for both of these.
     "SocketTimeoutSeconds": 0,
     "ExtractorRetries": 0,
+    # Request pacing. A bandwidth cap does not stop a 429; spacing the
+    # requests does. 0 disables each independently.
+    "SleepIntervalSeconds": 0,
+    "MaxSleepIntervalSeconds": 0,
+    "SleepRequestsSeconds": 0,
     "SubLangs": "en",
     "SponsorBlock": False,
     "SponsorBlockAction": "remove",
@@ -727,6 +732,14 @@ def sanitize_config(raw):
     data["ThrottledRate"] = normalize_rate_limit(data.get("ThrottledRate"))
     data["SocketTimeoutSeconds"] = clamp_int(data.get("SocketTimeoutSeconds"), 0, 0, 300)
     data["ExtractorRetries"] = clamp_int(data.get("ExtractorRetries"), 0, 0, 20)
+    data["SleepIntervalSeconds"] = clamp_int(data.get("SleepIntervalSeconds"), 0, 0, 600)
+    data["MaxSleepIntervalSeconds"] = clamp_int(data.get("MaxSleepIntervalSeconds"), 0, 0, 600)
+    # yt-dlp rejects a maximum below the minimum, so the pair is normalised
+    # here rather than at the argv, where it would fail the whole download.
+    if data["MaxSleepIntervalSeconds"] and (
+            data["MaxSleepIntervalSeconds"] < data["SleepIntervalSeconds"]):
+        data["MaxSleepIntervalSeconds"] = data["SleepIntervalSeconds"]
+    data["SleepRequestsSeconds"] = clamp_int(data.get("SleepRequestsSeconds"), 0, 0, 60)
     data["Proxy"] = normalize_proxy(data.get("Proxy"))
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
     allowed_languages = {

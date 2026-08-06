@@ -99,13 +99,6 @@ Notes on the items above, from the same pass:
   Acceptance: Preferred codec, container, frame rate and resolution ceiling are settings that compile to `--format-sort`; the editor-safe H.264 and AAC path survives as a named preset; existing format tests still pass.
   Complexity: M
 
-- [ ] P2 — Politeness pacing between downloads
-  Why: Rate-limit remedies are currently limited to a bandwidth cap, but yt-dlp's request pacing is the actual lever against 429s, and every commercial rival sells it.
-  Evidence: none of `--sleep-interval`, `--max-sleep-interval`, `--sleep-requests` or `--sleep-subtitles` appear in `astra_downloader/`; yt-dlp #13831 is a subtitle 429 report; Downie shipped configurable inter-download and inter-preparation delays in 4.12.2 and 4.12.3; SnapDownloader and StreamFab paywall scheduling and pacing.
-  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: Configurable request and inter-download sleeps compile to the yt-dlp flags; a classified 429 offers to raise them; the queue row reads "waiting Ns" instead of appearing hung.
-  Complexity: M
-
 - [ ] P2 — Self-heal a quarantined or truncated yt-dlp or ffmpeg binary
   Why: Antivirus removing the bundled tools is the largest single support burden for OSS downloaders of this shape, and the app currently discovers it as an opaque failure rather than naming it.
   Evidence: seven Open Video Downloader issues reduce to "binaries missing or corrupted, disable your antivirus" (#390, #436, #354, #362, #534, #555, #506). `verify_file_sha256` (`astra_downloader.py:839`) already exists for the update path but is not applied as a launch-time integrity check.

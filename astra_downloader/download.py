@@ -62,6 +62,8 @@ DOWNLOAD_ACTIVE_STATES = DOWNLOAD_RUNNING_STATES | DOWNLOAD_PENDING_STATES
 # has rendered this status since v3.20.7.
 DOWNLOAD_TERMINAL_STATES = {'complete', 'failed', 'cancelled', 'skipped'}
 DOWNLOAD_RETRYABLE_ERROR_CODES = {
+    # Transient by definition: the limit expires on its own.
+    'rate-limited',
     'network-unreachable',
     'po-provider-stale',
     'po-token-required',
@@ -152,6 +154,14 @@ DOWNLOAD_FAILURE_RECOVERY = {
         'error': 'Astra Downloader could not create a protected YouTube cookie jar.',
         'advice': 'Retry from Astra Deck so fresh cookies can be supplied.',
         'next_action': 'sign-in-and-retry',
+    },
+    'rate-limited': {
+        'error': 'The site refused further requests for now (HTTP 429).',
+        'advice': (
+            'Raise the request pacing in Settings — a bandwidth cap does not '
+            'help here — then retry. Fewer simultaneous downloads also helps.'
+        ),
+        'next_action': 'slow-down-and-retry',
     },
 }
 
@@ -1090,6 +1100,12 @@ def _classify_failure_text(text):
         'no formats available', 'only images are available',
     )):
         return 'sabr-limited'
+    # Checked before the generic network bucket: a 429 is not a broken
+    # connection and its fix is pacing, not retrying harder.
+    if any(marker in text for marker in (
+        'http error 429', 'too many requests', 'rate-limited', 'rate limited',
+    )):
+        return 'rate-limited'
     if any(marker in text for marker in (
         'network is unreachable', 'failed to establish a new connection',
         'connection refused', 'connection reset', 'connection timed out',
@@ -2105,6 +2121,19 @@ class DownloadManagerCore:
                 self.progress_updated.emit()
                 continue
 
+            # Request pacing makes yt-dlp sit idle on purpose. Without this the
+            # row keeps its last speed and reads as hung rather than waiting.
+            m = re.search(r'Sleeping\s+([\d.]+)\s+second', line, re.IGNORECASE)
+            if m:
+                try:
+                    seconds = max(0, int(round(float(m.group(1)))))
+                except (TypeError, ValueError):
+                    seconds = 0
+                dl.speed = f"waiting {seconds}s"
+                dl.eta = ""
+                self.progress_updated.emit()
+                continue
+
             # Status changes
             if dl.status == 'cancelled':
                 pass  # never resurrect a cancelled item from output lines
@@ -2273,6 +2302,17 @@ class DownloadManagerCore:
         # fails verification classifies through the existing taxonomy.
         if self.config.get("VerifyFormats"):
             args.append('--check-formats')
+        # Pacing. --limit-rate caps bandwidth, which does nothing about a
+        # per-request rate limit; spacing the requests is the actual lever.
+        sleep_interval = int(self.config.get("SleepIntervalSeconds", 0) or 0)
+        max_sleep = int(self.config.get("MaxSleepIntervalSeconds", 0) or 0)
+        if sleep_interval > 0:
+            args += ['--sleep-interval', str(sleep_interval)]
+            if max_sleep >= sleep_interval:
+                args += ['--max-sleep-interval', str(max_sleep)]
+        sleep_requests = int(self.config.get("SleepRequestsSeconds", 0) or 0)
+        if sleep_requests > 0:
+            args += ['--sleep-requests', str(sleep_requests)]
         proxy = self.config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]

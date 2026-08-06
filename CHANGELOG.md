@@ -21,6 +21,13 @@ repository's git log.
   crawling — plus a socket timeout and a separate retry count for the page
   read that happens before any transfer starts. All three default to off,
   leaving the argv byte-identical until you change something.
+- **Request pacing, and an HTTP 429 that says so.** A bandwidth cap does
+  nothing about a per-request rate limit. Settings now spaces downloads and
+  the requests inside them, with an optional randomised upper bound. A 429 is
+  classified as its own failure — previously it fell into the generic
+  "network unreachable" bucket, whose advice was to check your firewall — and
+  its recovery advice points at the pacing. A paced download now reads
+  "waiting 7s" in the queue instead of appearing hung on its last speed.
 - **Optional format verification.** yt-dlp can confirm a chosen format is
   actually downloadable before committing to it. Off by default, because it
   costs a request per candidate format.
