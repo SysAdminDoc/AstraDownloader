@@ -906,6 +906,57 @@ def is_playlist_url(url):
         return False
 
 
+# The argv half of the format-preference vocabulary declared in config.py.
+# A user token maps to one yt-dlp `--format-sort` field.
+FORMAT_SORT_VIDEO_FIELDS = {
+    'h264': 'vcodec:h264',
+    'vp9': 'vcodec:vp9',
+    'av1': 'vcodec:av01',
+}
+FORMAT_SORT_AUDIO_FIELDS = {
+    'aac': 'acodec:aac',
+    'opus': 'acodec:opus',
+}
+
+
+def build_format_sort_args(config):
+    """Compile soft codec and frame-rate preferences into `--format-sort`.
+
+    yt-dlp puts the fields it is given *ahead* of its own defaults, so naming
+    `vcodec` alone would rank a 360p H.264 stream above a 1080p VP9 one. `res`
+    is therefore always first: resolution stays the primary axis, which is
+    what the quality picker expresses, and these preferences break the ties
+    beneath it.
+
+    The container remains a hard constraint handled by `build_video_format_args`
+    — MP4 still forces H.264 and AAC so an editor imports the result without
+    transcoding. These only order what that leaves open.
+    """
+    # Every caller passes something with `.get` — a plain dict from the tests
+    # and a ConfigStore in the app; neither is required to be the other.
+    read = getattr(config, 'get', None)
+    if not callable(read):
+        return []
+    fields = []
+    video = str(read('VideoCodecPreference') or 'auto').strip().lower()
+    if video in FORMAT_SORT_VIDEO_FIELDS:
+        fields.append(FORMAT_SORT_VIDEO_FIELDS[video])
+    audio = str(read('AudioCodecPreference') or 'auto').strip().lower()
+    if audio in FORMAT_SORT_AUDIO_FIELDS:
+        fields.append(FORMAT_SORT_AUDIO_FIELDS[audio])
+    try:
+        frame_rate = int(read('PreferredFrameRate') or 0)
+    except (TypeError, ValueError, OverflowError):
+        frame_rate = 0
+    if frame_rate > 0:
+        # `~` is "closest to", so an unavailable 60fps falls back to what
+        # exists rather than failing the format selection outright.
+        fields.append(f'fps~{frame_rate}')
+    if not fields:
+        return []
+    return ['--format-sort', ','.join(['res'] + fields)]
+
+
 def build_video_format_args(container, quality):
     """Return editor-compatible yt-dlp format selection arguments."""
     height_filter = '' if quality == 'best' else f'[height<={quality}]'
@@ -2392,6 +2443,7 @@ class DownloadManagerCore:
                      '--audio-format', dl.format, '--audio-quality', '0']
         else:
             args += build_video_format_args(dl.format, dl.quality)
+        args += build_format_sort_args(self.config)
 
         # v1.4.0 (N1): YouTube extractor-args — PO Token routing when the
         # bgutil-ytdlp-pot-provider HTTP server is reachable. No-op on

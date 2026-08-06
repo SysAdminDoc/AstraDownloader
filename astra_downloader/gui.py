@@ -1131,6 +1131,21 @@ class MainWindowCore(QMainWindow):
             header.addWidget(make_label(subtitle, "subtitle", word_wrap=True))
         return header
 
+    def _add_format_preference(self, target, label, accessible, choices,
+                               current):
+        """Add one labelled preference combo to a settings group."""
+        row = QHBoxLayout()
+        row.addWidget(make_label(label, "fieldLabel"), 1)
+        combo = QComboBox()
+        combo.setAccessibleName(accessible)
+        for text_label, value in choices:
+            combo.addItem(text_label, value)
+        restored = combo.findData(current)
+        combo.setCurrentIndex(restored if restored >= 0 else 0)
+        row.addWidget(combo)
+        target.addLayout(row)
+        return combo
+
     def _make_settings_group(self, title):
         group = QFrame()
         group.setProperty("class", "settingsGroup")
@@ -2564,6 +2579,48 @@ class MainWindowCore(QMainWindow):
         ))
         layout.addWidget(pp_card)
 
+        # Format preferences. The container above is a hard constraint —
+        # MP4 forces H.264 + AAC so an editor imports the result without
+        # transcoding — and these order whatever that leaves open. Resolution
+        # stays the primary axis; the quality picker owns it.
+        fmt_card, fmt_l = self._make_settings_group("Format preferences")
+        fmt_l.addWidget(make_label(
+            "Preferences, not requirements: a link that has none of these "
+            "still downloads. The MP4 container overrides them, because an "
+            "editor-safe file is the point of choosing MP4.",
+            "fieldHint", word_wrap=True,
+        ))
+        self.cfg_video_codec = self._add_format_preference(
+            fmt_l, "Preferred video codec", "Preferred video codec",
+            (
+                (tr("No preference"), "auto"),
+                ("H.264 (most compatible)", "h264"),
+                ("VP9", "vp9"),
+                ("AV1 (smallest)", "av1"),
+            ),
+            self.config.get("VideoCodecPreference", "auto"),
+        )
+        self.cfg_audio_codec = self._add_format_preference(
+            fmt_l, "Preferred audio codec", "Preferred audio codec",
+            (
+                (tr("No preference"), "auto"),
+                ("AAC (most compatible)", "aac"),
+                ("Opus", "opus"),
+            ),
+            self.config.get("AudioCodecPreference", "auto"),
+        )
+        self.cfg_frame_rate = self._add_format_preference(
+            fmt_l, "Preferred frame rate", "Preferred frame rate",
+            (
+                (tr("No preference"), 0),
+                ("30 fps", 30),
+                ("60 fps", 60),
+            ),
+            self._dependencies['clamp_int'](
+                self.config.get("PreferredFrameRate", 0), 0, 0, 120),
+        )
+        layout.addWidget(fmt_card)
+
         # Performance
         perf_card, perf_l = self._make_settings_group("Performance")
         frag_row = QHBoxLayout()
@@ -2938,6 +2995,9 @@ class MainWindowCore(QMainWindow):
             self.cfg_socket_timeout.valueChanged,
             self.cfg_extractor_retries.valueChanged,
             self.cfg_verify_formats.toggled,
+            self.cfg_video_codec.currentIndexChanged,
+            self.cfg_audio_codec.currentIndexChanged,
+            self.cfg_frame_rate.currentIndexChanged,
             self.cfg_sleep_interval.valueChanged,
             self.cfg_sleep_max.valueChanged,
             self.cfg_sleep_requests.valueChanged,
@@ -4139,6 +4199,9 @@ class MainWindowCore(QMainWindow):
             "EmbedSubs": self.cfg_subs.isChecked(),
             "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
             "VerifyFormats": self.cfg_verify_formats.isChecked(),
+            "VideoCodecPreference": self.cfg_video_codec.currentData(),
+            "AudioCodecPreference": self.cfg_audio_codec.currentData(),
+            "PreferredFrameRate": self.cfg_frame_rate.currentData(),
             "ThrottledRate": self.cfg_throttled.text().strip(),
             "SocketTimeoutSeconds": self.cfg_socket_timeout.value(),
             "ExtractorRetries": self.cfg_extractor_retries.value(),

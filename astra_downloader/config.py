@@ -103,6 +103,15 @@ def _env_bool(name, default=False):
     return default
 
 
+# The soft format preferences a user can express. This is the schema half:
+# the mapping from these tokens to yt-dlp `--format-sort` fields lives in
+# download.py, which owns argv, and a test pins the two vocabularies together
+# so neither can gain a value the other does not know.
+FORMAT_SORT_VIDEO_CODECS = frozenset({"auto", "h264", "vp9", "av1"})
+FORMAT_SORT_AUDIO_CODECS = frozenset({"auto", "aac", "opus"})
+FORMAT_SORT_FRAME_RATES = (0, 30, 60)
+
+
 DEFAULT_CONFIG = {
     "DownloadPath": str(Path.home() / "Videos"),
     "AudioDownloadPath": "",
@@ -120,6 +129,15 @@ DEFAULT_CONFIG = {
     # Verify a chosen format is actually downloadable before committing to it.
     # Off by default: it costs an extra request per candidate format.
     "VerifyFormats": False,
+    # Soft codec and frame-rate preferences, compiled into --format-sort. The
+    # container choice is a hard constraint and still wins: MP4 forces H.264
+    # + AAC so an editor imports the result without transcoding. These order
+    # what is left. "auto" leaves yt-dlp's own ordering alone.
+    "VideoCodecPreference": "auto",
+    "AudioCodecPreference": "auto",
+    # Preferred frame rate, as a target rather than a cap: 60 puts 60fps
+    # first and falls back rather than failing. 0 expresses no preference.
+    "PreferredFrameRate": 0,
     # Below this rate yt-dlp assumes the CDN is throttling and re-extracts the
     # video rather than crawling to the stall watchdog. Empty disables it.
     "ThrottledRate": "",
@@ -732,6 +750,18 @@ def sanitize_config(raw):
     data["ThrottledRate"] = normalize_rate_limit(data.get("ThrottledRate"))
     data["SocketTimeoutSeconds"] = clamp_int(data.get("SocketTimeoutSeconds"), 0, 0, 300)
     data["ExtractorRetries"] = clamp_int(data.get("ExtractorRetries"), 0, 0, 20)
+    video_codec = clean_text(data.get("VideoCodecPreference"), "auto", 16).lower()
+    data["VideoCodecPreference"] = (
+        video_codec if video_codec in FORMAT_SORT_VIDEO_CODECS else "auto"
+    )
+    audio_codec = clean_text(data.get("AudioCodecPreference"), "auto", 16).lower()
+    data["AudioCodecPreference"] = (
+        audio_codec if audio_codec in FORMAT_SORT_AUDIO_CODECS else "auto"
+    )
+    frame_rate = clamp_int(data.get("PreferredFrameRate"), 0, 0, 120)
+    data["PreferredFrameRate"] = (
+        frame_rate if frame_rate in FORMAT_SORT_FRAME_RATES else 0
+    )
     data["SleepIntervalSeconds"] = clamp_int(data.get("SleepIntervalSeconds"), 0, 0, 600)
     data["MaxSleepIntervalSeconds"] = clamp_int(data.get("MaxSleepIntervalSeconds"), 0, 0, 600)
     # yt-dlp rejects a maximum below the minimum, so the pair is normalised
