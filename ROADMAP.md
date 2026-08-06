@@ -64,20 +64,6 @@ Notes on the items above, from the same pass:
   Acceptance: Every string reaching `tr()` or `make_label()` is extracted into the `.ts` sources; a gate fails when an untranslated literal is added; the German scenario in `scripts/render-companion-gui.py` asserts a translated string on each of the six pages rather than only the nav rail.
   Complexity: L
 
-- [ ] P2 — Give repeated row buttons distinguishing accessible names
-  Why: A screen-reader user tabbing the History list hears "Show, Show, Show" with no way to tell which file; the same applies to Remove on Sign-ins and Subscriptions, and to every download-card action.
-  Evidence: `_make_tool_button` names the button from its own text (`gui.py:1124-1132`); repeated rows at `gui.py:3279-3281`, `1984-1988`, `1830-1835` and `2880-2928`. The correct pattern already exists for status labels (`gui.py:2842-2844`).
-  Touches: `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: Each per-row control's accessible name includes its target; a test renders a three-item list and asserts every accessible name is distinct.
-  Complexity: S
-
-- [ ] P2 — Keep keyboard focus when a download card is rebuilt
-  Why: Focus restoration only fires when the same widget object survives, but a card is destroyed and rebuilt on every status transition — so a keyboard user on a running download's Cancel button loses focus to nowhere the moment it completes.
-  Evidence: `gui.py:2999-3009` rebuilds when `_astra_structure` changes; `gui.py:3038-3043` restores only when the retained widget is identical.
-  Touches: `astra_downloader/gui.py`
-  Acceptance: Focus is restored by logical key (download id plus action) across a structure change; a test focuses a card action, forces a status transition, and asserts focus lands on the equivalent control or the card itself.
-  Complexity: M
-
 - [ ] P2 — Export and import settings, sign-ins and subscriptions
   Why: The only export is history to CSV, one-way and capped; an install cannot be migrated to another machine, and a corrupt config is unrecoverable through the UI even though the original bytes sit beside it.
   Evidence: `gui.py:3175-3212` is the sole export path. Requested repeatedly elsewhere (Open Video Downloader #630, Seal #425); 4K Video Downloader paywalls URL list import/export.

@@ -1125,14 +1125,21 @@ class MainWindowCore(QMainWindow):
         outer.addLayout(content, 1)
         return group, content
 
-    def _make_tool_button(self, text, class_name="secondary"):
+    def _make_tool_button(self, text, class_name="secondary", target=""):
+        """A tool button, optionally named for the row it acts on.
+
+        In a repeated list every button carries the same word, so a screen
+        reader announces "Show, Show, Show" with nothing to tell them apart.
+        `target` is what distinguishes them; the visible label is unchanged.
+        """
         translated = tr(text)
         btn = QPushButton(translated)
         btn.setProperty("class", class_name)
         btn.setIcon(make_line_icon(text))
         btn.setIconSize(QSize(15, 15))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setAccessibleName(translated)
+        target = str(target or "").strip()
+        btn.setAccessibleName(f"{translated}: {target}" if target else translated)
         return btn
 
     def _make_readiness_row(self, key, label_text, value_text="Checking"):
@@ -1893,10 +1900,11 @@ class MainWindowCore(QMainWindow):
                 detail += f" · {record['lastError']}"
             copy_layout.addWidget(make_label(detail, "toolbarMeta", word_wrap=True))
             row_layout.addLayout(copy_layout, 1)
-            scan = self._make_tool_button("Scan now", "ghost")
+            row_target = str(record.get("title") or record.get("url") or "")
+            scan = self._make_tool_button("Scan now", "ghost", row_target)
             scan.clicked.connect(lambda checked=False, sub_id=record.get("id"): self._scan_subscription(sub_id))
             row_layout.addWidget(scan, 0, Qt.AlignmentFlag.AlignTop)
-            remove = self._make_tool_button("Remove", "ghost")
+            remove = self._make_tool_button("Remove", "ghost", row_target)
             remove.clicked.connect(lambda checked=False, sub_id=record.get("id"): self._remove_subscription(sub_id))
             row_layout.addWidget(remove, 0, Qt.AlignmentFlag.AlignTop)
             self.subscription_container.addWidget(row)
@@ -2047,7 +2055,8 @@ class MainWindowCore(QMainWindow):
                 word_wrap=True,
             ))
             row_layout.addLayout(copy_layout, 1)
-            remove = self._make_tool_button("Remove", "ghost")
+            remove = self._make_tool_button(
+                "Remove", "ghost", str(entry.get("site") or ""))
             remove.clicked.connect(
                 lambda checked=False, site=entry.get("site"): self._remove_site_login(site)
             )
@@ -3020,22 +3029,25 @@ class MainWindowCore(QMainWindow):
         top.addWidget(title, 1)
         state_label = make_state_label(human_status(dl.status), download_status_tone(dl.status))
         top.addWidget(state_label)
+        # Repeated rows: every card carries the same words, so each control
+        # is named for the download it acts on.
+        card_target = title.text()
         if not recent and dl.status in self._value('DOWNLOAD_PENDING_STATES'):
             if dl.status != 'needs-auth':
-                btn_up = self._make_tool_button("Up", "ghost")
+                btn_up = self._make_tool_button("Up", "ghost", card_target)
                 btn_up.setToolTip("Move this pending download earlier.")
                 btn_up.clicked.connect(
                     lambda checked=False, dl_id=dl.id: self._move_pending_download(dl_id, -1)
                 )
                 top.addWidget(btn_up)
-                btn_down = self._make_tool_button("Down", "ghost")
+                btn_down = self._make_tool_button("Down", "ghost", card_target)
                 btn_down.setToolTip("Move this pending download later.")
                 btn_down.clicked.connect(
                     lambda checked=False, dl_id=dl.id: self._move_pending_download(dl_id, 1)
                 )
                 top.addWidget(btn_down)
             if dl.status == 'paused':
-                btn_resume = self._make_tool_button("Resume Queue", "ghost")
+                btn_resume = self._make_tool_button("Resume Queue", "ghost", card_target)
                 btn_resume.setToolTip("Resume recovered, unauthenticated downloads explicitly.")
                 btn_resume.clicked.connect(self._resume_download_queue)
                 top.addWidget(btn_resume)
@@ -3044,7 +3056,7 @@ class MainWindowCore(QMainWindow):
                 # The Sign-ins page is the fix for this state on every site the
                 # extension's YouTube cookie bridge cannot reach, so the row
                 # that reports it offers the way there instead of only Cancel.
-                btn_signin = self._make_tool_button("Add sign-in", "ghost")
+                btn_signin = self._make_tool_button("Add sign-in", "ghost", card_target)
                 btn_signin.setToolTip(
                     "Store this site's signed-in session so the download can run."
                 )
@@ -3052,11 +3064,11 @@ class MainWindowCore(QMainWindow):
                     lambda checked=False, url=dl.url: self._open_site_login_for(url)
                 )
                 top.addWidget(btn_signin)
-            btn_cancel = self._make_tool_button("Cancel", "ghost")
+            btn_cancel = self._make_tool_button("Cancel", "ghost", card_target)
             btn_cancel.clicked.connect(lambda checked=False, dl_id=dl.id: self.dl_manager.cancel(dl_id))
             top.addWidget(btn_cancel)
         elif not recent and dl.status in self._value('DOWNLOAD_RUNNING_STATES'):
-            btn_cancel = self._make_tool_button("Cancel", "ghost")
+            btn_cancel = self._make_tool_button("Cancel", "ghost", card_target)
             btn_cancel.clicked.connect(lambda checked=False, dl_id=dl.id: self.dl_manager.cancel(dl_id))
             top.addWidget(btn_cancel)
         elif recent and (
@@ -3064,11 +3076,11 @@ class MainWindowCore(QMainWindow):
              and dl.error_code in self._value('DOWNLOAD_RETRYABLE_ERROR_CODES'))
             or dl.status == "skipped"
         ):
-            btn_retry = self._make_tool_button("Retry", "ghost")
+            btn_retry = self._make_tool_button("Retry", "ghost", card_target)
             btn_retry.clicked.connect(lambda checked=False, item=dl: self._retry_download(item))
             top.addWidget(btn_retry)
         elif recent and dl.status == "complete" and dl.filename:
-            btn_show = self._make_tool_button("Show", "ghost")
+            btn_show = self._make_tool_button("Show", "ghost", card_target)
             btn_show.clicked.connect(lambda checked=False, path=dl.filename: self._show_download_location(path))
             top.addWidget(btn_show)
         card_l.addLayout(top)
@@ -3113,6 +3125,11 @@ class MainWindowCore(QMainWindow):
             and (focused is widget or widget.isAncestorOf(focused))
         ), (None, None))
         focused_key, focused_owner = focused_entry
+        # A card is destroyed and rebuilt on every status transition, so
+        # identity is not enough to restore focus: a keyboard user sitting on
+        # Cancel loses focus to nowhere the moment the download completes.
+        # Remember which control it was, not which object.
+        focused_action = focused.text() if isinstance(focused, QPushButton) else ''
         desired = []
 
         def retain(key, factory):
@@ -3180,12 +3197,24 @@ class MainWindowCore(QMainWindow):
 
         layout.activate()
         scroll_bar.setValue(min(scroll_value, scroll_bar.maximum()))
-        if (
-            focused_key in desired_keys
-            and focused is not None
-            and self._download_widgets.get(focused_key) is focused_owner
-        ):
-            focused.setFocus(Qt.FocusReason.OtherFocusReason)
+        if focused_key in desired_keys and focused is not None:
+            owner = self._download_widgets.get(focused_key)
+            if owner is focused_owner:
+                focused.setFocus(Qt.FocusReason.OtherFocusReason)
+            elif owner is not None:
+                # The card was rebuilt. Land on the same action if it still
+                # exists — a completed download has no Cancel — and on the card
+                # itself otherwise, so focus stays where the user was reading.
+                replacement = next((
+                    button for button in owner.findChildren(QPushButton)
+                    if button.text() == focused_action and focused_action
+                ), None)
+                if replacement is None:
+                    replacement = next(iter(owner.findChildren(QPushButton)), None)
+                if replacement is None:
+                    owner.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+                    replacement = owner
+                replacement.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _notify_completed_downloads(self, downloads):
         """Raise a one-shot tray notification when a download finishes while
@@ -3431,7 +3460,8 @@ class MainWindowCore(QMainWindow):
                 label.setFixedWidth(92)
                 card_l.addWidget(label)
             if filename:
-                btn_show = self._make_tool_button("Show", "ghost")
+                btn_show = self._make_tool_button(
+                    "Show", "ghost", Path(filename).name)
                 btn_show.clicked.connect(lambda checked=False, path=filename: self._show_download_location(path))
                 card_l.addWidget(btn_show)
             else:
