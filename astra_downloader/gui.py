@@ -1100,7 +1100,7 @@ class MainWindowCore(QMainWindow):
         tray_menu = QMenu()
         show_action = tray_menu.addAction("Show Astra Downloader")
         show_action.triggered.connect(self._show_from_tray)
-        self.tray_startstop = tray_menu.addAction("Stop Server")
+        self.tray_startstop = tray_menu.addAction("Stop server")
         self.tray_startstop.triggered.connect(self._toggle_server)
         folder_action = tray_menu.addAction("Open Downloads Folder")
         folder_action.triggered.connect(self._open_folder)
@@ -1408,7 +1408,7 @@ class MainWindowCore(QMainWindow):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.btn_startstop = self._make_tool_button("Start Server", "primary")
+        self.btn_startstop = self._make_tool_button("Start server", "primary")
         self.btn_startstop.clicked.connect(self._toggle_server)
         actions.addWidget(self.btn_startstop)
         btn_copy = self._make_tool_button("Copy endpoint")
@@ -3064,7 +3064,7 @@ class MainWindowCore(QMainWindow):
         tools_row = QHBoxLayout()
         tools_row.setSpacing(8)
         self.btn_check_updates = self._make_tool_button(
-            "Check yt-dlp Update",
+            "Check for yt-dlp updates",
         )
         self.btn_check_updates.setToolTip("Check for a yt-dlp update. Active downloads must finish first.")
         self.btn_check_updates.clicked.connect(self._force_ytdlp_update)
@@ -3383,10 +3383,10 @@ class MainWindowCore(QMainWindow):
             self.server_badge.setAccessibleName(
                 "Extension server status indicator: Online"
             )
-            self.btn_startstop.setText("Stop Server")
-            self.btn_startstop.setIcon(make_line_icon("Stop Server"))
+            self.btn_startstop.setText("Stop server")
+            self.btn_startstop.setIcon(make_line_icon("Stop server"))
             self.btn_startstop.setProperty("class", "secondary")
-            self.tray_startstop.setText("Stop Server")
+            self.tray_startstop.setText("Stop server")
             self.tray.setToolTip(f"{self._value('APP_NAME')} - Running")
             self._set_readiness("server", "Running", "success")
         else:
@@ -3401,10 +3401,10 @@ class MainWindowCore(QMainWindow):
             self.server_badge.setAccessibleName(
                 "Extension server status indicator: Offline"
             )
-            self.btn_startstop.setText("Start Server")
-            self.btn_startstop.setIcon(make_line_icon("Start Server"))
+            self.btn_startstop.setText("Start server")
+            self.btn_startstop.setIcon(make_line_icon("Start server"))
             self.btn_startstop.setProperty("class", "primary")
-            self.tray_startstop.setText("Start Server")
+            self.tray_startstop.setText("Start server")
             self.tray.setToolTip(f"{self._value('APP_NAME')} - Stopped")
             self._set_readiness("server", "Stopped", "neutral")
         repolish(self.btn_startstop)
@@ -3549,9 +3549,15 @@ class MainWindowCore(QMainWindow):
                 )
                 top.addWidget(btn_down)
             if dl.status == 'paused':
-                btn_resume = self._make_tool_button("Resume Queue", "ghost", card_target)
-                btn_resume.setToolTip("Resume recovered, unauthenticated downloads explicitly.")
-                btn_resume.clicked.connect(self._resume_download_queue)
+                # Per-item, like every other action on this row. This used to
+                # call resume_intake(), which clears the global pause and
+                # starts every paused download — so resuming one started all
+                # of them.
+                btn_resume = self._make_tool_button("Resume", "ghost", card_target)
+                btn_resume.setToolTip("Resume this download.")
+                btn_resume.clicked.connect(
+                    lambda checked=False, dl_id=dl.id: self._resume_one_download(dl_id)
+                )
                 top.addWidget(btn_resume)
             if (dl.status == 'needs-auth'
                     and not self._dependencies['is_youtube_url'](dl.url)):
@@ -4030,9 +4036,14 @@ class MainWindowCore(QMainWindow):
     def _retry_download(self, dl):
         ok, err = self.dl_manager.retry(dl.id)
         if not ok:
+            # These controls live on the Download page, so their result has to
+            # appear there. The log panel is on the Browser extension page.
+            self._set_quick_download_status(err or "Retry was refused.", "error")
             self._append_log(f"Retry failed: {err}")
             return
-        self._append_log(f"Retry queued: {dl.title if dl.title != 'Unknown' else dl.url}")
+        label = dl.title if dl.title != 'Unknown' else dl.url
+        self._set_quick_download_status(f"Retry queued: {label}", "success")
+        self._append_log(f"Retry queued: {label}")
         self._nav_click("Download")
 
     def _toggle_queue_intake(self):
@@ -4040,19 +4051,41 @@ class MainWindowCore(QMainWindow):
             self._resume_download_queue()
             return
         if self.dl_manager.pause_intake():
-            self._append_log("Download intake paused. Running jobs will finish; new jobs will wait.")
+            message = "Download intake paused. Running jobs will finish; new jobs will wait."
+            self._set_quick_download_status(message, "warning")
+            self._append_log(message)
         else:
-            self._append_log("Could not persist the paused queue state. Check disk permissions.")
+            message = "Could not pause the queue. Check disk space and permissions."
+            self._set_quick_download_status(message, "error")
+            self._append_log(message)
+
+    def _resume_one_download(self, dl_id):
+        """Resume a single paused download, leaving the rest of the queue alone."""
+        ok, err = self.dl_manager.resume_download(dl_id)
+        if ok:
+            self._set_quick_download_status("Download resumed.", "success")
+            return
+        self._set_quick_download_status(
+            err or "That download could not be resumed.", "error"
+        )
+        self._append_log(f"Could not resume {dl_id}: {err}")
 
     def _resume_download_queue(self):
         if self.dl_manager.resume_intake():
-            self._append_log("Download queue resumed. Items needing sign-in remain paused.")
+            message = "Download queue resumed. Items needing sign-in remain paused."
+            self._set_quick_download_status(message, "success")
+            self._append_log(message)
         else:
-            self._append_log("Could not persist the resumed queue state. Check disk permissions.")
+            message = "Could not resume the queue. Check disk space and permissions."
+            self._set_quick_download_status(message, "error")
+            self._append_log(message)
 
     def _move_pending_download(self, dl_id, offset):
         ok, err = self.dl_manager.move_pending_by(dl_id, offset)
         if not ok:
+            self._set_quick_download_status(
+                err or "That download could not be reordered.", "error"
+            )
             self._append_log(f"Could not reorder pending download: {err}")
 
     def _show_download_location(self, file_path):
@@ -4490,6 +4523,9 @@ class MainWindowCore(QMainWindow):
 
     def _probe_quick_download_formats(self):
         """Ask yt-dlp what the pasted link offers, off the GUI thread."""
+        if self._force_exit:
+            # The debounce can already be in flight when the window closes.
+            return
         raw = self.quick_download_url.text().strip()
         parts = raw.split()
         if len(parts) != 1:
@@ -4896,6 +4932,13 @@ class MainWindowCore(QMainWindow):
             self.tools_status_timer.stop()
             self.update_timer.stop()
             self.cleanup_timer.stop()
+            # These three outlived the window. A link typed within the format
+            # probe's debounce fired after close and spawned a `yt-dlp -J`
+            # that cancel_all() does not track, so it kept running for up to
+            # its 60s timeout after the user had quit.
+            self._format_probe_timer.stop()
+            self._ui_refresh_timer.stop()
+            self._history_filter_timer.stop()
             event.accept()
 
     # ── First-run setup ──
