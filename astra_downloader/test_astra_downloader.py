@@ -1861,6 +1861,37 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertTrue(entries, "authenticated /health must expose recent log entries")
         self.assertIn("leak.txt", json.dumps(entries))
 
+    def test_health_subscription_list_requires_auth(self):
+        # The snapshot names every channel this user follows. /health gates
+        # recentErrors for the same reason and this sat two lines below it.
+        class FakeSubscriptions:
+            def snapshot(self):
+                return {
+                    "schedulerRunning": True,
+                    "subscriptions": [{
+                        "url": "https://www.youtube.com/@private-channel",
+                        "title": "Private Channel",
+                    }],
+                    "archive": {},
+                }
+
+        token = "a" * 32
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory(), FakeSubscriptions())
+        client = api.test_client()
+
+        anon = client.get("/health", headers={"X-MDL-Client": "MediaDL"}).get_json()
+        self.assertNotIn("private-channel", json.dumps(anon))
+        self.assertIn("version", anon, "discovery fields must stay unauthenticated")
+        self.assertEqual(anon["service"], "astra-downloader")
+
+        authed = client.get("/health", headers={
+            "X-MDL-Client": "MediaDL",
+            "X-Auth-Token": token,
+        }).get_json()
+        self.assertIn("private-channel", json.dumps(authed["subscriptions"]))
+
     def test_health_omits_local_runtime_paths_and_probes_once(self):
         token = "a" * 32
         config = FakeConfig({"ServerToken": token})

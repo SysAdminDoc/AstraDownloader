@@ -407,7 +407,10 @@ def create_api(config, dl_manager, history, *, dependencies):
             # bearer token — an unauthenticated local process gets an empty list.
             "recentErrors": get_recent_log_entries() if check_auth() else [],
         }
-        if subscription_manager is not None:
+        # The snapshot carries every subscribed channel URL and title, which is
+        # a list of what this user follows — the same class of thing as
+        # recentErrors above, and gated the same way.
+        if subscription_manager is not None and check_auth():
             try:
                 resp["subscriptions"] = subscription_manager.snapshot()
             except Exception:
