@@ -1076,8 +1076,14 @@ class MainWindowCore(QMainWindow):
         self.cleanup_timer.timeout.connect(dl_manager.cleanup_old)
         self.cleanup_timer.start(60000)
 
-        # Connect signals
-        dl_manager.progress_updated.connect(self._update_ui)
+        # Connect signals. yt-dlp emits a progress line per output line, each
+        # of which reaches this on the GUI thread, on top of the 500 ms timer.
+        # Coalesce them: one repaint per tick is all a human can read.
+        self._ui_refresh_timer = QTimer(self)
+        self._ui_refresh_timer.setSingleShot(True)
+        self._ui_refresh_timer.setInterval(120)
+        self._ui_refresh_timer.timeout.connect(self._update_ui)
+        dl_manager.progress_updated.connect(self._request_ui_refresh)
 
         # Server state
         self.server_running = False
@@ -1750,6 +1756,10 @@ class MainWindowCore(QMainWindow):
         self.history_page_status.hide()
         layout.addWidget(self.history_page_status)
 
+        self._history_filter_timer = QTimer(self)
+        self._history_filter_timer.setSingleShot(True)
+        self._history_filter_timer.setInterval(250)
+        self._history_filter_timer.timeout.connect(self._apply_history_filters)
         for signal in (
             self.history_search.textChanged,
             self.history_status.currentIndexChanged,
@@ -3258,7 +3268,18 @@ class MainWindowCore(QMainWindow):
                     # reason: tray notifications are best-effort polish
                     pass
 
+    def _request_ui_refresh(self):
+        """Collapse a burst of progress signals into one refresh.
+
+        A single download emits several progress lines per second and three can
+        run at once; every one of them used to rebuild the queue list on the
+        GUI thread, on top of the 500 ms timer that would have done it anyway.
+        """
+        if not self._ui_refresh_timer.isActive():
+            self._ui_refresh_timer.start()
+
     def _update_ui(self):
+        self._ui_refresh_timer.stop()
         if self.server_running and self.server_thread and not self.server_thread.is_alive():
             self.server_running = False
             self.server_start_time = None
@@ -3344,7 +3365,13 @@ class MainWindowCore(QMainWindow):
         )
 
     def _history_filters_changed(self, *_args):
+        # Every keystroke in the search box used to re-read and re-sanitise
+        # history.json and rebuild up to 50 widgets. Wait for a pause instead.
         self._history_offset = 0
+        self._history_filter_timer.start()
+
+    def _apply_history_filters(self):
+        self._history_filter_timer.stop()
         self._refresh_history()
 
     def _move_history_page(self, direction):
