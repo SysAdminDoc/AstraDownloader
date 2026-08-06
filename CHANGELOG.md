@@ -34,6 +34,12 @@ repository's git log.
 
 ### Added
 
+- **SponsorBlock acts on the categories you choose.** It sent the literal
+  `all`, so turning it on to skip sponsors also stripped intros, outros and
+  self-promo. Settings now lists the ten yt-dlp categories, defaulting to
+  sponsor, self-promotion and interaction reminders; ticking none keeps the
+  old all-categories behaviour. Unknown names are dropped rather than passed
+  through to the subprocess, and the YouTube-only scoping is unchanged.
 - **`ytdl://` and `mediadl://` links download the video they name.** The
   handlers were registered and the URL was thrown away — every such link
   mapped to the literal command "start", so clicking one opened the app and

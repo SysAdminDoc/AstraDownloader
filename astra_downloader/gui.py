@@ -862,8 +862,10 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_output_template',
     'normalize_proxy',
     'normalize_rate_limit',
+    'normalize_sponsorblock_categories',
     'normalize_sublangs',
     'normalize_url',
+    'SPONSORBLOCK_CATEGORIES',
     'quarantined_state_files',
     'query_history_entries',
     'reset_deno_runtime_cache',
@@ -2509,6 +2511,43 @@ class MainWindowCore(QMainWindow):
         sb_row.addWidget(self.cfg_sb_action)
         sb_row.addStretch()
         pp_l.addLayout(sb_row)
+
+        # Without a per-category choice the app sent the literal `all`, so
+        # asking it to skip sponsors also removed intros, outros and self-promo.
+        self.cfg_sb_categories = {}
+        selected = set(
+            self._dependencies['normalize_sponsorblock_categories'](
+                self.config.get("SponsorBlockCategories", "")
+            ).split(",")
+        )
+        category_labels = {
+            "sponsor": "Sponsor", "intro": "Intro", "outro": "Outro",
+            "selfpromo": "Self-promotion", "preview": "Recap or preview",
+            "filler": "Filler", "interaction": "Interaction reminder",
+            "music_offtopic": "Non-music section",
+            "poi_highlight": "Highlight", "chapter": "Chapter",
+        }
+        category_grid = QVBoxLayout()
+        category_grid.setSpacing(0)
+        names = list(self._value('SPONSORBLOCK_CATEGORIES'))
+        for start in range(0, len(names), 3):
+            line = QHBoxLayout()
+            line.setSpacing(10)
+            line.addSpacing(28)
+            for name in names[start:start + 3]:
+                box = QCheckBox(tr(category_labels.get(name, name)))
+                box.setChecked(name in selected)
+                box.setEnabled(self.cfg_sponsorblock.isChecked())
+                self.cfg_sponsorblock.toggled.connect(box.setEnabled)
+                self.cfg_sb_categories[name] = box
+                line.addWidget(box, 1)
+            line.addStretch()
+            category_grid.addLayout(line)
+        pp_l.addLayout(category_grid)
+        pp_l.addWidget(make_label(
+            "With nothing ticked, every category is acted on.",
+            "fieldHint", word_wrap=True,
+        ))
         layout.addWidget(pp_card)
 
         # Performance
@@ -3955,6 +3994,10 @@ class MainWindowCore(QMainWindow):
             "SubLangs": sublangs,
             "SponsorBlock": self.cfg_sponsorblock.isChecked(),
             "SponsorBlockAction": self.cfg_sb_action.currentData(),
+            "SponsorBlockCategories": ",".join(
+                name for name, box in self.cfg_sb_categories.items()
+                if box.isChecked()
+            ),
             "ConcurrentFragments": self.cfg_fragments.value(),
             "MaxConcurrentDownloads": self.cfg_maxconcurrent.value(),
             "DownloadRetries": self.cfg_retries.value(),

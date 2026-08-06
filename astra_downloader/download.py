@@ -1297,6 +1297,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'is_youtube_url',
     'load_json_file',
     'normalize_output_dir',
+    'normalize_sponsorblock_categories',
     'normalize_download_section',
     'normalize_playlist_items',
     'normalize_url',
@@ -2231,7 +2232,13 @@ class DownloadManagerCore:
         # failure reason in the output tail.
         if self.config.get("SponsorBlock") and self._dependencies['is_youtube_url'](dl.url):
             action = 'mark' if self.config.get("SponsorBlockAction") == 'mark' else 'remove'
-            args += [f'--sponsorblock-{action}', 'all']
+            # Empty means every category, which is what this used to send
+            # unconditionally — asking it to skip sponsors also stripped
+            # intros, outros and self-promo.
+            categories = self._dependencies['normalize_sponsorblock_categories'](
+                self.config.get("SponsorBlockCategories", "")
+            )
+            args += [f'--sponsorblock-{action}', categories or 'all']
         # v1.3.0: --force-overwrites lets the user re-download the same URL
         # repeatedly. Without it, yt-dlp refuses to overwrite an existing
         # output file and prints "[download] Title.mp4 has already been

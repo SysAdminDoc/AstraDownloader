@@ -57,13 +57,6 @@ Notes on the items above, from the same pass:
   Acceptance: A single versioned JSON bundle round-trips settings and subscriptions; cookie jar contents are excluded by default behind an explicit opt-in that warns, preserving the no-read-path rule; import validates the schema and reports what changed.
   Complexity: M
 
-- [ ] P2 — Per-category SponsorBlock instead of `all`
-  Why: The app sends the literal `all`, so enabling SponsorBlock to skip sponsors also removes intros, outros and self-promo with no way to choose.
-  Evidence: `download.py:2202-2204`. Parabolic #1583 requests exactly this; NeoDLP, YTDLnis and YTSage all ship category pickers.
-  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: Settings exposes the yt-dlp category list with per-category mark or remove; the argv carries the selected categories; the YouTube-only scoping at `download.py:2202` is preserved.
-  Complexity: M
-
 - [ ] P2 — Separate creator subtitles from auto-generated ones
   Why: The app passes `--write-subs` and `--write-auto-subs` together with a single language string, so users get both when they wanted "manual if it exists, else auto", and there is no way to fetch subtitles without the video or to normalise the format.
   Evidence: `download.py:2198` passes both unconditionally. yt-dlp #2262 is the second most-upvoted enhancement upstream; Open Video Downloader #659 asks for subtitle-only downloads; SnapDownloader sells subtitle language coverage as a paid feature.
