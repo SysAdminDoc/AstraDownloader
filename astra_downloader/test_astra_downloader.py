@@ -9974,6 +9974,115 @@ def gui_module_for_tests():
     return gui_module
 
 
+class SabrDisclosureTests(unittest.TestCase):
+    """A SABR-only link says what it cannot honour before the run, not after."""
+
+    @staticmethod
+    def _summary(*protocols, audio="https"):
+        formats = [
+            {"has_video": True, "height": 720 + index, "protocol": protocol}
+            for index, protocol in enumerate(protocols)
+        ]
+        formats.append({"has_video": False, "protocol": audio})
+        return {"formats": formats}
+
+    # ── The detection ────────────────────────────────────────────────────
+
+    def test_a_url_serving_only_sabr_is_limited(self):
+        self.assertTrue(ad.sabr_only_formats(self._summary("sabr", "sabr")))
+
+    def test_one_ordinary_format_is_enough_to_be_unlimited(self):
+        # The non-SABR format is what would be downloaded, so nothing is void.
+        self.assertFalse(ad.sabr_only_formats(self._summary("sabr", "https")))
+
+    def test_a_probe_with_no_video_is_not_treated_as_limited(self):
+        for summary in ({}, {"formats": []}, {"formats": [{"has_video": False}]},
+                        None, "nonsense"):
+            self.assertFalse(ad.sabr_only_formats(summary), summary)
+
+    def test_the_protocol_survives_the_summary(self):
+        # The detection reads a field the summariser has to carry; a probe
+        # that drops it would silently report every link as unlimited.
+        summary = ad.summarize_ytdlp_formats({"formats": [
+            {"format_id": "1", "ext": "mp4", "height": 720,
+             "vcodec": "avc1", "acodec": "none", "protocol": "sabr"},
+        ]})
+        self.assertEqual(summary["formats"][0]["protocol"], "sabr")
+        self.assertTrue(ad.sabr_only_formats(summary))
+
+    def test_the_voided_options_read_as_a_sentence(self):
+        self.assertEqual(
+            ad.describe_sabr_voided_options(("a", "b", "c")), "a, b and c"
+        )
+        self.assertEqual(ad.describe_sabr_voided_options(("a",)), "a")
+        self.assertEqual(ad.describe_sabr_voided_options(()), "")
+
+    # ── What the user is told ────────────────────────────────────────────
+
+    def _window(self):
+        window = FormatProbeTests._window(FormatProbeTests())
+        return window
+
+    def test_a_sabr_link_disables_the_clip_range_and_explains(self):
+        window = self._window()
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": self._summary("sabr"),
+                "error": "",
+            })
+        self.assertFalse(window.quick_download_start.enabled)
+        self.assertFalse(window.quick_download_end.enabled)
+        hint = window.quick_download_clip_hint.text()
+        self.assertIn("SABR", hint)
+        for option in ("clip ranges", "bandwidth cap", "concurrent fragments"):
+            self.assertIn(option, hint)
+
+    def test_a_typed_clip_range_is_cleared_rather_than_silently_ignored(self):
+        # Accepting the input and not delivering it is the failure mode this
+        # exists to prevent.
+        window = self._window()
+        window.quick_download_start.setText("0:10")
+        window.quick_download_end.setText("0:20")
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_sabr_limits(True)
+        self.assertEqual(window.quick_download_start.text(), "")
+        self.assertEqual(window.quick_download_end.text(), "")
+
+    def test_an_ordinary_link_leaves_the_clip_range_alone(self):
+        window = self._window()
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": self._summary("https"),
+                "error": "",
+            })
+        self.assertTrue(window.quick_download_start.enabled)
+        self.assertIn("single link", window.quick_download_clip_hint.text())
+
+    def test_editing_past_a_sabr_link_restores_the_clip_range(self):
+        window = self._window()
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": self._summary("sabr"),
+                "error": "",
+            })
+            self.assertFalse(window.quick_download_start.enabled)
+            window.quick_download_url.setText("https://vimeo.com/2")
+            window._format_probe_timer = types.SimpleNamespace(start=lambda: None)
+            window._schedule_format_probe()
+        self.assertTrue(window.quick_download_start.enabled)
+
+    def test_the_failure_advice_names_what_was_dropped(self):
+        payload = ad.download_error_payload("sabr-limited")
+        advice = payload["advice"]
+        for option in ("Clip ranges", "bandwidth cap", "concurrent fragments"):
+            self.assertIn(option, advice)
+
 class QuarantinedBinaryTests(unittest.TestCase):
     """A quarantine stub is present, unusable, and must not read as installed."""
 
@@ -10199,25 +10308,63 @@ class FormatSortTests(unittest.TestCase):
                       args[1])
         self.assertEqual(args[2:], ["--merge-output-format", "mp4"])
 
-    def test_the_real_binary_accepts_the_compiled_sort(self):
-        # A flag yt-dlp rejects would break every download rather than
-        # degrade, so the spelling is checked against the installed binary.
+    # A synthetic format table with H.264 only at 720p and AV1 at 1080p. It
+    # is the smallest shape that distinguishes "prefer H.264" from "prefer
+    # H.264 without losing resolution", and `--load-info-json` means the real
+    # binary decides, offline and deterministically.
+    _SORT_FIXTURE = {
+        "id": "t", "title": "t", "_type": "video",
+        "extractor": "generic", "extractor_key": "Generic",
+        "webpage_url": "https://example.test/t",
+        "formats": [
+            {"format_id": "h264-720", "url": "https://example.test/a",
+             "ext": "mp4", "height": 720, "width": 1280, "fps": 30,
+             "vcodec": "avc1.640028", "acodec": "none", "protocol": "https"},
+            {"format_id": "av1-1080", "url": "https://example.test/b",
+             "ext": "mp4", "height": 1080, "width": 1920, "fps": 60,
+             "vcodec": "av01.0.09M.08", "acodec": "none", "protocol": "https"},
+            {"format_id": "audio", "url": "https://example.test/d",
+             "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2",
+             "protocol": "https"},
+        ],
+    }
+
+    def _selected_format(self, sort_args):
         ytdlp = ad.YTDLP_PATH
         if not Path(ytdlp).exists():
             self.skipTest("yt-dlp is not installed in this environment")
-        args = ad.build_format_sort_args({
-            "VideoCodecPreference": "h264",
-            "AudioCodecPreference": "aac",
-            "PreferredFrameRate": 30,
-        })
-        proc = subprocess.run(
-            [str(ytdlp), "--ignore-config", "--no-plugin-dirs"] + args
-            + ["--simulate", "--no-warnings", "https://example.invalid/none"],
-            capture_output=True, text=True, timeout=120,
+        with tempfile.TemporaryDirectory() as tmpdir:
+            info = Path(tmpdir) / "info.json"
+            info.write_text(json.dumps(self._SORT_FIXTURE), encoding="utf-8")
+            proc = subprocess.run(
+                [str(ytdlp), "--ignore-config", "--no-plugin-dirs",
+                 "--no-warnings", "-f", "bestvideo"] + list(sort_args)
+                + ["--simulate", "--print", "%(format_id)s",
+                   "--load-info-json", str(info)],
+                capture_output=True, text=True, timeout=120,
+            )
+        lines = [line.strip() for line in (proc.stdout or "").splitlines()
+                 if line.strip()]
+        self.assertTrue(lines, (proc.stdout, proc.stderr))
+        return lines[-1]
+
+    def test_the_real_binary_honours_the_codec_preference(self):
+        # Not just "the flag parses": the preference has to change the choice.
+        self.assertEqual(self._selected_format([]), "av1-1080")
+        self.assertEqual(
+            self._selected_format(
+                ad.build_format_sort_args({"VideoCodecPreference": "h264"})
+            ),
+            "av1-1080",
         )
-        combined = (proc.stdout or "") + (proc.stderr or "")
-        self.assertNotIn("Invalid format sort", combined)
-        self.assertNotIn("no such option", combined.lower())
+
+    def test_the_real_binary_shows_why_res_has_to_lead(self):
+        # The trap this compiler exists to avoid, demonstrated rather than
+        # asserted: a bare vcodec preference drops 1080p to 720p because that
+        # is as high as H.264 goes here.
+        self.assertEqual(
+            self._selected_format(["--format-sort", "vcodec:h264"]), "h264-720"
+        )
 
 class FormatProbeTests(unittest.TestCase):
     """A pasted link is probed so the picker stops offering what it lacks."""
@@ -10254,11 +10401,27 @@ class FormatProbeTests(unittest.TestCase):
         def values(self):
             return [value for _label, value in self.items]
 
+    class _Field(QuickDownloadBatchTests._TextWidget):
+        def __init__(self, value=""):
+            super().__init__(value)
+            self.enabled = True
+
+        def setEnabled(self, value):
+            self.enabled = bool(value)
+
     def _window(self, url_text="https://vimeo.com/1", probed=""):
         window = types.SimpleNamespace(
             quick_download_url=QuickDownloadBatchTests._TextWidget(url_text),
             quick_download_quality=self._Combo(),
             quick_download_status=QuickDownloadBatchTests._TextWidget(),
+            quick_download_start=self._Field(),
+            quick_download_end=self._Field(),
+            # The real label is built carrying this text, so the harness
+            # starts where the window does.
+            quick_download_clip_hint=QuickDownloadBatchTests._TextWidget(
+                "Clip ranges apply to a single link."
+            ),
+            _sabr_limited=False,
             _probed_format_url=probed,
             _format_probe_generation=0,
             _dependencies={
@@ -10267,6 +10430,9 @@ class FormatProbeTests(unittest.TestCase):
                 "is_playlist_url": ad.is_playlist_url,
                 "probed_video_heights": ad.probed_video_heights,
                 "quality_choices_for_heights": ad.quality_choices_for_heights,
+                "sabr_only_formats": ad.sabr_only_formats,
+                "describe_sabr_voided_options": ad.describe_sabr_voided_options,
+                "SABR_LIMITED_NOTICE": lambda: ad.SABR_LIMITED_NOTICE,
             },
         )
         core = gui_module_for_tests().MainWindowCore
@@ -10274,6 +10440,7 @@ class FormatProbeTests(unittest.TestCase):
             "_value", "_set_quality_choices", "_reset_quality_choices",
             "_schedule_format_probe", "_apply_format_probe",
             "_probe_quick_download_formats", "_set_quick_download_status",
+            "_apply_sabr_limits",
         ):
             setattr(window, name, types.MethodType(getattr(core, name), window))
         window._set_quality_choices(ad.QUALITY_LADDER)
