@@ -852,6 +852,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_thumbnail = CheckField()
         window.cfg_chapters = CheckField()
         window.cfg_subs = CheckField()
+        window.cfg_keep_intermediates = CheckField()
         window.cfg_sponsorblock = CheckField()
         window.cfg_sb_action = ComboField()
         window.cfg_js_runtime = ComboField("auto")
@@ -1523,6 +1524,110 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                     self.assertIn(f"clip{index}.mp4", name)
             finally:
                 _retire_test_window(window)
+
+
+class IntermediateFileSweepTests(unittest.TestCase):
+    """"3/4 files and a folder when downloading, I want just 1 file." """
+
+    def setUp(self):
+        # A run here replaces subprocess.Popen wholesale, which the JS runtime
+        # and ffmpeg probes also go through. Their results are cached module
+        # wide, so without this a failed fake process teaches every later test
+        # that the runtime is broken.
+        self.addCleanup(ad.reset_deno_runtime_cache)
+        self.addCleanup(ad.reset_ffmpeg_capabilities_cache)
+        self.addCleanup(ad.reset_po_token_provider_cache)
+
+    def _finished(self, tmpdir, config=None):
+        manager = ad.DownloadManager(
+            config or FakeConfig({"DownloadPath": tmpdir}), FakeHistory())
+        download = ad.Download("dl_sweep", "https://example.com/video")
+        download.status = "complete"
+        download.filename = str(Path(tmpdir) / "Holiday Clip.mp4")
+        return manager, download
+
+    def _litter(self, tmpdir):
+        folder = Path(tmpdir)
+        (folder / "Holiday Clip.mp4").write_text("final", encoding="utf-8")
+        leftovers = [
+            folder / "Holiday Clip.mp4.part",
+            folder / "Holiday Clip.mp4.ytdl",
+            folder / "Holiday Clip.f137.mp4",
+            folder / "Holiday Clip.f140.m4a",
+        ]
+        for path in leftovers:
+            path.write_text("junk", encoding="utf-8")
+        bystander = folder / "Someone Else's Video.mp4"
+        bystander.write_text("keep", encoding="utf-8")
+        return leftovers, bystander
+
+    def test_a_successful_download_leaves_one_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            leftovers, bystander = self._litter(tmpdir)
+            manager, download = self._finished(tmpdir)
+
+            with mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._sweep_download_intermediates(download)
+
+            for path in leftovers:
+                self.assertFalse(path.exists(), f"{path.name} should have been swept")
+            self.assertTrue(Path(download.filename).exists())
+            self.assertTrue(bystander.exists(),
+                            "only this download's own intermediates may be removed")
+
+    def test_keeping_intermediates_is_a_setting(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            leftovers, _bystander = self._litter(tmpdir)
+            manager, download = self._finished(tmpdir, FakeConfig({
+                "DownloadPath": tmpdir, "KeepIntermediateFiles": True,
+            }))
+
+            manager._sweep_download_intermediates(download)
+
+            for path in leftovers:
+                self.assertTrue(path.exists(), f"{path.name} must be kept")
+
+    def test_a_failed_download_keeps_its_partial_file(self):
+        # The .part file is what a resume continues from, so a run that did
+        # not succeed must never be swept.
+        class FailingProc:
+            returncode = 1
+
+            def __init__(self, *_args, **_kwargs):
+                self.stdout = iter(["ERROR: unable to download video data\n"])
+
+            def wait(self):
+                return 1
+
+            def poll(self):
+                return 1
+
+            def terminate(self):
+                # reason: the cancel path may call this; satisfy the API
+                pass
+
+            def kill(self):
+                # reason: same as terminate
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            leftovers, _bystander = self._litter(tmpdir)
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                FakeHistory(),
+            )
+            download = ad.Download(
+                "dl_failed_sweep", "https://example.com/video", output_dir=tmpdir)
+            download.status = "queued"
+
+            with mock.patch.object(ad.subprocess, "Popen", FailingProc), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+
+            self.assertNotEqual(download.status, "complete")
+            for path in leftovers:
+                self.assertTrue(path.exists(), f"{path.name} must survive a failure")
 
 
 class UiRefreshCoalescingTests(unittest.TestCase):

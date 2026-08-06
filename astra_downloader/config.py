@@ -112,6 +112,9 @@ DEFAULT_CONFIG = {
     "EmbedThumbnail": True,
     "EmbedChapters": True,
     "EmbedSubs": False,
+    # Leftover .part / .f### / .ytdl files are swept after a download
+    # succeeds. Turn this on to keep them when diagnosing a merge problem.
+    "KeepIntermediateFiles": False,
     "SubLangs": "en",
     "SponsorBlock": False,
     "SponsorBlockAction": "remove",
@@ -659,6 +662,7 @@ def sanitize_config(raw):
     data["ServerToken"] = token if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", token) else uuid.uuid4().hex
     for key in (
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
+        "KeepIntermediateFiles",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "NotifyOnComplete", "ClipboardLinkGrabber", "LegacyHealthTokenEcho",
     ):
