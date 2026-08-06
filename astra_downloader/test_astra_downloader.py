@@ -1096,9 +1096,10 @@ class InstanceCommandTests(unittest.TestCase):
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
         self.assertTrue(ready.wait(2))
-        self.assertTrue(ad.send_instance_command("start", port=port_holder[0], attempts=1))
+        self.assertTrue(ad.send_instance_command(
+            "start", port=port_holder[0], attempts=1, token="t" * 32))
         thread.join(2)
-        self.assertEqual(received, ["start"])
+        self.assertEqual(received, ["t" * 32 + " start"])
 
     def test_send_instance_command_posts_show_to_listener(self):
         ready = threading.Event()
@@ -1118,9 +1119,52 @@ class InstanceCommandTests(unittest.TestCase):
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
         self.assertTrue(ready.wait(2))
-        self.assertTrue(ad.send_instance_command("show", port=port_holder[0], attempts=1))
+        self.assertTrue(ad.send_instance_command(
+            "show", port=port_holder[0], attempts=1, token="s" * 32))
         thread.join(2)
-        self.assertEqual(received, ["show"])
+        self.assertEqual(received, ["s" * 32 + " show"])
+
+    def test_instance_control_listener_rejects_an_untokened_command(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        token = "c" * 32
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+
+        with mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+
+        try:
+            window._dependencies['INSTANCE_CONTROL_PORT'] = lambda: port
+            commands = []
+            window.instance_command.connect(commands.append)
+            window._start_instance_command_listener()
+
+            self.assertTrue(ad.send_instance_command(
+                "shutdown", port=port, attempts=10, token="wrong-token"))
+            self.assertTrue(ad.send_instance_command(
+                "show", port=port, attempts=10, token=token))
+
+            deadline = time.monotonic() + 3
+            while not commands and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.02)
+
+            self.assertEqual(
+                commands, ["show"],
+                "an unauthenticated shutdown must never reach the window",
+            )
+        finally:
+            window._stop_instance_command_listener()
+            window.close()
+            window.deleteLater()
+            QApplication.processEvents()
 
     def test_occupied_source_lock_delegates_without_killing_existing_instance(self):
         class OccupiedSocket:

@@ -2,6 +2,7 @@
 
 import os
 import csv
+import hmac
 import json
 import queue
 import socket
@@ -3900,7 +3901,13 @@ class MainWindowCore(QMainWindow):
         def run():
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-                    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    # SO_REUSEADDR on Windows lets a later binder take the
+                    # listening port from underneath this one. The control
+                    # port is single-instance arbitration, so a second binder
+                    # must fail rather than win.
+                    exclusive = getattr(socket, 'SO_EXCLUSIVEADDRUSE', None)
+                    if exclusive is not None:
+                        server.setsockopt(socket.SOL_SOCKET, exclusive, 1)
                     server.bind((self._value('INSTANCE_CONTROL_HOST'), self._value('INSTANCE_CONTROL_PORT')))
                     server.listen(4)
                     server.settimeout(0.5)
@@ -3919,10 +3926,22 @@ class MainWindowCore(QMainWindow):
                         with conn:
                             try:
                                 conn.settimeout(0.5)
-                                raw = conn.recv(128)
+                                raw = conn.recv(256)
                             except OSError:
                                 continue
-                        command = raw.decode('ascii', errors='ignore').strip().lower()
+                        # `<token> <command>`. Without the token any local
+                        # process could stop a download mid-flight or bring the
+                        # local API up behind the user's back.
+                        presented, _, command = (
+                            raw.decode('ascii', errors='ignore').strip().rpartition(' ')
+                        )
+                        expected = str(self.config.get('ServerToken', '') or '')
+                        if not expected or not hmac.compare_digest(presented, expected):
+                            self.log_message.emit(
+                                "Rejected an instance command without a valid token."
+                            )
+                            continue
+                        command = command.strip().lower()
                         if command in {'show', 'start', 'shutdown'}:
                             self.instance_command.emit(command)
             except OSError as e:
