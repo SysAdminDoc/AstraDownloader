@@ -106,6 +106,17 @@ def tr(text):
     return QCoreApplication.translate("AstraDownloader", str(text))
 
 
+# The languages worth a checkbox. The free-text field beside them still takes
+# any code yt-dlp accepts — these exist so picking Simplified Chinese does not
+# require knowing it is spelled zh-Hans.
+SUBTITLE_LANGUAGE_CHOICES = (
+    ("English", "en"), ("Spanish", "es"), ("Portuguese", "pt"),
+    ("French", "fr"), ("German", "de"), ("Italian", "it"),
+    ("Russian", "ru"), ("Japanese", "ja"), ("Korean", "ko"),
+    ("Chinese", "zh-Hans"), ("Hindi", "hi"), ("Arabic", "ar"),
+)
+
+
 def make_label(text, class_name=None, word_wrap=False):
     label = QLabel(tr(text))
     # Plain text, always. Most strings reaching a label are not ours — video
@@ -903,6 +914,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_rate_limit',
     'normalize_sponsorblock_categories',
     'normalize_sublangs',
+    'normalize_subtitle_mode',
+    'normalize_subtitle_format',
     'normalize_url',
     'SPONSORBLOCK_CATEGORIES',
     'quarantined_state_files',
@@ -1522,8 +1535,9 @@ class MainWindowCore(QMainWindow):
         options_row.setSpacing(8)
         self.quick_download_type = QComboBox()
         self.quick_download_type.setAccessibleName("Download type")
-        self.quick_download_type.addItem(tr("Video"), False)
-        self.quick_download_type.addItem(tr("Audio"), True)
+        self.quick_download_type.addItem(tr("Video"), "video")
+        self.quick_download_type.addItem(tr("Audio"), "audio")
+        self.quick_download_type.addItem(tr("Subtitles"), "subtitles")
         self.quick_download_type.currentIndexChanged.connect(
             self._sync_quick_download_options
         )
@@ -1570,6 +1584,10 @@ class MainWindowCore(QMainWindow):
             word_wrap=True,
         )
         quick_layout.addWidget(self.quick_download_clip_hint)
+        self.quick_download_subs_hint = make_label("", "fieldHint", word_wrap=True)
+        self.quick_download_subs_hint.setAccessibleName("Subtitle request summary")
+        self.quick_download_subs_hint.hide()
+        quick_layout.addWidget(self.quick_download_subs_hint)
         # Whether the link in the box serves nothing but SABR streams.
         self._sabr_limited = False
         self.quick_download_status = make_label("", "fieldHint")
@@ -1694,10 +1712,76 @@ class MainWindowCore(QMainWindow):
         layout.addWidget(scroll, 1)
         self.tabs.addTab(page, "Download")
 
+    @staticmethod
+    def _split_sublangs(text):
+        """The language codes in a `--sub-langs` string, order preserved."""
+        seen = []
+        for part in str(text or "").split(","):
+            code = part.strip()
+            if code and code not in seen:
+                seen.append(code)
+        return seen
+
+    def _sync_sublang_checkboxes(self, text):
+        """Tick the boxes that match what the field says.
+
+        The field stays the source of truth — it is the only one of the two
+        that can express a code with no checkbox, and clearing a box must not
+        silently drop such a code.
+        """
+        codes = {code.lower() for code in self._split_sublangs(text)}
+        for box in getattr(self, "_sublang_boxes", ()):
+            box.blockSignals(True)
+            box.setChecked(box._sublang_code.lower() in codes)
+            box.blockSignals(False)
+
+    def _sublang_box_toggled(self, checked):
+        """Add or remove one language, leaving every other code untouched."""
+        box = self.sender()
+        code = getattr(box, "_sublang_code", "")
+        if not code:
+            return
+        codes = self._split_sublangs(self.cfg_sublangs.text())
+        present = [item for item in codes if item.lower() == code.lower()]
+        if checked and not present:
+            codes.append(code)
+        elif not checked and present:
+            codes = [item for item in codes if item.lower() != code.lower()]
+        else:
+            return
+        # yt-dlp needs at least one language, and the normaliser would put
+        # "en" back on save anyway — say so now rather than at save time.
+        self.cfg_sublangs.setText(",".join(codes) or "en")
+        if not codes:
+            self._sync_sublang_checkboxes(self.cfg_sublangs.text())
+
+    def _describe_subtitle_request(self):
+        """Say what a subtitles-only job will fetch, in the user's terms."""
+        mode = self._dependencies['normalize_subtitle_mode'](
+            self.config.get("SubtitleMode")
+        )
+        langs = self._dependencies['normalize_sublangs'](
+            self.config.get("SubLangs", "en")
+        )
+        kind = {
+            "manual": "creator subtitles only",
+            "auto": "auto-generated subtitles only",
+        }.get(mode, "creator subtitles, falling back to auto-generated")
+        fmt = self._dependencies['normalize_subtitle_format'](
+            self.config.get("SubtitleFormat")
+        )
+        as_format = f" as {fmt.upper()}" if fmt else ""
+        return (
+            f"Downloads {kind} in {langs}{as_format}, without the video. "
+            "Change this under Settings, Post-processing."
+        )
+
     def _sync_quick_download_options(self, *_args):
         if not hasattr(self, "quick_download_format"):
             return
-        audio_only = bool(self.quick_download_type.currentData())
+        kind = self.quick_download_type.currentData()
+        audio_only = kind == "audio"
+        subtitles_only = kind == "subtitles"
         current = self.quick_download_format.currentData()
         values = (
             (("MP3", "mp3"), ("M4A", "m4a"), ("Opus", "opus"),
@@ -1713,7 +1797,15 @@ class MainWindowCore(QMainWindow):
         if restored >= 0:
             self.quick_download_format.setCurrentIndex(restored)
         self.quick_download_format.blockSignals(False)
-        self.quick_download_quality.setEnabled(not audio_only)
+        # Neither picker describes a subtitle: the track kind, languages and
+        # output format come from Settings, which the hint below names.
+        self.quick_download_format.setEnabled(not subtitles_only)
+        self.quick_download_quality.setEnabled(not (audio_only or subtitles_only))
+        if hasattr(self, "quick_download_subs_hint"):
+            self.quick_download_subs_hint.setText(
+                self._describe_subtitle_request() if subtitles_only else ""
+            )
+            self.quick_download_subs_hint.setVisible(subtitles_only)
 
     def _start_quick_download(self):
         # A URL can never contain whitespace (normalize_url rejects it), so
@@ -1749,7 +1841,10 @@ class MainWindowCore(QMainWindow):
         for url in urls:
             dl_id, error = self.dl_manager.start_download(
                 url=url,
-                audio_only=bool(self.quick_download_type.currentData()),
+                audio_only=self.quick_download_type.currentData() == "audio",
+                subtitles_only=(
+                    self.quick_download_type.currentData() == "subtitles"
+                ),
                 fmt=self.quick_download_format.currentData(),
                 quality=self.quick_download_quality.currentData() or "best",
                 section=section,
@@ -1858,7 +1953,8 @@ class MainWindowCore(QMainWindow):
             self._set_quick_download_dir("")
             return
         current = self._quick_download_dir or self.config.get(
-            "AudioDownloadPath" if self.quick_download_type.currentData()
+            "AudioDownloadPath"
+            if self.quick_download_type.currentData() == "audio"
             else "DownloadPath",
             str(Path.home()),
         )
@@ -2574,7 +2670,11 @@ class MainWindowCore(QMainWindow):
         self.cfg_thumbnail.setChecked(self.config.get("EmbedThumbnail", True))
         self.cfg_chapters = QCheckBox(tr("Embed chapters"))
         self.cfg_chapters.setChecked(self.config.get("EmbedChapters", True))
-        self.cfg_subs = QCheckBox(tr("Embed subtitles"))
+        self.cfg_subs = QCheckBox(tr("Download subtitles"))
+        self.cfg_subs.setToolTip(
+            "Fetch subtitle tracks and embed them in the file. The Subtitles "
+            "download type fetches them without the video."
+        )
         self.cfg_subs.setChecked(self.config.get("EmbedSubs", False))
         self.cfg_keep_intermediates = QCheckBox(tr("Keep intermediate files"))
         self.cfg_keep_intermediates.setToolTip(
@@ -2583,9 +2683,52 @@ class MainWindowCore(QMainWindow):
         )
         self.cfg_keep_intermediates.setChecked(
             self.config.get("KeepIntermediateFiles", False))
+        # cfg_keep_intermediates is added after the subtitle rows below: the
+        # track, format and language controls belong directly under the
+        # checkbox that turns them on, not separated from it.
         for w in [self.cfg_metadata, self.cfg_thumbnail, self.cfg_chapters,
-                  self.cfg_subs, self.cfg_keep_intermediates]:
+                  self.cfg_subs]:
             pp_l.addWidget(w)
+        # Which of the two catalogues to ask for. Measured against the
+        # installed yt-dlp: sending both flags never yields two files for one
+        # language — the creator's track wins — so "both" is a preference,
+        # not a duplicate, and the new capability is asking for one kind only.
+        track_row = QHBoxLayout()
+        track_row.setSpacing(8)
+        track_row.addSpacing(28)
+        track_row.addWidget(make_label("Tracks", "fieldHint"))
+        self.cfg_subtitle_mode = QComboBox()
+        self.cfg_subtitle_mode.setAccessibleName("Subtitle tracks")
+        for label, value in (
+            ("Creator, else auto-generated", "prefer-manual"),
+            ("Creator only", "manual"),
+            ("Auto-generated only", "auto"),
+        ):
+            self.cfg_subtitle_mode.addItem(tr(label), value)
+        self.cfg_subtitle_mode.setCurrentIndex(max(0, self.cfg_subtitle_mode.findData(
+            self._dependencies['normalize_subtitle_mode'](
+                self.config.get("SubtitleMode")
+            )
+        )))
+        track_row.addWidget(self.cfg_subtitle_mode)
+        track_row.addSpacing(12)
+        track_row.addWidget(make_label("Save as", "fieldHint"))
+        self.cfg_subtitle_format = QComboBox()
+        self.cfg_subtitle_format.setAccessibleName("Subtitle format")
+        for label, value in (
+            ("Same as source", ""), ("SRT", "srt"), ("WebVTT", "vtt"),
+            ("ASS", "ass"), ("LRC", "lrc"),
+        ):
+            self.cfg_subtitle_format.addItem(tr(label), value)
+        self.cfg_subtitle_format.setCurrentIndex(max(0, self.cfg_subtitle_format.findData(
+            self._dependencies['normalize_subtitle_format'](
+                self.config.get("SubtitleFormat")
+            )
+        )))
+        track_row.addWidget(self.cfg_subtitle_format)
+        track_row.addStretch()
+        pp_l.addLayout(track_row)
+
         sub_row = QHBoxLayout()
         sub_row.setSpacing(8)
         sub_row.addSpacing(28)
@@ -2594,9 +2737,33 @@ class MainWindowCore(QMainWindow):
         self.cfg_sublangs.setAccessibleName("Subtitle languages")
         self.cfg_sublangs.setPlaceholderText("en,es")
         self.cfg_sublangs.setFixedWidth(140)
+        self.cfg_sublangs.textEdited.connect(self._sync_sublang_checkboxes)
         sub_row.addWidget(self.cfg_sublangs)
         sub_row.addStretch()
         pp_l.addLayout(sub_row)
+        # The field above still accepts any code yt-dlp knows; these are the
+        # common ones, so picking two languages does not mean knowing that
+        # Simplified Chinese is spelled zh-Hans. Three per row, because a
+        # single long row of labels overflows at 900x620 with a large font.
+        self._sublang_boxes = []
+        lang_row = None
+        for index, (label, code) in enumerate(SUBTITLE_LANGUAGE_CHOICES):
+            if index % 3 == 0:
+                lang_row = QHBoxLayout()
+                lang_row.setSpacing(8)
+                lang_row.addSpacing(28)
+                pp_l.addLayout(lang_row)
+            box = QCheckBox(tr(label))
+            box.setAccessibleName(f"Subtitle language {label}")
+            box.toggled.connect(self._sublang_box_toggled)
+            box._sublang_code = code
+            self._sublang_boxes.append(box)
+            lang_row.addWidget(box, 1)
+        if lang_row is not None:
+            for _ in range(-len(SUBTITLE_LANGUAGE_CHOICES) % 3):
+                lang_row.addStretch(1)
+        self._sync_sublang_checkboxes(self.cfg_sublangs.text())
+        pp_l.addWidget(self.cfg_keep_intermediates)
         pp_l.addWidget(make_divider())
         self.cfg_sponsorblock = QCheckBox(tr("Use SponsorBlock segments"))
         self.cfg_sponsorblock.setChecked(self.config.get("SponsorBlock", False))
@@ -3137,6 +3304,8 @@ class MainWindowCore(QMainWindow):
             self.cfg_chapters.toggled,
             self.cfg_subs.toggled,
             self.cfg_sublangs.textChanged,
+            self.cfg_subtitle_mode.currentIndexChanged,
+            self.cfg_subtitle_format.currentIndexChanged,
             self.cfg_sponsorblock.toggled,
             self.cfg_sb_action.currentIndexChanged,
             self.cfg_fragments.valueChanged,
@@ -4376,6 +4545,7 @@ class MainWindowCore(QMainWindow):
         self.cfg_dl_path.setText(dl_path)
         self.cfg_audio_path.setText(audio_path)
         self.cfg_sublangs.setText(sublangs)
+        self._sync_sublang_checkboxes(sublangs)
         self.cfg_ratelimit.setText(rate)
         self.cfg_proxy.setText(proxy)
         self.cfg_outtmpl.setText(outtmpl)
@@ -4407,6 +4577,12 @@ class MainWindowCore(QMainWindow):
             "MaxSleepIntervalSeconds": self.cfg_sleep_max.value(),
             "SleepRequestsSeconds": self.cfg_sleep_requests.value(),
             "SubLangs": sublangs,
+            "SubtitleMode": self._dependencies['normalize_subtitle_mode'](
+                self.cfg_subtitle_mode.currentData()
+            ),
+            "SubtitleFormat": self._dependencies['normalize_subtitle_format'](
+                self.cfg_subtitle_format.currentData()
+            ),
             "SponsorBlock": self.cfg_sponsorblock.isChecked(),
             "SponsorBlockAction": self.cfg_sb_action.currentData(),
             "SponsorBlockCategories": ",".join(

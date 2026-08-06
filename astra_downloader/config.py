@@ -42,6 +42,8 @@ __all__ = (
     "allowed_output_roots", "clean_text", "clean_path_text", "coerce_bool",
     "clamp_int", "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
+    "normalize_subtitle_mode", "normalize_subtitle_format",
+    "SUBTITLE_MODES", "SUBTITLE_FORMATS",
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
@@ -57,6 +59,8 @@ _OWNED_EXPORTS = {
     "clean_text", "clean_path_text", "coerce_bool", "clamp_int",
     "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
+    "normalize_subtitle_mode", "normalize_subtitle_format",
+    "SUBTITLE_MODES", "SUBTITLE_FORMATS",
     "bound_output_template_fields",
     "normalize_output_template",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
@@ -168,6 +172,11 @@ DEFAULT_CONFIG = {
     "MaxSleepIntervalSeconds": 0,
     "SleepRequestsSeconds": 0,
     "SubLangs": "en",
+    # Creator-written captions, the machine transcript, or the former with the
+    # latter as fallback (which is what this app has always done).
+    "SubtitleMode": "prefer-manual",
+    # Normalise every fetched track to one format. Empty keeps the site's.
+    "SubtitleFormat": "",
     "SponsorBlock": False,
     "SponsorBlockAction": "remove",
     # Which SponsorBlock categories to act on. Empty means every category,
@@ -299,6 +308,31 @@ def normalize_sublangs(value):
     cleaned = clean_text(value, "en", 80)
     cleaned = re.sub(r"[^a-zA-Z0-9,\-]", "", cleaned)
     return cleaned or "en"
+
+
+# Which subtitle tracks to ask for.
+#
+# Measured against the installed yt-dlp on 2026-08-06 with a fixture carrying
+# a manual EN track, an auto EN track and an auto ES track: passing
+# --write-subs and --write-auto-subs together does NOT fetch both English
+# tracks. yt-dlp merges them per language and the manual one wins, so "both"
+# already means prefer-manual-else-auto. What was missing is the ability to
+# ask for one kind only — a viewer who wants nothing but human-written
+# captions, or one who specifically wants the machine transcript.
+SUBTITLE_MODES = ("prefer-manual", "manual", "auto")
+
+# --convert-subs targets. Empty leaves the site's own format alone.
+SUBTITLE_FORMATS = ("", "srt", "vtt", "ass", "lrc")
+
+
+def normalize_subtitle_mode(value):
+    cleaned = clean_text(value, "", 20).lower()
+    return cleaned if cleaned in SUBTITLE_MODES else "prefer-manual"
+
+
+def normalize_subtitle_format(value):
+    cleaned = clean_text(value, "", 8).lower()
+    return cleaned if cleaned in SUBTITLE_FORMATS else ""
 
 
 # yt-dlp's SponsorBlock category names. An unknown name is dropped rather than
@@ -783,6 +817,8 @@ def sanitize_config(raw):
     ):
         data[key] = coerce_bool(data.get(key), DEFAULT_CONFIG[key])
     data["SubLangs"] = normalize_sublangs(data.get("SubLangs"))
+    data["SubtitleMode"] = normalize_subtitle_mode(data.get("SubtitleMode"))
+    data["SubtitleFormat"] = normalize_subtitle_format(data.get("SubtitleFormat"))
     data["SponsorBlockAction"] = "mark" if data.get("SponsorBlockAction") == "mark" else "remove"
     data["SponsorBlockCategories"] = normalize_sponsorblock_categories(
         data.get("SponsorBlockCategories")

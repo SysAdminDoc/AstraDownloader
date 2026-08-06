@@ -33,6 +33,7 @@ __all__ = (
     "DOWNLOAD_TERMINAL_STATES", "DOWNLOAD_RETRYABLE_ERROR_CODES",
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "build_impersonate_args",
+    "build_subtitle_args",
     "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
     "snapshot_download_fields", "restore_download_fields",
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
@@ -993,6 +994,68 @@ def build_impersonate_args(config, available_targets):
     return ['--impersonate', target]
 
 
+# The argv half of the subtitle vocabulary declared in config.py. A user
+# token maps to the yt-dlp flags that fetch that kind of track; a test pins
+# the two vocabularies together so neither can gain a value the other does
+# not know.
+SUBTITLE_WRITE_FLAGS = {
+    'prefer-manual': ('--write-subs', '--write-auto-subs'),
+    'manual': ('--write-subs',),
+    'auto': ('--write-auto-subs',),
+}
+SUBTITLE_CONVERT_FORMATS = frozenset({'srt', 'vtt', 'ass', 'lrc'})
+
+# yt-dlp names each subtitle it writes on stdout. A subtitles-only run passes
+# `--skip-download`, and the `after_move:` print hook the app normally learns
+# the output path from does not fire without a media file — measured against
+# the installed binary — so this line is the only report of what landed.
+SUBTITLE_WRITTEN_RE = re.compile(
+    r'^\[info\]\s+Writing video subtitles to:\s*(.+?)\s*$'
+)
+
+
+def build_subtitle_args(config, subtitles_only=False):
+    """Compile the subtitle request: which tracks, which languages, what format.
+
+    Measured against the installed yt-dlp on 2026-08-06 with a fixture holding
+    a manual EN track, an auto EN track and an auto ES track:
+
+        --write-subs --write-auto-subs  ->  en = MANUAL, es = auto
+        --write-subs                    ->  en = MANUAL  (es absent)
+        --write-auto-subs               ->  en = auto,   es = auto
+
+    So yt-dlp merges the two catalogues per language with the creator's track
+    winning; sending both never yielded two English files. `prefer-manual` is
+    therefore the long-standing behaviour under a name, and the new capability
+    is asking for exactly one kind — a viewer who wants only human-written
+    captions, or only the machine transcript.
+
+    A subtitles-only job fetches subtitles whether or not the embed switch is
+    on, since embedding is the one thing it cannot do.
+    """
+    read = getattr(config, 'get', None)
+    if not callable(read):
+        return []
+    embed = bool(read('EmbedSubs'))
+    if not (embed or subtitles_only):
+        return []
+    mode = str(read('SubtitleMode') or '').strip().lower()
+    if mode not in SUBTITLE_WRITE_FLAGS:
+        mode = 'prefer-manual'
+    args = []
+    # Embedding needs a container to embed into, so it is meaningless for a
+    # subtitles-only run and yt-dlp would warn about it on every job.
+    if embed and not subtitles_only:
+        args.append('--embed-subs')
+    args += list(SUBTITLE_WRITE_FLAGS[mode])
+    langs = re.sub(r'[^a-zA-Z0-9,\-]', '', str(read('SubLangs') or 'en')) or 'en'
+    args += ['--sub-langs', langs]
+    fmt = str(read('SubtitleFormat') or '').strip().lower()
+    if fmt and fmt in SUBTITLE_CONVERT_FORMATS:
+        args += ['--convert-subs', fmt]
+    return args
+
+
 def build_playlist_bound_args(config):
     """Compile the bounds that keep a pasted playlist from queueing all of it.
 
@@ -1383,7 +1446,7 @@ class Download:
                  output_dir=None, title=None, referer=None, cookies_file=None,
                  requires_auth=False, created_at=None, queue_order=0, section=None,
                  playlist_items=None, subscription_id=None, archive_key=None,
-                 clock=None):
+                 subtitles_only=False, clock=None):
         self._clock = clock or time.time
         self.id = dl_id
         self.url = url
@@ -1395,6 +1458,9 @@ class Download:
         self.referer = referer
         self.section = dict(section) if isinstance(section, dict) else None
         self.playlist_items = list(playlist_items) if playlist_items else None
+        # A subtitles-only job skips the media entirely. It is a property of
+        # the request, not of the settings, so two queued items can differ.
+        self.subtitles_only = bool(subtitles_only)
         # Subscription linkage is metadata only.  Normal downloads leave both
         # fields empty, so the regular re-download behavior is unchanged.
         self.subscription_id = subscription_id
@@ -1454,6 +1520,8 @@ class Download:
             payload["playlistItems"] = list(self.playlist_items)
         if self.subscription_id:
             payload["subscriptionId"] = self.subscription_id
+        if self.subtitles_only:
+            payload["subtitlesOnly"] = True
         return payload
 
 
@@ -1474,6 +1542,15 @@ RETRY_ROLLBACK_FIELDS = (
     'error', 'error_code', 'error_advice', 'error_action',
     'finished_time', 'start_time', 'queue_order',
     'requires_auth', '_cookies', 'resume_partial',
+)
+# start_download() reuses an existing needs-auth record rather than queueing a
+# duplicate, so it overwrites the whole request and must be able to put the
+# previous one back. This was the last positional tuple of the three.
+AUTH_RECOVERY_ROLLBACK_FIELDS = (
+    'audio_only', 'format', 'quality', 'output_dir',
+    'title', 'referer', 'section', 'playlist_items', 'subtitles_only',
+    'subscription_id', 'archive_key', 'requires_auth', 'status',
+    'error', 'error_code', 'error_advice', 'error_action',
 )
 
 
@@ -1531,6 +1608,7 @@ class DownloadQueueStore:
                if download.subscription_id else {}),
             **({'archiveKey': download.archive_key}
                if download.archive_key else {}),
+            **({'subtitlesOnly': True} if download.subtitles_only else {}),
             'createdAt': float(download.start_time),
             'order': int(download.queue_order),
         } for download in unfinished]
@@ -1776,6 +1854,9 @@ class DownloadManagerCore:
                 playlist_items=playlist_items,
                 subscription_id=subscription_id,
                 archive_key=archive_key,
+                subtitles_only=self._dependencies['coerce_bool'](
+                    item.get('subtitlesOnly'), False
+                ),
             )
             dl.status = 'needs-auth' if requires_auth else 'paused'
             dl.error = (
@@ -2032,7 +2113,7 @@ class DownloadManagerCore:
     def start_download(self, url, audio_only=False, fmt=None, quality=None,
                        output_dir=None, title=None, referer=None, cookies=None,
                        section=None, playlist_items=None, subscription_id=None,
-                       archive_key=None):
+                       archive_key=None, subtitles_only=False):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
@@ -2110,6 +2191,7 @@ class DownloadManagerCore:
         referer, _ = self._dependencies['normalize_url'](referer) if referer else (None, None)
         subscription_id = self._dependencies['clean_text'](subscription_id, '', 120) or None
         archive_key = self._dependencies['clean_text'](archive_key, '', 430) or None
+        subtitles_only = self._dependencies['coerce_bool'](subtitles_only, False)
 
         with self._lock:
             # Re-check capacity under the lock. The first check released the
@@ -2126,11 +2208,8 @@ class DownloadManagerCore:
             if auth_recovery:
                 dl = auth_recovery
                 dl_id = dl.id
-                recovery_previous = (
-                    dl.audio_only, dl.format, dl.quality, dl.output_dir,
-                    dl.title, dl.referer, dl.section, dl.playlist_items,
-                    dl.subscription_id, dl.archive_key, dl.requires_auth, dl.status,
-                    dl.error, dl.error_code, dl.error_advice, dl.error_action,
+                recovery_previous = snapshot_download_fields(
+                    dl, AUTH_RECOVERY_ROLLBACK_FIELDS
                 )
                 dl.audio_only = audio_only
                 dl.format = fmt
@@ -2140,6 +2219,7 @@ class DownloadManagerCore:
                 dl.referer = referer
                 dl.section = dict(section) if section else None
                 dl.playlist_items = list(playlist_items) if playlist_items else None
+                dl.subtitles_only = subtitles_only
                 dl.subscription_id = subscription_id
                 dl.archive_key = archive_key
                 dl.requires_auth = True
@@ -2168,6 +2248,7 @@ class DownloadManagerCore:
                     playlist_items=playlist_items,
                     subscription_id=subscription_id,
                     archive_key=archive_key,
+                    subtitles_only=subtitles_only,
                 )
                 dl._cookies = list(cookies) if cookies else None
                 self.downloads[dl_id] = dl
@@ -2175,12 +2256,7 @@ class DownloadManagerCore:
                 if not auth_recovery:
                     del self.downloads[dl_id]
                 else:
-                    (
-                        dl.audio_only, dl.format, dl.quality, dl.output_dir,
-                        dl.title, dl.referer, dl.section, dl.playlist_items,
-                        dl.subscription_id, dl.archive_key, dl.requires_auth, dl.status,
-                        dl.error, dl.error_code, dl.error_advice, dl.error_action,
-                    ) = recovery_previous
+                    restore_download_fields(dl, recovery_previous)
                 dl._cookies = None
                 if not self._persistence_compatible:
                     # Disk/permission advice is wrong for a schema mismatch;
@@ -2301,6 +2377,24 @@ class DownloadManagerCore:
                         f"WARNING: section ffmpeg termination failed: {error}"
                     )
 
+    def _converted_subtitle_path(self, written_path):
+        """Map a written subtitle to what `--convert-subs` renamed it to.
+
+        yt-dlp announces the track it downloaded and only then converts it,
+        and the `[SubtitlesConvertor]` line does not name a destination —
+        measured against the installed binary. The conversion is a pure
+        extension swap on the same stem, so derive it; if the derived file is
+        not there, the announced one is still the honest answer.
+        """
+        fmt = str(self.config.get('SubtitleFormat') or '').strip().lower()
+        if not fmt or fmt not in SUBTITLE_CONVERT_FORMATS:
+            return written_path
+        try:
+            converted = Path(written_path).with_suffix(f'.{fmt}')
+        except (TypeError, ValueError, OSError):
+            return written_path
+        return str(converted) if converted.exists() else written_path
+
     def _consume_ytdlp_output(self, dl, proc, activity):
         """Parse one yt-dlp process's stdout into `dl`'s live progress state.
 
@@ -2355,6 +2449,15 @@ class DownloadManagerCore:
                 except Exception:
                     # reason: malformed path payload; keep parsing the stream
                     pass
+
+            # A subtitles-only run passes --skip-download, and the after_move
+            # print hook above never fires without a media file, so the card
+            # would finish with nothing to reveal. This line is the report.
+            if getattr(dl, 'subtitles_only', False):
+                written = SUBTITLE_WRITTEN_RE.match(line)
+                if written:
+                    dl.filename = self._converted_subtitle_path(written.group(1))
+                    continue
 
             # Structured progress (MDLP prefix, legacy fallback)
             m = re.match(r'^MDLP\s+(\d+\.?\d*)%?\s+(\S+)\s+(\S+)', line)
@@ -2507,15 +2610,20 @@ class DownloadManagerCore:
         args += ['--concurrent-fragments', str(frags)]
         retries = self._dependencies['clamp_int'](self.config.get("DownloadRetries", 10), 10, 0, 50)
         args += ['--retries', str(retries), '--fragment-retries', str(retries)]
-        if self.config.get("EmbedMetadata"):
-            args.append('--embed-metadata')
-        if self.config.get("EmbedThumbnail"):
-            args.append('--embed-thumbnail')
-        if self.config.get("EmbedChapters"):
-            args.append('--embed-chapters')
-        if self.config.get("EmbedSubs"):
-            langs = re.sub(r'[^a-zA-Z0-9,\-]', '', self.config.get("SubLangs", "en"))
-            args += ['--embed-subs', '--write-subs', '--write-auto-subs', '--sub-langs', langs]
+        subtitles_only = bool(getattr(dl, 'subtitles_only', False))
+        # Every embed writes into the media container, and a subtitles-only
+        # run never produces one. Passing them would ask ffmpeg to postprocess
+        # a file that was deliberately not downloaded.
+        if not subtitles_only:
+            if self.config.get("EmbedMetadata"):
+                args.append('--embed-metadata')
+            if self.config.get("EmbedThumbnail"):
+                args.append('--embed-thumbnail')
+            if self.config.get("EmbedChapters"):
+                args.append('--embed-chapters')
+        args += build_subtitle_args(self.config, subtitles_only=subtitles_only)
+        if subtitles_only:
+            args.append('--skip-download')
         # SponsorBlock has YouTube-only segment data; passing it for any other
         # site only produces a warning line that later competes with the real
         # failure reason in the output tail.

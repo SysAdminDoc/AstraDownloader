@@ -20,6 +20,7 @@ CAPTURE_NAMES = (
     "downloads-arabic-rtl",
     "downloads-active-pending",
     "downloads-clipboard-staged",
+    "downloads-subtitles-only",
     "downloads-recovery-terminal",
     "history-populated",
     "history-cleared-undo",
@@ -27,6 +28,7 @@ CAPTURE_NAMES = (
     "subscriptions-empty",
     "site-logins-stored",
     "settings-dirty",
+    "settings-subtitles",
     "settings-fallback-port",
     "settings-invalid",
     "settings-save-failed",
@@ -486,6 +488,36 @@ def main():
             elif scenario == "downloads-active-pending":
                 scroll_current_page_to_top(window)
                 assert_visible_text(window, {"Downloading documentary", "Queued lecture"})
+            elif scenario == "downloads-subtitles-only":
+                # Subtitles is a third download type, not a settings toggle.
+                # Neither picker beside it describes a subtitle, so both are
+                # disabled and the page says what will actually be fetched.
+                window.config.update({
+                    "SubtitleMode": "manual",
+                    "SubLangs": "en,es",
+                    "SubtitleFormat": "srt",
+                })
+                combo = window.quick_download_type
+                index = combo.findData("subtitles")
+                if index < 0:
+                    raise RuntimeError("The Subtitles download type is missing")
+                combo.setCurrentIndex(index)
+                window._sync_quick_download_options()
+                app.processEvents()
+                scroll_current_page_to_top(window)
+                if window.quick_download_format.isEnabled():
+                    raise RuntimeError(
+                        "A container format is meaningless for a subtitle"
+                    )
+                if window.quick_download_quality.isEnabled():
+                    raise RuntimeError(
+                        "A video quality is meaningless for a subtitle"
+                    )
+                assert_visible_text(window, {
+                    "Downloads creator subtitles only in en,es as SRT, "
+                    "without the video. Change this under Settings, "
+                    "Post-processing."
+                })
             else:
                 if scenario == "downloads-arabic-rtl":
                     if app.layoutDirection() != Qt.LayoutDirection.RightToLeft:
@@ -577,6 +609,38 @@ def main():
             if scenario == "settings-dirty":
                 window.cfg_dl_path.setText(str(Path(temp_dir) / "Videos" / "Edited"))
                 expected = "Unsaved changes"
+            elif scenario == "settings-subtitles":
+                # The subtitle controls sit mid-page, so every other settings
+                # capture scrolls straight past them. Turn them on and bring
+                # them into view: this is the only shot that proves the track
+                # picker, the format picker and the language checkboxes
+                # actually lay out at the shipped width.
+                window.cfg_subs.setChecked(True)
+                mode = window.cfg_subtitle_mode
+                mode.setCurrentIndex(max(0, mode.findData("manual")))
+                fmt = window.cfg_subtitle_format
+                fmt.setCurrentIndex(max(0, fmt.findData("srt")))
+                window.cfg_sublangs.setText("en,es,zh-Hans")
+                window._sync_sublang_checkboxes(window.cfg_sublangs.text())
+                app.processEvents()
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(window.cfg_sublangs, 0, 220)
+                    app.processEvents()
+                    QTest.qWait(40)
+                ticked = [
+                    box._sublang_code for box in window._sublang_boxes
+                    if box.isChecked()
+                ]
+                if ticked != ["en", "es", "zh-Hans"]:
+                    raise RuntimeError(
+                        f"Language checkboxes do not match the field: {ticked}"
+                    )
+                if not window.cfg_subtitle_mode.isVisible():
+                    raise RuntimeError("The subtitle track picker is not visible")
+                expected = "Subtitle languages"
             elif scenario == "settings-fallback-port":
                 # A bind conflict binds a fallback port for the session only.
                 # The dashboard shows it; the spinbox keeps the configured
@@ -613,7 +677,9 @@ def main():
             if scenario == "settings-fallback-port":
                 # The Connection card is the top of the page.
                 scroll_current_page_to_top(window)
-            else:
+            elif scenario != "settings-subtitles":
+                # That scenario already scrolled to the controls it exists to
+                # show; scrolling to the bottom here would hide them again.
                 scroll_current_page_to_bottom(window)
             assert_visible_text(window, {expected})
             capture_window(window, scenario)
