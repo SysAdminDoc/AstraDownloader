@@ -69,13 +69,6 @@ Notes on the items above, from the same pass:
   Acceptance: Control commands carry the session token and are rejected without it; `SO_REUSEADDR` is removed or replaced with `SO_EXCLUSIVEADDRUSE` so a second binder fails rather than hijacking; the uninstall handshake still works.
   Complexity: M
 
-- [ ] P1 — Raise the source-run Python floor to 3.11
-  Why: `requirements.txt` pins `yt-dlp==2026.7.4`, whose release raised the minimum Python to 3.11, but the module-load guard still admits 3.10 — so a 3.10 checkout fails at dependency resolution instead of at the guard that exists to explain it.
-  Evidence: `astra_downloader.py:16-17` (`_MIN_PYTHON = (3, 10)`, with a comment citing the older 3.9 drop); yt-dlp 2026.07.04 release notes. `build.py:43` already restricts release builds to 3.11 and 3.12.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/requirements.txt`, `README.md`
-  Acceptance: `_MIN_PYTHON` is `(3, 11)`, its comment cites the current reason, and the README's source-run instructions agree.
-  Complexity: S
-
 - [ ] P1 — Make fatal startup and slot exceptions visible
   Why: For a windowed exe, a fatal startup error means double-clicking the icon does nothing at all, forever; and with no `sys.excepthook` or Qt hook, an exception inside a slot aborts the process without even a crash-log line.
   Evidence: `astra_downloader.py:3620-3626` logs and swallows; no `excepthook` exists anywhere in `astra_downloader/`.
