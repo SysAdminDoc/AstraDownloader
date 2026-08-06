@@ -73,6 +73,7 @@ try:
         normalize_output_template, normalize_proxy,
         normalize_rate_limit, normalize_sponsorblock_categories,
         normalize_playlist_date,
+        normalize_impersonate_target,
         normalize_sublangs, normalize_url, sanitize_config,
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
@@ -102,6 +103,7 @@ try:
         RESUME_ROLLBACK_FIELDS, RETRY_ROLLBACK_FIELDS,
         snapshot_download_fields, restore_download_fields,
         build_playlist_bound_args,
+        build_impersonate_args,
         FORMAT_SORT_VIDEO_FIELDS, FORMAT_SORT_AUDIO_FIELDS,
         build_subprocess_env as _owned_build_subprocess_env,
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
@@ -115,6 +117,7 @@ try:
     from .health import (
         BGUTIL_POT_MIN_VERSION, DENO_MIN_VERSION, NODE_MIN_VERSION,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe, PoTokenProviderProbe,
+        ImpersonateTargetsProbe, parse_impersonate_targets,
         PO_TOKEN_PROVIDER_PORT, YTDLP_EXTERNAL_RUNTIME_CUTOFF,
         _compare_semver, _parse_ytdlp_release_date, evaluate_sabr_support,
         _run_captured as _owned_run_captured,
@@ -170,6 +173,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         normalize_output_template, normalize_proxy,
         normalize_rate_limit, normalize_sponsorblock_categories,
         normalize_playlist_date,
+        normalize_impersonate_target,
         normalize_sublangs, normalize_url, sanitize_config,
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
@@ -199,6 +203,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         RESUME_ROLLBACK_FIELDS, RETRY_ROLLBACK_FIELDS,
         snapshot_download_fields, restore_download_fields,
         build_playlist_bound_args,
+        build_impersonate_args,
         FORMAT_SORT_VIDEO_FIELDS, FORMAT_SORT_AUDIO_FIELDS,
         build_subprocess_env as _owned_build_subprocess_env,
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
@@ -212,6 +217,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
     from health import (
         BGUTIL_POT_MIN_VERSION, DENO_MIN_VERSION, NODE_MIN_VERSION,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe, PoTokenProviderProbe,
+        ImpersonateTargetsProbe, parse_impersonate_targets,
         PO_TOKEN_PROVIDER_PORT, YTDLP_EXTERNAL_RUNTIME_CUTOFF,
         _compare_semver, _parse_ytdlp_release_date, evaluate_sabr_support,
         _run_captured as _owned_run_captured,
@@ -1034,6 +1040,22 @@ _ffmpeg_version_probe = ExecutableVersionProbe(
 
 def get_ytdlp_version(force=False):
     return _ytdlp_version_probe.get(force=force)
+
+
+_impersonate_targets_probe = ImpersonateTargetsProbe(
+    path=lambda: YTDLP_PATH,
+    runner=lambda args: _run_captured(args, timeout=20),
+    clock=lambda: time.time(),
+)
+
+
+def probe_impersonate_targets(force=False):
+    """Browser fingerprints the installed yt-dlp can actually imitate."""
+    return _impersonate_targets_probe.get(force=force)
+
+
+def reset_impersonate_targets_cache():
+    _impersonate_targets_probe.reset()
 
 
 _po_token_provider_probe = PoTokenProviderProbe(
@@ -3177,6 +3199,8 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
+                'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
                 'spawn_ytdlp': lambda *args, **kwargs: spawn_ytdlp(*args, **kwargs),
                 'spawn_media_process': lambda *args, **kwargs: spawn_media_process(*args, **kwargs),
@@ -3524,6 +3548,8 @@ class MainWindow(MainWindowCore):
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),
+                'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
+                'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
                 'normalize_proxy': lambda *args, **kwargs: normalize_proxy(*args, **kwargs),
                 'normalize_rate_limit': lambda *args, **kwargs: normalize_rate_limit(*args, **kwargs),
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),

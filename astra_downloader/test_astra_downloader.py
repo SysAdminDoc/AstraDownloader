@@ -872,6 +872,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_playlist_dateafter = TextField("")
         window.cfg_playlist_min_duration = NumberField(0)
         window.cfg_playlist_max_duration = NumberField(0)
+        window.cfg_impersonate = ComboField("")
         window.cfg_fragments = NumberField(4)
         window.cfg_maxconcurrent = NumberField(3)
         window.cfg_retries = NumberField(10)
@@ -901,6 +902,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "normalize_proxy": ad.normalize_proxy,
             "normalize_rate_limit": ad.normalize_rate_limit,
             "normalize_playlist_date": ad.normalize_playlist_date,
+            "normalize_impersonate_target": ad.normalize_impersonate_target,
             "normalize_sublangs": ad.normalize_sublangs,
         }
         values = {"DEFAULT_CONFIG": ad.DEFAULT_CONFIG, "SERVER_PORT": ad.SERVER_PORT}
@@ -960,6 +962,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "normalize_proxy": ad.normalize_proxy,
             "normalize_rate_limit": ad.normalize_rate_limit,
             "normalize_playlist_date": ad.normalize_playlist_date,
+            "normalize_impersonate_target": ad.normalize_impersonate_target,
             "normalize_sublangs": ad.normalize_sublangs,
         }
         window._value = {"DEFAULT_CONFIG": ad.DEFAULT_CONFIG, "SERVER_PORT": ad.SERVER_PORT}.__getitem__
@@ -11762,6 +11765,150 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
                 "every text-carrying QLabel must pin PlainText near construction",
             )
 
+
+class ImpersonateTests(unittest.TestCase):
+    """Imitating a browser is the standard 403 remedy, gated on what exists."""
+
+    # Trimmed from the installed binary's real output, including the repeated
+    # client rows that make the raw table longer than the target list.
+    SAMPLE = """[info] Available impersonate targets
+Client          OS           Source
+--------------------------------------
+Chrome-133      Macos-15     curl_cffi
+Chrome-136      Macos-15     curl_cffi
+Safari-17.2     Ios-17.2     curl_cffi
+Chrome-99       Android-12   curl_cffi
+Chrome-99       Windows-10   curl_cffi
+Edge-101        Windows-10   curl_cffi
+"""
+
+    def test_the_table_parses_to_client_names_only(self):
+        targets = ad.parse_impersonate_targets(self.SAMPLE)
+        self.assertEqual(
+            targets,
+            ["Chrome-133", "Chrome-136", "Safari-17.2", "Chrome-99", "Edge-101"],
+        )
+
+    def test_the_header_rule_and_info_line_are_not_targets(self):
+        targets = ad.parse_impersonate_targets(self.SAMPLE)
+        for noise in ("Client", "[info]", "--------------------------------------"):
+            self.assertNotIn(noise, targets)
+
+    def test_a_client_listed_for_several_systems_appears_once(self):
+        # The OS column is provenance; --impersonate takes the client.
+        self.assertEqual(
+            ad.parse_impersonate_targets(self.SAMPLE).count("Chrome-99"), 1
+        )
+
+    def test_junk_output_yields_no_targets(self):
+        for value in ("", None, "yt-dlp: error: no such option", "   "):
+            self.assertEqual(ad.parse_impersonate_targets(value), [])
+
+    # ── The argv gate ────────────────────────────────────────────────────
+
+    def test_nothing_configured_sends_no_flag(self):
+        self.assertEqual(
+            ad.build_impersonate_args(ad.sanitize_config({}), ["Chrome-136"]), []
+        )
+
+    def test_a_target_the_binary_has_is_sent(self):
+        self.assertEqual(
+            ad.build_impersonate_args(
+                {"ImpersonateTarget": "Chrome-136"}, ["Chrome-133", "Chrome-136"]
+            ),
+            ["--impersonate", "Chrome-136"],
+        )
+
+    def test_a_target_the_binary_lacks_is_dropped(self):
+        # Verified against the installed yt-dlp: an unknown target does not
+        # warn, it raises YoutubeDLError and the download dies. A setting that
+        # went stale across an update must not break every download.
+        self.assertEqual(
+            ad.build_impersonate_args(
+                {"ImpersonateTarget": "Chrome-999"}, ["Chrome-136"]
+            ),
+            [],
+        )
+
+    def test_no_probe_means_no_flag(self):
+        self.assertEqual(
+            ad.build_impersonate_args({"ImpersonateTarget": "Chrome-136"}, []), []
+        )
+
+    def test_the_stored_value_is_shape_checked(self):
+        for value in ("; rm -rf /", "--exec=calc", "Chrome", "notareal", "  "):
+            with self.subTest(value=value):
+                self.assertEqual(ad.normalize_impersonate_target(value), "")
+        self.assertEqual(ad.normalize_impersonate_target("Safari-17.2"), "Safari-17.2")
+
+    # ── The failure it answers ───────────────────────────────────────────
+
+    def test_a_403_is_classified_as_a_refusal_not_a_dead_network(self):
+        for text in (
+            "ERROR: unable to download webpage: HTTP Error 403: Forbidden",
+            "ERROR: Cloudflare challenge detected",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(ad.classify_download_failure(text), "blocked-by-site")
+
+    def test_the_403_advice_names_the_remedy(self):
+        advice = ad.download_error_payload("blocked-by-site")["advice"]
+        self.assertIn("imitate", advice.lower())
+
+    def test_a_403_becomes_retryable_once_a_browser_is_chosen(self):
+        # Not transient, so not in DOWNLOAD_RETRYABLE_ERROR_CODES — it is
+        # retryable once the user has done the thing that fixes it, which is
+        # what the precondition gate expresses.
+        self.assertNotIn("blocked-by-site", ad.DOWNLOAD_RETRYABLE_ERROR_CODES)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            targets = ["Chrome-136"]
+            settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            manager._dependencies["probe_impersonate_targets"] = lambda: targets
+            dl = ad.Download("dl_403", "https://example.com/v")
+            dl.status = "failed"
+            dl.error_code = "blocked-by-site"
+
+            satisfied, missing = manager.recovery_precondition(dl)
+            self.assertFalse(satisfied)
+            self.assertIn("Settings", missing)
+
+            manager.config = FakeConfig({**settings, "ImpersonateTarget": "Chrome-136"})
+            manager._precondition_cache.clear()
+            satisfied, _missing = manager.recovery_precondition(dl)
+            self.assertTrue(satisfied)
+
+    def test_a_target_the_binary_lost_is_named_in_the_refusal(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir,
+                        "ImpersonateTarget": "Chrome-999"}
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            manager._dependencies["probe_impersonate_targets"] = lambda: ["Chrome-136"]
+            dl = ad.Download("dl_403", "https://example.com/v")
+            dl.status = "failed"
+            dl.error_code = "blocked-by-site"
+            satisfied, missing = manager.recovery_precondition(dl)
+        self.assertFalse(satisfied)
+        self.assertIn("Chrome-999", missing)
+
+    # ── Against the real binary ──────────────────────────────────────────
+
+    def test_the_installed_binary_reports_targets_this_parser_understands(self):
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest("yt-dlp is not installed in this environment")
+        proc = subprocess.run(
+            [str(ytdlp), "--list-impersonate-targets"],
+            capture_output=True, text=True, timeout=120,
+        )
+        targets = ad.parse_impersonate_targets(proc.stdout)
+        self.assertTrue(targets, f"no targets parsed from: {proc.stdout[:300]}")
+        for target in targets:
+            with self.subTest(target=target):
+                # Every parsed target must survive the stored-value shape
+                # check, or the picker would offer something that cannot
+                # round-trip through the config.
+                self.assertEqual(ad.normalize_impersonate_target(target), target)
 
 class StylesheetContrastTests(unittest.TestCase):
     """Control boundaries meet the WCAG non-text contrast floor."""
