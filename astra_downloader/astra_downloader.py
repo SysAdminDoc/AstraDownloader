@@ -73,6 +73,7 @@ try:
         normalize_output_template, normalize_proxy,
         normalize_rate_limit, normalize_sublangs, normalize_url, sanitize_config,
         query_history_entries, sanitize_history_entries,
+        quarantined_state_files, restore_quarantined_file,
         validate_download_request_body,
     )
     from .download import (
@@ -154,6 +155,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         normalize_output_template, normalize_proxy,
         normalize_rate_limit, normalize_sublangs, normalize_url, sanitize_config,
         query_history_entries, sanitize_history_entries,
+        quarantined_state_files, restore_quarantined_file,
         validate_download_request_body,
     )
     from download import (
@@ -3078,6 +3080,7 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
+                'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
                 'spawn_ytdlp': lambda *args, **kwargs: spawn_ytdlp(*args, **kwargs),
                 'spawn_media_process': lambda *args, **kwargs: spawn_media_process(*args, **kwargs),
                 'terminate_process_tree': lambda *args, **kwargs: terminate_process_tree(*args, **kwargs),
@@ -3413,8 +3416,10 @@ class MainWindow(MainWindowCore):
                 'normalize_rate_limit': lambda *args, **kwargs: normalize_rate_limit(*args, **kwargs),
                 'normalize_sublangs': lambda *args, **kwargs: normalize_sublangs(*args, **kwargs),
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
+                'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
                 'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
                 'reset_deno_runtime_cache': lambda *args, **kwargs: reset_deno_runtime_cache(*args, **kwargs),
+                'restore_quarantined_file': lambda *args, **kwargs: restore_quarantined_file(*args, **kwargs),
                 'reset_ffmpeg_capabilities_cache': lambda *args, **kwargs: reset_ffmpeg_capabilities_cache(*args, **kwargs),
                 'subscription_manager': subscriptions,
                 'write_persistent_log': lambda *args, **kwargs: write_persistent_log(*args, **kwargs),

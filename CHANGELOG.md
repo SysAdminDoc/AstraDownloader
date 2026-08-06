@@ -40,6 +40,13 @@ repository's git log.
 
 ### Fixed
 
+- **A quarantined state file is announced, and can be put back.** A corrupt
+  `config.json` was renamed aside in silence, taking every setting with it and
+  regenerating the server token — which breaks extension pairing with no
+  explanation. A corrupt `download-queue.json` was indistinguishable from an
+  empty one, so pending downloads vanished. The Download page now names the
+  file and its backup, says what the consequence was, and offers one-click
+  restore; dismissing leaves the backup alone.
 - **A startup failure says something instead of nothing.** In a windowed
   build a fatal error meant double-clicking the icon did nothing, forever,
   with the only evidence in a file nobody knew about. It now shows a message

@@ -55,13 +55,6 @@ Notes on the items above, from the same pass:
 
 ### P1
 
-- [ ] P1 — Tell the user when a state file was quarantined, and offer restore
-  Why: A corrupt `config.json` silently regenerates the server token — breaking extension pairing — and reverts every setting; a corrupt `download-queue.json` is indistinguishable from an empty one and discards all pending work, while a mere schema mismatch is properly surfaced.
-  Evidence: `config.py:734-748` renames to `<name>.corrupt-<timestamp>` with no notification; `download.py:1226-1230` and `1384-1400` treat an empty dict as a valid empty queue; `config.py:654-655` regenerates the token.
-  Touches: `astra_downloader/config.py`, `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: Quarantining a file raises a persistent, dismissible in-app notice naming the file and its backup path, with a one-click restore that swaps the backup back and reloads; corrupt and empty queue files are distinguished.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 — Finish the localisation
