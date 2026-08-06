@@ -5603,6 +5603,67 @@ class EndToEndDownloadTests(unittest.TestCase):
         self.assertNotIn("--playlist-start", args)
         self.assertNotIn("--playlist-end", args)
 
+    def _capture_download_argv(self, download):
+        captured_args = []
+        base_factory = self._make_fake_popen(
+            ['[download] Destination: clip.mp4'], returncode=0
+        )
+
+        def capture(args, **kwargs):
+            captured_args.append(list(args))
+            return base_factory(args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                FakeHistory(),
+            )
+            download.output_dir = tmpdir
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", capture), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+        # Version and capability probes share this Popen and are cached
+        # module-wide, so how many of them run depends on test order. The
+        # download itself is the only invocation carrying the URL.
+        runs = [args for args in captured_args if download.url in args]
+        self.assertEqual(len(runs), 1)
+        return runs[0]
+
+    def test_fresh_download_still_overwrites_an_existing_output_file(self):
+        # The v1.3.0 behaviour: re-downloading the same URL must not stop at
+        # "has already been downloaded".
+        download = ad.Download("dl_fresh", "https://example.com/video")
+        self.assertIn("--force-overwrites", self._capture_download_argv(download))
+
+    def test_resumed_download_keeps_its_partial_file(self):
+        # --force-overwrites includes --no-continue, so sending it on a resume
+        # throws away the `.part` file and re-fetches from byte zero.
+        download = ad.Download("dl_resume", "https://example.com/video")
+        download.resume_partial = True
+        self.assertNotIn("--force-overwrites", self._capture_download_argv(download))
+
+    def test_retry_and_resume_mark_the_download_as_continuing(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+
+        retried = ad.Download("dl_retry", "https://example.com/video")
+        retried.status = 'failed'
+        retried.error_code = sorted(ad.DOWNLOAD_RETRYABLE_ERROR_CODES)[0]
+        manager.downloads[retried.id] = retried
+        self.assertFalse(retried.resume_partial)
+        ok, err = manager.retry(retried.id)
+        self.assertTrue(ok, err)
+        self.assertTrue(retried.resume_partial)
+
+        paused = ad.Download("dl_paused", "https://example.com/video")
+        paused.status = 'paused'
+        manager.downloads[paused.id] = paused
+        self.assertFalse(paused.resume_partial)
+        ok, err = manager.resume_download(paused.id)
+        self.assertTrue(ok, err)
+        self.assertTrue(paused.resume_partial)
+
     def test_playlist_subset_rejects_video_urls_and_clip_combinations(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
         download_id, err = manager.start_download(
