@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.1.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.2.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.12-3776ab)](astra_downloader/requirements.txt)
@@ -46,7 +46,15 @@ and run it. It installs to `%LOCALAPPDATA%\AstraDownloader`, registers its
 Start Menu and desktop entries, and starts.
 
 The build is unsigned, so SmartScreen will warn on first run — choose **More
-info → Run anyway**.
+info → Run anyway**. That is permanent policy, not an oversight: verify the
+download against the SHA-256 published beside it instead of relying on a
+signature.
+
+```powershell
+Get-FileHash .\AstraDownloader.exe -Algorithm SHA256
+```
+
+Compare the result with `AstraDownloader.exe.sha256` from the same release.
 
 To remove it completely, including the shortcuts, the logon task, and the
 protocol handlers:
@@ -81,7 +89,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 481 tests
+py -3.12 -m pytest          # 493 tests
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```
@@ -108,8 +116,16 @@ readable through the API, the GUI, the log, or the diagnostics payload: only
 counts, sources, and expiry are exposed. See
 [`docs/yt-dlp-cookie-threat-model.md`](docs/yt-dlp-cookie-threat-model.md).
 
+**No external downloader is offered.** aria2c, curl and the rest are refused
+at the process boundary, along with `--exec` and the `--netrc` family: they
+hand the transfer, or a command line, to a process this program does not
+control, and 2026 brought code-execution advisories against two of the common
+choices. yt-dlp is also spawned with its plugin directories disabled, so a
+plugin you install for yt-dlp itself will not be loaded here.
+
 Report a vulnerability by opening a
 [security advisory](https://github.com/SysAdminDoc/AstraDownloader/security/advisories/new).
+Accepted properties and non-issues are listed in [`SECURITY.md`](SECURITY.md).
 
 ## License
 
