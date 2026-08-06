@@ -1525,6 +1525,77 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 _retire_test_window(window)
 
 
+class UiRefreshCoalescingTests(unittest.TestCase):
+    def _window(self, history=None):
+        history = history or FakeHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            return ad.MainWindow(FakeConfig(), manager, history), manager
+
+    def test_a_burst_of_progress_signals_causes_one_refresh(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window, manager = self._window()
+        try:
+            refreshes = []
+            real_update = window._update_ui
+            window._update_ui = lambda: (refreshes.append(1), real_update())[1]
+            window._ui_refresh_timer.timeout.disconnect()
+            window._ui_refresh_timer.timeout.connect(lambda: window._update_ui())
+
+            # yt-dlp emits a line per progress tick, per running download.
+            for _ in range(200):
+                window._request_ui_refresh()
+            QApplication.processEvents()
+            self.assertEqual(refreshes, [], "the burst must not refresh synchronously")
+
+            deadline = time.monotonic() + 2
+            while not refreshes and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.02)
+
+            self.assertEqual(
+                len(refreshes), 1,
+                f"200 progress signals collapsed to {len(refreshes)} refreshes",
+            )
+        finally:
+            _retire_test_window(window)
+
+    def test_typing_in_the_history_search_reloads_once(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+
+        class CountingHistory(FakeHistory):
+            def __init__(self):
+                super().__init__()
+                self.loads = 0
+
+            def load(self):
+                self.loads += 1
+                return list(self.entries)
+
+        history = CountingHistory()
+        window, _manager = self._window(history)
+        try:
+            history.loads = 0
+            for length in range(1, 9):
+                window.history_search.setText("holiday"[:length] or "h")
+                QApplication.processEvents()
+            self.assertEqual(history.loads, 0, "typing must not hit the store per key")
+
+            deadline = time.monotonic() + 2
+            while history.loads == 0 and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.02)
+            self.assertEqual(history.loads, 1)
+        finally:
+            _retire_test_window(window)
+
+
 class DownloadCardFocusTests(unittest.TestCase):
     def test_focus_survives_a_card_rebuild_on_status_change(self):
         from PyQt6.QtCore import Qt

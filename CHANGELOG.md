@@ -40,6 +40,11 @@ repository's git log.
 
 ### Fixed
 
+- **The queue list stops rebuilding on every yt-dlp progress line.** Each line
+  from each of up to three running downloads triggered a full refresh on the
+  GUI thread, on top of the 500 ms timer that would have done it anyway. Bursts
+  now collapse into one refresh, and typing in the History search waits for a
+  pause instead of re-reading and re-sanitising `history.json` per keystroke.
 - **Repeated row buttons are distinguishable to a screen reader.** Tabbing the
   History list announced "Show, Show, Show"; each control is now named for the
   file, site, subscription or download it acts on. The visible labels are

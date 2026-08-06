@@ -99,13 +99,6 @@ Notes on the items above, from the same pass:
   Acceptance: A bundled `qjs` binary is detected and used automatically when no Deno or Node is present, with a version floor enforced as for the others; the readiness row names the runtime in use; a fresh install downloads a YouTube video with no user-installed runtime.
   Complexity: M
 
-- [ ] P2 — Throttle `_update_ui` and debounce the history search
-  Why: `_update_ui` runs on the GUI thread for every yt-dlp progress line with no throttle on top of a 500 ms timer, and every keystroke in the history search re-reads and re-sanitises `history.json` and rebuilds up to 50 widgets.
-  Evidence: `gui.py:1066-1076` wires both the timer and `progress_updated`; `download.py:2036`, `2061`, `2072`, `2080` and `2083` emit per line; `gui.py:1680-1688` wires `textChanged` straight to `_refresh_history`, which loads from disk at `gui.py:3217`.
-  Touches: `astra_downloader/gui.py`
-  Acceptance: UI refreshes coalesce to at most one per timer tick regardless of progress-line volume; the history search debounces by 200 to 300 ms and reuses a cached load; a test asserts the refresh count under a burst of progress signals.
-  Complexity: S
-
 - [ ] P2 — Make the `ytdl://` and `mediadl://` handlers download the URL they were given
   Why: The handlers are registered but the payload is discarded — the URL maps to the literal command `start`, so clicking such a link launches the app and never queues the video.
   Evidence: `astra_downloader.py:2483-2496` registers the handler as `<exe> "%1"`; `astra_downloader.py:2372-2380` maps any such argument to `start`; nothing parses the payload.
