@@ -120,13 +120,6 @@ Notes on the items above, from the same pass:
   Acceptance: Configurable request and inter-download sleeps compile to the yt-dlp flags; a classified 429 offers to raise them; the queue row reads "waiting Ns" instead of appearing hung.
   Complexity: M
 
-- [ ] P2 — Guarantee one file per finished download
-  Why: A recurring complaint about tools in this class is that a download leaves three or four files plus a folder — `.part`, `.f###`, `.ytdl` and sidecars — with no cleanup.
-  Evidence: no `.part` or `.ytdl` sweep exists in `download.py`; VideoHelp thread 414206 ("there are 3/4 files and a folder when downloading, I want just 1 file"). Interacts with the `--force-overwrites` item above, which governs `.part` retention.
-  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`
-  Acceptance: Intermediates are removed on success and retained on failure for resume; a "keep intermediate files" setting exists for debugging; a test asserts the post-success directory contents for a merged download.
-  Complexity: S
-
 - [ ] P2 — Self-heal a quarantined or truncated yt-dlp or ffmpeg binary
   Why: Antivirus removing the bundled tools is the largest single support burden for OSS downloaders of this shape, and the app currently discovers it as an opaque failure rather than naming it.
   Evidence: seven Open Video Downloader issues reduce to "binaries missing or corrupted, disable your antivirus" (#390, #436, #354, #362, #534, #555, #506). `verify_file_sha256` (`astra_downloader.py:839`) already exists for the update path but is not applied as a launch-time integrity check.

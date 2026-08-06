@@ -32,6 +32,15 @@ repository's git log.
   handling. None of these are ever built into an argv — the guard exists to
   catch a future regression that does.
 
+### Added
+
+- **One finished download, one file.** A merged download leaves `.part`,
+  `.f###` and `.ytdl` files beside the result, and yt-dlp does not always
+  remove them. They are now swept once the download succeeds — never on
+  failure, where the `.part` file is what a resume continues from — and only
+  files belonging to that download's own destination are touched. Settings has
+  a "Keep intermediate files" switch for diagnosing a merge problem.
+
 ### Changed
 
 - **Running from source needs Python 3.11.** The pinned yt-dlp raised its

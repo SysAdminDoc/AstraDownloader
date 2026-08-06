@@ -2360,7 +2360,15 @@ class MainWindowCore(QMainWindow):
         self.cfg_chapters.setChecked(self.config.get("EmbedChapters", True))
         self.cfg_subs = QCheckBox(tr("Embed subtitles"))
         self.cfg_subs.setChecked(self.config.get("EmbedSubs", False))
-        for w in [self.cfg_metadata, self.cfg_thumbnail, self.cfg_chapters, self.cfg_subs]:
+        self.cfg_keep_intermediates = QCheckBox(tr("Keep intermediate files"))
+        self.cfg_keep_intermediates.setToolTip(
+            "Keep the .part, .f### and .ytdl files a finished download leaves "
+            "behind. Off by default: one download, one file."
+        )
+        self.cfg_keep_intermediates.setChecked(
+            self.config.get("KeepIntermediateFiles", False))
+        for w in [self.cfg_metadata, self.cfg_thumbnail, self.cfg_chapters,
+                  self.cfg_subs, self.cfg_keep_intermediates]:
             pp_l.addWidget(w)
         sub_row = QHBoxLayout()
         sub_row.setSpacing(8)
@@ -3834,6 +3842,7 @@ class MainWindowCore(QMainWindow):
             "EmbedThumbnail": self.cfg_thumbnail.isChecked(),
             "EmbedChapters": self.cfg_chapters.isChecked(),
             "EmbedSubs": self.cfg_subs.isChecked(),
+            "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
             "SubLangs": sublangs,
             "SponsorBlock": self.cfg_sponsorblock.isChecked(),
             "SponsorBlockAction": self.cfg_sb_action.currentData(),

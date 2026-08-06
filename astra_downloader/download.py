@@ -1,6 +1,7 @@
 """Import-safe download domain model and policy boundary."""
 
 import getpass
+import glob
 import json
 import logging
 import math
@@ -2645,6 +2646,7 @@ class DownloadManagerCore:
 
         dl.mark_terminal()
         if dl.status == "complete":
+            self._sweep_download_intermediates(dl)
             self.total_completed += 1
             duration = int(time.time() - dl.start_time)
             recorded = self.history.add({
@@ -3223,6 +3225,54 @@ class DownloadManagerCore:
                 'persistenceError': self._persistence_error or None,
                 'historyError': self._history_error or None,
             }
+
+    def _sweep_download_intermediates(self, dl):
+        """Leave one file behind for one finished download.
+
+        A merged download writes `Title.f137.mp4`, `Title.f140.m4a`,
+        `Title.mp4.part` and `Title.mp4.ytdl` alongside `Title.mp4`, and yt-dlp
+        does not always remove them — a partial run, a killed process or an
+        interrupted merge all leave them. Only files that belong to *this*
+        download's own destination are touched, and only after it succeeded:
+        on failure they are what a resume continues from.
+        """
+        if self.config.get("KeepIntermediateFiles", False):
+            return
+        final = str(dl.filename or '').strip()
+        if not final:
+            return
+        try:
+            final_path = Path(final)
+            folder = final_path.parent
+            if not folder.is_dir():
+                return
+            stem = final_path.stem
+            # `Title.mp4` -> `Title.mp4.part`, `Title.mp4.ytdl`, `Title.f137.mp4`
+            patterns = (
+                f"{glob.escape(final_path.name)}.part",
+                f"{glob.escape(final_path.name)}.part-Frag*",
+                f"{glob.escape(final_path.name)}.ytdl",
+                f"{glob.escape(stem)}.f[0-9]*.*",
+            )
+            removed = 0
+            for pattern in patterns:
+                for candidate in folder.glob(pattern):
+                    if candidate == final_path or not candidate.is_file():
+                        continue
+                    try:
+                        candidate.unlink()
+                        removed += 1
+                    except OSError:
+                        # reason: a leftover we cannot delete is not a download
+                        # failure; the file the user asked for is already there
+                        pass
+            if removed:
+                self._dependencies['write_persistent_log'](
+                    f"Download {dl.id}: removed {removed} intermediate file(s)."
+                )
+        except OSError:
+            # reason: sweeping is cleanup, never part of the download result
+            pass
 
     def persistence_notice(self):
         """The durability problem the user most needs to know about, if any.
