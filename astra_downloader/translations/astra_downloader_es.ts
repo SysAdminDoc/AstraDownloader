@@ -3,28 +3,28 @@
   <context>
     <name>AstraDownloader</name>
     <message>
-      <source>Dashboard</source>
-      <translation>Panel</translation>
-    </message>
-    <message>
-      <source>Downloads</source>
-      <translation>Descargas</translation>
+      <source>Download</source>
+      <translation>Descargar</translation>
     </message>
     <message>
       <source>History</source>
       <translation>Historial</translation>
     </message>
     <message>
+      <source>Sign-ins</source>
+      <translation>Inicios de sesión</translation>
+    </message>
+    <message>
+      <source>Browser extension</source>
+      <translation>Extensión del navegador</translation>
+    </message>
+    <message>
       <source>Settings</source>
       <translation>Configuración</translation>
     </message>
     <message>
-      <source>Quick download</source>
-      <translation>Quick download</translation>
-    </message>
-    <message>
-      <source>Add to queue</source>
-      <translation>Add to queue</translation>
+      <source>Download a video</source>
+      <translation>Download a video</translation>
     </message>
     <message>
       <source>Video</source>
@@ -51,16 +51,12 @@
       <translation>Pause intake</translation>
     </message>
     <message>
-      <source>Queue is clear</source>
-      <translation>Queue is clear</translation>
+      <source>Nothing downloading yet</source>
+      <translation>Nothing downloading yet</translation>
     </message>
     <message>
-      <source>Downloads sent from Astra Deck appear here.</source>
-      <translation>Downloads sent from Astra Deck appear here.</translation>
-    </message>
-    <message>
-      <source>Open dashboard</source>
-      <translation>Open dashboard</translation>
+      <source>Paste a link</source>
+      <translation>Paste a link</translation>
     </message>
     <message>
       <source>Server offline</source>
@@ -85,10 +81,6 @@
     <message>
       <source>Stage copied video links for review</source>
       <translation>Stage copied video links for review</translation>
-    </message>
-    <message>
-      <source>Sign-ins</source>
-      <translation>Inicios de sesión</translation>
     </message>
     <message>
       <source>Save changes</source>

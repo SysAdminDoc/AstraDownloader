@@ -3,28 +3,28 @@
   <context>
     <name>AstraDownloader</name>
     <message>
-      <source>Dashboard</source>
-      <translation>لوحة المعلومات</translation>
-    </message>
-    <message>
-      <source>Downloads</source>
-      <translation>التنزيلات</translation>
+      <source>Download</source>
+      <translation>تنزيل</translation>
     </message>
     <message>
       <source>History</source>
       <translation>السجل</translation>
     </message>
     <message>
+      <source>Sign-ins</source>
+      <translation>تسجيلات الدخول</translation>
+    </message>
+    <message>
+      <source>Browser extension</source>
+      <translation>امتداد المتصفح</translation>
+    </message>
+    <message>
       <source>Settings</source>
       <translation>الإعدادات</translation>
     </message>
     <message>
-      <source>Quick download</source>
-      <translation>Quick download</translation>
-    </message>
-    <message>
-      <source>Add to queue</source>
-      <translation>Add to queue</translation>
+      <source>Download a video</source>
+      <translation>Download a video</translation>
     </message>
     <message>
       <source>Video</source>
@@ -51,16 +51,12 @@
       <translation>Pause intake</translation>
     </message>
     <message>
-      <source>Queue is clear</source>
-      <translation>Queue is clear</translation>
+      <source>Nothing downloading yet</source>
+      <translation>Nothing downloading yet</translation>
     </message>
     <message>
-      <source>Downloads sent from Astra Deck appear here.</source>
-      <translation>Downloads sent from Astra Deck appear here.</translation>
-    </message>
-    <message>
-      <source>Open dashboard</source>
-      <translation>Open dashboard</translation>
+      <source>Paste a link</source>
+      <translation>Paste a link</translation>
     </message>
     <message>
       <source>Server offline</source>
@@ -85,10 +81,6 @@
     <message>
       <source>Stage copied video links for review</source>
       <translation>Stage copied video links for review</translation>
-    </message>
-    <message>
-      <source>Sign-ins</source>
-      <translation>تسجيلات الدخول</translation>
     </message>
     <message>
       <source>Save changes</source>

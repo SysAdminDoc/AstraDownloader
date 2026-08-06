@@ -186,6 +186,14 @@ def make_line_icon(name, size=18):
     if key == "dashboard":
         for x, y in ((2, 2), (10, 2), (2, 10), (10, 10)):
             painter.drawRoundedRect(x, y, 6, 6, 1, 1)
+    elif "extension" in key or "browser" in key:
+        # A puzzle-piece read badly at 18px, so this is a plug: the server
+        # is the socket the extension connects into. Ordered before the
+        # "browse"/folder branch, which "browser" would otherwise match.
+        painter.drawRoundedRect(5, 7, 8, 9, 1, 1)
+        painter.drawLine(7, 7, 7, 3)
+        painter.drawLine(11, 7, 11, 3)
+        painter.drawLine(9, 16, 9, 17)
     elif key == "downloads" or "download" in key:
         painter.drawLine(9, 2, 9, 12)
         painter.drawLine(5, 9, 9, 13)
@@ -346,7 +354,7 @@ def make_empty_state(title, body, action_text=None, action=None):
     layout.addStretch(2)
     glyph = QLabel()
     glyph.setProperty("class", "emptyGlyph")
-    glyph.setPixmap(make_line_icon("Downloads" if "Queue" in title else "History", size=36).pixmap(36, 36))
+    glyph.setPixmap(make_line_icon("Download" if "Queue" in title else "History", size=36).pixmap(36, 36))
     glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(glyph)
     empty_title = make_label(title, "emptyTitle")
@@ -964,9 +972,13 @@ class MainWindowCore(QMainWindow):
 
         # Nav buttons
         self.nav_buttons = []
+        # Download is index 0 and the landing page: this is a video
+        # downloader first, and the local API that serves the browser
+        # extension is one of the things it happens to run. Ordering the
+        # rail any other way makes the paste box something you navigate to.
         self._page_names = [
-            "Dashboard", "Downloads", "History", "Subscriptions",
-            "Sign-ins", "Settings",
+            "Download", "History", "Sign-ins", "Subscriptions",
+            "Browser extension", "Settings",
         ]
         for name in self._page_names:
             translated_name = tr(name)
@@ -985,7 +997,13 @@ class MainWindowCore(QMainWindow):
 
         sidebar_layout.addStretch()
 
-        # Status dot
+        # Status dot. It reports the extension server, which is now a
+        # secondary feature \u2014 an unlabelled "Stopped" in the rail of a
+        # downloader reads as "the app is broken", so the caption names
+        # what is actually stopped.
+        status_caption = make_label("Extension server", "fieldHint")
+        status_caption.setContentsMargins(22, 0, 18, 0)
+        sidebar_layout.addWidget(status_caption)
         status_row = QHBoxLayout()
         status_row.setContentsMargins(22, 0, 18, 22)
         status_row.setSpacing(8)
@@ -1008,14 +1026,18 @@ class MainWindowCore(QMainWindow):
         self.tabs.setAccessibleName("Companion pages")
         main_layout.addWidget(self.tabs)
 
-        self._build_dashboard()
-        self._build_downloads()
+        # readiness_values is populated by every page that owns a status
+        # row, so it has to exist before the first _build_* call rather
+        # than inside whichever page happened to be built first.
+        self.readiness_values = {}
+        self._build_download()
         self._build_history()
-        self._build_subscriptions()
         self._build_site_logins()
+        self._build_subscriptions()
+        self._build_extension()
         self._build_settings()
 
-        self._nav_click("Dashboard")
+        self._nav_click("Download")
 
         # System tray
         self.tray = QSystemTrayIcon(self)
@@ -1225,15 +1247,17 @@ class MainWindowCore(QMainWindow):
         value = self._dependencies[name]
         return value() if callable(value) else value
 
-    def _build_dashboard(self):
+    def _build_extension(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 38, 24)
         layout.setSpacing(16)
 
         layout.addLayout(self._make_page_header(
-            "Dashboard",
-            ""
+            "Browser extension",
+            "Astra Downloader runs a local API so the Astra Deck browser "
+            "extension can send downloads straight from a page. Downloading "
+            "by pasting a link never needs this server.",
         ))
 
         # Server control
@@ -1246,7 +1270,7 @@ class MainWindowCore(QMainWindow):
         state_row.setSpacing(10)
         self.server_badge = make_label("\u25cf", "stateDot")
         self.server_badge.setProperty("tone", "neutral")
-        self.server_badge.setAccessibleName("Dashboard server status indicator: Offline")
+        self.server_badge.setAccessibleName("Extension server status indicator: Offline")
         self.dash_status = make_label("Server offline", "heroTitle")
         state_row.addWidget(self.server_badge)
         state_row.addWidget(self.dash_status)
@@ -1278,37 +1302,23 @@ class MainWindowCore(QMainWindow):
         actions.addStretch()
         ctrl_layout.addLayout(actions)
 
-        self.setup_status = make_label("", "fieldHint")
-        self.setup_status.setAccessibleName("Download tool setup status")
-        self.setup_status.hide()
-        self.setup_progress = QProgressBar()
-        self.setup_progress.setRange(0, 100)
-        self.setup_progress.setAccessibleName("Download tool setup progress")
-        self.setup_progress.setValue(0)
-        self.setup_progress.setTextVisible(False)
-        self.setup_progress.hide()
-        ctrl_layout.addWidget(self.setup_status)
-        ctrl_layout.addWidget(self.setup_progress)
-        self.readiness_values = {}
         readiness = make_card("readiness")
         readiness_layout = QVBoxLayout(readiness)
         readiness_layout.setContentsMargins(22, 10, 0, 8)
         readiness_layout.setSpacing(1)
         readiness_header = QHBoxLayout()
-        readiness_header.addWidget(make_label("System readiness", "panelTitle"))
+        readiness_header.addWidget(make_label("Pairing", "panelTitle"))
         readiness_header.addStretch()
         readiness_layout.addLayout(readiness_header)
         readiness_layout.addWidget(self._make_readiness_row("server", "Local API", "Stopped"))
-        readiness_layout.addWidget(self._make_readiness_row("ytDlp", "yt-dlp"))
-        readiness_layout.addWidget(self._make_readiness_row("ffmpeg", "FFmpeg"))
-        readiness_layout.addWidget(self._make_readiness_row("deno", "JavaScript runtime"))
-        # SABR support is derived from the yt-dlp version by the async
-        # readiness probe (_apply_readiness) — never probe yt-dlp --version
-        # synchronously here: this runs on the GUI thread before first paint
-        # and a cold probe costs up to 5s. It also keeps the pill fresh after
-        # setup installs or updates yt-dlp mid-session.
-        readiness_layout.addWidget(self._make_readiness_row("sabr", "SABR", "Limited"))
-        self._set_readiness("sabr", "Limited", "warning")
+        readiness_layout.addWidget(make_label(
+            "The extension finds this server on its own once it is running. "
+            "Requests are accepted from this machine only and must carry the "
+            "session token.",
+            "fieldHint",
+            word_wrap=True,
+        ))
+        readiness_layout.addStretch()
 
         hero = QHBoxLayout()
         hero.setSpacing(0)
@@ -1356,31 +1366,34 @@ class MainWindowCore(QMainWindow):
         self.log_text.setPlainText("Ready.")
         layout.addWidget(self.log_text, 1)
 
-        self.tabs.addTab(page, "Dashboard")
+        self.tabs.addTab(page, "Browser extension")
 
-    def _build_downloads(self):
+    def _build_download(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 38, 24)
         layout.setSpacing(12)
-        layout.addLayout(self._make_page_header("Downloads", ""))
+        layout.addLayout(self._make_page_header(
+            "Download a video",
+            "Paste a link from almost any site — YouTube, Reddit, X, TikTok, "
+            "Vimeo, Instagram, Twitch and hundreds more.",
+        ))
 
         quick_card = make_card()
         quick_layout = QVBoxLayout(quick_card)
         quick_layout.setContentsMargins(16, 14, 16, 14)
         quick_layout.setSpacing(10)
-        quick_layout.addWidget(make_section_label("Quick download"))
         url_row = QHBoxLayout()
         self.quick_download_url = QLineEdit()
+        self.quick_download_url.setProperty("class", "heroUrl")
         self.quick_download_url.setAccessibleName("Video URL")
         self.quick_download_url.setPlaceholderText(
-            tr("Paste any video link — YouTube, Reddit, X, TikTok, Vimeo, "
-               "or several at once")
+            tr("Paste a video link, or several at once")
         )
         self.quick_download_url.returnPressed.connect(self._start_quick_download)
         self.quick_download_url.textEdited.connect(self._quick_download_url_edited)
         url_row.addWidget(self.quick_download_url, 1)
-        self.btn_quick_download = self._make_tool_button("Add to queue", "primary")
+        self.btn_quick_download = self._make_tool_button("Download", "primary")
         self.btn_quick_download.clicked.connect(self._start_quick_download)
         url_row.addWidget(self.btn_quick_download)
         quick_layout.addLayout(url_row)
@@ -1421,8 +1434,7 @@ class MainWindowCore(QMainWindow):
         options_row.addWidget(self.quick_download_end)
         quick_layout.addLayout(options_row)
         quick_layout.addWidget(make_label(
-            tr("Any site yt-dlp supports works here. Clip ranges apply to a "
-               "single link."),
+            tr("Clip ranges apply to a single link."),
             "fieldHint",
         ))
         self.quick_download_status = make_label("", "fieldHint")
@@ -1431,6 +1443,41 @@ class MainWindowCore(QMainWindow):
         quick_layout.addWidget(self.quick_download_status)
         layout.addWidget(quick_card)
         self._sync_quick_download_options()
+
+        # Tool setup progress lives with the paste box, not on the server
+        # page: it reports on yt-dlp/FFmpeg, which is what makes a download
+        # work, and a user who never opens the extension page still needs to
+        # see it.
+        self.setup_status = make_label("", "fieldHint")
+        self.setup_status.setAccessibleName("Download tool setup status")
+        self.setup_status.hide()
+        self.setup_progress = QProgressBar()
+        self.setup_progress.setRange(0, 100)
+        self.setup_progress.setAccessibleName("Download tool setup progress")
+        self.setup_progress.setValue(0)
+        self.setup_progress.setTextVisible(False)
+        self.setup_progress.hide()
+        layout.addWidget(self.setup_status)
+        layout.addWidget(self.setup_progress)
+
+        # The strip that answers "why did that fail?" without leaving the
+        # page. SABR is derived from the yt-dlp version by the async
+        # readiness probe (_apply_readiness) — never probe yt-dlp --version
+        # synchronously here: this runs on the GUI thread before first paint
+        # and a cold probe costs up to 5s.
+        tools_row = QHBoxLayout()
+        tools_row.setSpacing(18)
+        tools_row.addWidget(self._make_readiness_row("ytDlp", "yt-dlp"), 1)
+        tools_row.addWidget(make_vertical_divider())
+        tools_row.addWidget(self._make_readiness_row("ffmpeg", "FFmpeg"), 1)
+        tools_row.addWidget(make_vertical_divider())
+        tools_row.addWidget(
+            self._make_readiness_row("deno", "JavaScript runtime"), 1)
+        tools_row.addWidget(make_vertical_divider())
+        tools_row.addWidget(self._make_readiness_row("sabr", "SABR", "Limited"), 1)
+        layout.addLayout(tools_row)
+        self._set_readiness("sabr", "Limited", "warning")
+        layout.addWidget(make_divider())
 
         toolbar = QHBoxLayout()
         self.queue_capacity_badge = make_label("0 / 200 jobs", "toolbarMeta")
@@ -1457,7 +1504,7 @@ class MainWindowCore(QMainWindow):
         scroll.setWidget(content)
         self.downloads_scroll = scroll
         layout.addWidget(scroll, 1)
-        self.tabs.addTab(page, "Downloads")
+        self.tabs.addTab(page, "Download")
 
     def _sync_quick_download_options(self, *_args):
         if not hasattr(self, "quick_download_format"):
@@ -2523,6 +2570,11 @@ class MainWindowCore(QMainWindow):
         elif name == "Subscriptions":
             self._refresh_subscriptions(force=True)
 
+    def _focus_download_url(self):
+        """Put the caret in the paste box, wherever the user is."""
+        self._nav_click("Download")
+        self.quick_download_url.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _animate_page(self):
         widget = self.tabs.currentWidget()
         if not widget:
@@ -2686,7 +2738,7 @@ class MainWindowCore(QMainWindow):
             self.dash_hint.setText("Local only \u00b7 ready for Astra Deck")
             self.server_badge.setProperty("tone", "success")
             self.server_badge.setAccessibleName(
-                "Dashboard server status indicator: Online"
+                "Extension server status indicator: Online"
             )
             self.btn_startstop.setText("Stop Server")
             self.btn_startstop.setIcon(make_line_icon("Stop Server"))
@@ -2704,7 +2756,7 @@ class MainWindowCore(QMainWindow):
             self.dash_hint.setText("Local only \u00b7 start before downloading")
             self.server_badge.setProperty("tone", "neutral")
             self.server_badge.setAccessibleName(
-                "Dashboard server status indicator: Offline"
+                "Extension server status indicator: Offline"
             )
             self.btn_startstop.setText("Start Server")
             self.btn_startstop.setIcon(make_line_icon("Start Server"))
@@ -2928,10 +2980,11 @@ class MainWindowCore(QMainWindow):
 
         if not active and not pending and not recent:
             retain(("empty",), lambda: make_empty_state(
-                "Queue is clear",
-                "Downloads sent from Astra Deck appear here.",
-                "Open dashboard",
-                lambda: self._nav_click("Dashboard"),
+                "Nothing downloading yet",
+                "Paste a video link above to start. Downloads sent from the "
+                "Astra Deck browser extension land here too.",
+                "Paste a link",
+                self._focus_download_url,
             ))
         for section_key, section_title, downloads, is_recent in (
             ("active", "In progress", active, False),
@@ -3188,7 +3241,7 @@ class MainWindowCore(QMainWindow):
                 "No downloads yet",
                 "Completed downloads will appear here.",
                 "View download queue",
-                lambda: self._nav_click("Downloads"),
+                lambda: self._nav_click("Download"),
             ))
             self.history_container.addStretch()
             return
@@ -3271,7 +3324,7 @@ class MainWindowCore(QMainWindow):
             self._append_log(f"Retry failed: {err}")
             return
         self._append_log(f"Retry queued: {dl.title if dl.title != 'Unknown' else dl.url}")
-        self._nav_click("Downloads")
+        self._nav_click("Download")
 
     def _toggle_queue_intake(self):
         if self.dl_manager.capacity()['intakePaused']:
@@ -3790,7 +3843,7 @@ class MainWindowCore(QMainWindow):
             self.status_dot.setAccessibleName("Server status indicator: Error")
             self.server_badge.setProperty("tone", "danger")
             self.server_badge.setAccessibleName(
-                "Dashboard server status indicator: Error"
+                "Extension server status indicator: Error"
             )
             repolish(self.status_label)
             repolish(self.status_dot)

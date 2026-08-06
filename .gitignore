@@ -1,0 +1,44 @@
+node_modules/
+.venv/
+.build-venv/
+.release-venv/
+build/
+dist/
+*.bak
+
+# AstraDownloader.exe is a release artifact built by astra_downloader/build.py
+# — it does not belong in the source tree. Build locally, then attach it to
+# the GitHub Release.
+AstraDownloader.exe
+AstraDownloader.exe.sha256
+
+# Python build artifacts
+astra_downloader/build/
+astra_downloader/dist/
+astra_downloader/*.spec
+astra_downloader/__pycache__/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Agent + working notes — kept local, never published.
+CLAUDE.md
+CODEX_CHANGELOG.md
+CODEX-CHANGELOG.md
+AGENTS.md
+.claude/
+.codex/
+.factory/
+.ai/
+TODO.md
+NOTES.md
+AUDIT*.md
+SESSION*.md
+PROJECT_CONTEXT.md
+
+# Credentials and captured session state must never be staged.
+*.pem
+cookies.txt
+site-logins/
+.auth/
+*.storageState.json

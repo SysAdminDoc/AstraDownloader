@@ -162,8 +162,8 @@ def main():
 
         def select_page(window, page_name):
             expected_index = (
-                "Dashboard", "Downloads", "History", "Subscriptions",
-                "Sign-ins", "Settings",
+                "Download", "History", "Sign-ins", "Subscriptions",
+                "Browser extension", "Settings",
             ).index(page_name)
             window._nav_click(page_name)
             for nav_button in window.nav_buttons:
@@ -314,13 +314,13 @@ def main():
             ])
 
         def capture_dashboard_state(window):
-            select_page(window, "Dashboard")
+            select_page(window, "Browser extension")
             if scenario == "dashboard-german":
-                assert_visible_text(window, {"Übersicht"})
+                assert_visible_text(window, {"Browser-Erweiterung"})
                 nav_text = [button.text() for button in window.nav_buttons]
                 if nav_text != [
-                    "Übersicht", "Downloads", "Verlauf", "Subscriptions",
-                    "Anmeldungen", "Einstellungen",
+                    "Herunterladen", "Verlauf", "Anmeldungen",
+                    "Subscriptions", "Browser-Erweiterung", "Einstellungen",
                 ]:
                     raise RuntimeError(
                         f"German navigation catalogue did not render: {nav_text}"
@@ -336,7 +336,13 @@ def main():
                 for status_widget in (
                         window.status_label, window.status_dot, window.server_badge):
                     app_module.repolish(status_widget)
-                assert_visible_text(window, {"Starting", "Starting local server", "Checking"})
+                # "Checking" used to come from the tool readiness rows that
+                # shared this page. They live with the paste box now, so the
+                # server page's own hint carries the in-flight wording.
+                assert_visible_text(window, {
+                    "Starting", "Starting local server",
+                    "Checking the local API and installed tools…",
+                })
             elif scenario == "dashboard-online":
                 window.status_label.setText("Running")
                 window.status_label.setProperty("tone", "success")
@@ -353,7 +359,13 @@ def main():
                 window._set_readiness("ffmpeg", "7.1", "success")
                 window._set_readiness("deno", "Deno 2.7.11", "success")
                 window._set_readiness("sabr", "Supported", "success")
-                assert_visible_text(window, {"Running", "Server online", "2026.07.04", "7.1"})
+                assert_visible_text(window, {"Running", "Server online"})
+                # Tool versions render on the Download page now, so prove
+                # they reached the widgets there rather than asserting them
+                # on a page that no longer carries those rows.
+                select_page(window, "Download")
+                assert_visible_text(window, {"2026.07.04", "7.1", "Deno 2.7.11"})
+                select_page(window, "Browser extension")
             else:
                 window.status_label.setText("Server error")
                 window.status_label.setProperty("tone", "danger")
@@ -376,8 +388,12 @@ def main():
                 for key, (text, tone) in degraded.items():
                     window._set_readiness(key, text, tone)
                 assert_visible_text(
-                    window, {"Server error", "Server unavailable", "Missing", "Update Deno"}
+                    window, {"Server error", "Server unavailable"}
                 )
+                # The degraded tool rows render on the Download page.
+                select_page(window, "Download")
+                assert_visible_text(window, {"Missing", "Update Deno"})
+                select_page(window, "Browser extension")
             capture_window(window, scenario)
 
         def capture_download_state(window, manager):
@@ -398,7 +414,7 @@ def main():
                 }
             window._downloads_signature = None
             window._update_ui()
-            select_page(window, "Downloads")
+            select_page(window, "Download")
             if scenario == "downloads-clipboard-staged":
                 window.config.set("ClipboardLinkGrabber", True)
                 window.tray.hide()

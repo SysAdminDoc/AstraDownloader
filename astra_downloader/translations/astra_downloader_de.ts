@@ -3,28 +3,28 @@
   <context>
     <name>AstraDownloader</name>
     <message>
-      <source>Dashboard</source>
-      <translation>Übersicht</translation>
-    </message>
-    <message>
-      <source>Downloads</source>
-      <translation>Downloads</translation>
+      <source>Download</source>
+      <translation>Herunterladen</translation>
     </message>
     <message>
       <source>History</source>
       <translation>Verlauf</translation>
     </message>
     <message>
+      <source>Sign-ins</source>
+      <translation>Anmeldungen</translation>
+    </message>
+    <message>
+      <source>Browser extension</source>
+      <translation>Browser-Erweiterung</translation>
+    </message>
+    <message>
       <source>Settings</source>
       <translation>Einstellungen</translation>
     </message>
     <message>
-      <source>Quick download</source>
-      <translation>Schnell-Download</translation>
-    </message>
-    <message>
-      <source>Add to queue</source>
-      <translation>Zur Warteschlange hinzufügen</translation>
+      <source>Download a video</source>
+      <translation>Video herunterladen</translation>
     </message>
     <message>
       <source>Video</source>
@@ -51,16 +51,12 @@
       <translation>Annahme pausieren</translation>
     </message>
     <message>
-      <source>Queue is clear</source>
-      <translation>Warteschlange ist leer</translation>
+      <source>Nothing downloading yet</source>
+      <translation>Noch keine Downloads</translation>
     </message>
     <message>
-      <source>Downloads sent from Astra Deck appear here.</source>
-      <translation>Von Astra Deck gesendete Downloads erscheinen hier.</translation>
-    </message>
-    <message>
-      <source>Open dashboard</source>
-      <translation>Übersicht öffnen</translation>
+      <source>Paste a link</source>
+      <translation>Link einfügen</translation>
     </message>
     <message>
       <source>Server offline</source>
@@ -85,10 +81,6 @@
     <message>
       <source>Stage copied video links for review</source>
       <translation>Kopierte YouTube-Links zur Prüfung vormerken</translation>
-    </message>
-    <message>
-      <source>Sign-ins</source>
-      <translation>Anmeldungen</translation>
     </message>
     <message>
       <source>Save changes</source>
