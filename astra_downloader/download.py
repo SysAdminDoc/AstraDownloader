@@ -1366,6 +1366,11 @@ class DownloadManagerCore:
             writer=lambda path, data: self._dependencies['atomic_write_json'](path, data),
         )
         self._persistence_error = ""
+        # A completed download whose history entry could not be written. The
+        # file is on disk and the download is genuinely complete, so the run
+        # must not be failed — but silence here means the user's record of it
+        # simply does not exist, which is how a full disk presents.
+        self._history_error = ""
         self._persistence_compatible = True
         self.intake_paused = False
         self._closing = False
@@ -2627,7 +2632,7 @@ class DownloadManagerCore:
         if dl.status == "complete":
             self.total_completed += 1
             duration = int(time.time() - dl.start_time)
-            self.history.add({
+            recorded = self.history.add({
                 "id": dl.id, "url": dl.url, "title": dl.title,
                 "filename": dl.filename, "format": dl.format,
                 "quality": dl.quality, "audioOnly": dl.audio_only,
@@ -2635,6 +2640,18 @@ class DownloadManagerCore:
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "duration": duration,
             })
+            with self._lock:
+                if recorded:
+                    self._history_error = ""
+                else:
+                    self._history_error = (
+                        "The last download finished but could not be added to "
+                        "History. Check free disk space and folder permissions."
+                    )
+            if not recorded:
+                self._dependencies['write_persistent_log'](
+                    f"Download {dl.id} completed but its history entry could not be saved."
+                )
 
         self.progress_updated.emit()
         self.download_completed.emit(dl.id)
@@ -3189,7 +3206,19 @@ class DownloadManagerCore:
                 'count': len(items),
                 'capacity': self._capacity_locked(),
                 'persistenceError': self._persistence_error or None,
+                'historyError': self._history_error or None,
             }
+
+    def persistence_notice(self):
+        """The durability problem the user most needs to know about, if any.
+
+        Every persistence caller but one already reports its failure through a
+        return value the caller checks. The history write on completion cannot:
+        the download really did finish, so there is nothing to fail and no
+        return path to check it. This is where that failure becomes visible.
+        """
+        with self._lock:
+            return self._persistence_error or self._history_error or ''
 
     def cleanup_old(self):
         cutoff = time.time() - 300  # 5 min

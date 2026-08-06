@@ -23,6 +23,11 @@ repository's git log.
 
 ### Fixed
 
+- **A download that finishes but cannot be recorded says so.** `history.add`
+  reports whether the write landed and the caller discarded it, so on a full
+  disk a download completed, the file existed, and History simply never
+  mentioned it. The Download page now carries a storage notice for this and
+  for a queue that could not be saved, and the failure reaches the log.
 - **The proof-of-origin provider status is visible.** The readiness probe has
   always computed it and failure advice referred to it, but no row existed to
   show it, so every update was discarded in silence. The Download page tool

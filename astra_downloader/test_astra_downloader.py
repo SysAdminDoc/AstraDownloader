@@ -58,6 +58,10 @@ class FakeHistory:
 
     def add(self, entry):
         self.entries.append(entry)
+        # HistoryStore.add reports whether the write landed. The double
+        # returned None, which reads as a failed write now that the caller
+        # checks it.
+        return True
 
     def load(self):
         return list(self.entries)
@@ -5664,6 +5668,66 @@ class EndToEndDownloadTests(unittest.TestCase):
         self.assertTrue(ok, err)
         self.assertTrue(paused.resume_partial)
 
+    def test_completed_download_reports_a_failed_history_write(self):
+        # The download really did finish and the file really is on disk, so
+        # there is no failure to raise — which is why this used to vanish.
+        class RefusingHistory(FakeHistory):
+            def add(self, entry):
+                return False
+
+        download = ad.Download("dl_history_fail", "https://example.com/video")
+        captured_args = []
+        base_factory = self._make_fake_popen(
+            ['[download] Destination: clip.mp4'], returncode=0
+        )
+
+        def capture(args, **kwargs):
+            captured_args.append(list(args))
+            return base_factory(args, **kwargs)
+
+        logged = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                RefusingHistory(),
+            )
+            download.output_dir = tmpdir
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", capture), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", side_effect=logged.append):
+                manager._run_download(download)
+
+            self.assertEqual(download.status, "complete",
+                             "a history write failure must not fail the download")
+            notice = manager.persistence_notice()
+            self.assertIn("History", notice)
+            self.assertEqual(manager.queue_payload()["historyError"], notice)
+            self.assertTrue(
+                any("history entry could not be saved" in line for line in logged),
+                logged,
+            )
+
+    def test_successful_history_write_leaves_no_notice(self):
+        download = ad.Download("dl_history_ok", "https://example.com/video")
+        base_factory = self._make_fake_popen(
+            ['[download] Destination: clip.mp4'], returncode=0
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                FakeHistory(),
+            )
+            download.output_dir = tmpdir
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", base_factory), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+            self.assertEqual(download.status, "complete")
+            self.assertEqual(manager.persistence_notice(), "")
+            self.assertIsNone(manager.queue_payload()["historyError"])
+
     def test_playlist_subset_rejects_video_urls_and_clip_combinations(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
         download_id, err = manager.start_download(
@@ -9919,6 +9983,36 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
 
                 window._apply_readiness({})
                 self.assertEqual(window.readiness_values["provider"][1].text(), "Fallback")
+            finally:
+                window.close()
+                window.deleteLater()
+                QApplication.processEvents()
+
+    def test_a_storage_failure_is_shown_on_the_download_page(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+            try:
+                # The window is never shown in an offscreen run, so isHidden()
+                # is the honest question: was it explicitly hidden?
+                window._update_ui()
+                self.assertTrue(window.persistence_notice.isHidden())
+
+                manager._history_error = "Disk is full."
+                window._update_ui()
+                QApplication.processEvents()
+                self.assertFalse(window.persistence_notice.isHidden())
+                self.assertEqual(window.persistence_notice.text(), "Disk is full.")
+
+                manager._history_error = ""
+                window._update_ui()
+                QApplication.processEvents()
+                self.assertTrue(window.persistence_notice.isHidden())
             finally:
                 window.close()
                 window.deleteLater()
