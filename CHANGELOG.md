@@ -10,6 +10,45 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased]
+
+### Added
+
+- **Choose which subtitles you get.** Subtitle tracks come from two
+  catalogues — the ones a creator wrote and the machine transcript — and the
+  app always asked for both. You can now ask for creator subtitles only, the
+  auto-generated ones only, or the creator's with auto-generated as a fallback
+  (which is what it has always done). Measured against the installed yt-dlp:
+  sending both flags never produced two files for one language, so the old
+  behaviour was already the fallback preference and what was actually missing
+  was the ability to exclude a kind.
+- **Subtitles as a download type.** Pick Subtitles beside Video and Audio to
+  fetch the tracks without the media. The format and quality pickers are
+  disabled for it, since neither describes a subtitle, and the page states
+  which languages and format the job will use.
+- **Normalise subtitles to one format.** SRT, WebVTT, ASS or LRC, or leave the
+  site's own format alone.
+- **Pick subtitle languages from a list.** Twelve common languages have
+  checkboxes; the field beside them still accepts any code yt-dlp knows, and a
+  code with no checkbox is never dropped when you untick another.
+
+### Changed
+
+- The "Embed subtitles" checkbox is now "Download subtitles", which is what it
+  does — it fetches sidecar tracks as well as embedding them.
+
+### Fixed
+
+- **A subtitles-only download reports the file it wrote.** yt-dlp's
+  after-move hook does not fire when the media is skipped, so such a job would
+  have finished with nothing to reveal in the folder; the written-subtitle
+  line is now read instead, and a converted track is named by its new
+  extension.
+- **The last positional rollback tuple is gone.** `start_download` reuses a
+  waiting-for-sign-in record rather than queueing a duplicate, and restored
+  the previous request from a sixteen-field tuple — the same shape as the
+  retry defect fixed in 2.4.0. It now names its fields.
+
 ## [2.4.0] - 2026-08-06
 
 ### Fixed

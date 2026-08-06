@@ -873,6 +873,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_playlist_min_duration = NumberField(0)
         window.cfg_playlist_max_duration = NumberField(0)
         window.cfg_impersonate = ComboField("")
+        window.cfg_subtitle_mode = ComboField("prefer-manual")
+        window.cfg_subtitle_format = ComboField("")
         window.cfg_fragments = NumberField(4)
         window.cfg_maxconcurrent = NumberField(3)
         window.cfg_retries = NumberField(10)
@@ -894,6 +896,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window._show_settings_status = lambda message, tone="neutral": window.statuses.append((message, tone))
         window._append_log = window.logs.append
         window._sync_connection_ui = lambda: window.server_calls.append("sync")
+        window._sync_sublang_checkboxes = lambda *_args: None
         window._stop_server = lambda: window.server_calls.append("stop")
         window._start_server = lambda: window.server_calls.append("start")
         window._dependencies = {
@@ -904,6 +907,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "normalize_playlist_date": ad.normalize_playlist_date,
             "normalize_impersonate_target": ad.normalize_impersonate_target,
             "normalize_sublangs": ad.normalize_sublangs,
+            "normalize_subtitle_mode": ad.normalize_subtitle_mode,
+            "normalize_subtitle_format": ad.normalize_subtitle_format,
         }
         values = {"DEFAULT_CONFIG": ad.DEFAULT_CONFIG, "SERVER_PORT": ad.SERVER_PORT}
         window._value = values.__getitem__
@@ -9885,7 +9890,7 @@ class QuickDownloadBatchTests(unittest.TestCase):
         def currentData(self):
             return self.value
 
-    def _window(self, url_text, results, start="", end=""):
+    def _window(self, url_text, results, start="", end="", kind="video"):
         calls = []
 
         def start_download(**kwargs):
@@ -9897,7 +9902,7 @@ class QuickDownloadBatchTests(unittest.TestCase):
             quick_download_start=self._TextWidget(start),
             quick_download_end=self._TextWidget(end),
             quick_download_status=self._TextWidget(),
-            quick_download_type=self._Combo(False),
+            quick_download_type=self._Combo(kind),
             quick_download_format=self._Combo("mp4"),
             quick_download_quality=self._Combo("best"),
             dl_manager=types.SimpleNamespace(start_download=start_download),
@@ -9914,6 +9919,27 @@ class QuickDownloadBatchTests(unittest.TestCase):
             gui_module_for_tests().MainWindowCore._set_quick_download_status, window
         )
         return window, calls
+
+    def test_the_download_type_decides_which_job_is_queued(self):
+        # The combo used to carry an audio_only boolean. It now names a kind,
+        # because there are three of them and bool("subtitles") is True — the
+        # old shape would have queued a subtitles request as an audio one.
+        for kind, expected in (
+            ("video", {"audio_only": False, "subtitles_only": False}),
+            ("audio", {"audio_only": True, "subtitles_only": False}),
+            ("subtitles", {"audio_only": False, "subtitles_only": True}),
+        ):
+            with self.subTest(kind=kind):
+                window, calls = self._window(
+                    "https://vimeo.com/1", [("dl_1", None)], kind=kind
+                )
+                with mock.patch.object(gui_module_for_tests(), "repolish"):
+                    ad.MainWindow._start_quick_download(window)
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0]["audio_only"], expected["audio_only"])
+                self.assertEqual(
+                    calls[0]["subtitles_only"], expected["subtitles_only"]
+                )
 
     def test_single_link_queues_once(self):
         window, calls = self._window(
@@ -11765,6 +11791,484 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
                 "every text-carrying QLabel must pin PlainText near construction",
             )
 
+
+class SubtitleRequestTests(unittest.TestCase):
+    """Which subtitle tracks are asked for, and what happens to them."""
+
+    def _config(self, **overrides):
+        config = ad.sanitize_config({"EmbedSubs": True})
+        config.update(overrides)
+        return config
+
+    # -- The vocabulary the two modules share -----------------------------
+
+    def test_config_and_argv_agree_on_the_modes(self):
+        # config.py declares what a user may store; download.py declares what
+        # each stored value compiles to. A value in one and not the other is
+        # either an unreachable setting or a KeyError at argv time.
+        self.assertEqual(
+            set(ad.SUBTITLE_MODES),
+            set(ad.SUBTITLE_WRITE_FLAGS),
+        )
+
+    def test_config_and_argv_agree_on_the_formats(self):
+        self.assertEqual(
+            {value for value in ad.SUBTITLE_FORMATS if value},
+            set(ad.SUBTITLE_CONVERT_FORMATS),
+        )
+
+    # -- Track selection --------------------------------------------------
+
+    def test_prefer_manual_sends_both_flags(self):
+        # Measured against the installed binary: both flags do NOT produce two
+        # files for one language. yt-dlp merges the catalogues per language
+        # and the creator's track wins, so this IS prefer-manual-else-auto.
+        args = ad.build_subtitle_args(
+            self._config(SubtitleMode="prefer-manual"))
+        self.assertIn("--write-subs", args)
+        self.assertIn("--write-auto-subs", args)
+
+    def test_creator_only_never_asks_for_the_machine_transcript(self):
+        args = ad.build_subtitle_args(
+            self._config(SubtitleMode="manual"))
+        self.assertIn("--write-subs", args)
+        self.assertNotIn("--write-auto-subs", args)
+
+    def test_auto_only_never_asks_for_the_creator_track(self):
+        args = ad.build_subtitle_args(
+            self._config(SubtitleMode="auto"))
+        self.assertIn("--write-auto-subs", args)
+        self.assertNotIn("--write-subs", args)
+
+    def test_an_unknown_mode_falls_back_to_the_shipped_behaviour(self):
+        # A config hand-edited to a mode a later version removed must not
+        # silently stop fetching subtitles.
+        args = ad.build_subtitle_args(
+            self._config(SubtitleMode="whatever-this-is"))
+        self.assertIn("--write-subs", args)
+        self.assertIn("--write-auto-subs", args)
+
+    # -- The gate ---------------------------------------------------------
+
+    def test_subtitles_off_sends_nothing(self):
+        self.assertEqual(
+            ad.build_subtitle_args(
+                ad.sanitize_config({"EmbedSubs": False})),
+            [],
+        )
+
+    def test_a_subtitles_only_job_ignores_the_embed_switch(self):
+        # Embedding is the one thing it cannot do, so gating it on the embed
+        # checkbox would make the download type silently do nothing.
+        args = ad.build_subtitle_args(
+            ad.sanitize_config({"EmbedSubs": False}), subtitles_only=True)
+        self.assertIn("--write-subs", args)
+        self.assertNotIn("--embed-subs", args)
+
+    def test_a_normal_job_still_embeds(self):
+        args = ad.build_subtitle_args(self._config())
+        self.assertIn("--embed-subs", args)
+
+    # -- Languages and format ---------------------------------------------
+
+    def test_languages_reach_the_argv(self):
+        args = ad.build_subtitle_args(
+            self._config(SubLangs="en,es,zh-Hans"))
+        self.assertIn("--sub-langs", args)
+        self.assertEqual(args[args.index("--sub-langs") + 1], "en,es,zh-Hans")
+
+    def test_a_language_string_cannot_smuggle_an_argument(self):
+        args = ad.build_subtitle_args(
+            self._config(SubLangs="en --exec=calc"))
+        self.assertEqual(args[args.index("--sub-langs") + 1], "en--execcalc")
+
+    def test_a_chosen_format_is_converted(self):
+        args = ad.build_subtitle_args(
+            self._config(SubtitleFormat="srt"))
+        self.assertIn("--convert-subs", args)
+        self.assertEqual(args[args.index("--convert-subs") + 1], "srt")
+
+    def test_no_format_leaves_the_site_format_alone(self):
+        self.assertNotIn(
+            "--convert-subs",
+            ad.build_subtitle_args(self._config(SubtitleFormat="")),
+        )
+
+    def test_an_unknown_format_is_dropped_rather_than_passed(self):
+        for value in ("exe", "; rm -rf /", "--exec"):
+            with self.subTest(value=value):
+                self.assertNotIn(
+                    "--convert-subs",
+                    ad.build_subtitle_args(
+                        self._config(SubtitleFormat=value)),
+                )
+
+    def test_the_stored_values_are_shape_checked(self):
+        self.assertEqual(ad.normalize_subtitle_mode("manual"), "manual")
+        self.assertEqual(ad.normalize_subtitle_mode("nonsense"), "prefer-manual")
+        self.assertEqual(ad.normalize_subtitle_format("SRT"), "srt")
+        self.assertEqual(ad.normalize_subtitle_format("../../etc"), "")
+
+
+class SubtitlesOnlyJobTests(unittest.TestCase):
+    """A subtitles-only job skips the media and still names its output."""
+
+    class _Download:
+        def __init__(self, subtitles_only=True):
+            self.subtitles_only = subtitles_only
+            self.filename = ""
+
+    def setUp(self):
+        self.addCleanup(ad.reset_deno_runtime_cache)
+        self.addCleanup(ad.reset_ffmpeg_capabilities_cache)
+        self.addCleanup(ad.reset_po_token_provider_cache)
+
+    def _argv(self, overrides, subtitles_only=True):
+        """The real argv, captured by running the real download path."""
+        captured = []
+
+        class Proc:
+            returncode = 0
+            stdout = io.StringIO("")
+
+            def __init__(self, args, **_kwargs):
+                captured.append(list(args))
+
+            def wait(self, timeout=None):
+                return 0
+
+            def poll(self):
+                return 0
+
+            def terminate(self):
+                # reason: satisfy the API the cancel path expects
+                pass
+
+            def kill(self):
+                # reason: same as terminate
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}
+            settings.update(overrides)
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            download = ad.Download("dl_subs", "https://example.com/video",
+                                   output_dir=tmpdir,
+                                   subtitles_only=subtitles_only)
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, "Popen", Proc),                  mock.patch.object(ad, "probe_po_token_provider", return_value=None),                  mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._run_download(download)
+        runs = [args for args in captured if download.url in args]
+        self.assertEqual(len(runs), 1)
+        return runs[0]
+
+    def test_the_media_is_skipped(self):
+        self.assertIn("--skip-download", self._argv({"EmbedSubs": True}))
+
+    def test_a_normal_download_never_skips_the_media(self):
+        self.assertNotIn(
+            "--skip-download",
+            self._argv({"EmbedSubs": True}, subtitles_only=False),
+        )
+
+    def test_nothing_is_embedded_into_a_file_that_was_not_downloaded(self):
+        # Every embed postprocesses the media container, and this run
+        # deliberately produces none.
+        argv = self._argv({
+            "EmbedSubs": True, "EmbedMetadata": True,
+            "EmbedThumbnail": True, "EmbedChapters": True,
+        })
+        for flag in ("--embed-subs", "--embed-metadata", "--embed-thumbnail",
+                     "--embed-chapters"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, argv)
+
+    def test_a_normal_download_still_embeds_all_four(self):
+        argv = self._argv({
+            "EmbedSubs": True, "EmbedMetadata": True,
+            "EmbedThumbnail": True, "EmbedChapters": True,
+        }, subtitles_only=False)
+        for flag in ("--embed-subs", "--embed-metadata", "--embed-thumbnail",
+                     "--embed-chapters"):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, argv)
+
+    def test_the_subtitles_still_get_fetched(self):
+        argv = self._argv({"EmbedSubs": False, "SubtitleMode": "manual"})
+        self.assertIn("--write-subs", argv)
+        self.assertNotIn("--write-auto-subs", argv)
+
+    def test_the_written_subtitle_line_is_recognised(self):
+        match = ad.SUBTITLE_WRITTEN_RE.match(
+            r"[info] Writing video subtitles to: C:\\Videos\\Clip.en.vtt")
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1), r"C:\\Videos\\Clip.en.vtt")
+
+    def test_an_unrelated_info_line_is_not_a_subtitle(self):
+        for line in (
+            "[info] Writing video description to: C:\\Videos\\Clip.description",
+            "[download] Destination: C:\\Videos\\Clip.en.vtt",
+            "Writing video subtitles to: relative-without-the-info-prefix",
+        ):
+            with self.subTest(line=line):
+                self.assertIsNone(
+                    ad.SUBTITLE_WRITTEN_RE.match(line))
+
+    def test_a_converted_subtitle_is_named_by_its_new_extension(self):
+        # yt-dlp announces the .vtt it downloaded and only then converts it;
+        # the [SubtitlesConvertor] line names no destination, so the path has
+        # to be derived. Verified against the installed binary.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            written = Path(tmpdir) / "Clip.en.vtt"
+            written.write_text("WEBVTT\n", encoding="utf-8")
+            converted = Path(tmpdir) / "Clip.en.srt"
+            converted.write_text("1\n", encoding="utf-8")
+            manager = types.SimpleNamespace(
+                config={"SubtitleFormat": "srt"},
+                _converted_subtitle_path=None,
+            )
+            manager._converted_subtitle_path = types.MethodType(
+                ad.DownloadManager._converted_subtitle_path,
+                manager,
+            )
+            self.assertEqual(
+                manager._converted_subtitle_path(str(written)), str(converted))
+
+    def test_an_unconverted_subtitle_keeps_the_announced_path(self):
+        # If the conversion did not happen, naming a file that is not there
+        # would make "Show in folder" open nothing.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            written = Path(tmpdir) / "Clip.en.vtt"
+            written.write_text("WEBVTT\n", encoding="utf-8")
+            manager = types.SimpleNamespace(config={"SubtitleFormat": "srt"})
+            manager._converted_subtitle_path = types.MethodType(
+                ad.DownloadManager._converted_subtitle_path,
+                manager,
+            )
+            self.assertEqual(
+                manager._converted_subtitle_path(str(written)), str(written))
+
+    def test_the_flag_survives_a_restart(self):
+        # The queue index is what a recovered download is rebuilt from; a
+        # subtitles-only job that came back as a full video download would
+        # fetch the media the user deliberately skipped.
+        download = ad.Download(
+            "dl_1", "https://example.com/v", subtitles_only=True)
+        store = ad.DownloadQueueStore(
+            path=Path("unused.json"), reader=lambda *_a: None,
+            writer=lambda *_a: None, logger=lambda *_a: None,
+            clean_text=ad.clean_text, clean_path_text=ad.clean_path_text,
+        )
+        download.status = "pending"
+        record = store.serialize([download])["downloads"][0]
+        self.assertIs(record["subtitlesOnly"], True)
+
+    def test_a_normal_download_does_not_carry_the_flag(self):
+        download = ad.Download("dl_1", "https://example.com/v")
+        self.assertNotIn("subtitlesOnly", download.to_dict())
+
+
+class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
+    """The flags this app compiles do what it claims, on the installed yt-dlp.
+
+    Offline and deterministic: a --load-info-json fixture holding a manual EN
+    track, an auto EN track and an auto ES track, served over loopback.
+    """
+
+    MANUAL = b"WEBVTT\n\n00:00.000 --> 00:01.000\nMANUAL-TRACK\n"
+    AUTO_EN = b"WEBVTT\n\n00:00.000 --> 00:01.000\nAUTO-EN\n"
+    AUTO_ES = b"WEBVTT\n\n00:00.000 --> 00:01.000\nAUTO-ES\n"
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        cls.bodies = {
+            "/manual-en.vtt": cls.MANUAL,
+            "/auto-en.vtt": cls.AUTO_EN,
+            "/auto-es.vtt": cls.AUTO_ES,
+        }
+        bodies = cls.bodies
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = bodies.get(self.path)
+                self.send_response(200 if body else 404)
+                self.send_header("Content-Length", str(len(body or b"")))
+                self.end_headers()
+                if body:
+                    self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        cls.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.thread.join(timeout=5)
+
+    def _run(self, config, subtitles_only=False):
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest("yt-dlp is not installed in this environment")
+        info = {
+            "id": "p1", "title": "fixture", "ext": "mp4",
+            "extractor": "generic", "extractor_key": "Generic",
+            "webpage_url": "https://example.com/p", "_type": "video",
+            "formats": [{"format_id": "0", "url": f"{self.base}/none.mp4",
+                         "ext": "mp4", "protocol": "http"}],
+            "subtitles": {"en": [{"ext": "vtt",
+                                  "url": f"{self.base}/manual-en.vtt"}]},
+            "automatic_captions": {
+                "en": [{"ext": "vtt", "url": f"{self.base}/auto-en.vtt"}],
+                "es": [{"ext": "vtt", "url": f"{self.base}/auto-es.vtt"}],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            info_path = tmp / "p.info.json"
+            info_path.write_text(json.dumps(info), encoding="utf-8")
+            args = [str(ytdlp), "--ignore-config", "--load-info-json",
+                    str(info_path), "--skip-download", "--no-colors",
+                    "-o", str(tmp / "%(title)s.%(ext)s")]
+            args += [
+                arg for arg in ad.build_subtitle_args(
+                    config, subtitles_only=subtitles_only)
+                if arg != "--embed-subs"
+            ]
+            proc = subprocess.run(args, capture_output=True, text=True,
+                                  timeout=180)
+            written = {}
+            for path in tmp.iterdir():
+                if path.suffix in {".vtt", ".srt"}:
+                    text = path.read_text(encoding="utf-8", errors="replace")
+                    marker = next(
+                        (m for m in ("MANUAL-TRACK", "AUTO-EN", "AUTO-ES")
+                         if m in text), "?")
+                    written[path.name] = marker
+            return proc, written
+
+    def _config(self, **overrides):
+        config = ad.sanitize_config({"EmbedSubs": True, "SubLangs": "en,es"})
+        config.update(overrides)
+        return config
+
+    def test_prefer_manual_takes_the_creator_track_and_fills_the_gap(self):
+        proc, written = self._run(self._config(SubtitleMode="prefer-manual"))
+        self.assertEqual(proc.returncode, 0, proc.stderr[:400])
+        self.assertEqual(written,
+                         {"fixture.en.vtt": "MANUAL-TRACK",
+                          "fixture.es.vtt": "AUTO-ES"})
+
+    def test_creator_only_leaves_out_the_language_that_has_no_creator_track(self):
+        proc, written = self._run(self._config(SubtitleMode="manual"))
+        self.assertEqual(proc.returncode, 0, proc.stderr[:400])
+        self.assertEqual(written, {"fixture.en.vtt": "MANUAL-TRACK"})
+
+    def test_auto_only_takes_the_machine_transcript_even_where_a_creator_track_exists(self):
+        proc, written = self._run(self._config(SubtitleMode="auto"))
+        self.assertEqual(proc.returncode, 0, proc.stderr[:400])
+        self.assertEqual(written,
+                         {"fixture.en.vtt": "AUTO-EN",
+                          "fixture.es.vtt": "AUTO-ES"})
+
+    def test_conversion_rewrites_every_track_to_the_chosen_format(self):
+        proc, written = self._run(
+            self._config(SubtitleMode="prefer-manual", SubtitleFormat="srt"))
+        self.assertEqual(proc.returncode, 0, proc.stderr[:400])
+        self.assertEqual(sorted(written), ["fixture.en.srt", "fixture.es.srt"])
+        self.assertEqual(written["fixture.en.srt"], "MANUAL-TRACK")
+
+    def test_a_subtitles_only_run_writes_no_media(self):
+        proc, written = self._run(
+            ad.sanitize_config({"EmbedSubs": False}), subtitles_only=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr[:400])
+        self.assertTrue(written)
+        self.assertNotIn("fixture.mp4", written)
+
+
+class SubtitleLanguagePickerTests(unittest.TestCase):
+    """The checkboxes and the free-text field describe the same languages."""
+
+    def _window(self):
+        gui = gui_module_for_tests()
+        window = types.SimpleNamespace(
+            cfg_sublangs=QuickDownloadBatchTests._TextWidget("en"),
+            _sublang_boxes=[],
+        )
+        for _label, code in gui.SUBTITLE_LANGUAGE_CHOICES:
+            box = types.SimpleNamespace(_sublang_code=code, checked=False)
+            box.setChecked = lambda value, b=box: setattr(b, "checked", value)
+            box.isChecked = lambda b=box: b.checked
+            box.blockSignals = lambda _value: None
+            window._sublang_boxes.append(box)
+        for name in ("_split_sublangs", "_sync_sublang_checkboxes",
+                     "_sublang_box_toggled"):
+            member = getattr(gui.MainWindowCore, name)
+            setattr(window, name, member if isinstance(member, staticmethod)
+                    else types.MethodType(member, window))
+        window._split_sublangs = gui.MainWindowCore._split_sublangs
+        return window
+
+    def _checked(self, window):
+        return [box._sublang_code for box in window._sublang_boxes
+                if box.isChecked()]
+
+    def test_the_stored_codes_tick_their_boxes(self):
+        window = self._window()
+        window._sync_sublang_checkboxes("en,zh-Hans")
+        self.assertEqual(self._checked(window), ["en", "zh-Hans"])
+
+    def test_a_code_with_no_box_still_shows_the_ones_that_have_boxes(self):
+        # The field accepts anything yt-dlp knows; only some have a checkbox.
+        window = self._window()
+        window._sync_sublang_checkboxes("en,cy,ga")
+        self.assertEqual(self._checked(window), ["en"])
+
+    def test_ticking_a_box_adds_only_that_language(self):
+        window = self._window()
+        window.cfg_sublangs.setText("en,cy")
+        box = next(b for b in window._sublang_boxes if b._sublang_code == "fr")
+        window.sender = lambda: box
+        window._sublang_box_toggled(True)
+        self.assertEqual(window.cfg_sublangs.text(), "en,cy,fr")
+
+    def test_clearing_a_box_keeps_the_codes_that_have_no_box(self):
+        # The regression this guards: rebuilding the field from the checkboxes
+        # alone would silently delete every language the picker cannot show.
+        window = self._window()
+        window.cfg_sublangs.setText("en,cy,fr")
+        box = next(b for b in window._sublang_boxes if b._sublang_code == "fr")
+        window.sender = lambda: box
+        window._sublang_box_toggled(False)
+        self.assertEqual(window.cfg_sublangs.text(), "en,cy")
+
+    def test_clearing_the_last_language_falls_back_rather_than_emptying(self):
+        window = self._window()
+        window.cfg_sublangs.setText("fr")
+        box = next(b for b in window._sublang_boxes if b._sublang_code == "fr")
+        window.sender = lambda: box
+        window._sublang_box_toggled(False)
+        self.assertEqual(window.cfg_sublangs.text(), "en")
+
+    def test_a_duplicate_code_is_not_added_twice(self):
+        window = self._window()
+        window.cfg_sublangs.setText("en,fr")
+        box = next(b for b in window._sublang_boxes if b._sublang_code == "fr")
+        window.sender = lambda: box
+        window._sublang_box_toggled(True)
+        self.assertEqual(window.cfg_sublangs.text(), "en,fr")
+
+    def test_every_offered_code_survives_the_normaliser(self):
+        # A checkbox that writes a code the save path then rewrites would tick
+        # itself off again the moment the user saved.
+        for _label, code in gui_module_for_tests().SUBTITLE_LANGUAGE_CHOICES:
+            with self.subTest(code=code):
+                self.assertEqual(ad.normalize_sublangs(code), code)
 
 class ImpersonateTests(unittest.TestCase):
     """Imitating a browser is the standard 403 remedy, gated on what exists."""
