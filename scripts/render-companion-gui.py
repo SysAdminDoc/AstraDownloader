@@ -17,6 +17,7 @@ CAPTURE_NAMES = (
     "dashboard-online",
     "dashboard-error-degraded",
     "dashboard-german",
+    "downloads-arabic-rtl",
     "downloads-active-pending",
     "downloads-clipboard-staged",
     "downloads-recovery-terminal",
@@ -67,7 +68,7 @@ def main():
         sys.path.insert(0, str(ROOT))
 
         from astra_downloader import astra_downloader as app_module
-        from PyQt6.QtCore import QTimer
+        from PyQt6.QtCore import Qt, QTimer
         from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QImage
         from PyQt6.QtTest import QTest
         from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea
@@ -84,6 +85,11 @@ def main():
         app.setApplicationVersion(app_module.APP_VERSION)
         if scenario == "dashboard-german":
             app._astra_translator = app_module.install_companion_translator(app, "de")
+        elif scenario == "downloads-arabic-rtl":
+            # Arabic is the only advertised locale that flips the whole
+            # layout, and until this scenario existed nothing ever rendered
+            # one — so no gate could see what RTL did to the page.
+            app._astra_translator = app_module.install_companion_translator(app, "ar")
         for font_name in ("segoeui.ttf", "seguisb.ttf", "segoeuib.ttf"):
             font_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / font_name
             if font_path.exists():
@@ -325,6 +331,15 @@ def main():
                     raise RuntimeError(
                         f"German navigation catalogue did not render: {nav_text}"
                     )
+                # The rail is the one surface every locale translates, so a
+                # rail-only assertion passes against a catalogue that has
+                # nothing else in it. Body strings on the landing page are
+                # what prove the catalogue actually reached the window.
+                select_page(window, "Download")
+                assert_visible_text(
+                    window, {"Video herunterladen", "Clip von"}
+                )
+                select_page(window, "Browser extension")
             elif scenario == "dashboard-starting":
                 window.status_label.setText("Starting")
                 window.status_label.setProperty("tone", "warning")
@@ -396,6 +411,39 @@ def main():
                 select_page(window, "Browser extension")
             capture_window(window, scenario)
 
+        def check_rtl_hero_proportions(window):
+            """The page must actually mirror, and mirroring must not resize.
+
+            Measured rather than assumed: the Download button is narrower
+            under Arabic than under English, but only because the translated
+            word is shorter — it sits at its size hint in both directions. So
+            the property worth pinning is not its width, it is that the row
+            reversed, the rail moved, and the paste box still dominates.
+            """
+            button = window.btn_quick_download
+            field = window.quick_download_url
+            rail = window.nav_buttons[0]
+            if button.x() >= field.x():
+                raise RuntimeError(
+                    "RTL did not reverse the hero row: the Download button is "
+                    f"at x={button.x()} against a paste box at x={field.x()}"
+                )
+            rail_x = rail.mapTo(window, rail.rect().topLeft()).x()
+            if rail_x < window.width() / 2:
+                raise RuntimeError(
+                    f"RTL left the navigation rail on the left at x={rail_x}"
+                )
+            if button.width() < button.sizeHint().width():
+                raise RuntimeError(
+                    f"RTL collapsed the Download button to {button.width()}px "
+                    f"below its {button.sizeHint().width()}px hint"
+                )
+            if field.width() < button.width() * 2:
+                raise RuntimeError(
+                    f"RTL starved the paste box: {field.width()}px against a "
+                    f"{button.width()}px button"
+                )
+
         def capture_download_state(window, manager):
             seed_download_matrix(manager)
             if scenario == "downloads-clipboard-staged":
@@ -439,6 +487,12 @@ def main():
                 scroll_current_page_to_top(window)
                 assert_visible_text(window, {"Downloading documentary", "Queued lecture"})
             else:
+                if scenario == "downloads-arabic-rtl":
+                    if app.layoutDirection() != Qt.LayoutDirection.RightToLeft:
+                        raise RuntimeError(
+                            "Arabic fixture did not flip the layout direction"
+                        )
+                    check_rtl_hero_proportions(window)
                 if scenario == "reflow-900x620-hidpi-large-font":
                     window.resize(900, 620)
                     app.setFont(QFont("Segoe UI", 12))

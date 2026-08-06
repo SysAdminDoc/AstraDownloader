@@ -9980,6 +9980,147 @@ def gui_module_for_tests():
     return gui_module
 
 
+class TranslationCoverageTests(unittest.TestCase):
+    """An advertised locale must not be an English catalogue in disguise."""
+
+    # Every locale below `SOURCE_STRINGS` in the builder falls back to its own
+    # English source, which Qt needs but which also makes an empty catalogue
+    # indistinguishable from a finished one. These are the locales known to be
+    # incomplete; the list is the localisation backlog, stated in code instead
+    # of hidden inside XML that looks translated.
+    KNOWN_INCOMPLETE = {
+        "ar", "es", "fr", "it", "ja", "ko", "pt_BR", "ru", "zh_CN",
+    }
+
+    def _builder(self):
+        import importlib.util
+        root = Path(ad.__file__).parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "build_companion_translations",
+            root / "scripts" / "build-companion-translations.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_german_is_complete(self):
+        # The one locale the product actually ships. If it regresses, the
+        # German smoke scenario is asserting against a catalogue that lost
+        # its content.
+        coverage = self._builder().catalogue_coverage()
+        translated, total = coverage["de"]
+        self.assertEqual(translated, total,
+                         f"German lost translations: {translated}/{total}")
+
+    def test_an_undeclared_string_is_not_counted_as_translated(self):
+        # The measurement itself: the builder writes a missing entry out as
+        # its own English source, so only a declared key is coverage.
+        builder = self._builder()
+        original = builder.CATALOGS["de"].pop("Best")
+        try:
+            declared, total = builder.catalogue_coverage()["de"]
+            self.assertEqual(declared, total - 1)
+        finally:
+            builder.CATALOGS["de"]["Best"] = original
+
+    def test_a_translation_that_matches_english_still_counts(self):
+        # German keeps "Video", "Audio" and "Server offline" unchanged. Those
+        # are decisions, not gaps, and counting differences would report a
+        # finished catalogue as incomplete.
+        builder = self._builder()
+        german = builder.CATALOGS["de"]
+        identical = [
+            source for source in builder.SOURCE_STRINGS
+            if german.get(source) == source
+        ]
+        self.assertTrue(identical, "expected at least one identical rendering")
+        declared, total = builder.catalogue_coverage()["de"]
+        self.assertEqual(declared, total)
+
+    def test_the_incomplete_locales_are_exactly_the_declared_ones(self):
+        # A new locale added with only its nav strings joins this list
+        # deliberately, and a locale that gets finished has to leave it.
+        coverage = self._builder().catalogue_coverage()
+        incomplete = {
+            locale for locale, (done, total) in coverage.items()
+            if locale != "en" and done < total
+        }
+        self.assertEqual(incomplete, self.KNOWN_INCOMPLETE)
+
+    def test_every_locale_translates_the_navigation_rail(self):
+        # The floor: whatever else is missing, the rail is what an advertised
+        # locale must at least deliver.
+        builder = self._builder()
+        rail = ("Download", "History", "Sign-ins", "Browser extension",
+                "Settings")
+        for locale, translations in builder.CATALOGS.items():
+            if locale == "en":
+                continue
+            for source in rail:
+                with self.subTest(locale=locale, source=source):
+                    self.assertNotEqual(
+                        translations.get(source, source), source,
+                        f"{locale} does not translate the rail entry {source!r}",
+                    )
+
+    def test_the_shipped_arabic_catalogue_really_is_mostly_english(self):
+        # The generated .ts is what ships, and it is where the gap becomes
+        # user-visible: an Arabic window renders mirrored chrome around
+        # English body text. Confirmed against the file, not only the table.
+        import re
+        translations = Path(ad.__file__).parent / "translations"
+        text = (translations / "astra_downloader_ar.ts").read_text(
+            encoding="utf-8")
+        pairs = re.findall(
+            r"<source>(.*?)</source>\s*<translation>(.*?)</translation>",
+            text, re.S,
+        )
+        self.assertTrue(pairs)
+        english = [source for source, value in pairs
+                   if source.strip() == value.strip()]
+        self.assertIn("Download a video", english)
+        self.assertIn("Pause intake", english)
+        # And the rail, which every locale does translate, is not among them.
+        for source in ("Download", "History", "Settings"):
+            self.assertNotIn(source, english)
+
+
+class RightToLeftLayoutTests(unittest.TestCase):
+    """Arabic flips the layout, and the smoke set now renders one."""
+
+    def _renderer_source(self):
+        root = Path(ad.__file__).parents[1]
+        return (root / "scripts" / "render-companion-gui.py").read_text(
+            encoding="utf-8"
+        )
+
+    def test_an_rtl_scenario_is_in_the_smoke_set(self):
+        # No RTL locale was ever rendered, so no gate could see what the
+        # mirrored layout did to the page.
+        source = self._renderer_source()
+        self.assertIn('"downloads-arabic-rtl"', source)
+        self.assertIn('install_companion_translator(app, "ar")', source)
+
+    def test_the_rtl_scenario_asserts_the_row_actually_mirrors(self):
+        source = self._renderer_source()
+        self.assertIn("check_rtl_hero_proportions", source)
+
+    def test_the_german_scenario_asserts_more_than_the_navigation_rail(self):
+        # The rail is the one surface every locale translates, so a rail-only
+        # assertion passes against a catalogue with nothing else in it.
+        source = self._renderer_source()
+        self.assertIn("Video herunterladen", source)
+        self.assertIn("Clip von", source)
+
+    def test_arabic_is_the_only_right_to_left_locale_advertised(self):
+        import i18n as i18n_module
+        from PyQt6.QtCore import Qt, QLocale
+        rtl = {
+            locale for locale in i18n_module.SUPPORTED_LOCALES
+            if QLocale(locale).textDirection() == Qt.LayoutDirection.RightToLeft
+        }
+        self.assertEqual(rtl, {"ar"})
+
 class PlaylistBoundTests(unittest.TestCase):
     """A pasted playlist can be bounded without reintroducing an archive."""
 

@@ -129,6 +129,27 @@ CATALOGS = {
 }
 
 
+def catalogue_coverage():
+    """Report how many source strings each catalogue actually declares.
+
+    A missing entry is written out below as its own English source, which is
+    what Qt needs to fall back cleanly — but it also makes an untranslated
+    catalogue byte-indistinguishable from a finished one, so nothing could
+    see that a locale was advertised and empty.
+
+    Coverage counts *declared* keys, not values that differ from English. A
+    real translation may coincide with its source — German keeps "Video",
+    "Audio" and "Server offline" — and counting differences would report a
+    finished catalogue as incomplete.
+    """
+    known = set(SOURCE_STRINGS)
+    report = {}
+    for locale, translations in CATALOGS.items():
+        declared = sum(1 for source in translations if source in known)
+        report[locale] = (declared, len(SOURCE_STRINGS))
+    return report
+
+
 def write_ts(locale, translations):
     root = ET.Element(
         "TS",
@@ -176,6 +197,11 @@ def main():
         if not qm_path.exists() or qm_path.stat().st_size < 100:
             raise SystemExit(f"Translation compiler did not produce {qm_path}")
     print(f"Compiled {len(CATALOGS)} companion translation catalogues.")
+    for locale, (translated, total) in sorted(catalogue_coverage().items()):
+        if locale == "en":
+            continue
+        note = "" if translated == total else "   <- incomplete"
+        print(f"  {locale:>5}: {translated}/{total} strings translated{note}")
 
 
 if __name__ == "__main__":
