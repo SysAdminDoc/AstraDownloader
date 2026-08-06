@@ -78,13 +78,6 @@ Notes on the items above, from the same pass:
   Acceptance: Focus is restored by logical key (download id plus action) across a structure change; a test focuses a card action, forces a status transition, and asserts focus lands on the equivalent control or the card itself.
   Complexity: M
 
-- [ ] P2 — Report History page failures on the History page
-  Why: Clear, undo and export report failures through `_append_log`, which writes to the Server log panel on a different page, so a user who hits a permissions error on History sees nothing at all.
-  Evidence: `gui.py:3293-3298`, `3309-3314`, `3179` and `3209-3211` against the log widget's home at `gui.py:1358-1367`. Every other page has a status widget.
-  Touches: `astra_downloader/gui.py`
-  Acceptance: History gains a status label following the existing pattern, and clear, undo and export render both success and failure on-page.
-  Complexity: S
-
 - [ ] P2 — Export and import settings, sign-ins and subscriptions
   Why: The only export is history to CSV, one-way and capped; an install cannot be migrated to another machine, and a corrupt config is unrecoverable through the UI even though the original bytes sit beside it.
   Evidence: `gui.py:3175-3212` is the sole export path. Requested repeatedly elsewhere (Open Video Downloader #630, Seal #425); 4K Video Downloader paywalls URL list import/export.
@@ -175,20 +168,6 @@ Notes on the items above, from the same pass:
   Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/health.py`
   Acceptance: When SABR is detected for a URL the affected controls are disabled with an explanation before the run starts, and the `sabr-limited` advice names which options were dropped.
   Complexity: M
-
-- [ ] P2 — Bound the sign-in file import before it reaches memory
-  Why: The import reads an unbounded file into RAM on the GUI thread, so choosing a multi-gigabyte file freezes the window before the downstream 1 MB cap rejects it.
-  Evidence: `gui.py:2069-2073` reads with no size check, against the cap in `import_netscape_text` (`download.py:662-663`); the HTTP path is bounded correctly.
-  Touches: `astra_downloader/gui.py`
-  Acceptance: File size is checked before reading, oversized files are rejected through the existing error surface, and the read happens off the GUI thread.
-  Complexity: S
-
-- [ ] P2 — Correct the diagnostics ring-buffer limit and the test that hides it
-  Why: The bundle advertises 30 entries but the ring holds 20, and the test injects 35 synthetic entries and asserts 30 — so it passes for the wrong reason and the mismatch cannot be caught.
-  Evidence: `astra_downloader.py:236` (`DIAGNOSTIC_LOG_ENTRY_LIMIT = 30`) against `astra_downloader.py:352` (`deque(maxlen=20)`); `test_astra_downloader.py:1163` and `1178`.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: The two constants derive from one source, and the test exercises the real ring rather than an injected list so it fails if they diverge again.
-  Complexity: S
 
 ### P3
 

@@ -82,7 +82,8 @@ try:
         DOWNLOAD_RUNNING_STATES, DOWNLOAD_STALL_TIMEOUT_SECONDS,
         DOWNLOAD_TERMINAL_STATES, DOWNLOAD_WATCHDOG_POLL_SECONDS,
         DOWNLOAD_QUEUE_SCHEMA_VERSION, MAX_CONCURRENT, MAX_QUEUED_TOTAL,
-        MAX_SITE_LOGIN_COOKIES, MAX_SITE_LOGINS, PLAYLIST_PREVIEW_LIMIT,
+        MAX_SITE_LOGIN_COOKIES, MAX_SITE_LOGIN_TEXT_BYTES, MAX_SITE_LOGINS,
+        PLAYLIST_PREVIEW_LIMIT,
         SITE_LOGIN_BROWSERS, SITE_LOGIN_DIRNAME, SITE_LOGIN_INDEX_NAME,
         SiteLoginStore,
         build_browser_cookie_args,
@@ -164,7 +165,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         DOWNLOAD_RUNNING_STATES, DOWNLOAD_STALL_TIMEOUT_SECONDS,
         DOWNLOAD_TERMINAL_STATES, DOWNLOAD_WATCHDOG_POLL_SECONDS,
         DOWNLOAD_QUEUE_SCHEMA_VERSION, MAX_CONCURRENT, MAX_QUEUED_TOTAL,
-        MAX_SITE_LOGIN_COOKIES, MAX_SITE_LOGINS, PLAYLIST_PREVIEW_LIMIT,
+        MAX_SITE_LOGIN_COOKIES, MAX_SITE_LOGIN_TEXT_BYTES, MAX_SITE_LOGINS,
+        PLAYLIST_PREVIEW_LIMIT,
         SITE_LOGIN_BROWSERS, SITE_LOGIN_DIRNAME, SITE_LOGIN_INDEX_NAME,
         SiteLoginStore,
         build_browser_cookie_args,
@@ -380,7 +382,9 @@ MAX_TEXT_FIELD = 500
 MAX_PATH_FIELD = 2048
 LOG_MAX_BYTES = 1024 * 1024
 _LOG_LOCK = threading.Lock()
-_LOG_RING_MAX = 20
+# One source: the ring has to hold at least what a diagnostics bundle claims
+# to include, or the bundle quietly ships fewer entries than it advertises.
+_LOG_RING_MAX = DIAGNOSTIC_LOG_ENTRY_LIMIT
 _log_ring = __import__('collections').deque(maxlen=_LOG_RING_MAX)
 YTDLP_FORBIDDEN_LINK_FLAGS = frozenset({
     # Shortcut files written from remote metadata — CVE-2026-55404.
@@ -3384,6 +3388,7 @@ class MainWindow(MainWindowCore):
                 'INSTALL_DIR': lambda: INSTALL_DIR,
                 'INSTANCE_CONTROL_HOST': lambda: INSTANCE_CONTROL_HOST,
                 'INSTANCE_CONTROL_PORT': lambda: INSTANCE_CONTROL_PORT,
+                'MAX_SITE_LOGIN_TEXT_BYTES': lambda: MAX_SITE_LOGIN_TEXT_BYTES,
                 'MODULE_FILE': lambda: __file__,
                 'PORT_FALLBACKS': lambda: PORT_FALLBACKS,
                 'ReadinessProbe': lambda *args, **kwargs: ReadinessProbe(*args, **kwargs),
