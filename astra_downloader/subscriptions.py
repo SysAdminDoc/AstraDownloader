@@ -38,10 +38,7 @@ SUBSCRIPTION_MAX_RECORDS = 100
 SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000
 _TEXT_LIMIT = 500
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
-_YOUTUBE_HOST_RE = re.compile(
-    r"^https?://(?:[^/]+\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)(?:/|$|\?)",
-    re.IGNORECASE,
-)
+_YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "youtube-nocookie.com")
 
 
 def _default_clean_text(value, default="", max_len=_TEXT_LIMIT):
@@ -62,7 +59,16 @@ def _default_normalize_url(value):
 
 
 def _default_is_youtube_url(url):
-    return bool(_YOUTUBE_HOST_RE.match(url or ""))
+    # Parsed-host comparison, matching health.is_youtube_url. A string match
+    # here would accept `https://evil.com?x=.youtube.com/` as a channel URL.
+    try:
+        parsed = urlparse(str(url or "").strip())
+        host = (parsed.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    if parsed.scheme.lower() not in ("http", "https") or not host:
+        return False
+    return any(host == known or host.endswith("." + known) for known in _YOUTUBE_HOSTS)
 
 
 def _default_clamp_int(value, default, minimum, maximum):

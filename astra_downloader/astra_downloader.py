@@ -3224,9 +3224,14 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
         return False
     target = str(Path(path).resolve())
     if sys.platform == 'win32':
-        script = "Start-Sleep -Seconds 2; Remove-Item -LiteralPath $args[0] -Recurse -Force"
+        # powershell -Command joins every remaining argument into the command
+        # text, so $args is always empty here — the path has to be embedded in
+        # the script itself. Single-quote it (doubling any literal quote) so a
+        # username containing a quote or a space cannot break out.
+        quoted = "'" + target.replace("'", "''") + "'"
+        script = f"Start-Sleep -Seconds 2; Remove-Item -LiteralPath {quoted} -Recurse -Force"
         subprocess.Popen(
-            ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script, target],
+            ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=CREATE_NO_WINDOW,

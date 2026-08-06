@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 try:
     from ._compat import make_legacy_resolver
@@ -43,15 +44,27 @@ YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
 DENO_MIN_VERSION = "2.3.0"
 NODE_MIN_VERSION = "22.0.0"
 
-_YOUTUBE_HOST_RE = re.compile(
-    r'^https?://(?:[^/]+\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)(?:/|$|\?)',
-    re.IGNORECASE,
-)
+YOUTUBE_HOSTS = ('youtube.com', 'youtu.be', 'youtube-nocookie.com')
 
 
 def is_youtube_url(url):
-    """Return whether a URL points at a supported YouTube property."""
-    return bool(_YOUTUBE_HOST_RE.match(url or ''))
+    """Return whether a URL points at a supported YouTube property.
+
+    The host is parsed, never string-matched. This predicate decides which
+    cookie jar is handed to a yt-dlp process on a `--cookies` write path, so a
+    pattern that can be satisfied by a query string or fragment —
+    `https://evil.com?x=.youtube.com/` — hands the YouTube jar to an
+    attacker-chosen host. `urlparse().hostname` also strips userinfo, so
+    `https://youtube.com@evil.com/` resolves to `evil.com` as it must.
+    """
+    try:
+        parsed = urlparse(str(url or '').strip())
+        host = (parsed.hostname or '').lower().rstrip('.')
+    except ValueError:
+        return False
+    if parsed.scheme.lower() not in ('http', 'https') or not host:
+        return False
+    return any(host == known or host.endswith('.' + known) for known in YOUTUBE_HOSTS)
 
 
 def _compare_semver(a, b):
