@@ -1315,6 +1315,86 @@ class UninstallCleanupTests(unittest.TestCase):
         self.assertNotIn("rmdir", args)
 
 
+class FatalErrorReportingTests(unittest.TestCase):
+    """A windowed exe that dies silently just doesn't open when you click it."""
+
+    def test_report_fatal_error_writes_the_crash_log_and_shows_a_dialog(self):
+        shown = []
+
+        class FakeUser32:
+            def MessageBoxW(self, _hwnd, text, caption, _flags):
+                shown.append((caption, text))
+                return 1
+
+        class FakeWindll:
+            user32 = FakeUser32()
+
+        import ctypes as _ctypes
+
+        with tempfile.TemporaryDirectory() as tmp:
+            crash_log = Path(tmp) / "crash.log"
+            with mock.patch.object(ad, "CRASH_LOG_PATH", crash_log), \
+                    mock.patch.object(ad.sys, "platform", "win32"), \
+                    mock.patch.object(_ctypes, "windll", FakeWindll(), create=True):
+                try:
+                    raise RuntimeError("PyQt6 plugin missing")
+                except RuntimeError as error:
+                    ad.report_fatal_error(f"Fatal startup error: {error}")
+
+            self.assertTrue(crash_log.exists(), "the crash log must be written")
+            body = crash_log.read_text(encoding="utf-8")
+            self.assertIn("PyQt6 plugin missing", body)
+
+        self.assertEqual(len(shown), 1)
+        caption, text = shown[0]
+        self.assertEqual(caption, ad.APP_NAME)
+        self.assertIn("PyQt6 plugin missing", text)
+        self.assertIn(str(crash_log), text,
+                      "the dialog must name the file the user should send")
+
+    def test_unhandled_exception_hook_logs_and_notifies(self):
+        notices = []
+        original = sys.excepthook
+        # The hook chains to whatever was installed before it; under pytest-qt
+        # that is a recorder that would fail the test on the exception we are
+        # deliberately raising.
+        sys.excepthook = lambda *_args: None
+        with tempfile.TemporaryDirectory() as tmp:
+            crash_log = Path(tmp) / "crash.log"
+            with mock.patch.object(ad, "CRASH_LOG_PATH", crash_log):
+                hook = ad.install_unhandled_exception_hooks(notify=notices.append)
+                try:
+                    try:
+                        raise ValueError("slot exploded")
+                    except ValueError:
+                        hook(*sys.exc_info())
+                finally:
+                    sys.excepthook = original
+
+            self.assertTrue(crash_log.exists())
+            body = crash_log.read_text(encoding="utf-8")
+            self.assertIn("slot exploded", body)
+            self.assertIn("Unhandled exception", body)
+
+        self.assertEqual(notices, ["ValueError: slot exploded"])
+
+    def test_unhandled_exception_hook_leaves_keyboard_interrupt_alone(self):
+        notices = []
+        original = sys.excepthook
+        # The hook chains to whatever was installed before it; under pytest-qt
+        # that is a recorder that would fail the test on the exception we are
+        # deliberately raising.
+        sys.excepthook = lambda *_args: None
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(ad, "CRASH_LOG_PATH", Path(tmp) / "crash.log"):
+                hook = ad.install_unhandled_exception_hooks(notify=notices.append)
+                try:
+                    hook(KeyboardInterrupt, KeyboardInterrupt(), None)
+                finally:
+                    sys.excepthook = original
+        self.assertEqual(notices, [])
+
+
 class DownloadManagerTests(unittest.TestCase):
     def test_fourth_download_is_retained_pending_while_three_run(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())

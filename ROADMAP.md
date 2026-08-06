@@ -62,13 +62,6 @@ Notes on the items above, from the same pass:
   Acceptance: Quarantining a file raises a persistent, dismissible in-app notice naming the file and its backup path, with a one-click restore that swaps the backup back and reloads; corrupt and empty queue files are distinguished.
   Complexity: M
 
-- [ ] P1 — Make fatal startup and slot exceptions visible
-  Why: For a windowed exe, a fatal startup error means double-clicking the icon does nothing at all, forever; and with no `sys.excepthook` or Qt hook, an exception inside a slot aborts the process without even a crash-log line.
-  Evidence: `astra_downloader.py:3620-3626` logs and swallows; no `excepthook` exists anywhere in `astra_downloader/`.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/gui.py`
-  Acceptance: A fatal startup error shows a native message box naming the crash-log path and exits non-zero; `sys.excepthook` and a Qt slot hook route unhandled exceptions to `log_crash` plus a non-fatal in-app notice.
-  Complexity: S
-
 ### P2
 
 - [ ] P2 — Finish the localisation
