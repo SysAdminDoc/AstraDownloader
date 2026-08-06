@@ -23,6 +23,11 @@ repository's git log.
 
 ### Fixed
 
+- **The proof-of-origin provider status is visible.** The readiness probe has
+  always computed it and failure advice referred to it, but no row existed to
+  show it, so every update was discarded in silence. The Download page tool
+  strip now carries a PO provider row and wraps to a second line, which also
+  stops the strip's entries overlapping on a narrow window at a large font.
 - **Interrupted downloads resume instead of restarting.** `--force-overwrites`
   was sent on every run, and yt-dlp's own help notes it includes
   `--no-continue`, so a 4 GB file interrupted at 95% re-downloaded in full.

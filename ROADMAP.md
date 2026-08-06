@@ -55,13 +55,6 @@ Notes on the items above, from the same pass:
 
 ### P1
 
-- [ ] P1 — Render the PO-token provider readiness row the code already computes
-  Why: `_apply_readiness` sets a `provider` state three times and `_set_readiness` silently discards all of it because no such row exists, so the PO-provider status that failure advice refers to has never been visible.
-  Evidence: `gui.py:1228`, `1234`, `1239` set it; `gui.py:1155-1158` early-returns on unknown keys; `_make_readiness_row` is called only for `server`, `ytDlp`, `ffmpeg`, `deno` and `sabr`. `download.py:2253-2254` documents a "PO provider: Fallback" row that does not exist.
-  Touches: `astra_downloader/gui.py` (`_build_download`), `astra_downloader/test_astra_downloader.py`
-  Acceptance: A provider row renders in the Download page tool strip and reflects Ready / Update / Fallback with its tooltip; a test asserts that every key written by `_apply_readiness` has a registered row, so this class of bug cannot recur.
-  Complexity: S
-
 - [ ] P1 — Surface persistence failures instead of losing a completed download
   Why: `history.add` swallows every write error and returns False; the call site discards it, so on a full disk a download completes, the file exists, and history never records it with no user-visible signal.
   Evidence: `download.py:2612-2622` against `config.py:966-972`. Every other persistence caller checks and rolls back (`download.py:2632-2635`, `2701-2706`, `2780-2787`).
