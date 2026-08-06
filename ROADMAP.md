@@ -30,12 +30,12 @@ Notes on the items above, from the same pass:
 
 ### P2
 
-- [ ] P2 — Finish the localisation
-  Why: The app advertises 11 locales but ships translations for about a tenth of its strings, so choosing German yields a mostly-English window. This is also the only feature any external user has ever requested.
-  Evidence: 21 `<message>` entries per catalogue against 122 `tr()` call sites plus 85 auto-translated `make_label()` calls in `gui.py`; `i18n.py:10-22` advertises 11 locales; Astra Deck issue #1 asks for Chinese. ytDownloader (23 Crowdin languages) and Parabolic (Weblate) both outsource this work.
-  Touches: `scripts/build-companion-translations.py`, `astra_downloader/translations/`, `astra_downloader/gui.py`
-  Acceptance: Every string reaching `tr()` or `make_label()` is extracted into the `.ts` sources; a gate fails when an untranslated literal is added; the German scenario in `scripts/render-companion-gui.py` asserts a translated string on each of the six pages rather than only the nav rail.
-  Complexity: L
+- [ ] P2 — Translate the strings the extractor cannot see
+  Why: `Duration`, `Format` and `Quality` are the History list's column headers and render in English in every locale, because they are written with `setText()` at runtime rather than built through `tr()`. The same shape hides an unknown number of other strings: readiness values ("Checking", "Fallback"), and the composed status lines ("0 of 0 filtered · 0 retained", "Every 60 min · next scan ...").
+  Evidence: measured 2026-08-06 by rendering the German locale and dumping every visible QLabel per page — the three column headers came back English against a 219/219 German catalogue. `scripts/extract_companion_strings.py` reads the syntax tree, so a literal that never appears as an argument to a translating call is invisible to it by construction.
+  Touches: `astra_downloader/gui.py`, `scripts/extract_companion_strings.py`
+  Acceptance: the runtime-assigned labels are built through `tr()` so the extractor finds them; the composed status lines take their word order from a translated template rather than concatenation; the German scenario asserts one of them.
+  Complexity: M
 
 - [ ] P3 — Give `subscriptions.py` a real test surface
   Why: The scheduling core is 872 lines behind a single test class, and it is the one subsystem that runs unattended — a defect there is discovered by a user whose channel silently stopped downloading.

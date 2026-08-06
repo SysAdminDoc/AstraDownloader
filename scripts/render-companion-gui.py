@@ -331,19 +331,31 @@ def main():
                 nav_text = [button.text() for button in window.nav_buttons]
                 if nav_text != [
                     "Herunterladen", "Verlauf", "Anmeldungen",
-                    "Subscriptions", "Browser-Erweiterung", "Einstellungen",
+                    "Abonnements", "Browser-Erweiterung", "Einstellungen",
                 ]:
                     raise RuntimeError(
                         f"German navigation catalogue did not render: {nav_text}"
                     )
                 # The rail is the one surface every locale translates, so a
                 # rail-only assertion passes against a catalogue that has
-                # nothing else in it. Body strings on the landing page are
-                # what prove the catalogue actually reached the window.
-                select_page(window, "Download")
-                assert_visible_text(
-                    window, {"Video herunterladen", "Clip von"}
-                )
+                # nothing else in it — which is exactly what nine of the
+                # eleven locales still are. Assert body copy on EVERY page,
+                # so an English string surviving anywhere fails here.
+                for page, expected_german in (
+                    ("Download", {"Ausschnitt von",
+                                  "Ausschnitte gelten nur für einen einzelnen Link."}),
+                    ("History", {"Verlauf", "Datei", "Gespeichert ab"}),
+                    ("Sign-ins", {"Anmeldungen", "Website-Anmeldung hinzufügen",
+                                  "Lesen aus"}),
+                    ("Subscriptions", {"Abonnements", "Neues Abonnement"}),
+                    ("Browser extension", {"Browser-Erweiterung", "Kopplung",
+                                           "Laufzeit"}),
+                    ("Settings", {"Einstellungen", "Formatwünsche",
+                                  "Dateinamenvorlage", "Aktion"}),
+                ):
+                    select_page(window, page)
+                    scroll_current_page_to_top(window)
+                    assert_visible_text(window, expected_german)
                 select_page(window, "Browser extension")
             elif scenario == "dashboard-starting":
                 window.status_label.setText("Starting")
