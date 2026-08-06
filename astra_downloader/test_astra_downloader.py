@@ -6134,13 +6134,13 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_0_0(self):
-        # v2.0.0: Astra Downloader became its own product in its own
-        # repository. The window opens on Download rather than a server
-        # dashboard, the local API that serves the Astra Deck browser
-        # extension moved to its own page, and the self-update URLs point at
-        # this repository's releases instead of the extension's.
-        self.assertEqual(ad.APP_VERSION, "2.0.0")
+    def test_app_version_bumped_to_2_1_0(self):
+        # v2.1.0: the roadmap drain. --uninstall actually removes the install
+        # directory, YouTube is recognised by parsed host rather than URL
+        # text, interrupted downloads resume, a completed download that cannot
+        # be recorded says so, ytdl:// links download what they name, and the
+        # window accepts a dropped link.
+        self.assertEqual(ad.APP_VERSION, "2.1.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
