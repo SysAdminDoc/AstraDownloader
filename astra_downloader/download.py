@@ -93,7 +93,11 @@ DOWNLOAD_FAILURE_RECOVERY = {
             'This video only exposes SABR-limited formats that this yt-dlp '
             'path cannot download yet.'
         ),
-        'advice': 'Update yt-dlp when SABR support lands, or retry after YouTube exposes standard formats.',
+        'advice': (
+            'Clip ranges, the bandwidth cap and concurrent fragments do not '
+            'apply to SABR streams and were ignored. Update yt-dlp when SABR '
+            'support lands, or retry after YouTube exposes standard formats.'
+        ),
         'next_action': 'update-ytdlp-or-retry-later',
     },
     'deno-runtime-missing': {
@@ -1019,6 +1023,9 @@ def summarize_ytdlp_formats(info):
             'filesize': int(f.get('filesize') or f.get('filesize_approx') or 0),
             'tbr': f.get('tbr') or 0,
             'format_note': (f.get('format_note') or '')[:80],
+            # Carried so a SABR-only URL can be recognised before a run
+            # starts, rather than after the options it voids are ignored.
+            'protocol': (f.get('protocol') or '')[:32],
         })
     return {
         'id': str(info.get('id') or ''),
@@ -1031,6 +1038,47 @@ def summarize_ytdlp_formats(info):
 # The quality picker's fixed ladder, highest first. A probe narrows it; it is
 # never widened, so a probe that reports nothing leaves the offer untouched.
 QUALITY_LADDER = ('2160', '1440', '1080', '720', '480')
+
+# yt-dlp cannot apply --download-sections, --limit-rate or -N to a SABR
+# stream (PR #13515). When a URL serves nothing else those options are void,
+# and the failure taxonomy exists precisely to stop that going unexplained.
+SABR_VOIDED_OPTIONS = (
+    'clip ranges', 'the bandwidth cap', 'concurrent fragments',
+)
+SABR_LIMITED_NOTICE = (
+    'This link only offers SABR streams. {options} do not apply to them and '
+    'will be ignored.'
+)
+
+
+def describe_sabr_voided_options(options=SABR_VOIDED_OPTIONS):
+    """Render the voided-option list as a sentence fragment."""
+    items = [str(option) for option in options if str(option or '').strip()]
+    if not items:
+        return ''
+    if len(items) == 1:
+        return items[0]
+    return ', '.join(items[:-1]) + ' and ' + items[-1]
+
+
+def sabr_only_formats(summary):
+    """Whether every video format a probe found is a SABR stream.
+
+    A URL that serves anything else is not limited — the non-SABR format is
+    what gets downloaded — so this is deliberately all-or-nothing rather than
+    a warning on the first SABR entry.
+    """
+    if not isinstance(summary, dict):
+        return False
+    video = [
+        entry for entry in (summary.get('formats') or [])
+        if isinstance(entry, dict) and entry.get('has_video')
+    ]
+    if not video:
+        return False
+    return all(
+        'sabr' in str(entry.get('protocol') or '').lower() for entry in video
+    )
 
 
 def probed_video_heights(summary):

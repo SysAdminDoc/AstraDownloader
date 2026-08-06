@@ -884,6 +884,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'is_playlist_url',
     'is_youtube_url',
     'probed_video_heights',
+    'describe_sabr_voided_options',
+    'sabr_only_formats',
+    'SABR_LIMITED_NOTICE',
     'quality_choices_for_heights',
     'looks_like_media_link',
     'MANAGED_BINARY_ANTIVIRUS_ADVICE',
@@ -1541,10 +1544,13 @@ class MainWindowCore(QMainWindow):
         self.quick_download_end.setMaximumWidth(84)
         options_row.addWidget(self.quick_download_end)
         quick_layout.addLayout(options_row)
-        quick_layout.addWidget(make_label(
-            tr("Clip ranges apply to a single link."),
-            "fieldHint",
-        ))
+        self.quick_download_clip_hint = make_label(
+            tr("Clip ranges apply to a single link."), "fieldHint",
+            word_wrap=True,
+        )
+        quick_layout.addWidget(self.quick_download_clip_hint)
+        # Whether the link in the box serves nothing but SABR streams.
+        self._sabr_limited = False
         self.quick_download_status = make_label("", "fieldHint")
         self.quick_download_status.setAccessibleName("Quick download status")
         self.quick_download_status.hide()
@@ -4361,6 +4367,32 @@ class MainWindowCore(QMainWindow):
         combo.setCurrentIndex(restored if restored >= 0 else 0)
         combo.blockSignals(False)
 
+    def _apply_sabr_limits(self, limited):
+        """Disable what a SABR-only link cannot honour, and say why.
+
+        yt-dlp ignores --download-sections, --limit-rate and -N on a SABR
+        stream, so a clip range typed against one silently yields the whole
+        video. Better to refuse the input than to accept it and not deliver.
+        """
+        limited = bool(limited)
+        if getattr(self, "_sabr_limited", None) == limited:
+            return
+        self._sabr_limited = limited
+        for field in (self.quick_download_start, self.quick_download_end):
+            field.setEnabled(not limited)
+            if limited:
+                field.clear()
+        if limited:
+            notice = self._value('SABR_LIMITED_NOTICE').format(
+                options=self._dependencies['describe_sabr_voided_options']()
+            )
+            self.quick_download_clip_hint.setText(notice)
+            self._set_quick_download_status(notice, "warning")
+        else:
+            self.quick_download_clip_hint.setText(
+                tr("Clip ranges apply to a single link.")
+            )
+
     def _schedule_format_probe(self):
         """Restart the debounce, and drop a stale narrowing straight away."""
         if not hasattr(self, "_format_probe_timer"):
@@ -4376,6 +4408,7 @@ class MainWindowCore(QMainWindow):
             return
         self._probed_format_url = ""
         self._format_probe_generation += 1
+        self._apply_sabr_limits(False)
         self._set_quality_choices(self._value('QUALITY_LADDER'))
 
     def _probe_quick_download_formats(self):
@@ -4425,7 +4458,9 @@ class MainWindowCore(QMainWindow):
             # A probe failure is not a download failure: the fixed ladder is
             # still a usable offer, so it stays and nothing is said.
             return
-        heights = self._dependencies['probed_video_heights'](payload.get("summary"))
+        summary = payload.get("summary")
+        self._apply_sabr_limits(self._dependencies['sabr_only_formats'](summary))
+        heights = self._dependencies['probed_video_heights'](summary)
         if not heights:
             return
         self._probed_format_url = payload.get("url") or ""
