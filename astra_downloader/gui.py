@@ -1494,6 +1494,14 @@ class MainWindowCore(QMainWindow):
                 line.addStretch(1)
             tools_grid.addLayout(line)
         layout.addLayout(tools_grid)
+
+        # Durability problems that no other surface can report: a completed
+        # download whose history entry could not be written, or a queue that
+        # could not be saved. Both leave the app looking like it worked.
+        self.persistence_notice = make_label("", "errorCallout", word_wrap=True)
+        self.persistence_notice.setAccessibleName("Storage problem")
+        self.persistence_notice.hide()
+        layout.addWidget(self.persistence_notice)
         self._set_readiness("sabr", "Limited", "warning")
         layout.addWidget(make_divider())
 
@@ -3140,6 +3148,13 @@ class MainWindowCore(QMainWindow):
         active.sort(key=lambda d: d.start_time)
         pending.sort(key=lambda d: (d.queue_order, d.start_time))
         recent.sort(key=lambda d: d.start_time, reverse=True)
+        read_notice = getattr(self.dl_manager, 'persistence_notice', None)
+        notice = read_notice() if callable(read_notice) else ''
+        if notice != self.persistence_notice.text():
+            self.persistence_notice.setText(notice)
+            self.persistence_notice.setVisible(bool(notice))
+            if notice:
+                self._append_log(notice)
         capacity = self.dl_manager.capacity()
         self.queue_capacity_badge.setText(
             f"{capacity['total']} / {capacity['totalLimit']} jobs"

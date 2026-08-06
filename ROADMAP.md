@@ -55,13 +55,6 @@ Notes on the items above, from the same pass:
 
 ### P1
 
-- [ ] P1 — Surface persistence failures instead of losing a completed download
-  Why: `history.add` swallows every write error and returns False; the call site discards it, so on a full disk a download completes, the file exists, and history never records it with no user-visible signal.
-  Evidence: `download.py:2612-2622` against `config.py:966-972`. Every other persistence caller checks and rolls back (`download.py:2632-2635`, `2701-2706`, `2780-2787`).
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: A failed history write is logged and surfaced in the UI; a test injecting a raising writer asserts the user-visible signal appears and the download still reports complete.
-  Complexity: S
-
 - [ ] P1 — Tell the user when a state file was quarantined, and offer restore
   Why: A corrupt `config.json` silently regenerates the server token — breaking extension pairing — and reverts every setting; a corrupt `download-queue.json` is indistinguishable from an empty one and discards all pending work, while a mere schema mismatch is properly surfaced.
   Evidence: `config.py:734-748` renames to `<name>.corrupt-<timestamp>` with no notification; `download.py:1226-1230` and `1384-1400` treat an empty dict as a valid empty queue; `config.py:654-655` regenerates the token.
