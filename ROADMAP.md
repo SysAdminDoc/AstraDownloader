@@ -4,15 +4,6 @@ Actionable items only — work a coding agent can pick up and implement without
 external dependencies. Completed items are deleted; shipped work lives in git
 history and `CHANGELOG.md`.
 
-## P2 — Downloader-first follow-ups from the v2.0.0 split
-
-- **Format probing before download.** `/formats` already returns the real
-  format table for a URL. The GUI's quality picker is a fixed list
-  (Best/2160/1440/1080/720/480) that does not know what the pasted link
-  actually offers, so a user can pick 2160p on a 720p video and only learn
-  the truth from the result. Probe on paste (debounced, cancellable) and
-  reduce the picker to what exists.
-
 ## P3 — Unaudited — needs a pass
 
 Carried over from the Astra Deck audit backlog: these companion areas were
@@ -30,10 +21,6 @@ Added 2026-08-06 from the research pass recorded in `RESEARCH.md`. Every item
 below traces to a finding or source there.
 
 Notes on the items above, from the same pass:
-- *Format probing before download* — confirmed as the most common gap complaint
-  in this software class (MeTube #1032, ytDownloader #231) and a prerequisite
-  for audio-track and codec selection. It should land together with "Sort
-  formats instead of guessing quality" below.
 - *Light-theme behaviour* — no theme key exists in `DEFAULT_CONFIG`, so the
   work is "build a light theme", not "audit the existing one".
 - *Subscriptions unaudited* — corroborated from the other direction:
@@ -42,20 +29,6 @@ Notes on the items above, from the same pass:
 ### P1
 
 ### P2
-
-- [ ] P2 — Make a right-to-left locale render correctly, and render one in the smoke
-  Why: Arabic is advertised and flips the whole layout to RTL, but 84% of the window is still English, so an Arabic user gets mirrored chrome wrapped around left-aligned English — worse than plain English. No gate could have caught it because no RTL locale is ever rendered.
-  Evidence: measured 2026-08-06 by rendering the real window under `ar` offscreen — 121 of 144 visible strings were pure ASCII. `i18n.py:62-66` sets `Qt.LayoutDirection.RightToLeft` for `ar`. `scripts/render-companion-gui.py` has 19 scenarios and no RTL one; its only locale scenario is `dashboard-german`, which asserts on the nav rail — the one surface Arabic does translate, except *Subscriptions*, which stays English. In the capture the hero Download button renders at a fraction of its LTR width with its icon against the frame edge. Details and the measurement in `RESEARCH.md` (Second Pass).
-  Touches: `scripts/render-companion-gui.py`, `astra_downloader/gui.py`, `astra_downloader/translations/`
-  Acceptance: an `ar` scenario joins the smoke set and captures the Download page; the hero button keeps its LTR proportions under RTL; the German rail assertion is extended to a body string on the same page so a rail-only translation can no longer pass. Pairs with "Finish the localisation" — this item is the RTL correctness half, not the bulk-translation half.
-  Complexity: M
-
-- [ ] P2 — Fetch a playlist or subscription incrementally instead of whole
-  Why: A subscription scan and a playlist download both re-walk everything every time. yt-dlp has the selection primitives to stop at the first already-seen item, bound a run, and filter by date or duration; none is used, so the subscription scheduler does the most expensive possible thing on every tick.
-  Evidence: the selection theme is the single largest unused group — 29 options — and none of `--break-on-existing`, `--dateafter`, `--datebefore`, `--max-downloads`, `--match-filters`, `--min-filesize` or `--lazy-playlist` appears in `astra_downloader/` (verified 2026-08-06). `--download-archive` is deliberately excluded and pinned by test, and must stay excluded — the archive-key mechanism in `subscriptions.py` is this project's answer to the same problem, so the new flags must complement it rather than reintroduce it.
-  Touches: `astra_downloader/subscriptions.py`, `astra_downloader/download.py`, `astra_downloader/config.py`, `astra_downloader/gui.py`
-  Acceptance: a subscription scan bounds itself by count and by date and stops early once it reaches known items, without `--download-archive`; a playlist download can be capped; the existing no-archive tests still pass.
-  Complexity: M
 
 - [ ] P2 — Finish the localisation
   Why: The app advertises 11 locales but ships translations for about a tenth of its strings, so choosing German yields a mostly-English window. This is also the only feature any external user has ever requested.
@@ -92,32 +65,11 @@ Notes on the items above, from the same pass:
   Acceptance: A bundled `qjs` binary is detected and used automatically when no Deno or Node is present, with a version floor enforced as for the others; the readiness row names the runtime in use; a fresh install downloads a YouTube video with no user-installed runtime.
   Complexity: M
 
-- [ ] P2 — Sort formats instead of guessing quality
-  Why: The quality picker is a fixed ladder that cannot express codec, frame-rate or HDR preference, so users cannot ask for "1080p H.264 60fps, never AV1" — the most common power-user need in this class.
-  Evidence: no `--format-sort` anywhere in `astra_downloader/`; `build_video_format_args` (`download.py:897-918`) encodes preferences as a hand-built cascade. yt-dlp added `--format-sort-reset` and `--compat-options 2025` in 2026.01.29. Pairs with the existing "Format probing before download" item.
-  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`, `astra_downloader/gui.py`
-  Acceptance: Preferred codec, container, frame rate and resolution ceiling are settings that compile to `--format-sort`; the editor-safe H.264 and AAC path survives as a named preset; existing format tests still pass.
-  Complexity: M
-
-- [ ] P2 — Self-heal a quarantined or truncated yt-dlp or ffmpeg binary
-  Why: Antivirus removing the bundled tools is the largest single support burden for OSS downloaders of this shape, and the app currently discovers it as an opaque failure rather than naming it.
-  Evidence: seven Open Video Downloader issues reduce to "binaries missing or corrupted, disable your antivirus" (#390, #436, #354, #362, #534, #555, #506). `verify_file_sha256` (`astra_downloader.py:839`) already exists for the update path but is not applied as a launch-time integrity check.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/health.py`, `astra_downloader/gui.py`
-  Acceptance: On launch a missing or zero-size managed binary is re-fetched automatically, and the log and readiness row say that antivirus may have removed it, naming the exclusion path.
-  Complexity: M
-
 - [ ] P2 — Windows shell integration: AppUserModelID, taskbar progress, notification actions
   Why: Without an explicit AppUserModelID an unpackaged exe has unreliable taskbar-pinning identity and toast attribution; download progress is invisible unless the window is open; and completion notifications cannot be clicked to reach the file.
   Evidence: no `SetCurrentProcessExplicitAppUserModelID` anywhere in `astra_downloader/`; progress exists only in-window (`gui.py:2933`); `QSystemTrayIcon.messageClicked` is never connected, only `activated` (`gui.py:1059`); `_show_download_location` opens the parent folder with `os.startfile` rather than selecting the file (`gui.py:3349-3361`).
   Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/gui.py`
   Acceptance: An AppUserModelID is set before the first window is created; the taskbar button shows aggregate queue progress; clicking a completion notification reveals the file with `explorer /select,`; a right-click menu on a finished card offers play, reveal, copy URL and re-download.
-  Complexity: M
-
-- [ ] P2 — Disclose SABR-imposed limitations instead of failing mid-run
-  Why: When a URL yields SABR-only formats, clip ranges, rate limits and concurrent fragments are all silently void — exactly the unexplained degradation the failure taxonomy exists to prevent.
-  Evidence: yt-dlp PR #13515, still open as of 2026-07, documents that `--download-sections`, `--rate-limit` and `-N` are unsupported with SABR; `evaluate_sabr_support` and a `sabr-limited` error code already exist (`health.py`, `download.py:70-171`).
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`, `astra_downloader/health.py`
-  Acceptance: When SABR is detected for a URL the affected controls are disabled with an explanation before the run starts, and the `sabr-limited` advice names which options were dropped.
   Complexity: M
 
 ### P3
