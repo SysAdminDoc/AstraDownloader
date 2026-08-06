@@ -863,6 +863,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_sb_action = ComboField()
         window.cfg_js_runtime = ComboField("auto")
         window.cfg_ytdlp_channel = ComboField("nightly")
+        window.cfg_video_codec = ComboField("auto")
+        window.cfg_audio_codec = ComboField("auto")
+        window.cfg_frame_rate = ComboField(0)
         window.cfg_fragments = NumberField(4)
         window.cfg_maxconcurrent = NumberField(3)
         window.cfg_retries = NumberField(10)
@@ -1654,10 +1657,20 @@ class TransferReliabilityArgvTests(unittest.TestCase):
         self.assertEqual(len(runs), 1)
         return runs[0]
 
+    def test_a_format_preference_reaches_the_download_argv(self):
+        argv = self._argv({
+            "VideoCodecPreference": "h264",
+            "PreferredFrameRate": 60,
+        })
+        self.assertEqual(
+            argv[argv.index("--format-sort") + 1], "res,vcodec:h264,fps~60"
+        )
+
     def test_defaults_add_none_of_the_new_flags(self):
         argv = self._argv({})
         for flag in ("--throttled-rate", "--socket-timeout",
-                     "--extractor-retries", "--check-formats"):
+                     "--extractor-retries", "--check-formats",
+                     "--format-sort"):
             with self.subTest(flag=flag):
                 self.assertNotIn(flag, argv, "defaults must not change the argv")
 
@@ -9947,6 +9960,98 @@ def gui_module_for_tests():
     import gui as gui_module
     return gui_module
 
+
+class FormatSortTests(unittest.TestCase):
+    """Codec and frame-rate preferences compile to one --format-sort."""
+
+    def test_no_preference_sends_no_flag(self):
+        # The default must leave the argv byte-identical: a preference nobody
+        # expressed has no business changing every download.
+        self.assertEqual(ad.build_format_sort_args(ad.sanitize_config({})), [])
+
+    def test_resolution_always_leads_the_sort(self):
+        # yt-dlp puts the given fields ahead of its own defaults, so naming
+        # vcodec alone ranks a 360p H.264 stream above a 1080p VP9 one.
+        # Verified against the real binary: `--format-sort vcodec:h264` on a
+        # 4K source selects 1080p, `res,vcodec:h264` keeps 2160p.
+        args = ad.build_format_sort_args({"VideoCodecPreference": "h264"})
+        self.assertEqual(args, ["--format-sort", "res,vcodec:h264"])
+
+    def test_every_preference_compiles_into_one_flag(self):
+        args = ad.build_format_sort_args({
+            "VideoCodecPreference": "av1",
+            "AudioCodecPreference": "opus",
+            "PreferredFrameRate": 60,
+        })
+        self.assertEqual(
+            args, ["--format-sort", "res,vcodec:av01,acodec:opus,fps~60"]
+        )
+
+    def test_frame_rate_is_a_target_not_a_requirement(self):
+        # `~` is "closest to": an unavailable 60fps falls back rather than
+        # failing the whole format selection.
+        args = ad.build_format_sort_args({"PreferredFrameRate": 60})
+        self.assertIn("fps~60", args[1])
+
+    def test_an_unknown_preference_is_ignored(self):
+        for config in (
+            {"VideoCodecPreference": "h265"},
+            {"AudioCodecPreference": "flac"},
+            {"PreferredFrameRate": "nonsense"},
+            {"PreferredFrameRate": 0},
+        ):
+            self.assertEqual(ad.build_format_sort_args(config), [], config)
+
+    def test_the_two_modules_share_one_vocabulary(self):
+        # config.py owns the schema, download.py owns the argv mapping, and
+        # the modules never cross-import. Neither may gain a value the other
+        # does not know.
+        self.assertEqual(
+            set(ad.FORMAT_SORT_VIDEO_FIELDS) | {"auto"},
+            set(ad.FORMAT_SORT_VIDEO_CODECS),
+        )
+        self.assertEqual(
+            set(ad.FORMAT_SORT_AUDIO_FIELDS) | {"auto"},
+            set(ad.FORMAT_SORT_AUDIO_CODECS),
+        )
+
+    def test_sanitize_rejects_a_value_outside_the_vocabulary(self):
+        data = ad.sanitize_config({
+            "VideoCodecPreference": "h265",
+            "AudioCodecPreference": "flac",
+            "PreferredFrameRate": 45,
+        })
+        self.assertEqual(data["VideoCodecPreference"], "auto")
+        self.assertEqual(data["AudioCodecPreference"], "auto")
+        self.assertEqual(data["PreferredFrameRate"], 0)
+
+    def test_the_editor_safe_container_path_is_untouched(self):
+        # MP4 remains a hard H.264 + AAC constraint; the preference only
+        # orders what that leaves open.
+        args = ad.build_video_format_args("mp4", "1080")
+        self.assertIn("bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]",
+                      args[1])
+        self.assertEqual(args[2:], ["--merge-output-format", "mp4"])
+
+    def test_the_real_binary_accepts_the_compiled_sort(self):
+        # A flag yt-dlp rejects would break every download rather than
+        # degrade, so the spelling is checked against the installed binary.
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest("yt-dlp is not installed in this environment")
+        args = ad.build_format_sort_args({
+            "VideoCodecPreference": "h264",
+            "AudioCodecPreference": "aac",
+            "PreferredFrameRate": 30,
+        })
+        proc = subprocess.run(
+            [str(ytdlp), "--ignore-config", "--no-plugin-dirs"] + args
+            + ["--simulate", "--no-warnings", "https://example.invalid/none"],
+            capture_output=True, text=True, timeout=120,
+        )
+        combined = (proc.stdout or "") + (proc.stderr or "")
+        self.assertNotIn("Invalid format sort", combined)
+        self.assertNotIn("no such option", combined.lower())
 
 class FormatProbeTests(unittest.TestCase):
     """A pasted link is probed so the picker stops offering what it lacks."""
