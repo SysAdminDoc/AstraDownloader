@@ -6346,12 +6346,12 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_3_0(self):
-        # v2.3.0: the quality picker is probed against the pasted link, codec
-        # and frame-rate preference compile to --format-sort, a playlist can
-        # be bounded, a quarantined binary is re-fetched instead of trusted,
-        # and a SABR-only link says what it cannot honour.
-        self.assertEqual(ad.APP_VERSION, "2.3.0")
+    def test_app_version_bumped_to_2_4_0(self):
+        # v2.4.0: a rejected retry rolls back instead of raising, a ytdl://
+        # link reaches a running window, per-card actions are per-card, a
+        # subscription reports an unwritable archive, control boundaries meet
+        # the contrast floor, and a browser can be imitated to get past a 403.
+        self.assertEqual(ad.APP_VERSION, "2.4.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
