@@ -34,6 +34,10 @@ repository's git log.
 
 ### Added
 
+- **Drop a link on the window and it downloads.** A dragged link, a selection
+  of text containing links, or a dropped `.txt` list all land in the paste
+  box's batch path — junk lines are ignored, duplicates collapse, and the
+  window switches to Download so you can watch the queue.
 - **One finished download, one file.** A merged download leaves `.part`,
   `.f###` and `.ytdl` files beside the result, and yt-dlp does not always
   remove them. They are now swept once the download succeeds — never on

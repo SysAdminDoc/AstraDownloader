@@ -911,6 +911,8 @@ class MainWindowCore(QMainWindow):
         self.site_login_finished.connect(self._finish_site_login_import)
 
         self.setWindowTitle(self._value('APP_NAME'))
+        # Dropping a link on a downloader should download it.
+        self.setAcceptDrops(True)
         self.setMinimumSize(900, 620)
         self.resize(1120, 760)
 
@@ -1668,6 +1670,62 @@ class MainWindowCore(QMainWindow):
                 if len(failures) > 1 else failures[0][1],
                 "error",
             )
+
+    # ── Drag and drop ────────────────────────────────────────────────────
+    # A downloader should accept a link you drop on it. Both a dragged link
+    # and a dropped text file of links end up in the same batch path the
+    # paste box already uses.
+    MAX_DROPPED_LINK_FILE_BYTES = 1024 * 1024
+
+    def _links_from_mime(self, mime):
+        """Pull candidate links out of a drop, from text or a dropped file."""
+        candidates = []
+        if mime.hasText():
+            candidates.extend(mime.text().split())
+        for url in mime.urls() if mime.hasUrls() else ():
+            if url.isLocalFile():
+                path = Path(url.toLocalFile())
+                try:
+                    if (path.suffix.lower() not in ('.txt', '.url', '.csv')
+                            or path.stat().st_size > self.MAX_DROPPED_LINK_FILE_BYTES):
+                        continue
+                    candidates.extend(
+                        path.read_text(encoding='utf-8', errors='replace').split()
+                    )
+                except OSError:
+                    # reason: an unreadable drop is not an application error
+                    continue
+            else:
+                candidates.append(url.toString())
+        links, seen = [], set()
+        for candidate in candidates:
+            candidate = candidate.strip().strip('<>"\'')
+            normalized, error = self._dependencies['normalize_url'](candidate)
+            if error or not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            links.append(normalized)
+        return links
+
+    def dragEnterEvent(self, event):
+        if self._links_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self, event):
+        links = self._links_from_mime(event.mimeData())
+        if not links:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self._nav_click("Download")
+        self.quick_download_url.setText(" ".join(links))
+        # A clip range can only apply to one link, and a drop is a batch.
+        if len(links) > 1:
+            self.quick_download_start.clear()
+            self.quick_download_end.clear()
+        self._start_quick_download()
 
     def _set_quick_download_status(self, message, state):
         self.quick_download_status.setText(message)
