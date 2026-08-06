@@ -55,13 +55,6 @@ Notes on the items above, from the same pass:
 
 ### P1
 
-- [ ] P1 — Stop `--force-overwrites` from destroying partial-download resume
-  Why: yt-dlp's `--force-overwrites` includes `--no-continue`, so every interrupted, paused or retried download restarts from zero — a 4 GB file at 95% re-downloads entirely.
-  Evidence: `download.py:2210` appends it unconditionally; the comment at `download.py:2205-2209` documents the v1.3.0 intent (allow re-downloading the same URL) and shows the resume loss was unintended. Confirmed against `yt-dlp.exe --help` on 2026-08-06.
-  Touches: `astra_downloader/download.py` (`_run_download`), `astra_downloader/test_astra_downloader.py`
-  Acceptance: A fresh user-initiated download of a URL whose output file exists still overwrites; a resumed or retried download omits the flag and continues from the existing `.part` file. Tests assert presence and absence per path, and the v1.3.0 "re-downloads always run" behaviour still passes.
-  Complexity: M
-
 - [ ] P1 — Extend the process-boundary flag denylist to the 2026 advisories
   Why: The guard covers only the four link-file flags from CVE-2026-55404, but six further yt-dlp advisories landed in 2026 on flags of the same class, and the guard's own docstring says it exists to catch future builder regressions.
   Evidence: `astra_downloader.py:381-405` (`YTDLP_FORBIDDEN_LINK_FLAGS`, `validate_ytdlp_spawn_args`). Advisories: `--exec` GHSA-69qj-pvh9-c5wg, `--netrc-cmd` GHSA-g3gw-q23r-pgqm, `--downloader aria2c` CVE-2026-50574, `--downloader curl` CVE-2026-50019.

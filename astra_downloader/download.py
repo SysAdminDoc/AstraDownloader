@@ -1164,6 +1164,12 @@ class Download:
         self.cookies_scope = ""
         self.requires_auth = bool(requires_auth)
         self._cookies = None
+        # yt-dlp's --force-overwrites includes --no-continue, so it must only be
+        # sent on a run that is *meant* to start over. A retry, a resume, or a
+        # download recovered after a restart is exactly the case where a `.part`
+        # file may already hold most of the media — sending it there restarts a
+        # 4 GB file from zero. Set on the paths that continue existing work.
+        self.resume_partial = False
         self.status = "pending"
         self.progress = 0.0
         self.speed = ""
@@ -1479,6 +1485,9 @@ class DownloadManagerCore:
                 if requires_auth else
                 'Recovered after restart. Resume the queue when you are ready.'
             )
+            # This download was interrupted mid-flight, so whatever yt-dlp had
+            # already written is still on disk. Continue from it.
+            dl.resume_partial = True
             restored.append(dl)
 
         if not restored:
@@ -2207,7 +2216,13 @@ class DownloadManagerCore:
         # output file and prints "[download] Title.mp4 has already been
         # downloaded" — same UX failure mode as the now-removed
         # --download-archive feature.
-        args.append('--force-overwrites')
+        #
+        # It also includes --no-continue, which is why it is not unconditional:
+        # on a retry, a resume, or a download recovered after a restart there
+        # may be a `.part` file worth continuing from, and discarding it means
+        # re-fetching everything already on disk.
+        if not getattr(dl, 'resume_partial', False):
+            args.append('--force-overwrites')
         rate = str(self.config.get("RateLimit", "")).strip().upper()
         if rate and re.match(r'^\d+[KMG]?$', rate):
             args += ['--limit-rate', rate]
@@ -2689,6 +2704,7 @@ class DownloadManagerCore:
             previous = (
                 dl.status, dl.error, dl.error_code, dl.error_advice,
                 dl.error_action, dl.requires_auth, dl._cookies,
+                dl.resume_partial,
             )
             if cookies:
                 dl.requires_auth = True
@@ -2698,10 +2714,12 @@ class DownloadManagerCore:
             dl.error_code = ''
             dl.error_advice = ''
             dl.error_action = ''
+            dl.resume_partial = True
             if not self._persist_locked():
                 (
                     dl.status, dl.error, dl.error_code, dl.error_advice,
                     dl.error_action, dl.requires_auth, dl._cookies,
+                    dl.resume_partial,
                 ) = previous
                 return False, self._persistence_error
         self.progress_updated.emit()
@@ -2736,7 +2754,7 @@ class DownloadManagerCore:
                 dl.status, dl.progress, dl.speed, dl.eta, dl.filename,
                 dl.error, dl.error_code, dl.error_advice, dl.error_action,
                 dl.finished_time, dl.start_time, dl.queue_order,
-                dl.requires_auth, dl._cookies,
+                dl.requires_auth, dl._cookies, dl.resume_partial,
             )
             if dl.requires_auth and not cookies:
                 dl.status = 'needs-auth'
@@ -2775,6 +2793,8 @@ class DownloadManagerCore:
             dl.error_action = ''
             dl.finished_time = None
             dl.start_time = time.time()
+            # A retry continues whatever the failed attempt left on disk.
+            dl.resume_partial = True
             self._next_order += 1
             dl.queue_order = self._next_order
             if not self._persist_locked():
@@ -2782,7 +2802,7 @@ class DownloadManagerCore:
                     dl.status, dl.progress, dl.speed, dl.eta, dl.filename,
                     dl.error, dl.error_code, dl.error_advice, dl.error_action,
                     dl.finished_time, dl.start_time, dl.queue_order,
-                    dl.requires_auth, dl._cookies,
+                    dl.requires_auth, dl._cookies, dl.resume_partial,
                 ) = previous
                 return False, self._persistence_error
         self.progress_updated.emit()

@@ -14,6 +14,13 @@ repository's git log.
 
 ### Fixed
 
+- **Interrupted downloads resume instead of restarting.** `--force-overwrites`
+  was sent on every run, and yt-dlp's own help notes it includes
+  `--no-continue`, so a 4 GB file interrupted at 95% re-downloaded in full.
+  It is now sent only on a run meant to start over — a retry, a resume, or a
+  download recovered after a restart continues from its `.part` file, while
+  re-downloading the same URL still overwrites as it always did.
+
 - **`--uninstall` now actually removes the install directory.** The delayed
   removal ran `powershell -Command "<script>" <path>`, which never populates
   `$args`, so the command was well-formed, reported success and deleted
