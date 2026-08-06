@@ -10,6 +10,19 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased]
+
+### Security
+
+- **yt-dlp no longer loads plugins from your profile.** `--ignore-config`
+  stops configuration *files*; plugin directories are a separate mechanism
+  with their own defaults, so arbitrary Python under
+  `%APPDATA%\yt-dlp\plugins` was imported and executed inside every yt-dlp
+  process this app spawns. Verified against the real binary with a marker
+  plugin, before and after. `--no-plugin-dirs` and `--no-remote-components`
+  are now added at the same process boundary that refuses `--exec` and the
+  external downloaders, so an invocation added later cannot forget them.
+
 ## [2.1.0] - 2026-08-06
 
 ### Security
