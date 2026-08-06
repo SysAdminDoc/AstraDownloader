@@ -43,6 +43,7 @@ __all__ = (
     "cookie_domain_in_site", "parse_netscape_cookies",
     "build_browser_cookie_args", "describe_browser_cookie_failure",
     "SITE_LOGIN_BROWSERS", "MAX_SITE_LOGINS", "MAX_SITE_LOGIN_COOKIES",
+    "MAX_SITE_LOGIN_TEXT_BYTES",
     "SITE_LOGIN_DIRNAME", "SITE_LOGIN_INDEX_NAME",
 )
 

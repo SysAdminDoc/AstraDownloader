@@ -1081,6 +1081,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.logs = []
         window.refreshes = 0
         window._append_log = window.logs.append
+        window.statuses = []
+        window._show_history_status = lambda text, state="neutral": (
+            window.statuses.append((text, state)) or window.logs.append(text)
+        )
         window._refresh_history = lambda: setattr(window, "refreshes", window.refreshes + 1)
 
         ad.MainWindow._clear_history(window)
@@ -1093,6 +1097,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertFalse(window.btn_undo_clear_history.hidden)
         self.assertEqual(window.refreshes, 0)
         self.assertIn("still available", window.logs[-1])
+
+        # Both failures have to reach the History page, not only the server
+        # log panel that lives on another page.
+        self.assertEqual([state for _text, state in window.statuses], ["error", "error"])
 
 
 class InstanceCommandTests(unittest.TestCase):
@@ -1253,6 +1261,28 @@ class DiagnosticsBundleTests(unittest.TestCase):
         self.assertNotIn("SAPISID", serialized)
         self.assertNotIn("a" * 32, serialized)
         self.assertIn("[redacted", serialized)
+
+    def test_the_real_log_ring_holds_what_the_bundle_advertises(self):
+        # Injecting a synthetic list let the bundle claim 30 entries while the
+        # ring behind get_recent_log_entries only ever held 20, so the two
+        # constants could diverge with every test still green.
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "server.log"
+            for index in range(ad.DIAGNOSTIC_LOG_ENTRY_LIMIT + 10):
+                ad.write_persistent_log(f"entry {index}", log_path)
+
+            entries = ad.get_recent_log_entries()
+
+        self.assertEqual(len(entries), ad.DIAGNOSTIC_LOG_ENTRY_LIMIT)
+        bundle = ad.build_diagnostics_bundle(recent_logs=entries)
+        self.assertEqual(
+            len(bundle["recentLog"]), ad.DIAGNOSTIC_LOG_ENTRY_LIMIT,
+            "the bundle must be able to carry a full ring",
+        )
+        self.assertEqual(
+            bundle["recentLog"][-1]["message"],
+            f"entry {ad.DIAGNOSTIC_LOG_ENTRY_LIMIT + 9}",
+        )
 
 
 class UninstallCleanupTests(unittest.TestCase):
@@ -1447,6 +1477,43 @@ class QuarantinedStateFileTests(unittest.TestCase):
                         len(self.config_module.quarantined_state_files()), 1,
                         "dismissing must not delete the backup",
                     )
+                finally:
+                    _retire_test_window(window)
+
+
+class SiteLoginImportBoundTests(unittest.TestCase):
+    def test_an_oversized_cookie_file_is_rejected_before_it_is_read(self):
+        # The 1 MB cap lives downstream of the read, and the read is on the
+        # GUI thread — a huge pick froze the window before the cap applied.
+        _get_qapp_or_skip(self)
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with tempfile.TemporaryDirectory() as tmp:
+            oversized = Path(tmp) / "cookies.txt"
+            oversized.write_bytes(b"x" * (ad.MAX_SITE_LOGIN_TEXT_BYTES + 1))
+
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+                try:
+                    reads = []
+                    real_read_text = Path.read_text
+
+                    def tracking_read_text(self, *args, **kwargs):
+                        reads.append(str(self))
+                        return real_read_text(self, *args, **kwargs)
+
+                    with mock.patch.object(
+                        ad.QFileDialog, "getOpenFileName",
+                        return_value=(str(oversized), ""),
+                    ), mock.patch.object(Path, "read_text", tracking_read_text):
+                        window._import_site_login_from_file()
+
+                    self.assertNotIn(
+                        str(oversized), reads,
+                        "the oversized file must never be read into memory",
+                    )
+                    self.assertIn("too large", window.site_login_status.text())
                 finally:
                     _retire_test_window(window)
 

@@ -836,6 +836,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'INSTALL_DIR',
     'INSTANCE_CONTROL_HOST',
     'INSTANCE_CONTROL_PORT',
+    'MAX_SITE_LOGIN_TEXT_BYTES',
     'MODULE_FILE',
     'PORT_FALLBACKS',
     'ReadinessProbe',
@@ -1733,6 +1734,15 @@ class MainWindowCore(QMainWindow):
         range_row.addWidget(self.btn_history_next)
         layout.addLayout(range_row)
 
+        # Clear, Undo and Export used to report through _append_log, whose
+        # widget lives on the Browser extension page — so a permissions error
+        # here produced no visible response at all. Every other page has one
+        # of these.
+        self.history_page_status = make_label("", "fieldHint", word_wrap=True)
+        self.history_page_status.setAccessibleName("History status message")
+        self.history_page_status.hide()
+        layout.addWidget(self.history_page_status)
+
         for signal in (
             self.history_search.textChanged,
             self.history_status.currentIndexChanged,
@@ -2045,6 +2055,14 @@ class MainWindowCore(QMainWindow):
             self.site_login_container.addWidget(row)
         self.site_login_container.addStretch()
 
+    def _show_history_status(self, message, state="neutral"):
+        """Report a History action on the History page, and in the log."""
+        self.history_page_status.setText(message)
+        self.history_page_status.setProperty("state", state)
+        self.history_page_status.show()
+        repolish(self.history_page_status)
+        self._append_log(message)
+
     def _show_site_login_status(self, message, state="neutral"):
         self.site_login_status.setText(message)
         self.site_login_status.setProperty("state", state)
@@ -2121,6 +2139,21 @@ class MainWindowCore(QMainWindow):
             "Cookie files (*.txt);;All files (*.*)",
         )
         if not path:
+            return
+        # The size is checked before the read, not after. import_netscape_text
+        # rejects anything over MAX_SITE_LOGIN_TEXT_BYTES, but this runs on the
+        # GUI thread — picking a multi-gigabyte file froze the window solid
+        # before that limit ever got a chance to apply.
+        limit = self._value('MAX_SITE_LOGIN_TEXT_BYTES')
+        try:
+            size = Path(path).stat().st_size
+        except OSError as error:
+            self._show_site_login_status(f"Could not read that file: {error}", "error")
+            return
+        if size > limit:
+            self._show_site_login_status(
+                "That cookie file is too large to be a browser export.", "error"
+            )
             return
         try:
             text = Path(path).read_text(encoding="utf-8", errors="replace")
@@ -3295,7 +3328,8 @@ class MainWindowCore(QMainWindow):
         result = self._history_query(offset=0, limit=500)
         rows = result["history"]
         if not rows:
-            self._append_log("No filtered history rows are available to export.")
+            self._show_history_status(
+                "No filtered history rows are available to export.", "warning")
             return
         default_path = Path(self.config.get("DownloadPath", str(Path.home())))
         suggested = default_path / "astra-download-history.csv"
@@ -3326,9 +3360,11 @@ class MainWindowCore(QMainWindow):
                     for row in rows
                 )
         except OSError as error:
-            self._append_log(f"Could not export download history: {error}")
+            self._show_history_status(
+                f"Could not export download history: {error}", "error")
             return
-        self._append_log(f"Exported {len(rows)} filtered history row(s) to {path}")
+        self._show_history_status(
+            f"Exported {len(rows)} filtered history row(s) to {path}", "success")
 
     def _refresh_history(self):
         self._clear_layout(self.history_container)
@@ -3407,35 +3443,41 @@ class MainWindowCore(QMainWindow):
         snapshot = self.history_mgr.load()
         if not snapshot:
             self._refresh_history()
-            self._append_log("Download history is already clear")
+            self._show_history_status("Download history is already clear.", "neutral")
             return
         if not self.history_mgr.clear():
-            self._append_log(
+            self._show_history_status(
                 "Could not clear download history. The existing history was preserved; "
-                "check disk permissions and retry."
+                "check disk permissions and retry.",
+                "error",
             )
             return
         self._cleared_history_snapshot = snapshot
         self._refresh_history()
         self.btn_undo_clear_history.show()
-        self._append_log("Download history cleared. Downloaded files were not removed.")
+        self._show_history_status(
+            "Download history cleared. Downloaded files were not removed.", "success")
 
     def _undo_clear_history(self):
         if not self._cleared_history_snapshot:
             self.btn_undo_clear_history.hide()
-            self._append_log("No cleared history entries to restore")
+            self._show_history_status("No cleared history entries to restore.", "warning")
             return
         if not self.history_mgr.replace(self._cleared_history_snapshot):
-            self._append_log(
+            self._show_history_status(
                 "Could not restore download history. The Undo snapshot is still available; "
-                "check disk permissions and retry."
+                "check disk permissions and retry.",
+                "error",
             )
             return
         restored = len(self._cleared_history_snapshot)
         self._cleared_history_snapshot = []
         self.btn_undo_clear_history.hide()
         self._refresh_history()
-        self._append_log(f"Restored {restored} download history entr{'y' if restored == 1 else 'ies'}")
+        self._show_history_status(
+            f"Restored {restored} download history entr{'y' if restored == 1 else 'ies'}.",
+            "success",
+        )
 
     def _retry_download(self, dl):
         ok, err = self.dl_manager.retry(dl.id)

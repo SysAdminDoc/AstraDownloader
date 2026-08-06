@@ -40,6 +40,15 @@ repository's git log.
 
 ### Fixed
 
+- **History reports its own failures on the History page.** Clear, Undo and
+  Export wrote their results to the log panel, which lives on the Browser
+  extension page — so a permissions error produced no visible response at all.
+- **An oversized cookies.txt is refused before it is read.** The 1 MB cap sat
+  downstream of a read on the GUI thread, so picking a huge file froze the
+  window before the cap could apply.
+- **The diagnostics bundle carries the 30 log entries it advertises.** The ring
+  behind it held 20; the test injected a synthetic list, so it passed while the
+  two constants disagreed.
 - **A quarantined state file is announced, and can be put back.** A corrupt
   `config.json` was renamed aside in silence, taking every setting with it and
   regenerating the server token — which breaks extension pairing with no
