@@ -886,6 +886,10 @@ SetupWorker = SetupWorkerCore
 
 
 _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
+    'build_reveal_command',
+    'spawn_detached',
+    'summarize_taskbar_progress',
+    'TaskbarProgress',
     'APP_NAME',
     'APP_VERSION',
     'DEFAULT_CONFIG',
@@ -1149,6 +1153,13 @@ class MainWindowCore(QMainWindow):
         exit_action.triggered.connect(self._force_close)
         self.tray.setContextMenu(tray_menu)
         self.tray.activated.connect(self._tray_activated)
+        # A toast that cannot be acted on is just an interruption. Clicking
+        # one reveals the download it announced.
+        self.tray.messageClicked.connect(self._notification_clicked)
+        # Qt 6 dropped QtWinExtras, so this talks to ITaskbarList3 directly.
+        # It fails soft: no taskbar bar is a missing nicety, not a broken app.
+        self._taskbar_progress = self._dependencies['TaskbarProgress']()
+        self._last_notified_file = ""
         self.tray.setToolTip(f"{self._value('APP_NAME')} - Running")
         self.tray.show()
         self._clipboard = QApplication.clipboard()
@@ -3749,6 +3760,15 @@ class MainWindowCore(QMainWindow):
         card.setProperty("class", "download")
         card.setProperty("downloadId", dl.id)
         card.setObjectName(f"download_{dl.id}")
+        if recent and dl.status == "complete":
+            # A finished card carries one button; the rest of what you might
+            # want to do with a file lives here rather than in four more.
+            card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            card.customContextMenuRequested.connect(
+                lambda point, item=dl, widget=card: self._download_card_menu(
+                    item, widget
+                ).exec(widget.mapToGlobal(point))
+            )
         card_l = QVBoxLayout(card)
         card_l.setContentsMargins(16, 13, 16, 13)
         card_l.setSpacing(9)
@@ -3973,6 +3993,9 @@ class MainWindowCore(QMainWindow):
         for d in newly_complete:
             self._seen_complete.add(d.id)
             if notify:
+                # What a click on this toast will act on. Windows gives no
+                # per-message identity, so the most recent one wins.
+                self._last_notified_file = getattr(d, 'filename', '') or ''
                 title = (getattr(d, 'title', '') or '').strip() or 'Your download is finished.'
                 skipped = d.status == 'skipped'
                 if skipped:
@@ -4014,6 +4037,7 @@ class MainWindowCore(QMainWindow):
         # Stats
         self.stat_active.setText(str(self.dl_manager.active_count()))
         self.stat_completed.setText(str(self.dl_manager.total_completed))
+        self._update_taskbar_progress()
         if self.tabs.currentIndex() == self._page_names.index("Subscriptions"):
             self._refresh_subscriptions()
         if self.server_start_time:
@@ -4319,6 +4343,17 @@ class MainWindowCore(QMainWindow):
         if not file_path:
             self._open_folder()
             return
+        # Selecting the file beats opening its folder: a busy Downloads
+        # folder otherwise leaves the user hunting for what just finished.
+        command = self._dependencies['build_reveal_command'](file_path)
+        if command:
+            try:
+                self._dependencies['spawn_detached'](command)
+                return
+            except Exception as e:
+                # Fall through to the folder: a shell that would not take
+                # /select is no reason to open nothing at all.
+                self._append_log(f"Could not select the file in Explorer: {e}")
         path = Path(file_path)
         try:
             target = path.parent if path.suffix else path
@@ -4328,6 +4363,92 @@ class MainWindowCore(QMainWindow):
             self._append_log("Download location is no longer available")
         except Exception as e:
             self._append_log(f"Could not open download location: {e}")
+
+    def _update_taskbar_progress(self):
+        """Show queue progress on the taskbar button.
+
+        The window is usually not the thing being watched — a download runs
+        for minutes and the user goes elsewhere — so the taskbar button is
+        where progress is actually wanted.
+        """
+        taskbar = getattr(self, '_taskbar_progress', None)
+        if taskbar is None:
+            return False
+        state, completed, total = self._dependencies['summarize_taskbar_progress'](
+            self.dl_manager.snapshot(),
+            self._value('DOWNLOAD_RUNNING_STATES'),
+            self._value('DOWNLOAD_TERMINAL_STATES'),
+        )
+        return taskbar.apply(int(self.winId()), state, completed, total)
+
+    def _notification_clicked(self):
+        """Reveal whatever the last completion toast was about."""
+        target = getattr(self, '_last_notified_file', '')
+        self._show_from_tray()
+        if target:
+            self._show_download_location(target)
+        return bool(target)
+
+    def _play_download(self, file_path):
+        """Open a finished file in whatever the system plays it with."""
+        try:
+            if file_path and Path(file_path).is_file():
+                os.startfile(str(Path(file_path)))
+                return True
+            self._append_log("That file is no longer on disk")
+        except Exception as e:
+            self._append_log(f"Could not open the file: {e}")
+        return False
+
+    def _copy_download_url(self, url):
+        if not url:
+            return False
+        QApplication.clipboard().setText(str(url))
+        self._set_quick_download_status("Link copied.", "success")
+        return True
+
+    def _download_card_menu(self, download, position_widget):
+        """Right-click actions for one finished download.
+
+        Everything here is already reachable some other way; the point is
+        that it is reachable *from the thing it acts on* rather than from a
+        button strip that cannot afford four more buttons.
+        """
+        menu = QMenu(self)
+        filename = getattr(download, 'filename', '') or ''
+        playable = bool(filename) and Path(filename).is_file()
+        play = menu.addAction(tr("Play"))
+        play.setEnabled(playable)
+        play.triggered.connect(lambda: self._play_download(filename))
+        reveal = menu.addAction(tr("Show in folder"))
+        reveal.setEnabled(bool(filename))
+        reveal.triggered.connect(lambda: self._show_download_location(filename))
+        menu.addSeparator()
+        url = getattr(download, 'url', '') or ''
+        copy_link = menu.addAction(tr("Copy link"))
+        copy_link.setEnabled(bool(url))
+        copy_link.triggered.connect(lambda: self._copy_download_url(url))
+        again = menu.addAction(tr("Download again"))
+        again.setEnabled(bool(url))
+        again.triggered.connect(lambda: self._redownload(download))
+        return menu
+
+    def _redownload(self, download):
+        """Put a finished download's link back in the paste box, ready to go.
+
+        Deliberately not an immediate re-queue: the format and quality
+        pickers belong to the box, and silently repeating the original
+        request would ignore whatever the user has since changed there.
+        """
+        url = getattr(download, 'url', '') or ''
+        if not url:
+            return False
+        self.quick_download_url.setText(url)
+        self._nav_click("Download")
+        self._set_quick_download_status(
+            "Link ready. Check the options, then choose Download.", "neutral"
+        )
+        return True
 
     def _set_input_error(self, widget, is_error):
         widget.setProperty("state", "error" if is_error else "")

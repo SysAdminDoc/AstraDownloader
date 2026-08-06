@@ -3383,6 +3383,10 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
         'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
         'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
+        'build_reveal_command': lambda *args, **kwargs: build_reveal_command(*args, **kwargs),
+        'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
+        'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
+        'TaskbarProgress': TaskbarProgress,
         'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,
@@ -3426,7 +3430,10 @@ class SetupWorker(SetupWorkerCore):
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
                 'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
-        'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
+                'build_reveal_command': lambda *args, **kwargs: build_reveal_command(*args, **kwargs),
+                'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
+                'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
+                'TaskbarProgress': TaskbarProgress,
                 'register_desktop_shortcut': lambda *args, **kwargs: register_desktop_shortcut(*args, **kwargs),
                 'register_protocol_handlers': lambda *args, **kwargs: register_protocol_handlers(*args, **kwargs),
                 'register_startup_task': lambda *args, **kwargs: register_startup_task(*args, **kwargs),
@@ -3606,6 +3613,10 @@ class MainWindow(MainWindowCore):
                 'MODULE_FILE': lambda: __file__,
                 'PORT_FALLBACKS': lambda: PORT_FALLBACKS,
                 'ReadinessProbe': lambda *args, **kwargs: ReadinessProbe(*args, **kwargs),
+                'TaskbarProgress': TaskbarProgress,
+                'build_reveal_command': lambda *args, **kwargs: build_reveal_command(*args, **kwargs),
+                'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
+                'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
                 'SERVER_PORT': lambda: SERVER_PORT,
                 'SetupWorker': lambda *args, **kwargs: SetupWorker(*args, **kwargs),
                 'YTDLP_PATH': lambda: YTDLP_PATH,
@@ -3668,6 +3679,248 @@ class MainWindow(MainWindowCore):
 # SINGLE INSTANCE GUARD
 # ══════════════════════════════════════════════════════════════
 INSTANCE_ALREADY_RUNNING = object()
+
+
+# Windows uses this string to decide which taskbar button a window belongs to
+# and which application a toast is attributed to. The documented shape is
+# CompanyName.ProductName[.SubProduct][.VersionInformation], deliberately
+# without a version: it must stay stable across releases or an upgrade
+# orphans the user's pinned shortcut.
+APP_USER_MODEL_ID = "SysAdminDoc.AstraDownloader"
+
+
+def set_app_user_model_id(app_id=APP_USER_MODEL_ID):
+    """Claim an explicit taskbar identity. Returns whether Windows took it.
+
+    An unpackaged executable that never calls this gets an identity derived
+    from its path, so a pinned shortcut and the running process disagree and
+    the taskbar shows two buttons for one app.
+    """
+    try:
+        import ctypes
+        result = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            str(app_id)
+        )
+    except Exception as error:
+        # reason: a non-Windows host or a shell32 without the export leaves
+        # the process on the default identity, which is cosmetic, not fatal
+        write_persistent_log(f"Could not set the taskbar identity: {error}")
+        return False
+    # S_OK is 0; anything else is an HRESULT failure worth recording but not
+    # worth refusing to start over.
+    if result != 0:
+        write_persistent_log(
+            f"Windows refused the taskbar identity (HRESULT {result:#010x})"
+        )
+        return False
+    return True
+
+
+# Aggregate taskbar progress states, in ITaskbarList3::SetProgressState's
+# own vocabulary. Named here so the pure decision — what the queue as a whole
+# is doing — can be tested without a window handle or a COM apartment.
+TASKBAR_PROGRESS_NONE = 0x0
+TASKBAR_PROGRESS_INDETERMINATE = 0x1
+TASKBAR_PROGRESS_NORMAL = 0x2
+TASKBAR_PROGRESS_ERROR = 0x4
+TASKBAR_PROGRESS_PAUSED = 0x8
+
+
+def summarize_taskbar_progress(downloads, running_states, terminal_states):
+    """Reduce the queue to one (state, completed, total) the taskbar can show.
+
+    Windows gives a single button one bar, so several downloads have to become
+    one number. Percent-of-all-work is the honest reduction: five downloads at
+    20% reads as 20%, not as "one of five finished". Sizes are unknown until a
+    transfer starts, so each job counts as one unit of work and contributes
+    its own percentage.
+    """
+    active = [
+        download for download in downloads
+        if getattr(download, 'status', '') in running_states
+    ]
+    if not active:
+        # Nothing is running: leave the button alone rather than showing an
+        # empty bar over an idle app.
+        return (TASKBAR_PROGRESS_NONE, 0, 0)
+    # A download that already failed is deliberately not reflected here: the
+    # error state would colour the button red for work that is still running
+    # fine, and the failure is already reported on its own card.
+    total = len(active) * 100
+    completed = 0
+    for download in active:
+        try:
+            progress = float(getattr(download, 'progress', 0) or 0)
+        except (TypeError, ValueError):
+            progress = 0.0
+        completed += max(0.0, min(100.0, progress))
+    # Before the first progress line lands there is nothing to show but the
+    # fact that work is happening, which is what indeterminate means.
+    if completed <= 0:
+        return (TASKBAR_PROGRESS_INDETERMINATE, 0, total)
+    return (TASKBAR_PROGRESS_NORMAL, int(completed), total)
+
+
+class TaskbarProgress:
+    """ITaskbarList3 progress on the main window's taskbar button.
+
+    Qt 6 dropped QtWinExtras, which is where QWinTaskbarButton lived, so this
+    talks to the COM interface directly. Every entry point is guarded: the
+    taskbar is a nicety, and an app that refuses to run because a shell
+    interface was unavailable would be a worse bug than a missing bar.
+    """
+
+    CLSID_TASKBAR_LIST = "{56FDF344-FD6D-11d0-958A-006097C9A090}"
+    IID_TASKBAR_LIST3 = "{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}"
+    # ITaskbarList3 vtable slots. IUnknown takes 0-2, ITaskbarList 3-6,
+    # ITaskbarList2 7, and ITaskbarList3's own methods start at 8.
+    VTBL_HRINIT = 3
+    VTBL_SET_PROGRESS_VALUE = 9
+    VTBL_SET_PROGRESS_STATE = 10
+
+    def __init__(self, logger=None):
+        self._logger = logger or write_persistent_log
+        self._taskbar = None
+        self._unavailable = False
+        self._last = None
+
+    def _interface(self):
+        if self._taskbar is not None or self._unavailable:
+            return self._taskbar
+        try:
+            import ctypes
+
+            ole32 = ctypes.oledll.ole32
+            ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+            clsid = _guid_from_string(self.CLSID_TASKBAR_LIST)
+            iid = _guid_from_string(self.IID_TASKBAR_LIST3)
+            pointer = ctypes.c_void_p()
+            ole32.CoCreateInstance(
+                ctypes.byref(clsid), None, 1,  # CLSCTX_INPROC_SERVER
+                ctypes.byref(iid), ctypes.byref(pointer),
+            )
+            self._taskbar = pointer
+            self._call(self.VTBL_HRINIT)
+        except Exception as error:
+            self._unavailable = True
+            self._taskbar = None
+            self._logger(f"Taskbar progress is unavailable: {error}")
+        return self._taskbar
+
+    def _call(self, slot, *argtypes_and_args):
+        import ctypes
+
+        pointer = self._taskbar
+        if not pointer:
+            return None
+        vtable = ctypes.cast(
+            pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        )[0]
+        argtypes = [item for item in argtypes_and_args if isinstance(item, type)]
+        args = [item for item in argtypes_and_args if not isinstance(item, type)]
+        prototype = ctypes.WINFUNCTYPE(
+            ctypes.HRESULT, ctypes.c_void_p, *argtypes
+        )
+        return prototype(vtable[slot])(pointer, *args)
+
+    def apply(self, window_id, state, completed, total):
+        """Push one (state, completed, total) onto the taskbar button."""
+        import ctypes
+
+        if not window_id:
+            return False
+        current = (int(window_id), state, completed, total)
+        if current == self._last:
+            # The UI tick runs twice a second; the shell does not need to
+            # hear the same number again.
+            return True
+        if self._interface() is None:
+            return False
+        try:
+            handle = ctypes.c_void_p(int(window_id))
+            self._call(
+                self.VTBL_SET_PROGRESS_STATE,
+                ctypes.c_void_p, ctypes.c_int, handle, state,
+            )
+            if state == TASKBAR_PROGRESS_NORMAL:
+                self._call(
+                    self.VTBL_SET_PROGRESS_VALUE,
+                    ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong,
+                    handle, max(0, int(completed)), max(1, int(total)),
+                )
+        except Exception as error:
+            self._unavailable = True
+            self._logger(f"Taskbar progress update failed: {error}")
+            return False
+        self._last = current
+        return True
+
+
+def _guid_from_string(text):
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", wintypes.DWORD),
+            ("Data2", wintypes.WORD),
+            ("Data3", wintypes.WORD),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
+
+    guid = GUID()
+    ctypes.oledll.ole32.CLSIDFromString(str(text), ctypes.byref(guid))
+    return guid
+
+
+def spawn_detached(command):
+    """Start a shell helper and stop caring about it.
+
+    Explorer is not a subprocess this app supervises: it outlives the window
+    that opened it, and waiting on it or holding its pipes would tie a UI
+    click to a process the user now owns.
+    """
+    # `command` is a command line string for the shell helpers that need
+    # exact quoting (see build_reveal_command) and a list otherwise.
+    return subprocess.Popen(
+        command if isinstance(command, str) else list(command),
+        creationflags=CREATE_NEW_PROCESS_GROUP,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def build_reveal_command(file_path):
+    r"""Return the command LINE that opens Explorer with `file_path` selected.
+
+    `os.startfile` on the parent directory opens the folder but selects
+    nothing, so a user with a full Downloads folder still has to hunt for the
+    file that just finished.
+
+    This returns a string, not an argv list, and that is the whole point.
+    Explorer wants `/select,` and the path in one token with the quotes
+    around the PATH only. Building it as a list and letting Python quote it
+    produces `"/select,C:\dir\My File.mp4"` — one quoted argument — and
+    Explorer silently ignores it and opens the user's Documents folder
+    instead. Measured against the real shell: the list form opened
+    "Documents - File Explorer" for a path containing a space.
+    """
+    if not file_path:
+        return None
+    try:
+        target = Path(file_path)
+        if not target.is_file():
+            return None
+        resolved = target.resolve()
+    except (OSError, ValueError):
+        return None
+    if '"' in str(resolved):
+        # A quote in the path would break out of the quoting below. Nothing
+        # on Windows can create such a name, but the reveal is a nicety and
+        # refusing it is cheaper than reasoning about the escape.
+        return None
+    return f'explorer.exe /select,"{resolved}"' 
 
 
 def check_single_instance(startup_command=''):
@@ -3905,6 +4158,14 @@ def main():
         if lock is INSTANCE_ALREADY_RUNNING:
             write_persistent_log("Existing Astra Downloader instance accepted the launch request.")
             return
+
+    # Before the first window exists, and before the tray icon is created:
+    # Windows binds an unpackaged process to a taskbar identity at first
+    # window creation, and without an explicit one it guesses from the
+    # executable path. That guess is what makes a pinned shortcut launch a
+    # second, unpinned button, and it is also the identity toasts are
+    # attributed to.
+    set_app_user_model_id()
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)

@@ -44,13 +44,6 @@ Notes on the items above, from the same pass:
   Acceptance: A single versioned JSON bundle round-trips settings and subscriptions; cookie jar contents are excluded by default behind an explicit opt-in that warns, preserving the no-read-path rule; import validates the schema and reports what changed.
   Complexity: M
 
-- [ ] P2 — Windows shell integration: AppUserModelID, taskbar progress, notification actions
-  Why: Without an explicit AppUserModelID an unpackaged exe has unreliable taskbar-pinning identity and toast attribution; download progress is invisible unless the window is open; and completion notifications cannot be clicked to reach the file.
-  Evidence: no `SetCurrentProcessExplicitAppUserModelID` anywhere in `astra_downloader/`; progress exists only in-window (`gui.py:2933`); `QSystemTrayIcon.messageClicked` is never connected, only `activated` (`gui.py:1059`); `_show_download_location` opens the parent folder with `os.startfile` rather than selecting the file (`gui.py:3349-3361`).
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/gui.py`
-  Acceptance: An AppUserModelID is set before the first window is created; the taskbar button shows aggregate queue progress; clicking a completion notification reveals the file with `explorer /select,`; a right-click menu on a finished card offers play, reveal, copy URL and re-download.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Give `subscriptions.py` a real test surface
