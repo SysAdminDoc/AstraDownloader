@@ -40,6 +40,11 @@ repository's git log.
 
 ### Fixed
 
+- **A startup failure says something instead of nothing.** In a windowed
+  build a fatal error meant double-clicking the icon did nothing, forever,
+  with the only evidence in a file nobody knew about. It now shows a message
+  box naming the crash log and exits non-zero. Exceptions escaping a Qt slot
+  reach the crash log and the in-app log panel rather than aborting silently.
 - **A download that finishes but cannot be recorded says so.** `history.add`
   reports whether the write landed and the caller discarded it, so on a full
   disk a download completed, the file existed, and History simply never

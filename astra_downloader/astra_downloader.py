@@ -606,6 +606,72 @@ def log_crash(context="Unhandled exception"):
         pass
 
 
+def report_fatal_error(context="Fatal startup error"):
+    """Tell the user a windowed build died, then leave a non-zero exit code.
+
+    A packaged build has no console. Without this, a startup failure means
+    double-clicking the icon does nothing at all, forever, with the only
+    evidence in a log file the user has no reason to know exists.
+    """
+    log_crash(context)
+    message = (
+        f"{APP_NAME} could not start.\n\n{context}\n\n"
+        f"Details were written to:\n{CRASH_LOG_PATH}"
+    )
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+
+            # MB_OK | MB_ICONERROR | MB_SETFOREGROUND
+            ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x10 | 0x10000)
+        except Exception:
+            # reason: the crash log is already written; a failed dialog must
+            # not replace the original error
+            pass
+    else:
+        sys.stderr.write(message + "\n")
+
+
+def install_unhandled_exception_hooks(notify=None):
+    """Route exceptions that escape a slot to the crash log and the user.
+
+    Qt calls slots from C++, so an exception raised inside one unwinds into
+    the event loop and, since Qt 6, aborts the process. Without a hook there
+    is no traceback anywhere — not even in the log.
+    """
+    previous = sys.excepthook
+
+    def hook(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            previous(exc_type, exc_value, exc_traceback)
+            return
+        try:
+            write_persistent_log(
+                "Unhandled exception\n"
+                + "".join(traceback.format_exception(exc_type, exc_value, exc_traceback)),
+                CRASH_LOG_PATH,
+            )
+        except Exception:
+            # reason: reporting must never replace the exception being reported
+            pass
+        if callable(notify):
+            try:
+                notify(f"{exc_type.__name__}: {exc_value}")
+            except Exception:
+                # reason: the in-app notice is best effort
+                pass
+        previous(exc_type, exc_value, exc_traceback)
+
+    sys.excepthook = hook
+    # PyQt routes slot exceptions through sys.excepthook only when this is
+    # left alone; assigning it explicitly keeps the behaviour if a future
+    # PyQt release changes the default.
+    threading.excepthook = lambda args: hook(
+        args.exc_type, args.exc_value, args.exc_traceback
+    )
+    return hook
+
+
 def atomic_copy_verified(source, destination):
     """Copy one file through a sibling temporary and verify byte identity.
 
@@ -3643,6 +3709,12 @@ def main():
         start_minimized=start_min,
         subscriptions=subscriptions,
     )
+    # An exception escaping a slot used to abort the process with nothing
+    # written anywhere. Route it to the crash log and to the window's log
+    # panel, which is where a user already looks when something misbehaves.
+    install_unhandled_exception_hooks(
+        notify=lambda text: window.log_message.emit(f"Unhandled error: {text}")
+    )
 
     # The visual-smoke path exercises the frozen UI without installing system
     # integrations, starting the local server, or bootstrapping helper tools.
@@ -3664,6 +3736,8 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
     try:
         main()
-    except Exception:
-        log_crash("Fatal startup error")
+    except SystemExit:
         raise
+    except Exception as error:
+        report_fatal_error(f"Fatal startup error: {type(error).__name__}: {error}")
+        sys.exit(1)
