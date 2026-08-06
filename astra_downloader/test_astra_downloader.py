@@ -9948,6 +9948,237 @@ def gui_module_for_tests():
     return gui_module
 
 
+class FormatProbeTests(unittest.TestCase):
+    """A pasted link is probed so the picker stops offering what it lacks."""
+
+    class _Combo:
+        def __init__(self):
+            self.items = []
+            self.index = 0
+
+        def blockSignals(self, _value):
+            return None
+
+        def clear(self):
+            self.items = []
+            self.index = 0
+
+        def addItem(self, label, value):
+            self.items.append((label, value))
+
+        def findData(self, value):
+            for position, (_label, data) in enumerate(self.items):
+                if data == value:
+                    return position
+            return -1
+
+        def setCurrentIndex(self, index):
+            self.index = index
+
+        def currentData(self):
+            if 0 <= self.index < len(self.items):
+                return self.items[self.index][1]
+            return None
+
+        def values(self):
+            return [value for _label, value in self.items]
+
+    def _window(self, url_text="https://vimeo.com/1", probed=""):
+        window = types.SimpleNamespace(
+            quick_download_url=QuickDownloadBatchTests._TextWidget(url_text),
+            quick_download_quality=self._Combo(),
+            quick_download_status=QuickDownloadBatchTests._TextWidget(),
+            _probed_format_url=probed,
+            _format_probe_generation=0,
+            _dependencies={
+                "QUALITY_LADDER": lambda: ad.QUALITY_LADDER,
+                "normalize_url": ad.normalize_url,
+                "is_playlist_url": ad.is_playlist_url,
+                "probed_video_heights": ad.probed_video_heights,
+                "quality_choices_for_heights": ad.quality_choices_for_heights,
+            },
+        )
+        core = gui_module_for_tests().MainWindowCore
+        for name in (
+            "_value", "_set_quality_choices", "_reset_quality_choices",
+            "_schedule_format_probe", "_apply_format_probe",
+            "_probe_quick_download_formats", "_set_quick_download_status",
+        ):
+            setattr(window, name, types.MethodType(getattr(core, name), window))
+        window._set_quality_choices(ad.QUALITY_LADDER)
+        return window
+
+    # ── The pure reduction ───────────────────────────────────────────────
+
+    def test_probe_summary_yields_only_real_video_heights(self):
+        summary = {"formats": [
+            {"has_video": True, "height": 1080},
+            {"has_video": True, "height": 720},
+            {"has_video": False, "height": 0},      # audio-only
+            {"has_video": True, "height": 0},       # height unknown
+            {"has_video": True, "height": 1080},    # duplicate
+        ]}
+        self.assertEqual(ad.probed_video_heights(summary), [1080, 720])
+
+    def test_ladder_is_cut_to_the_tallest_format_offered(self):
+        self.assertEqual(
+            ad.quality_choices_for_heights([720, 480, 360]), ["720", "480"]
+        )
+
+    def test_a_height_between_rungs_keeps_the_rung_below_it(self):
+        # A 900p-only video still offers 720p rather than only "Best".
+        self.assertEqual(ad.quality_choices_for_heights([900]), ["720", "480"])
+
+    def test_a_link_below_the_lowest_rung_offers_only_best(self):
+        # Measured against the real format table of a 240p upload: every rung
+        # would name a resolution the link cannot serve.
+        self.assertEqual(ad.quality_choices_for_heights([240, 144]), [])
+
+    def test_an_unusable_probe_leaves_the_whole_ladder(self):
+        for heights in ([], None, [0], ["nonsense"]):
+            self.assertEqual(
+                ad.quality_choices_for_heights(heights), list(ad.QUALITY_LADDER)
+            )
+
+    # ── What the picker does with it ─────────────────────────────────────
+
+    def test_probe_narrows_the_picker_and_names_the_ceiling(self):
+        window = self._window()
+        self.assertIn("2160", window.quick_download_quality.values())
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {"formats": [{"has_video": True, "height": 720}]},
+                "error": "",
+            })
+        self.assertEqual(
+            window.quick_download_quality.values(), ["best", "720", "480"]
+        )
+        self.assertIn("720p", window.quick_download_status.text())
+
+    def test_a_probe_the_user_typed_past_is_discarded(self):
+        window = self._window()
+        window._format_probe_generation = 3
+        window._apply_format_probe({
+            "generation": 2,
+            "url": "https://vimeo.com/1",
+            "summary": {"formats": [{"has_video": True, "height": 480}]},
+            "error": "",
+        })
+        self.assertEqual(
+            window.quick_download_quality.values(),
+            ["best"] + list(ad.QUALITY_LADDER),
+        )
+
+    def test_a_probe_for_a_url_no_longer_in_the_box_is_discarded(self):
+        window = self._window(url_text="https://vimeo.com/2")
+        window._apply_format_probe({
+            "generation": 0,
+            "url": "https://vimeo.com/1",
+            "summary": {"formats": [{"has_video": True, "height": 480}]},
+            "error": "",
+        })
+        self.assertEqual(
+            window.quick_download_quality.values(),
+            ["best"] + list(ad.QUALITY_LADDER),
+        )
+
+    def test_a_failed_probe_leaves_the_offer_alone(self):
+        # The summary is deliberately populated: an error outranks whatever
+        # partial table came back with it, so the guard — not an empty
+        # summary — has to be what leaves the ladder intact.
+        window = self._window()
+        window._apply_format_probe({
+            "generation": 0,
+            "url": "https://vimeo.com/1",
+            "summary": {"formats": [{"has_video": True, "height": 480}]},
+            "error": "yt-dlp could not list formats.",
+        })
+        self.assertEqual(
+            window.quick_download_quality.values(),
+            ["best"] + list(ad.QUALITY_LADDER),
+        )
+        self.assertEqual(window.quick_download_status.text(), "")
+
+    def test_a_narrowed_picker_keeps_a_choice_that_survives(self):
+        window = self._window()
+        window.quick_download_quality.setCurrentIndex(
+            window.quick_download_quality.findData("480")
+        )
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {"formats": [{"has_video": True, "height": 1080}]},
+                "error": "",
+            })
+        self.assertEqual(window.quick_download_quality.currentData(), "480")
+
+    def test_a_choice_the_link_cannot_serve_falls_back_to_best(self):
+        window = self._window()
+        window.quick_download_quality.setCurrentIndex(
+            window.quick_download_quality.findData("2160")
+        )
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {"formats": [{"has_video": True, "height": 720}]},
+                "error": "",
+            })
+        self.assertEqual(window.quick_download_quality.currentData(), "best")
+
+    # ── When a probe is worth running at all ─────────────────────────────
+
+    def _spawned(self, window):
+        started = []
+        with mock.patch.object(
+            gui_module_for_tests().threading, "Thread",
+            lambda **kwargs: types.SimpleNamespace(
+                start=lambda: started.append(kwargs)
+            ),
+        ):
+            window._probe_quick_download_formats()
+        return started
+
+    def test_a_batch_paste_is_not_probed(self):
+        window = self._window(url_text="https://vimeo.com/1 https://vimeo.com/2")
+        self.assertEqual(self._spawned(window), [])
+
+    def test_a_playlist_is_not_probed(self):
+        window = self._window(
+            url_text="https://www.youtube.com/playlist?list=PL1"
+        )
+        self.assertEqual(self._spawned(window), [])
+
+    def test_the_same_url_is_not_probed_twice(self):
+        window = self._window(probed="https://vimeo.com/1")
+        self.assertEqual(self._spawned(window), [])
+
+    def test_a_single_pasted_link_is_probed(self):
+        window = self._window()
+        self.assertEqual(len(self._spawned(window)), 1)
+
+    def test_editing_past_a_probed_url_restores_the_full_ladder(self):
+        window = self._window()
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {"formats": [{"has_video": True, "height": 480}]},
+                "error": "",
+            })
+        self.assertEqual(window.quick_download_quality.values(), ["best", "480"])
+        window.quick_download_url.setText("https://vimeo.com/2")
+        window._format_probe_timer = types.SimpleNamespace(start=lambda: None)
+        window._schedule_format_probe()
+        self.assertEqual(
+            window.quick_download_quality.values(),
+            ["best"] + list(ad.QUALITY_LADDER),
+        )
+        self.assertEqual(window._probed_format_url, "")
+
 class SiteLoginPolicyTests(unittest.TestCase):
     """Scoping rules that keep one stored sign-in from becoming a cookie dump."""
 

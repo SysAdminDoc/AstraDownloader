@@ -977,6 +977,51 @@ def summarize_ytdlp_formats(info):
     }
 
 
+# The quality picker's fixed ladder, highest first. A probe narrows it; it is
+# never widened, so a probe that reports nothing leaves the offer untouched.
+QUALITY_LADDER = ('2160', '1440', '1080', '720', '480')
+
+
+def probed_video_heights(summary):
+    """Distinct video heights a `list_formats` summary actually offers."""
+    if not isinstance(summary, dict):
+        return []
+    heights = set()
+    for entry in (summary.get('formats') or []):
+        if not isinstance(entry, dict) or not entry.get('has_video'):
+            continue
+        try:
+            height = int(entry.get('height') or 0)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if height > 0:
+            heights.add(height)
+    return sorted(heights, reverse=True)
+
+
+def quality_choices_for_heights(heights, ladder=QUALITY_LADDER):
+    """Reduce the quality ladder to the rungs a probed URL can actually serve.
+
+    A rung survives when the URL has something at or below it, so the cap it
+    expresses is reachable. A video that tops out beneath the lowest rung —
+    a 240p upload against a ladder starting at 480p — keeps no rungs at all:
+    every one of them would name a resolution the link cannot serve, and
+    'Best' is the only honest offer. An empty or unusable probe returns the
+    whole ladder, so the picker never claims to know less than it did before.
+    """
+    usable = []
+    for value in heights or []:
+        try:
+            usable.append(int(value))
+        except (TypeError, ValueError, OverflowError):
+            continue
+    usable = [height for height in usable if height > 0]
+    if not usable:
+        return list(ladder)
+    tallest = max(usable)
+    return [rung for rung in ladder if int(rung) <= tallest]
+
+
 def summarize_ytdlp_playlist(info, limit=PLAYLIST_PREVIEW_LIMIT):
     """Reduce a flat-playlist probe to a bounded, UI-safe preview."""
     if not isinstance(info, dict):

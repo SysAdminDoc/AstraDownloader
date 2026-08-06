@@ -839,6 +839,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'MAX_SITE_LOGIN_TEXT_BYTES',
     'MODULE_FILE',
     'PORT_FALLBACKS',
+    'QUALITY_LADDER',
     'ReadinessProbe',
     'SERVER_PORT',
     'SetupWorker',
@@ -854,7 +855,10 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'get_recent_log_entries',
     'get_ytdlp_version',
     'SITE_LOGIN_BROWSERS',
+    'is_playlist_url',
     'is_youtube_url',
+    'probed_video_heights',
+    'quality_choices_for_heights',
     'looks_like_media_link',
     'maybe_auto_update_ytdlp',
     'normalize_output_dir',
@@ -881,6 +885,7 @@ class MainWindowCore(QMainWindow):
     tools_update_finished = pyqtSignal(dict)
     tools_status_text_ready = pyqtSignal(str)
     site_login_finished = pyqtSignal(dict)
+    format_probe_finished = pyqtSignal(dict)
 
     def __init__(self, config, dl_manager, history, start_minimized=False, *, dependencies):
         missing = sorted(set(_REQUIRED_MAIN_WINDOW_DEPENDENCIES) - set(dependencies))
@@ -911,6 +916,12 @@ class MainWindowCore(QMainWindow):
         self.tools_update_finished.connect(self._finish_ytdlp_update)
         self.tools_status_text_ready.connect(self._set_tools_status_text)
         self.site_login_finished.connect(self._finish_site_login_import)
+        self.format_probe_finished.connect(self._apply_format_probe)
+        # Format probing: the URL whose probe is currently reflected in the
+        # quality picker, and a generation counter so a probe that lands
+        # after the user has typed on is discarded rather than applied.
+        self._probed_format_url = ""
+        self._format_probe_generation = 0
 
         self.setWindowTitle(self._value('APP_NAME'))
         # Dropping a link on a downloader should download it.
@@ -1434,12 +1445,15 @@ class MainWindowCore(QMainWindow):
         options_row.addWidget(self.quick_download_format)
         self.quick_download_quality = QComboBox()
         self.quick_download_quality.setAccessibleName("Download quality")
-        for label, value in (
-            (tr("Best"), "best"), ("2160p", "2160"), ("1440p", "1440"),
-            ("1080p", "1080"), ("720p", "720"), ("480p", "480"),
-        ):
-            self.quick_download_quality.addItem(label, value)
+        self._set_quality_choices(self._value('QUALITY_LADDER'))
         options_row.addWidget(self.quick_download_quality)
+        # A pasted link is probed for the formats it really has, so the picker
+        # stops offering 2160p on a 720p video. Debounced, because a paste
+        # arrives one keystroke at a time when typed.
+        self._format_probe_timer = QTimer(self)
+        self._format_probe_timer.setSingleShot(True)
+        self._format_probe_timer.setInterval(700)
+        self._format_probe_timer.timeout.connect(self._probe_quick_download_formats)
         # A one-off destination for this download, without disturbing the
         # default in Settings. Cleared once the download is queued.
         self._quick_download_dir = ""
@@ -4210,10 +4224,105 @@ class MainWindowCore(QMainWindow):
 
     def _quick_download_url_edited(self, *_args):
         """Clear clipboard-specific guidance once the user edits a staged URL."""
+        self._schedule_format_probe()
         if not self._clipboard_staged_url:
             return
         self._clipboard_staged_url = ""
         self.quick_download_status.hide()
+
+    # ── Format probing ───────────────────────────────────────────────────
+    # The picker is a fixed ladder that knows nothing about the pasted link,
+    # so a user can ask for 2160p on a 720p video and only learn the truth
+    # from the result. One `-J` probe per settled URL narrows the offer.
+
+    def _set_quality_choices(self, values):
+        """Rebuild the quality picker, keeping the current choice if it survives."""
+        combo = self.quick_download_quality
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(tr("Best"), "best")
+        for value in values:
+            combo.addItem(f"{value}p", str(value))
+        restored = combo.findData(current)
+        combo.setCurrentIndex(restored if restored >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _schedule_format_probe(self):
+        """Restart the debounce, and drop a stale narrowing straight away."""
+        if not hasattr(self, "_format_probe_timer"):
+            return
+        if self.quick_download_url.text().strip() != self._probed_format_url:
+            # The picker must never describe a link that is no longer in the
+            # box, so the full ladder comes back before the new probe lands.
+            self._reset_quality_choices()
+        self._format_probe_timer.start()
+
+    def _reset_quality_choices(self):
+        if not self._probed_format_url:
+            return
+        self._probed_format_url = ""
+        self._format_probe_generation += 1
+        self._set_quality_choices(self._value('QUALITY_LADDER'))
+
+    def _probe_quick_download_formats(self):
+        """Ask yt-dlp what the pasted link offers, off the GUI thread."""
+        raw = self.quick_download_url.text().strip()
+        parts = raw.split()
+        if len(parts) != 1:
+            # A batch paste has no single format table to describe.
+            return
+        url, error = self._dependencies['normalize_url'](parts[0])
+        if error or not url:
+            return
+        if self._dependencies['is_playlist_url'](url):
+            return
+        if url == self._probed_format_url:
+            return
+        self._format_probe_generation += 1
+        generation = self._format_probe_generation
+
+        def worker():
+            try:
+                summary, probe_error = self.dl_manager.list_formats(url)
+            except Exception as exc:  # noqa: BLE001
+                summary, probe_error = None, str(exc)
+            self.format_probe_finished.emit({
+                "generation": generation,
+                "url": url,
+                "summary": summary or {},
+                "error": probe_error or "",
+            })
+
+        threading.Thread(
+            target=worker, name='format-probe', daemon=True
+        ).start()
+
+    def _apply_format_probe(self, payload):
+        """Narrow the picker to what the probed link actually offers."""
+        if not isinstance(payload, dict):
+            return
+        if payload.get("generation") != self._format_probe_generation:
+            # The user typed on while this probe ran; it describes a URL that
+            # is no longer in the box.
+            return
+        if payload.get("url") != self.quick_download_url.text().strip():
+            return
+        if payload.get("error"):
+            # A probe failure is not a download failure: the fixed ladder is
+            # still a usable offer, so it stays and nothing is said.
+            return
+        heights = self._dependencies['probed_video_heights'](payload.get("summary"))
+        if not heights:
+            return
+        self._probed_format_url = payload.get("url") or ""
+        self._set_quality_choices(
+            self._dependencies['quality_choices_for_heights'](heights)
+        )
+        self._set_quick_download_status(
+            tr("This link tops out at {height}p.").format(height=max(heights)),
+            "neutral",
+        )
 
     def _handle_clipboard_change(self, clipboard_text=None):
         """Stage a copied media URL for review without starting a download."""
