@@ -11763,6 +11763,78 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
             )
 
 
+class StylesheetContrastTests(unittest.TestCase):
+    """Control boundaries meet the WCAG non-text contrast floor."""
+
+    PAGE_BACKGROUND = "#0a0d12"
+
+    @staticmethod
+    def _relative_luminance(hex_colour):
+        raw = hex_colour.lstrip("#")
+        channels = [int(raw[index:index + 2], 16) / 255 for index in (0, 2, 4)]
+        linear = [
+            value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+            for value in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    @classmethod
+    def _contrast(cls, foreground, background):
+        first = cls._relative_luminance(foreground)
+        second = cls._relative_luminance(background)
+        lighter, darker = max(first, second), min(first, second)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    def test_the_page_background_is_what_this_measures_against(self):
+        # The ratios below are meaningless if this drifts, and an earlier
+        # measurement of this palette was wrong precisely because it assumed
+        # a background the sheet does not contain.
+        self.assertIn(
+            f"background-color: {self.PAGE_BACKGROUND}", ad.STYLESHEET
+        )
+
+    def test_input_boundaries_clear_the_non_text_contrast_floor(self):
+        # WCAG 2.2 SC 1.4.11 wants 3:1 for a control's visual boundary. The
+        # fill cannot carry it here — #11161d against the page is 1.07:1 —
+        # so the border is the only thing marking where a field is.
+        import re
+        borders = re.findall(
+            r"QLineEdit, QSpinBox, QComboBox \{[^}]*?border: 1px solid (#[0-9a-fA-F]{6})",
+            ad.STYLESHEET, re.S,
+        )
+        self.assertEqual(len(borders), 1, "expected one input border rule")
+        hero = re.findall(
+            r'QLineEdit\[class="heroUrl"\][^{]*\{[^}]*?border-color: (#[0-9a-fA-F]{6})',
+            ad.STYLESHEET, re.S,
+        )
+        self.assertTrue(hero, "expected a hero paste box border")
+        for label, colour in (("input", borders[0]), ("hero", hero[0])):
+            with self.subTest(border=label):
+                ratio = self._contrast(colour, self.PAGE_BACKGROUND)
+                self.assertGreaterEqual(
+                    ratio, 3.0,
+                    f"{label} border {colour} is {ratio:.2f}:1 against the page",
+                )
+
+    def test_the_input_fill_alone_cannot_identify_the_control(self):
+        # Documents why the border has to carry it, so a future change does
+        # not "fix" this by darkening the border and trusting the fill.
+        ratio = self._contrast("#11161d", self.PAGE_BACKGROUND)
+        self.assertLess(ratio, 3.0)
+
+    def test_a_ghost_button_is_not_a_bare_label(self):
+        # With a transparent background AND a transparent border, a ghost
+        # button rendered pixel-identically to the static labels beside it —
+        # "Save to" was indistinguishable from "Clip from".
+        import re
+        rule = re.search(
+            r'QPushButton\[class="ghost"\] \{([^}]*)\}', ad.STYLESHEET
+        )
+        self.assertIsNotNone(rule)
+        body = rule.group(1)
+        self.assertNotIn("background: transparent", body)
+        self.assertRegex(body, r"background-color: #[0-9a-fA-F]{6}")
+
 class SubscriptionScanReportingTests(unittest.TestCase):
     """A scan that cannot write says so instead of reporting a quiet skip."""
 

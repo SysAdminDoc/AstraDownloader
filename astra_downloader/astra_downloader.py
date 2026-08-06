@@ -2930,7 +2930,7 @@ QPushButton[class="primary"] {
 QPushButton[class="primary"]:hover { background-color: #ff7867; border-color: #ff7867; }
 QPushButton[class="secondary"] { background: transparent; color: #d8dde3; border-color: #3a4451; }
 QPushButton[class="danger"] { background: transparent; color: #ef9b93; border-color: #65403e; }
-QPushButton[class="ghost"] { background: transparent; border-color: transparent; color: #aeb6c1; padding-left: 9px; padding-right: 9px; }
+QPushButton[class="ghost"] { background-color: #11161d; border-color: transparent; color: #aeb6c1; padding-left: 9px; padding-right: 9px; }
 QPushButton[class="ghost"]:hover { background-color: #171d25; border-color: transparent; color: #f2f0ed; }
 /* Keyboard focus. The bare QPushButton:focus rule above is the same
    specificity as every QPushButton[class="…"] rule, so those later rules won
@@ -2970,7 +2970,7 @@ QPushButton[class="nav"][active="true"]:focus { background-color: #242b35; borde
 QLineEdit, QSpinBox, QComboBox {
     background-color: #11161d;
     color: #f0eeeb;
-    border: 1px solid #343e4a;
+    border: 1px solid #606a77;
     border-radius: 6px;
     padding: 7px 10px;
     min-height: 36px;
@@ -2987,7 +2987,7 @@ QLineEdit[class="heroUrl"] {
     font-size: 15px;
     min-height: 46px;
     padding: 10px 14px;
-    border-color: #3f4a58;
+    border-color: #687381;
 }
 QLineEdit[class="heroUrl"]:focus { border-color: #ff7664; background: #151b23; }
 QComboBox::drop-down { border: none; width: 24px; }
