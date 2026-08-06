@@ -6,8 +6,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import json
 import traceback
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +31,7 @@ CAPTURE_NAMES = (
     "site-logins-stored",
     "settings-dirty",
     "settings-subtitles",
+    "settings-bundle-imported",
     "settings-fallback-port",
     "settings-invalid",
     "settings-save-failed",
@@ -609,6 +612,69 @@ def main():
             if scenario == "settings-dirty":
                 window.cfg_dl_path.setText(str(Path(temp_dir) / "Videos" / "Edited"))
                 expected = "Unsaved changes"
+            elif scenario == "settings-bundle-imported":
+                # Drive the real round trip: export the live settings, change
+                # them, import the bundle back, and check the FORM shows the
+                # restored values. A stale form is not cosmetic here — the
+                # next Save would write the pre-import values back over it.
+                bundle_path = Path(temp_dir) / "bundle.json"
+                window.cfg_sublangs.setText("de,fr")
+                window.cfg_subs.setChecked(True)
+                window._save_settings()
+                app.processEvents()
+                with mock.patch.object(
+                    app_module.QFileDialog, "getSaveFileName",
+                    staticmethod(lambda *a, **k: (str(bundle_path), "")),
+                ):
+                    if not window._export_settings_bundle():
+                        raise RuntimeError("Export refused to write the bundle")
+                if not bundle_path.exists():
+                    raise RuntimeError("The bundle was not written")
+                payload = json.loads(bundle_path.read_text(encoding="utf-8"))
+                if "ServerToken" in json.dumps(payload):
+                    raise RuntimeError("The bundle leaked the API token")
+                # Move the settings away from what the bundle holds.
+                window.cfg_sublangs.setText("en")
+                window.cfg_subs.setChecked(False)
+                window._save_settings()
+                app.processEvents()
+                if config.get("SubLangs") != "en":
+                    raise RuntimeError("Fixture failed to change the setting")
+                with mock.patch.object(
+                    app_module.QFileDialog, "getOpenFileName",
+                    staticmethod(lambda *a, **k: (str(bundle_path), "")),
+                ):
+                    if not window._import_settings_bundle():
+                        raise RuntimeError("Import refused the bundle it wrote")
+                app.processEvents()
+                if config.get("SubLangs") != "de,fr":
+                    raise RuntimeError(
+                        f"Import did not restore the setting: {config.get('SubLangs')}"
+                    )
+                if window.cfg_sublangs.text() != "de,fr":
+                    raise RuntimeError(
+                        "The form still shows the pre-import value; the next "
+                        "Save would undo the import"
+                    )
+                if not window.cfg_subs.isChecked():
+                    raise RuntimeError("The form checkbox did not refresh")
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(window.btn_export_settings, 0, 200)
+                    app.processEvents()
+                    QTest.qWait(40)
+                status = window.settings_status.text()
+                if not status.startswith("Imported "):
+                    raise RuntimeError(f"Import reported {status!r}")
+                if "changed settings" not in status:
+                    raise RuntimeError(
+                        f"The import must say what it changed: {status!r}"
+                    )
+                # Pin the exact sentence so the capture proves it is legible
+                # on the page, not merely present in a variable.
+                expected = status
             elif scenario == "settings-subtitles":
                 # The subtitle controls sit mid-page, so every other settings
                 # capture scrolls straight past them. Turn them on and bring
@@ -677,7 +743,7 @@ def main():
             if scenario == "settings-fallback-port":
                 # The Connection card is the top of the page.
                 scroll_current_page_to_top(window)
-            elif scenario != "settings-subtitles":
+            elif scenario not in ("settings-subtitles", "settings-bundle-imported"):
                 # That scenario already scrolled to the controls it exists to
                 # show; scrolling to the bottom here would hide them again.
                 scroll_current_page_to_bottom(window)

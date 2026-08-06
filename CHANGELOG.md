@@ -42,6 +42,19 @@ repository's git log.
   available, matching yt-dlp's own priority; QuickJS is also selectable
   outright in Settings.
 
+- **Export and import settings.** A single versioned JSON bundle carries
+  settings and subscriptions, so an install can be moved to another machine
+  and a config you cannot open can be restored without hand-editing JSON. The
+  import validates the file, refuses one written by a newer version, puts
+  every value through the same normaliser the live config uses, and then
+  reports which settings actually changed.
+
+  Stored sign-ins are listed by site but never exported. Cookie values do not
+  leave their jar files — that is the store's stated contract — so the bundle
+  names the sites you will need to sign in to again rather than carrying the
+  sessions. There is deliberately no option to include them. The local API
+  token is left out for the same reason: it is a working credential, and a
+  bundle is the kind of file people email to themselves.
 - **Progress on the taskbar button.** A download runs for minutes and the
   window is usually not what the user is looking at, so the queue's overall
   progress now shows on the taskbar. Several downloads reduce to percent of
@@ -72,6 +85,10 @@ repository's git log.
   have finished with nothing to reveal in the folder; the written-subtitle
   line is now read instead, and a converted track is named by its new
   extension.
+- **An imported setting is no longer undone by the next Save.** The settings
+  form is redrawn from the stored config after an import; without that it
+  would still be showing the pre-import values, and saving would write them
+  straight back over the import.
 - **Tests no longer depend on what is installed on the machine running them.**
   `INSTALL_DIR` was redirected for the test run but the runtime paths derived
   from it were not, so a check asserting "no JavaScript runtime is available"

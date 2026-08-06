@@ -11793,6 +11793,231 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
             )
 
 
+class SettingsBundleTests(unittest.TestCase):
+    """A portable bundle carries settings and subscriptions — never secrets."""
+
+    SUBSCRIPTION = {
+        "id": "sub_1",
+        "url": "https://www.youtube.com/@astra",
+        "title": "Astra",
+        "intervalMinutes": 120,
+        "enabled": True,
+        "lastScanAt": 1754400000.0,
+        "lastError": "quota exceeded",
+        "lastQueued": 7,
+    }
+
+    def _bundle(self, **overrides):
+        settings = {"SubLangs": "de,fr", "EmbedSubs": True,
+                    "ServerToken": "s" * 32}
+        settings.update(overrides)
+        return ad.build_settings_bundle(
+            ad.sanitize_config(settings),
+            [self.SUBSCRIPTION],
+            [{"site": "x.com"}, {"site": "vimeo.com"}],
+            app_version="2.4.0", now=1754500000.0,
+        )
+
+    # -- What must never be in it -----------------------------------------
+
+    def test_the_api_token_is_never_exported(self):
+        # It is a working credential for the local API, and a bundle is
+        # exactly the kind of file people email to themselves.
+        payload = json.dumps(self._bundle())
+        self.assertNotIn("s" * 32, payload)
+        self.assertNotIn("ServerToken", self._bundle()["settings"])
+
+    def test_no_cookie_value_can_reach_a_bundle(self):
+        # SiteLoginStore states that cookie values never leave the jar files.
+        # The export names the sites and stops there — there is deliberately
+        # no option to include them, because an option to break that rule is
+        # still a way to break it.
+        bundle = self._bundle()
+        self.assertEqual(bundle["siteLoginSites"], ["x.com", "vimeo.com"])
+        signature = inspect.signature(ad.build_settings_bundle)
+        self.assertNotIn("cookies", signature.parameters)
+        self.assertNotIn("include_cookies", signature.parameters)
+
+    def test_the_store_still_has_no_way_to_read_a_cookie_out(self):
+        # Guards the rule itself rather than this one caller: if a reader is
+        # ever added, this is the test that says the bundle must be revisited.
+        readers = [
+            name for name in dir(ad.SiteLoginStore)
+            if not name.startswith("_") and "cookie" in name.lower()
+        ]
+        self.assertEqual(readers, ["save_cookies"])
+
+    def test_one_machines_scan_history_is_not_carried(self):
+        payload = json.dumps(self._bundle())
+        for field in ("lastScanAt", "lastError", "lastQueued", "nextScanAt"):
+            with self.subTest(field=field):
+                self.assertNotIn(field, payload)
+
+    def test_environment_driven_settings_are_left_out(self):
+        # They are read from the environment at startup, so exporting them
+        # would promise something the import cannot deliver.
+        settings = self._bundle()["settings"]
+        for key in ("LegacyHealthTokenEcho", "LegacyHealthTokenOrigins"):
+            with self.subTest(key=key):
+                self.assertNotIn(key, settings)
+
+    # -- The round trip ---------------------------------------------------
+
+    def test_settings_survive_a_write_and_a_read(self):
+        bundle, error = ad.read_settings_bundle(
+            json.loads(json.dumps(self._bundle())))
+        self.assertIsNone(error)
+        self.assertEqual(bundle["settings"]["SubLangs"], "de,fr")
+        self.assertIs(bundle["settings"]["EmbedSubs"], True)
+
+    def test_subscriptions_survive_with_what_matters(self):
+        bundle, _error = ad.read_settings_bundle(self._bundle())
+        self.assertEqual(len(bundle["subscriptions"]), 1)
+        record = bundle["subscriptions"][0]
+        self.assertEqual(record["url"], self.SUBSCRIPTION["url"])
+        self.assertEqual(record["intervalMinutes"], 120)
+        self.assertIs(record["enabled"], True)
+
+    def test_every_exported_setting_is_one_the_app_knows(self):
+        # A key the app no longer has would be silently dropped at import;
+        # a key it has but never exports cannot be migrated at all.
+        exported = set(self._bundle()["settings"])
+        self.assertEqual(
+            exported, set(ad.DEFAULT_CONFIG) - set(ad.BUNDLE_EXCLUDED_SETTINGS)
+        )
+
+    # -- Validation -------------------------------------------------------
+
+    def test_a_file_that_is_not_ours_is_refused(self):
+        for payload in ({}, {"schema": "something-else"}, [], "text", None):
+            with self.subTest(payload=payload):
+                bundle, error = ad.read_settings_bundle(payload)
+                self.assertIsNone(bundle)
+                self.assertTrue(error)
+
+    def test_a_newer_format_is_refused_with_the_reason(self):
+        bundle, error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": ad.SETTINGS_BUNDLE_VERSION + 1,
+            "settings": {},
+        })
+        self.assertIsNone(bundle)
+        self.assertIn("newer version", error)
+
+    def test_a_bundle_with_no_settings_is_refused(self):
+        bundle, error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": 1,
+        })
+        self.assertIsNone(bundle)
+        self.assertIn("no settings", error)
+
+    def test_a_hand_edited_value_is_normalised_not_trusted(self):
+        # An import overwrites the live config, so a bundle must not be able
+        # to introduce a value the app would reject from its own config file.
+        bundle, error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": 1,
+            "settings": {
+                "SubLangs": "en; rm -rf /",
+                "MaxConcurrentDownloads": 9999,
+                "JavaScriptRuntime": "bun",
+                "SubtitleMode": "whatever",
+            },
+        })
+        self.assertIsNone(error)
+        self.assertEqual(bundle["settings"]["SubLangs"], "enrm-rf")
+        self.assertLessEqual(bundle["settings"]["MaxConcurrentDownloads"], 10)
+        self.assertEqual(bundle["settings"]["JavaScriptRuntime"], "auto")
+        self.assertEqual(bundle["settings"]["SubtitleMode"], "prefer-manual")
+
+    def test_a_token_planted_in_a_bundle_is_not_imported(self):
+        # The exclusion has to hold on the way in too — otherwise a
+        # hand-written bundle could overwrite the local API credential.
+        bundle, _error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": 1,
+            "settings": {"ServerToken": "attacker" * 4, "SubLangs": "en"},
+        })
+        self.assertNotIn("ServerToken", bundle["settings"])
+
+    def test_a_subscription_with_a_bad_url_is_dropped_not_imported(self):
+        bundle, _error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": 1,
+            "settings": {"SubLangs": "en"},
+            "subscriptions": [
+                {"url": "not a url"},
+                {"url": "file:///etc/passwd"},
+                {"url": "https://www.youtube.com/@ok"},
+            ],
+        })
+        self.assertEqual([record["url"] for record in bundle["subscriptions"]],
+                         ["https://www.youtube.com/@ok"])
+
+    # -- Reporting --------------------------------------------------------
+
+    def test_the_import_names_the_settings_it_would_change(self):
+        current = ad.sanitize_config({"SubLangs": "en", "EmbedSubs": False})
+        bundle, _error = ad.read_settings_bundle(self._bundle())
+        changes = ad.describe_bundle_changes(current, bundle)
+        self.assertEqual(sorted(changes["settings"]), ["EmbedSubs", "SubLangs"])
+        self.assertEqual(changes["subscriptions"], 1)
+
+    def test_an_identical_bundle_reports_no_changes(self):
+        # "Imported 0 changed settings" is a useful answer; "done" is not.
+        current = ad.sanitize_config({"SubLangs": "de,fr", "EmbedSubs": True})
+        bundle, _error = ad.read_settings_bundle(self._bundle())
+        self.assertEqual(
+            ad.describe_bundle_changes(current, bundle)["settings"], [])
+
+    def test_the_sites_needing_a_sign_in_are_reported(self):
+        bundle, _error = ad.read_settings_bundle(self._bundle())
+        changes = ad.describe_bundle_changes(ad.sanitize_config({}), bundle)
+        self.assertEqual(changes["siteLoginSites"], ["x.com", "vimeo.com"])
+
+
+class SettingsFormReloadTests(unittest.TestCase):
+    """The form is redrawn after an import, and knows every setting."""
+
+    def test_every_settings_widget_can_be_refreshed(self):
+        # An import replaces the stored settings under a form already on
+        # screen. A widget missing from the table keeps its pre-import value,
+        # and the next Save writes that value straight back over the import —
+        # so a new setting that forgets this table is a silent data loss.
+        gui = gui_module_for_tests()
+        source = inspect.getsource(gui.MainWindowCore._build_settings)
+        import re
+        built = set(re.findall(r"self\.(cfg_[a-z_0-9]+)\s*=", source))
+        # Not a stored setting: it reports the session's bound port.
+        built.discard("cfg_port_session_hint")
+        # A dict of checkboxes, refreshed separately by name.
+        built.discard("cfg_sb_categories")
+        # ServerToken is read-only and never travels in a bundle, so an
+        # import cannot make this field stale.
+        built.discard("cfg_token")
+        tabled = {name for name, _key, _kind
+                  in gui.MainWindowCore._SETTINGS_FORM_FIELDS}
+        self.assertEqual(
+            built - tabled, set(),
+            "these settings widgets would keep stale values after an import",
+        )
+
+    def test_every_tabled_key_is_a_real_setting(self):
+        gui = gui_module_for_tests()
+        unknown = [
+            key for _name, key, _kind
+            in gui.MainWindowCore._SETTINGS_FORM_FIELDS
+            if key not in ad.DEFAULT_CONFIG
+        ]
+        self.assertEqual(unknown, [])
+
+    def test_the_kinds_are_ones_the_reloader_handles(self):
+        gui = gui_module_for_tests()
+        kinds = {kind for _name, _key, kind
+                 in gui.MainWindowCore._SETTINGS_FORM_FIELDS}
+        self.assertEqual(kinds, {"text", "check", "number", "combo"})
+
 class RevealInExplorerTests(unittest.TestCase):
     """Showing a finished file selects it, and the quoting is exact."""
 

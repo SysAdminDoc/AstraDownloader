@@ -44,6 +44,8 @@ __all__ = (
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
+    "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
+    "SETTINGS_BUNDLE_SCHEMA", "SETTINGS_BUNDLE_VERSION", "BUNDLE_EXCLUDED_SETTINGS",
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
@@ -61,6 +63,8 @@ _OWNED_EXPORTS = {
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
+    "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
+    "SETTINGS_BUNDLE_SCHEMA", "SETTINGS_BUNDLE_VERSION", "BUNDLE_EXCLUDED_SETTINGS",
     "bound_output_template_fields",
     "normalize_output_template",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
@@ -107,12 +111,15 @@ def _env_bool(name, default=False):
     return default
 
 
+# The JavaScript runtimes a user may store. "auto" walks the rest in
+# yt-dlp's own priority order; the probe half lives in health.py and a test
+# pins the two vocabularies together.
+JAVASCRIPT_RUNTIME_CHOICES = frozenset({"auto", "deno", "node", "quickjs"})
+
 # The soft format preferences a user can express. This is the schema half:
 # the mapping from these tokens to yt-dlp `--format-sort` fields lives in
 # download.py, which owns argv, and a test pins the two vocabularies together
 # so neither can gain a value the other does not know.
-JAVASCRIPT_RUNTIME_CHOICES = frozenset({"auto", "deno", "node", "quickjs"})
-
 FORMAT_SORT_VIDEO_CODECS = frozenset({"auto", "h264", "vp9", "av1"})
 FORMAT_SORT_AUDIO_CODECS = frozenset({"auto", "aac", "opus"})
 FORMAT_SORT_FRAME_RATES = (0, 30, 60)
@@ -799,6 +806,161 @@ def _is_path_under(child, root):
         return True
     except (ValueError, OSError, RuntimeError):
         return False
+
+
+# ---------------------------------------------------------------------------
+# Settings bundle: moving an install to another machine, and getting a
+# corrupted config back without hand-editing JSON.
+
+SETTINGS_BUNDLE_SCHEMA = "astra-downloader-settings"
+SETTINGS_BUNDLE_VERSION = 1
+
+# Settings deliberately left out of an exported bundle.
+#
+# ServerToken is the shared secret the browser extension authenticates with.
+# Carrying it into a bundle would put a working credential in a file users
+# email to themselves, and copying one machine's token to another lets either
+# drive the other's queue. The importing install keeps its own.
+#
+# The legacy health-token settings are read from environment variables at
+# startup, so exporting them would write a value the target machine is about
+# to overwrite anyway — an import that appears to do nothing is worse than
+# one that does not claim to.
+BUNDLE_EXCLUDED_SETTINGS = frozenset({
+    "ServerToken",
+    "LegacyHealthTokenEcho",
+    "LegacyHealthTokenOrigins",
+})
+
+# Subscription fields that describe one machine's scan history rather than
+# the subscription itself. A bundle carries what to watch and how often, not
+# when this particular install last looked.
+_BUNDLE_SUBSCRIPTION_FIELDS = (
+    "id", "url", "title", "intervalMinutes", "enabled",
+)
+
+
+def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
+                          app_version="", now=None):
+    """Build the portable bundle: settings, subscriptions, sign-in names.
+
+    Sign-ins are named but never carried. `SiteLoginStore` states that cookie
+    values never leave the jar files, and a bundle is precisely the kind of
+    file that gets emailed around, so the export records which sites had a
+    sign-in and leaves the user to add them again on the other machine. That
+    is also why there is no opt-in to include them: an option to break that
+    rule is still a way to break it.
+    """
+    read = getattr(config, "get", None)
+    settings = {}
+    if callable(read):
+        for key in sorted(DEFAULT_CONFIG):
+            if key in BUNDLE_EXCLUDED_SETTINGS:
+                continue
+            settings[key] = read(key, DEFAULT_CONFIG[key])
+    exported_subscriptions = []
+    for record in subscriptions or ():
+        if not isinstance(record, dict):
+            continue
+        exported_subscriptions.append(
+            {field: record.get(field) for field in _BUNDLE_SUBSCRIPTION_FIELDS
+             if field in record}
+        )
+    names = []
+    for entry in site_logins or ():
+        site = entry.get("site") if isinstance(entry, dict) else entry
+        site = clean_text(site, "", 253)
+        if site and site not in names:
+            names.append(site)
+    return {
+        "schema": SETTINGS_BUNDLE_SCHEMA,
+        "schemaVersion": SETTINGS_BUNDLE_VERSION,
+        "appVersion": str(app_version or ""),
+        "exportedAt": float(now if now is not None else 0.0),
+        "settings": settings,
+        "subscriptions": exported_subscriptions,
+        # Names only — see the docstring.
+        "siteLoginSites": names,
+    }
+
+
+def read_settings_bundle(payload):
+    """Validate a bundle. Returns (bundle, error); never both.
+
+    Fails closed on anything that is not recognisably one of ours: an import
+    overwrites every setting, so guessing at a malformed file is how a user
+    ends up with a config they cannot explain.
+    """
+    if not isinstance(payload, dict):
+        return None, "That file is not an Astra Downloader settings bundle."
+    if payload.get("schema") != SETTINGS_BUNDLE_SCHEMA:
+        return None, "That file is not an Astra Downloader settings bundle."
+    try:
+        version = int(payload.get("schemaVersion"))
+    except (TypeError, ValueError):
+        return None, "That bundle does not declare a version."
+    if version > SETTINGS_BUNDLE_VERSION:
+        return None, (
+            f"That bundle was written by a newer version (format {version}; "
+            f"this build reads {SETTINGS_BUNDLE_VERSION}). Update Astra "
+            "Downloader and try again."
+        )
+    raw_settings = payload.get("settings")
+    if not isinstance(raw_settings, dict):
+        return None, "That bundle has no settings in it."
+    # Everything goes through the same normaliser the live config uses, so a
+    # hand-edited bundle cannot introduce a value the app would not accept
+    # from its own config file.
+    merged = {key: value for key, value in raw_settings.items()
+              if key in DEFAULT_CONFIG and key not in BUNDLE_EXCLUDED_SETTINGS}
+    settings = sanitize_config(merged)
+    for key in BUNDLE_EXCLUDED_SETTINGS:
+        settings.pop(key, None)
+    subscriptions = []
+    for record in (payload.get("subscriptions") or []):
+        if not isinstance(record, dict):
+            continue
+        url, url_error = normalize_url(record.get("url"))
+        if url_error or not url:
+            continue
+        subscriptions.append({
+            "url": url,
+            "title": clean_text(record.get("title"), "", 300),
+            "intervalMinutes": clamp_int(record.get("intervalMinutes"), 60, 1, 40320),
+            "enabled": coerce_bool(record.get("enabled"), True),
+        })
+    sites = []
+    for site in (payload.get("siteLoginSites") or []):
+        site = clean_text(site, "", 253)
+        if site and site not in sites:
+            sites.append(site)
+    return {
+        "schemaVersion": version,
+        "appVersion": clean_text(payload.get("appVersion"), "", 40),
+        "settings": settings,
+        "subscriptions": subscriptions,
+        "siteLoginSites": sites,
+    }, None
+
+
+def describe_bundle_changes(current, bundle):
+    """Say what importing this bundle would actually change.
+
+    An import that reports "done" tells the user nothing about whether it did
+    what they wanted; this is what the confirmation says instead.
+    """
+    read = getattr(current, "get", None)
+    changed = []
+    if callable(read):
+        for key in sorted(bundle.get("settings") or {}):
+            incoming = bundle["settings"][key]
+            if read(key, DEFAULT_CONFIG.get(key)) != incoming:
+                changed.append(key)
+    return {
+        "settings": changed,
+        "subscriptions": len(bundle.get("subscriptions") or []),
+        "siteLoginSites": list(bundle.get("siteLoginSites") or []),
+    }
 
 
 def sanitize_config(raw):
