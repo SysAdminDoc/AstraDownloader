@@ -55,13 +55,6 @@ Notes on the items above, from the same pass:
 
 ### P1
 
-- [ ] P1 — Extend the process-boundary flag denylist to the 2026 advisories
-  Why: The guard covers only the four link-file flags from CVE-2026-55404, but six further yt-dlp advisories landed in 2026 on flags of the same class, and the guard's own docstring says it exists to catch future builder regressions.
-  Evidence: `astra_downloader.py:381-405` (`YTDLP_FORBIDDEN_LINK_FLAGS`, `validate_ytdlp_spawn_args`). Advisories: `--exec` GHSA-69qj-pvh9-c5wg, `--netrc-cmd` GHSA-g3gw-q23r-pgqm, `--downloader aria2c` CVE-2026-50574, `--downloader curl` CVE-2026-50019.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: `--exec`, `--exec-before-download`, `--netrc`, `--netrc-cmd`, `--downloader`, `--external-downloader` and `--downloader-args` are refused at `spawn_ytdlp` with the same prefix-abbreviation handling as the existing check; a test feeds each flag and its accepted abbreviations and asserts the raise.
-  Complexity: S
-
 - [ ] P1 — Render the PO-token provider readiness row the code already computes
   Why: `_apply_readiness` sets a `provider` state three times and `_set_readiness` silently discards all of it because no such row exists, so the PO-provider status that failure advice refers to has never been visible.
   Evidence: `gui.py:1228`, `1234`, `1239` set it; `gui.py:1155-1158` early-returns on unknown keys; `_make_readiness_row` is called only for `server`, `ytDlp`, `ffmpeg`, `deno` and `sabr`. `download.py:2253-2254` documents a "PO provider: Fallback" row that does not exist.

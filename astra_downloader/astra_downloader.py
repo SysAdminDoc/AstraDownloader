@@ -379,20 +379,37 @@ _LOG_LOCK = threading.Lock()
 _LOG_RING_MAX = 20
 _log_ring = __import__('collections').deque(maxlen=_LOG_RING_MAX)
 YTDLP_FORBIDDEN_LINK_FLAGS = frozenset({
+    # Shortcut files written from remote metadata — CVE-2026-55404.
     '--write-link',
     '--write-url-link',
     '--write-desktop-link',
     '--write-webloc-link',
+    # Command execution driven by extractor output — GHSA-69qj-pvh9-c5wg.
+    '--exec',
+    '--exec-before-download',
+    # Credential files and credential-producing commands —
+    # GHSA-g3gw-q23r-pgqm.
+    '--netrc',
+    '--netrc-cmd',
+    '--netrc-location',
+    # Handing the transfer to an external downloader. Astra Downloader never
+    # offers one, and 2026 brought code-execution advisories against two of
+    # the common choices (CVE-2026-50574, CVE-2026-50019).
+    '--downloader',
+    '--external-downloader',
+    '--downloader-args',
+    '--external-downloader-args',
 })
 
 
 def validate_ytdlp_spawn_args(args):
-    """Fail closed if a shortcut-writing flag reaches the process boundary.
+    """Fail closed if an out-of-policy flag reaches the process boundary.
 
     Request fields and persisted settings are allowlisted earlier, but this
     final guard also catches future builder regressions and yt-dlp's accepted
-    long-option abbreviations. These flags create files from remote metadata
-    and were the affected surface in CVE-2026-55404.
+    long-option abbreviations. Everything here either creates files or runs
+    commands from remote metadata, or hands the transfer to a process this
+    program does not control; each entry names its advisory above.
     """
     safe_args = list(args)
     for raw_arg in safe_args[1:]:
@@ -401,7 +418,7 @@ def validate_ytdlp_spawn_args(args):
         option = raw_arg.strip().split('=', 1)[0].casefold()
         if option.startswith('--') and any(
                 forbidden.startswith(option) for forbidden in YTDLP_FORBIDDEN_LINK_FLAGS):
-            raise ValueError('Refusing unsafe yt-dlp link-file output flag.')
+            raise ValueError(f'Refusing unsafe yt-dlp flag: {option}')
     return safe_args
 
 

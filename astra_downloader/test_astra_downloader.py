@@ -5878,7 +5878,7 @@ class EndToEndDownloadTests(unittest.TestCase):
 
 
 class YtDlpLinkFilePolicyTests(unittest.TestCase):
-    """Defense in depth for CVE-2026-55404 shortcut-file output."""
+    """Defense in depth for the yt-dlp flags this program never sends."""
 
     def test_process_boundary_rejects_link_flags_and_abbreviations(self):
         hostile_options = {
@@ -5887,14 +5887,32 @@ class YtDlpLinkFilePolicyTests(unittest.TestCase):
             '--write-u',
             '--write-d',
             '--write-w',
+            # yt-dlp accepts unambiguous long-option abbreviations, so the
+            # guard has to refuse the prefixes too.
+            '--exe',
+            '--netr',
+            '--down',
+            '--external-down',
         }
         for option in hostile_options:
             for suffix in ('', '=true'):
                 with self.subTest(option=option, suffix=suffix), \
                      mock.patch.object(ad.subprocess, 'Popen') as popen:
-                    with self.assertRaisesRegex(ValueError, 'link-file output flag'):
+                    with self.assertRaisesRegex(ValueError, 'Refusing unsafe yt-dlp flag'):
                         ad.spawn_ytdlp(['yt-dlp.exe', option + suffix, 'https://example.test'])
                     popen.assert_not_called()
+
+    def test_process_boundary_covers_the_2026_advisory_flags(self):
+        # Named explicitly so the set cannot silently shrink back to the
+        # four link-file flags it started as.
+        for option in (
+            '--exec', '--exec-before-download',
+            '--netrc', '--netrc-cmd', '--netrc-location',
+            '--downloader', '--external-downloader',
+            '--downloader-args', '--external-downloader-args',
+        ):
+            with self.subTest(option=option):
+                self.assertIn(option, ad.YTDLP_FORBIDDEN_LINK_FLAGS)
 
     def test_process_boundary_allows_reviewed_download_args(self):
         sentinel = object()
@@ -5919,9 +5937,26 @@ class Aria2cExternalDownloaderBanTests(unittest.TestCase):
             "(CVE-2026-50574: RCE via manifest downloads)")
 
     def test_source_never_passes_external_downloader_flag(self):
-        src = Path(ad.__file__).read_text(encoding='utf-8')
-        self.assertNotIn('--external-downloader', src,
-            "astra_downloader must not pass --external-downloader to yt-dlp")
+        # The argv builder lives in download.py. astra_downloader.py names
+        # these flags only in the process-boundary denylist, which is the
+        # thing enforcing the ban rather than breaking it.
+        import download
+
+        src = inspect.getsource(download)
+        for flag in ('--external-downloader', '--downloader'):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, src,
+                    "the yt-dlp argv builder must not pass an external downloader")
+
+    def test_external_downloader_is_refused_at_the_process_boundary(self):
+        for option in ('--external-downloader', '--downloader', '--downloader-args'):
+            with self.subTest(option=option), \
+                 mock.patch.object(ad.subprocess, 'Popen') as popen:
+                with self.assertRaises(ValueError):
+                    ad.spawn_ytdlp([
+                        'yt-dlp.exe', option, 'aria2c', 'https://example.test',
+                    ])
+                popen.assert_not_called()
 
 
 class DownloadSizeCeilingTests(unittest.TestCase):

@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Security
+
+- **The yt-dlp process-boundary guard covers the 2026 advisories.** It refused
+  the four link-file flags from CVE-2026-55404; it now also refuses `--exec`,
+  `--exec-before-download`, the `--netrc` family and every spelling of the
+  external-downloader options, with the same long-option abbreviation
+  handling. None of these are ever built into an argv — the guard exists to
+  catch a future regression that does.
+
 ### Fixed
 
 - **Interrupted downloads resume instead of restarting.** `--force-overwrites`
