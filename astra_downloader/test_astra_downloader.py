@@ -1477,6 +1477,63 @@ class UninstallCleanupTests(unittest.TestCase):
         self.assertNotIn("rmdir", args)
 
 
+class InstalledExecutableTests(unittest.TestCase):
+    """A portable/forked launch must not corrupt or downgrade the install."""
+
+    def _paths(self, tmp):
+        root = Path(tmp)
+        current = root / "Downloads" / "AstraDownloader.exe"
+        target = root / "AstraDownloader" / "AstraDownloader.exe"
+        current.parent.mkdir(parents=True)
+        target.parent.mkdir(parents=True)
+        return current, target
+
+    def _frozen_patches(self, current, target, *, installed_version):
+        return mock.patch.object(ad, "is_frozen_app", return_value=True), \
+            mock.patch.object(ad, "current_executable_path", return_value=current), \
+            mock.patch.object(ad, "install_target_exe", return_value=target), \
+            mock.patch.object(ad, "_probe_companion_version", return_value=installed_version), \
+            mock.patch.object(ad, "write_persistent_log")
+
+    def test_newer_managed_exe_is_kept_when_an_older_copy_launches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"running-older")
+            target.write_bytes(b"managed-newer")
+            patches = self._frozen_patches(current, target, installed_version="2.6.0")
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                result = ad.ensure_installed_executable()
+
+            self.assertEqual(result, target)
+            self.assertEqual(target.read_bytes(), b"managed-newer")
+
+    def test_older_managed_exe_is_replaced_by_a_verified_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"running-newer")
+            target.write_bytes(b"managed-older")
+            patches = self._frozen_patches(current, target, installed_version="2.4.0")
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                result = ad.ensure_installed_executable()
+
+            self.assertEqual(result, target)
+            self.assertEqual(target.read_bytes(), b"running-newer")
+
+    def test_failed_verified_copy_keeps_the_previous_managed_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"running-newer")
+            target.write_bytes(b"managed-still-good")
+            patches = self._frozen_patches(current, target, installed_version="2.4.0")
+            with patches[0], patches[1], patches[2], patches[3], patches[4], \
+                    mock.patch.object(ad, "atomic_copy_verified",
+                                       side_effect=OSError("disk full")):
+                result = ad.ensure_installed_executable()
+
+            self.assertEqual(result, current)
+            self.assertEqual(target.read_bytes(), b"managed-still-good")
+
+
 class QuarantinedStateFileTests(unittest.TestCase):
     """A corrupt state file is set aside silently. Something has to say so."""
 
@@ -12483,7 +12540,7 @@ class CompletionNotificationTests(unittest.TestCase):
 
 
 class DownloadCardMenuTests(unittest.TestCase):
-    """A finished card offers what you might want to do with the file."""
+    """A terminal card offers what is useful for that outcome."""
 
     def _window(self):
         gui = gui_module_for_tests()
@@ -12523,10 +12580,10 @@ class DownloadCardMenuTests(unittest.TestCase):
                 window._play_download(str(Path(tmpdir) / "gone.mp4")))
         self.assertTrue(any("no longer" in line for line in window.logs))
 
-    def test_the_menu_is_only_attached_to_a_finished_card(self):
+    def test_the_menu_is_attached_to_a_terminal_card(self):
         source = inspect.getsource(
             gui_module_for_tests().MainWindowCore._download_card)
-        self.assertIn('if recent and dl.status == "complete":', source)
+        self.assertIn('if recent:', source)
         self.assertIn("_download_card_menu", source)
 
 class QuickJsRuntimeTests(unittest.TestCase):

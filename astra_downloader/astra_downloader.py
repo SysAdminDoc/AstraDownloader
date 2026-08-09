@@ -2595,8 +2595,36 @@ def install_target_exe():
     return INSTALL_DIR / "AstraDownloader.exe"
 
 
-def ensure_installed_executable():
-    """Copy a downloaded one-file exe into the managed install directory."""
+def _probe_companion_version(path, timeout=15):
+    """Read a frozen companion's version without opening its GUI."""
+    try:
+        result = subprocess.run(
+            [str(path), '--version'],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            creationflags=CREATE_NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    if result.returncode != 0:
+        return ''
+    version_pattern = r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?'
+    for line in (result.stdout or '').splitlines():
+        value = line.strip()
+        if re.fullmatch(version_pattern, value):
+            return value
+    return ''
+
+
+def ensure_installed_executable(*, allow_downgrade=False):
+    """Install the running frozen exe without silently replacing a newer one.
+
+    ``allow_downgrade`` is deliberately explicit for a future repair or user
+    initiated rollback path. Ordinary launches always preserve a newer managed
+    binary and use the byte-verified copy primitive for replacement.
+    """
     current = current_executable_path()
     if not is_frozen_app():
         return current
@@ -2611,19 +2639,19 @@ def ensure_installed_executable():
 
     try:
         INSTALL_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
-        shutil.copy2(current, tmp)
-        os.replace(tmp, target)
+        if target.exists() and not allow_downgrade:
+            installed_version = _probe_companion_version(target)
+            if installed_version and _compare_semver(installed_version, APP_VERSION) > 0:
+                write_persistent_log(
+                    f"Kept newer installed executable {installed_version}; "
+                    f"running copy is {APP_VERSION}."
+                )
+                return target
+        atomic_copy_verified(current, target)
         write_persistent_log(f"Installed executable updated: {target}")
         return target
     except Exception as e:
         write_persistent_log(f"Could not update installed executable from {current}: {e}")
-        try:
-            if 'tmp' in locals() and tmp.exists():
-                tmp.unlink()
-        except Exception:
-            # reason: failed executable cleanup is best-effort after the install error is logged
-            pass
         return current
 
 
