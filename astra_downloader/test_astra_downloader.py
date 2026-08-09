@@ -449,6 +449,111 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(restored.archive_summary()["complete"], 1)
             self.assertEqual(restored.archive_entries()[key]["status"], "complete")
 
+    def test_failed_archive_claims_back_off_and_stop_after_three_attempts(self):
+        subs = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "retry.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel"
+            )
+            self.assertIsNone(error)
+            candidate = {
+                "id": "video-retry",
+                "url": "https://www.youtube.com/watch?v=video-retry",
+                "title": "Retry me",
+            }
+            key = ad.subscription_archive_key(candidate)
+
+            self.assertEqual(store.reserve_archive(key, candidate, record["id"], now=1000),
+                             subs.RESERVE_OK)
+            self.assertTrue(store.release_archive(key, "members-only", now=1000))
+            first = store.archive_entries()[key]
+            self.assertEqual(first["attempts"], 1)
+            self.assertEqual(first["nextRetryAt"], 1000 + ad.SUBSCRIPTION_RETRY_BASE_SECONDS)
+
+            download_candidate = {
+                "id": "video-download-failure",
+                "url": "https://www.youtube.com/watch?v=video-download-failure",
+                "title": "Download failure",
+            }
+            download_key = ad.subscription_archive_key(download_candidate)
+            self.assertEqual(
+                store.reserve_archive(download_key, download_candidate, record["id"], now=1000),
+                subs.RESERVE_OK,
+            )
+            self.assertTrue(store.mark_archive_queued(download_key, "dl_failed", now=1000))
+            self.assertEqual(
+                store.mark_download("dl_failed", "failed", "HTTP 403", now=1000),
+                1,
+            )
+            self.assertEqual(
+                store.archive_entries()[download_key]["nextRetryAt"],
+                1000 + ad.SUBSCRIPTION_RETRY_BASE_SECONDS,
+            )
+
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=1100),
+                subs.RESERVE_RETRY_BACKOFF,
+            )
+            self.assertEqual(store.reserve_archive(key, candidate, record["id"], now=1300),
+                             subs.RESERVE_OK)
+            self.assertEqual(store.archive_entries()[key]["attempts"], 2)
+            self.assertTrue(store.release_archive(key, "members-only", now=1300))
+            self.assertEqual(store.archive_entries()[key]["nextRetryAt"], 1900)
+
+            self.assertEqual(store.reserve_archive(key, candidate, record["id"], now=1900),
+                             subs.RESERVE_OK)
+            self.assertEqual(store.archive_entries()[key]["attempts"], 3)
+            self.assertTrue(store.release_archive(key, "members-only", now=1900))
+            self.assertEqual(store.archive_entries()[key]["nextRetryAt"], 3100)
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=3100),
+                subs.RESERVE_RETRY_EXHAUSTED,
+            )
+
+    def test_manual_rescan_resets_the_retry_budget_and_names_gave_up_item(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "manager-retry.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel"
+            )
+            self.assertIsNone(error)
+            entries = [{
+                "id": "video-retry",
+                "url": "https://www.youtube.com/watch?v=video-retry",
+                "title": "Members-only upload",
+            }]
+            enqueues = []
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: (entries, None),
+                enqueue=lambda *_args: enqueues.append("attempt") or (
+                    None, "members-only"
+                ),
+            )
+
+            for stamp in (1000, 1300, 1900):
+                result = manager.scan_subscription(record["id"], now=stamp)
+                self.assertEqual(result["queued"], 0)
+                self.assertIn("members-only", result["error"])
+            exhausted = manager.scan_subscription(record["id"], now=3100)
+            self.assertEqual(exhausted["skipped"], 1)
+            self.assertIn("Members-only upload", exhausted["error"])
+            self.assertIn("after 3 attempts", exhausted["error"])
+            self.assertEqual(len(enqueues), 3)
+
+            manual = manager.scan_subscription(
+                record["id"], now=3200, manual=True
+            )
+            self.assertIn("members-only", manual["error"])
+            self.assertEqual(len(enqueues), 4)
+            key = ad.subscription_archive_key(entries[0])
+            self.assertEqual(store.archive_entries()[key]["attempts"], 1)
+            self.assertEqual(
+                store.archive_entries()[key]["nextRetryAt"],
+                3200 + ad.SUBSCRIPTION_RETRY_BASE_SECONDS,
+            )
+
     def test_scheduler_enqueues_new_uploads_once_and_dedupes_after_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "subscriptions.json"

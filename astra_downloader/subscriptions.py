@@ -22,10 +22,14 @@ __all__ = (
     "SUBSCRIPTION_SCHEMA_VERSION",
     "SUBSCRIPTION_MIN_INTERVAL_MINUTES",
     "SUBSCRIPTION_MAX_INTERVAL_MINUTES",
+    "SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS",
+    "SUBSCRIPTION_RETRY_BASE_SECONDS",
     "SUBSCRIPTION_MAX_RECORDS",
     "SUBSCRIPTION_MAX_ARCHIVE_ENTRIES",
     "RESERVE_OK",
     "RESERVE_ALREADY_PRESENT",
+    "RESERVE_RETRY_BACKOFF",
+    "RESERVE_RETRY_EXHAUSTED",
     "RESERVE_SAVE_FAILED",
     "SubscriptionStore",
     "SubscriptionManager",
@@ -37,13 +41,17 @@ __all__ = (
 SUBSCRIPTION_SCHEMA_VERSION = 1
 SUBSCRIPTION_MIN_INTERVAL_MINUTES = 5
 SUBSCRIPTION_MAX_INTERVAL_MINUTES = 7 * 24 * 60
+SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS = 3
+SUBSCRIPTION_RETRY_BASE_SECONDS = SUBSCRIPTION_MIN_INTERVAL_MINUTES * 60
 SUBSCRIPTION_MAX_RECORDS = 100
 SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000
-# reserve_archive outcomes. "already present" is the ordinary nothing-to-do
-# case; "save failed" means the archive could not be written and the scan has
-# a real problem to report rather than a quiet skip.
+# reserve_archive outcomes. "already present" and "retry backoff" are ordinary
+# nothing-to-do cases; "retry exhausted" is surfaced with the candidate's last
+# error, while "save failed" means the archive could not be written.
 RESERVE_OK = "reserved"
 RESERVE_ALREADY_PRESENT = "already-present"
+RESERVE_RETRY_BACKOFF = "retry-backoff"
+RESERVE_RETRY_EXHAUSTED = "retry-exhausted"
 RESERVE_SAVE_FAILED = "save-failed"
 _TEXT_LIMIT = 500
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
@@ -121,6 +129,12 @@ def _safe_nonnegative_int(value, default=0):
     except (TypeError, ValueError, OverflowError):
         parsed = default
     return max(0, parsed)
+
+
+def _next_retry_at(attempts, now):
+    """Return an increasing retry time for a failed archive attempt."""
+    attempts = max(1, _safe_nonnegative_int(attempts, 1))
+    return now + SUBSCRIPTION_RETRY_BASE_SECONDS * (2 ** (attempts - 1))
 
 
 def _safe_candidate_id(value):
@@ -352,6 +366,8 @@ class SubscriptionStore:
                 "updatedAt": _finite_timestamp(value.get("updatedAt"), self._clock()) or self._clock(),
                 "completedAt": _finite_timestamp(value.get("completedAt"), None),
                 "lastError": self._clean(value.get("lastError"), "", 500),
+                "attempts": _safe_nonnegative_int(value.get("attempts")),
+                "nextRetryAt": _finite_timestamp(value.get("nextRetryAt"), None),
             }
             entries.append((key, entry))
         entries.sort(key=lambda item: item[1]["updatedAt"], reverse=True)
@@ -518,12 +534,10 @@ class SubscriptionStore:
     def reserve_archive(self, key, candidate, subscription_id, now=None):
         """Claim an archive key.
 
-        Returns one of ``RESERVE_OK``, ``RESERVE_ALREADY_PRESENT`` or
-        ``RESERVE_SAVE_FAILED``. A single boolean collapsed the last two, so a
-        subscription that could no longer write its archive reported exactly
-        what a healthy scan with nothing new reports — and the scheduler runs
-        unattended, so the channel silently stopped downloading while every
-        reading said it was up to date.
+        Failed claims are retried with a bounded, increasing delay. Once the
+        attempt budget is spent, the scheduler gets a distinct outcome so it
+        can name the candidate and its last failure instead of silently
+        re-enqueueing it forever.
         """
         key = self._clean(key, "", 430)
         if not key or not isinstance(candidate, dict):
@@ -531,8 +545,17 @@ class SubscriptionStore:
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             existing = self._data["archive"].get(key)
-            if existing and existing.get("status") in {"reserved", "queued", "complete"}:
-                return RESERVE_ALREADY_PRESENT
+            attempts = 0
+            if existing:
+                if existing.get("status") in {"reserved", "queued", "complete"}:
+                    return RESERVE_ALREADY_PRESENT
+                attempts = _safe_nonnegative_int(existing.get("attempts"))
+                if attempts >= SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS:
+                    return RESERVE_RETRY_EXHAUSTED
+                retry_at = _finite_timestamp(existing.get("nextRetryAt"), None)
+                if retry_at is not None and now < retry_at:
+                    return RESERVE_RETRY_BACKOFF
+            attempts += 1
             before = _copy(self._data)
             self._data["archive"][key] = {
                 "url": self._clean(candidate.get("url"), "", 4096),
@@ -544,6 +567,8 @@ class SubscriptionStore:
                 "updatedAt": now,
                 "completedAt": None,
                 "lastError": "",
+                "attempts": attempts,
+                "nextRetryAt": None,
             }
             self._trim_archive_locked()
             if not self._save_locked():
@@ -589,6 +614,14 @@ class SubscriptionStore:
                 entry["lastError"] = self._clean(error, "", 500)
                 if status == "complete":
                     entry["completedAt"] = now
+                    entry["nextRetryAt"] = None
+                else:
+                    entry["attempts"] = max(
+                        1, _safe_nonnegative_int(entry.get("attempts"))
+                    )
+                    entry["nextRetryAt"] = _next_retry_at(
+                        entry["attempts"], now
+                    )
             if not self._save_locked():
                 self._data = before
                 return 0
@@ -617,6 +650,7 @@ class SubscriptionStore:
                     entry["downloadId"] = dl_id
                     entry["subscriptionId"] = sub_id or entry.get("subscriptionId", "")
                     entry["status"] = "queued"
+                    entry["nextRetryAt"] = None
                     entry["updatedAt"] = now
                     changed = True
             for key, entry in self._data["archive"].items():
@@ -625,6 +659,12 @@ class SubscriptionStore:
                     entry["downloadId"] = ""
                     entry["lastError"] = "Scheduled download was interrupted; it will retry on the next scan."
                     entry["updatedAt"] = now
+                    entry["attempts"] = max(
+                        1, _safe_nonnegative_int(entry.get("attempts"))
+                    )
+                    entry["nextRetryAt"] = _next_retry_at(
+                        entry["attempts"], now
+                    )
                     changed = True
             if changed and not self._save_locked():
                 self._data = before
@@ -644,6 +684,30 @@ class SubscriptionStore:
         with self._lock:
             return _copy(self._data["archive"])
 
+    def reset_archive_retries(self, subscription_id, now=None):
+        """Clear failed-candidate retry state for an explicit manual rescan."""
+        subscription_id = self._clean(subscription_id, "", 120)
+        now = _finite_timestamp(now, self._clock()) or self._clock()
+        with self._lock:
+            changed = False
+            before = _copy(self._data)
+            for entry in self._data["archive"].values():
+                if entry.get("subscriptionId") != subscription_id:
+                    continue
+                if entry.get("status") != "failed":
+                    continue
+                entry["attempts"] = 0
+                entry["nextRetryAt"] = None
+                entry["lastError"] = ""
+                entry["updatedAt"] = now
+                changed = True
+            if not changed:
+                return True
+            if not self._save_locked():
+                self._data = before
+                return False
+            return True
+
     def _update_archive(self, key, *, status, downloadId, lastError, now=None):
         key = self._clean(key, "", 430)
         now = _finite_timestamp(now, self._clock()) or self._clock()
@@ -656,6 +720,13 @@ class SubscriptionStore:
             entry["downloadId"] = self._clean(downloadId, "", 120)
             entry["lastError"] = self._clean(lastError, "", 500)
             entry["updatedAt"] = now
+            if status == "failed":
+                entry["attempts"] = max(
+                    1, _safe_nonnegative_int(entry.get("attempts"))
+                )
+                entry["nextRetryAt"] = _next_retry_at(entry["attempts"], now)
+            else:
+                entry["nextRetryAt"] = None
             if not self._save_locked():
                 self._data = before
                 return False
@@ -769,7 +840,7 @@ class SubscriptionManager:
         due = self.store.due_subscriptions(now)
         results = []
         for item in due:
-            results.append(self.scan_subscription(item["id"], now=now))
+            results.append(self.scan_subscription(item["id"], now=now, manual=False))
         return results
 
     def request_scan(self, sub_id):
@@ -781,7 +852,7 @@ class SubscriptionManager:
                 return {"id": sub_id, "scheduled": False, "scanning": True}, None
         threading.Thread(
             target=self.scan_subscription,
-            kwargs={"sub_id": sub_id},
+            kwargs={"sub_id": sub_id, "manual": True},
             name=f"AstraSubscriptionScan-{sub_id}",
             daemon=True,
         ).start()
@@ -790,9 +861,9 @@ class SubscriptionManager:
     def scan_now(self, sub_id, *, background=False):
         if background:
             return self.request_scan(sub_id)
-        return self.scan_subscription(sub_id)
+        return self.scan_subscription(sub_id, manual=True)
 
-    def scan_subscription(self, sub_id, *, now=None):
+    def scan_subscription(self, sub_id, *, now=None, manual=False):
         sub_id = str(sub_id)
         with self._lock:
             if sub_id in self._scan_ids:
@@ -802,6 +873,10 @@ class SubscriptionManager:
             started = self.store.begin_scan(sub_id, now=now)
             if not started:
                 return {"id": sub_id, "queued": 0, "skipped": 0, "error": "Subscription no longer exists."}
+            if manual and not self.store.reset_archive_retries(sub_id, now=now):
+                message = "Could not reset subscription retry state; check disk space and permissions."
+                self.store.finish_scan(sub_id, error=message, now=now)
+                return {"id": sub_id, "queued": 0, "skipped": 0, "error": message}
             try:
                 probe_result = self._probe(started["url"])
                 if isinstance(probe_result, tuple):
@@ -834,6 +909,25 @@ class SubscriptionManager:
                 reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
                 if reserved == RESERVE_ALREADY_PRESENT:
                     skipped += 1
+                    continue
+                if reserved == RESERVE_RETRY_BACKOFF:
+                    skipped += 1
+                    continue
+                if reserved == RESERVE_RETRY_EXHAUSTED:
+                    skipped += 1
+                    entry = self.store.archive_entries().get(key, {})
+                    attempts = max(
+                        1,
+                        _safe_nonnegative_int(entry.get("attempts")),
+                    )
+                    last_error = self.store._clean(entry.get("lastError"), "", 500)
+                    message = (
+                        f"{candidate.get('title') or '(untitled)'}: stopped retrying "
+                        f"after {attempts} attempts"
+                    )
+                    if last_error:
+                        message += f": {last_error}"
+                    errors.append(message)
                     continue
                 if reserved != RESERVE_OK:
                     errors.append(

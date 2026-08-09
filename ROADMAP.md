@@ -166,16 +166,6 @@ Notes on existing items above — read these before starting them:
 
 ### P1
 
-- [ ] P1 — Bound the retries a subscription spends on a candidate it cannot download
-  Why: An archive entry that reaches `failed` is not in the set that blocks re-reservation, and nothing counts attempts or backs off. One members-only or geo-blocked video in a watched channel makes the app spawn the same doomed yt-dlp job every 5 minutes, unattended, for as long as the subscription exists — the realistic outcome is rate-limiting from the extractor host.
-  Evidence: `reserve_archive` refuses only `{"reserved", "queued", "complete"}` (`subscriptions.py:534`), while both failure paths write `"failed"` (`release_archive` `:563-570`, `mark_download`/`handle_download_completed` `:832-859`, `:882-888`). `SUBSCRIPTION_MIN_INTERVAL_MINUTES = 5` (`:38`) and the scheduler runs unattended (`:758-766`). No `attempts` field exists on an archive entry anywhere in the module. Retrying a *transient* failure is the intended behaviour — the defect is the missing cap, not the retry.
-  Touches: `astra_downloader/subscriptions.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: an archive entry counts attempts and applies increasing backoff; after a bounded number it stops re-enqueueing and the subscription row names the item that gave up and why; a manual rescan clears the count.
-  Complexity: M
-
-
-
-
 ### P2
 
 - [ ] P2 — Back off per host, not per download

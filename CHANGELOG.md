@@ -18,6 +18,10 @@ repository's git log.
   previews and subscription scans now carry the configured proxy, browser
   impersonation and the target site's stored sign-in. Probe cookie jars are
   scoped by the same site check as downloads and removed after the probe.
+- **Subscription retries are bounded.** Failed candidates now back off with
+  increasing delays, stop after three attempts with the title and last error
+  shown on the subscription row, and get a fresh budget when the user starts
+  a manual rescan.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
