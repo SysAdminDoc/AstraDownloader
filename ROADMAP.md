@@ -168,13 +168,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: a 429 or throttle failure records a retry-after per registrable domain; other hosts keep downloading; the card shows a countdown rather than a static message; the existing pacing settings gain a jitter option.
   Complexity: M
 
-- [ ] P2 — Let a stored sign-in be tested
-  Why: A cookie jar's only feedback is a download failing hours later, and the app already knows enough to check it directly. This is the answer to the most common failure class in the whole field.
-  Evidence: the Sign-ins page shows site, source, count and expiry (`gui.py:2364-2426`) and nothing exercises a jar. `describe_browser_cookie_failure` (`download.py:789-796`) already explains Chrome/Edge 127+ App-Bound Encryption *after* an import fails, but nothing validates a jar that imported cleanly and has since been invalidated server-side. Cookie diagnosis — not cookie import — is the recurring complaint across Parabolic (#1755, #1835, #1753) and ytDownloader (#433). TubeArchivist's answer is a Validate button whose check is concrete and falsifiable: can yt-dlp reach a private, sign-in-only resource. yt-dlp 2026.07 also reworked the Instagram extractor to detect invalidated cookies specifically, which is a new classifiable failure.
-  Touches: `astra_downloader/gui.py`, `astra_downloader/download.py`
-  Acceptance: each sign-in row has a Test action that runs a bounded, metadata-only yt-dlp probe against a sign-in-gated URL for that site and reports pass/fail in plain language on the page; a jar that fails is marked in the list, not silently kept.
-  Complexity: M
-
 - [ ] P2 — Translate the strings that never reach `gui.py`
   Why: The text a user reads at the moment they need help is the one category that never translates. Different mechanism from the existing "strings the extractor cannot see" item — those are runtime `setText` calls *inside* `gui.py`; these live in modules the extractor does not read at all, and they include every failure explanation and every screen-reader label.
   Evidence: `scripts/extract_companion_strings.py:32-34` scans `astra_downloader/gui.py` only. `DOWNLOAD_FAILURE_RECOVERY` is 14 codes × `error`/`advice`/`next_action` as plain literals in `download.py:78-183`, rendered raw at `gui.py:3780-3783` and `:3880-3885`; `SABR_LIMITED_NOTICE` (`download.py:1186-1189`) and `MANAGED_BINARY_ANTIVIRUS_ADVICE` (`health.py:143-146`) have the same shape. Counted in `gui.py` on 2026-08-06: 30 `setToolTip` calls of which 1 is wrapped in `tr()`, and 88 `setAccessibleName` calls of which 2 are — so every screen-reader label is English in 10 of the 11 advertised locales.

@@ -1050,6 +1050,7 @@ class MainWindowCore(QMainWindow):
     tools_update_finished = pyqtSignal(dict)
     tools_status_text_ready = pyqtSignal(str)
     site_login_finished = pyqtSignal(dict)
+    site_login_test_finished = pyqtSignal(dict)
     format_probe_finished = pyqtSignal(dict)
 
     def __init__(self, config, dl_manager, history, start_minimized=False, *, dependencies):
@@ -1076,11 +1077,14 @@ class MainWindowCore(QMainWindow):
         self._download_widgets = {}
         self._clipboard_last_seen = ""
         self._clipboard_staged_url = ""
+        self._site_login_test_states = {}
+        self._site_login_testing = False
         self.log_message.connect(self._append_log)
         self.instance_command.connect(self._handle_instance_command)
         self.tools_update_finished.connect(self._finish_ytdlp_update)
         self.tools_status_text_ready.connect(self._set_tools_status_text)
         self.site_login_finished.connect(self._finish_site_login_import)
+        self.site_login_test_finished.connect(self._finish_site_login_test)
         self.format_probe_finished.connect(self._apply_format_probe)
         # Format probing: the URL whose probe is currently reflected in the
         # quality picker, and a generation counter so a probe that lands
@@ -2639,6 +2643,9 @@ class MainWindowCore(QMainWindow):
                 state = f"{tr('First cookie expires')} {expires}"
             else:
                 state = tr("Session cookies — valid until the site signs you out")
+            test_state = self._site_login_test_states.get(entry.get("site"))
+            if test_state:
+                state += f" · {test_state.get('message', '')}"
             count = int(entry.get("cookies", 0) or 0)
             copy_layout.addWidget(make_label(
                 f"{count} {tr('cookie') if count == 1 else tr('cookies')} · "
@@ -2647,6 +2654,14 @@ class MainWindowCore(QMainWindow):
                 word_wrap=True,
             ))
             row_layout.addLayout(copy_layout, 1)
+            test = self._make_tool_button(
+                "Test", "ghost", str(entry.get("site") or "")
+            )
+            test.setToolTip(tr("Run a bounded metadata-only sign-in test."))
+            test.clicked.connect(
+                lambda checked=False, site=entry.get("site"): self._test_site_login(site)
+            )
+            row_layout.addWidget(test, 0, Qt.AlignmentFlag.AlignTop)
             remove = self._make_tool_button(
                 "Remove", "ghost", str(entry.get("site") or ""))
             remove.clicked.connect(
@@ -2686,6 +2701,7 @@ class MainWindowCore(QMainWindow):
             message += f" {skipped} {tr('cookies for other sites were discarded.')}"
         self._show_site_login_status(message, "success")
         self._append_log(f"Stored a site sign-in for {site} ({count} cookies).")
+        self._site_login_test_states.pop(site, None)
         self.site_login_url.clear()
         self._refresh_site_logins(force=True)
         return True
@@ -2779,6 +2795,52 @@ class MainWindowCore(QMainWindow):
                 f"{tr('Removed the stored sign-in for')} {site}.", "neutral"
             )
             self._append_log(f"Removed the stored site sign-in for {site}.")
+        self._refresh_site_logins(force=True)
+
+    def _test_site_login(self, site):
+        manager = self.dl_manager
+        if manager is None or not site or self._site_login_testing:
+            return
+        self._site_login_testing = True
+        self._show_site_login_status(
+            tr("Testing the stored sign-in…"), "neutral"
+        )
+
+        def worker():
+            try:
+                result, error = manager.test_site_login(site)
+            except Exception as exc:  # noqa: BLE001
+                result, error = None, str(exc)
+            self.site_login_test_finished.emit({
+                "site": site,
+                "result": result or {},
+                "error": error or "",
+            })
+
+        threading.Thread(
+            target=worker, name="site-login-test", daemon=True
+        ).start()
+
+    def _finish_site_login_test(self, payload):
+        self._site_login_testing = False
+        site = str(payload.get("site") or "")
+        error = str(payload.get("error") or "").strip()
+        if error:
+            self._site_login_test_states[site] = {
+                "ok": False,
+                "message": f"{tr('Test failed')}: {error[:200]}",
+            }
+            self._show_site_login_status(error, "error")
+        else:
+            result = payload.get("result") or {}
+            self._site_login_test_states[site] = {
+                "ok": True,
+                "message": tr("Test passed"),
+            }
+            self._show_site_login_status(
+                result.get("message") or tr("Stored sign-in test passed."),
+                "success",
+            )
         self._refresh_site_logins(force=True)
 
     def _add_subscription(self):

@@ -415,8 +415,16 @@
       <translation>Cookies dieser Website importieren, um den wartenden Download freizugeben.</translation>
     </message>
     <message>
+      <source>Test</source>
+      <translation>Test</translation>
+    </message>
+    <message>
       <source>Reading cookies from the browser…</source>
       <translation>Cookies werden aus dem Browser gelesen…</translation>
+    </message>
+    <message>
+      <source>Testing the stored sign-in…</source>
+      <translation>Testing the stored sign-in…</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -787,6 +795,10 @@
       <translation>Abgelaufen — melden Sie sich erneut an, um sie zu erneuern</translation>
     </message>
     <message>
+      <source>Run a bounded metadata-only sign-in test.</source>
+      <translation>Run a bounded metadata-only sign-in test.</translation>
+    </message>
+    <message>
       <source>Signed in to</source>
       <translation>Angemeldet bei</translation>
     </message>
@@ -797,6 +809,10 @@
     <message>
       <source>Site sign-ins are unavailable in this session.</source>
       <translation>Website-Anmeldungen sind in dieser Sitzung nicht verfügbar.</translation>
+    </message>
+    <message>
+      <source>Test passed</source>
+      <translation>Test passed</translation>
     </message>
     <message>
       <source>Up</source>
@@ -875,6 +891,10 @@
       <translation>Cookies anderer Websites wurden verworfen.</translation>
     </message>
     <message>
+      <source>Stored sign-in test passed.</source>
+      <translation>Stored sign-in test passed.</translation>
+    </message>
+    <message>
       <source>No preference</source>
       <translation>Keine Bevorzugung</translation>
     </message>
@@ -913,6 +933,10 @@
     <message>
       <source>Removed the stored sign-in for</source>
       <translation>Gespeicherte Anmeldung entfernt für</translation>
+    </message>
+    <message>
+      <source>Test failed</source>
+      <translation>Test failed</translation>
     </message>
     <message>
       <source>from</source>
