@@ -1979,9 +1979,17 @@ def probe_companion_update_binary(path, expected_version, timeout=30):
 # frozen binary). A genuinely newer release has a different digest, so it
 # still installs normally.
 def read_last_installed_update_sha256():
-    """Lowercase hex digest of the last scheduled update, or None."""
+    """Lowercase hex digest of the last successfully activated update, or None."""
     data = load_json_file(_companion_update_state_path(), {})
-    value = data.get('sha256') if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    # Older state files had no status and are still valid. Once the recovery
+    # helper has written a status, only an active install may suppress a retry;
+    # activation and rollback failures must leave the release available again.
+    status = str(data.get('status') or '').strip().lower()
+    if status and status != 'active':
+        return None
+    value = data.get('sha256')
     if isinstance(value, str):
         value = value.strip().lower()
         if re.fullmatch(r'[0-9a-f]{64}', value):
@@ -1990,7 +1998,7 @@ def read_last_installed_update_sha256():
 
 
 def record_last_installed_update_sha256(digest):
-    """Persist the digest of the update we just scheduled. Best-effort."""
+    """Persist an activated update digest when a caller has verified it."""
     try:
         _write_update_state(
             _companion_update_state_path(),
@@ -2106,7 +2114,7 @@ function Test-Companion([string] $Path, [string] $Version) {
 
 function Write-RecoveryState([string] $Status, [string] $ActiveVersion, [string] $RollbackVersion, [string] $ErrorCode) {
     $state = [ordered]@{
-        sha256 = $ExpectedSHA256.ToLower()
+        sha256 = if ($Status -eq 'active') { $ExpectedSHA256.ToLower() } else { '' }
         app_version = $ExpectedVersion
         status = $Status
         active_version = $ActiveVersion
@@ -2213,7 +2221,8 @@ def healthy(path, version):
 
 def write_state(status, active_version, rollback_version, error_code):
     payload = {
-        'sha256': expected_sha256, 'app_version': expected_version,
+        'sha256': expected_sha256 if status == 'active' else '',
+        'app_version': expected_version,
         'status': status, 'active_version': active_version,
         'rollback_version': rollback_version, 'error_code': error_code,
         'updated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -2421,7 +2430,7 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
         # Version-skew guard (see read_last_installed_update_sha256): the
         # artifact digest equals expected_hash — verify_file_sha256 just
         # proved it — so compare that against the running frozen binary and
-        # the last update this install scheduled. A match means the
+        # the last update this install activated. A match means the
         # releases/latest asset has not actually changed (main's APP_VERSION
         # was bumped ahead of the release), and installing it again can only
         # loop, never advance the version.
@@ -2487,7 +2496,6 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
             expected_version=latest_version,
             previous_version=current_version,
         )
-        record_last_installed_update_sha256(downloaded_digest)
         if restart:
             schedule_companion_process_exit()
         write_persistent_log(

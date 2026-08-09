@@ -166,13 +166,6 @@ Notes on existing items above — read these before starting them:
 
 ### P0
 
-- [ ] P0 — Stop a failed update from permanently pinning the user on the old version
-  Why: The transaction records the digest of an update that did **not** activate, and the version-skew guard then refuses that digest forever — so one transient activation failure leaves the app reporting "you're up to date" until the next release ships. Same shape as the v2.0.0 self-update-target bug, arriving from the other direction.
-  Evidence: `record_last_installed_update_sha256(downloaded_digest)` runs at `astra_downloader.py:2490`, before the swap is attempted. The PowerShell helper's `Write-RecoveryState` writes `sha256 = $ExpectedSHA256.ToLower()` unconditionally (`:2109`) and is called with `rolled-back` (`:2143`), `rollback-failed` (`:2145`) and `activation-failed` (`:2148`); the POSIX twin does the same (`:2216`). `read_last_installed_update_sha256` (`:1981-1989`) reads that same field back out of `companion-update-state.json`, and `_run_companion_self_update` short-circuits to `update_available: false, status: 'release-pending'` on a match (`:2436`). Full path traced 2026-08-06.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: the suppression digest is recorded only after a verified activation; a `rolled-back` / `rollback-failed` / `activation-failed` state does not suppress a retry of the same version; the UI distinguishes "already installed" from "last attempt failed". A test drives an activation failure and asserts the next check still offers the update.
-  Complexity: M
-
 - [ ] P0 — Give a failed download somewhere to live
   Why: A download that fails leaves no trace anywhere in the product after five minutes. Nothing can answer "what failed overnight?", which is the question a queue-based downloader exists to answer.
   Evidence: measured 2026-08-06. `history.add` is called only inside `if dl.status == "complete":` (`download.py:3087-3091`), so failures never reach history. `cleanup_old` deletes any terminal download 5 minutes after it finishes (`download.py:3835-3842`), driven by the 60 s timer at `gui.py:1177-1179`. The Download page shows `recent[:8]` (`gui.py:3935`). A non-retryable failure gets `action = "none"` (`gui.py:3701-3713`) and the context menu is gated on `recent and dl.status == "complete"` (`gui.py:3790-3798`), so it offers no retry, no copy-link and no copy-error. The same root cause makes the History status filter inert: it offers only "All statuses" and "Complete" (`gui.py:2058-2061`) while `query_history_entries` defaults a missing status to `"complete"` (`config.py:1227`), so both selections return identical rows.

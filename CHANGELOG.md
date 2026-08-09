@@ -108,6 +108,10 @@ repository's git log.
   waiting-for-sign-in record rather than queueing a duplicate, and restored
   the previous request from a sixteen-field tuple — the same shape as the
   retry defect fixed in 2.4.0. It now names its fields.
+- **A failed companion activation no longer pins update checks.** The
+  suppression digest is written only after the detached helper verifies an
+  active install, so activation and rollback failures can offer the release
+  again.
 
 ## [2.4.0] - 2026-08-06
 
