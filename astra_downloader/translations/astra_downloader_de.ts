@@ -435,12 +435,12 @@
       <translation>Bestätigen Sie, wohin fertige Videos gespeichert werden. Sie können dies später in den Einstellungen ändern.</translation>
     </message>
     <message>
-      <source>Video download folder</source>
-      <translation>Ordner für Videodownloads</translation>
-    </message>
-    <message>
       <source>This choice is saved once for this install.</source>
       <translation>Diese Auswahl wird für diese Installation einmalig gespeichert.</translation>
+    </message>
+    <message>
+      <source>Video download folder</source>
+      <translation>Ordner für Videodownloads</translation>
     </message>
     <message>
       <source>First-run download folder</source>

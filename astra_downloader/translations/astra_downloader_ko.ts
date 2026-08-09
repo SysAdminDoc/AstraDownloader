@@ -435,12 +435,12 @@
       <translation>Confirm where finished videos should go. You can change this later in Settings.</translation>
     </message>
     <message>
-      <source>Video download folder</source>
-      <translation>Video download folder</translation>
-    </message>
-    <message>
       <source>This choice is saved once for this install.</source>
       <translation>This choice is saved once for this install.</translation>
+    </message>
+    <message>
+      <source>Video download folder</source>
+      <translation>Video download folder</translation>
     </message>
     <message>
       <source>First-run download folder</source>

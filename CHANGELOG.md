@@ -10,6 +10,24 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [2.6.0] - 2026-08-09
+
+### Added
+
+- **Local subtitles fill the missing-track gap.** An opt-in, checksum-pinned
+  multilingual Whisper model is provisioned during setup, and successful video
+  downloads with no subtitle track can now produce a cancellable SRT sidecar.
+- **The release build has an antivirus fallback.** It now emits a normal
+  one-folder zip with its own SHA-256 sidecar alongside the one-file executable.
+- **Subscription archive scans avoid document-sized rollback copies.** Failed
+  mutations now restore only touched entries. On this Windows 11 / CPython
+  3.12.10 machine, a 50-candidate scan against 20,000 archive entries fell
+  from a 20.66 s median before the change to 3.20 s after it (103 JSON writes
+  in each run).
+- **First launch is guided from the Download page.** Missing managed tools
+  provision there, the video destination is confirmed once, and the welcome
+  panel links directly to browser-extension pairing.
+
 ## [2.5.0] - 2026-08-06
 
 ### Added
@@ -73,19 +91,6 @@ repository's git log.
 - **Network-path workarounds are opt-in.** Settings can force an IP family, bind
   a source address, supply a geo X-Forwarded-For value, or use a verification-
   only proxy; 403 and geo-restriction failures now name the matching remedy.
-- **Local subtitles fill the missing-track gap.** An opt-in, checksum-pinned
-  multilingual Whisper model is provisioned during setup, and successful video
-  downloads with no subtitle track can now produce a cancellable SRT sidecar.
-- **The release build has an antivirus fallback.** It now emits a normal
-  one-folder zip with its own SHA-256 sidecar alongside the one-file executable.
-- **Subscription archive scans avoid document-sized rollback copies.** Failed
-  mutations now restore only touched entries. On this Windows 11 / CPython
-  3.12.10 machine, a 50-candidate scan against 20,000 archive entries fell
-  from a 20.66 s median before the change to 3.20 s after it (103 JSON writes
-  in each run).
-- **First launch is guided from the Download page.** Missing managed tools
-  provision there, the video destination is confirmed once, and the welcome
-  panel links directly to browser-extension pairing.
 - **Site profiles are URL-aware.** Named domain profiles can set output format,
   quality, impersonation, proxy and request pacing defaults; matching happens
   when a link is pasted, with an explicit one-off profile or no-profile choice.
