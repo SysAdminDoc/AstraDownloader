@@ -859,6 +859,61 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(set(entries), {keys[0], keys[2]})
             self.assertEqual(entries[keys[0]]["status"], "queued")
 
+    def test_failed_archive_trim_restores_only_the_changed_entries(self):
+        subs = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rollback.json"
+            writes = {"fail": False}
+
+            def writer(actual_path, data):
+                if writes["fail"]:
+                    raise OSError("disk full")
+                ad.atomic_write_json(actual_path, data)
+
+            store = ad.SubscriptionStore(
+                path=path,
+                reader=ad.load_json_file,
+                writer=writer,
+                logger=lambda _message: None,
+                max_archive_entries=2,
+            )
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@rollback-channel"
+            )
+            self.assertIsNone(error)
+            candidates = [
+                {
+                    "id": f"video-rollback-{index}",
+                    "url": f"https://www.youtube.com/watch?v=video-rollback-{index}",
+                    "title": f"Rollback {index}",
+                }
+                for index in range(3)
+            ]
+            for candidate in candidates[:2]:
+                self.assertEqual(
+                    store.reserve_archive(
+                        ad.subscription_archive_key(candidate),
+                        candidate,
+                        record["id"],
+                        now=1000,
+                    ),
+                    subs.RESERVE_OK,
+                )
+            before = store.archive_entries()
+            saved_file = path.read_text(encoding="utf-8")
+            writes["fail"] = True
+
+            result = store.reserve_archive(
+                ad.subscription_archive_key(candidates[2]),
+                candidates[2],
+                record["id"],
+                now=1001,
+            )
+
+            self.assertEqual(result, subs.RESERVE_SAVE_FAILED)
+            self.assertEqual(store.archive_entries(), before)
+            self.assertEqual(path.read_text(encoding="utf-8"), saved_file)
+
     def test_completed_download_updates_only_its_subscription_archive_entry(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self._store(Path(tmp) / "completion.json")

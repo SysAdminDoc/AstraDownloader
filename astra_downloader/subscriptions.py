@@ -57,6 +57,7 @@ RESERVE_SAVE_FAILED = "save-failed"
 _TEXT_LIMIT = 500
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 _YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "youtube-nocookie.com")
+_MISSING_STATE = object()
 
 
 def _default_clean_text(value, default="", max_len=_TEXT_LIMIT):
@@ -412,11 +413,30 @@ class SubscriptionStore:
         if not self._compatible:
             return False
         try:
-            self._writer(self.path, _copy(self._data))
+            # Writers consume the JSON-shaped document synchronously while the
+            # store lock is held. Copying the entire archive here turns every
+            # candidate mutation into another O(archive) deepcopy.
+            self._writer(self.path, self._data)
             return True
         except Exception as error:  # noqa: BLE001
             self._logger(f"Subscription state save failed: {error}")
             return False
+
+    def _snapshot_archive_entry_locked(self, snapshots, key):
+        if key in snapshots:
+            return
+        entry = self._data["archive"].get(key, _MISSING_STATE)
+        snapshots[key] = _MISSING_STATE if entry is _MISSING_STATE else _copy(entry)
+
+    def _restore_archive_locked(self, snapshots, removed=None):
+        archive = self._data["archive"]
+        for key, entry in (removed or {}).items():
+            archive[key] = entry
+        for key, entry in snapshots.items():
+            if entry is _MISSING_STATE:
+                archive.pop(key, None)
+            else:
+                archive[key] = entry
 
     def _find_locked(self, sub_id):
         return next(
@@ -446,7 +466,6 @@ class SubscriptionStore:
         if not record:
             return False, "That subscription could not be restored."
         with self._lock:
-            before = _copy(self._data)
             if len(self._data["subscriptions"]) >= self.max_records:
                 return False, f"Subscription limit reached ({self.max_records})."
             if self._find_locked(record["id"]):
@@ -456,7 +475,7 @@ class SubscriptionStore:
                 return False, "That subscription is already configured."
             self._data["subscriptions"].append(record)
             if not self._save_locked():
-                self._data = before
+                self._data["subscriptions"].pop()
                 return False, "Could not save subscriptions. Check disk space and permissions."
             return _copy(record), None
 
@@ -490,10 +509,9 @@ class SubscriptionStore:
                 "lastQueued": 0,
                 "lastSkipped": 0,
             }
-            before = _copy(self._data)
             self._data["subscriptions"].append(record)
             if not self._save_locked():
-                self._data = before
+                self._data["subscriptions"].pop()
                 return None, "Could not save subscriptions. Check disk space and permissions."
             return _copy(record), None
 
@@ -504,7 +522,7 @@ class SubscriptionStore:
             record = self._find_locked(str(sub_id))
             if record is None:
                 return None, "Subscription no longer exists."
-            before = _copy(self._data)
+            before = _copy(record)
             if url is not None:
                 normalized, error = self._normalize_url(url)
                 if error or not normalized or not self._is_youtube_url(normalized):
@@ -533,21 +551,25 @@ class SubscriptionStore:
             elif not record["enabled"]:
                 record["nextScanAt"] = None
             if not self._save_locked():
-                self._data = before
+                record.clear()
+                record.update(before)
                 return None, "Could not save subscriptions. Check disk space and permissions."
             return _copy(record), None
 
     def remove_subscription(self, sub_id):
         with self._lock:
-            before = _copy(self._data)
-            original = len(self._data["subscriptions"])
-            self._data["subscriptions"] = [
-                item for item in self._data["subscriptions"] if item["id"] != str(sub_id)
-            ]
-            if len(self._data["subscriptions"]) == original:
+            index = next(
+                (
+                    index for index, item in enumerate(self._data["subscriptions"])
+                    if item["id"] == str(sub_id)
+                ),
+                None,
+            )
+            if index is None:
                 return False, "Subscription no longer exists."
+            removed = self._data["subscriptions"].pop(index)
             if not self._save_locked():
-                self._data = before
+                self._data["subscriptions"].insert(index, removed)
                 return False, "Could not save subscriptions. Check disk space and permissions."
             return True, None
 
@@ -566,13 +588,14 @@ class SubscriptionStore:
             record = self._find_locked(str(sub_id))
             if record is None:
                 return None
-            before = _copy(self._data)
+            before = _copy(record)
             record["lastScanAt"] = now
             record["lastError"] = ""
             record["nextScanAt"] = now + record["intervalMinutes"] * 60
             record["updatedAt"] = now
             if not self._save_locked():
-                self._data = before
+                record.clear()
+                record.update(before)
                 return None
             return _copy(record)
 
@@ -582,14 +605,15 @@ class SubscriptionStore:
             record = self._find_locked(str(sub_id))
             if record is None:
                 return False
-            before = _copy(self._data)
+            before = _copy(record)
             record["lastQueued"] = _safe_nonnegative_int(queued)
             record["lastSkipped"] = _safe_nonnegative_int(skipped)
             record["lastError"] = self._clean(error, "", 500)
             record["nextScanAt"] = now + record["intervalMinutes"] * 60
             record["updatedAt"] = now
             if not self._save_locked():
-                self._data = before
+                record.clear()
+                record.update(before)
                 return False
             return True
 
@@ -618,7 +642,8 @@ class SubscriptionStore:
                 if retry_at is not None and now < retry_at:
                     return RESERVE_RETRY_BACKOFF
             attempts += 1
-            before = _copy(self._data)
+            before = {}
+            self._snapshot_archive_entry_locked(before, key)
             self._data["archive"][key] = {
                 "url": self._clean(candidate.get("url"), "", 4096),
                 "title": self._clean(candidate.get("title"), "(untitled)", 500) or "(untitled)",
@@ -632,9 +657,9 @@ class SubscriptionStore:
                 "attempts": attempts,
                 "nextRetryAt": None,
             }
-            self._trim_archive_locked()
+            removed = self._trim_archive_locked()
             if not self._save_locked():
-                self._data = before
+                self._restore_archive_locked(before, removed)
                 return RESERVE_SAVE_FAILED
             return RESERVE_OK
 
@@ -664,13 +689,14 @@ class SubscriptionStore:
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             matches = [
-                entry for entry in self._data["archive"].values()
+                (key, entry) for key, entry in self._data["archive"].items()
                 if entry.get("downloadId") == download_id
             ]
             if not matches:
                 return 0
-            before = _copy(self._data)
-            for entry in matches:
+            before = {}
+            for key, entry in matches:
+                self._snapshot_archive_entry_locked(before, key)
                 entry["status"] = status
                 entry["updatedAt"] = now
                 entry["lastError"] = self._clean(error, "", 500)
@@ -685,7 +711,7 @@ class SubscriptionStore:
                         entry["attempts"], now
                     )
             if not self._save_locked():
-                self._data = before
+                self._restore_archive_locked(before)
                 return 0
             return len(matches)
 
@@ -700,7 +726,7 @@ class SubscriptionStore:
             if dl_id and key:
                 active[dl_id] = (key, sub_id)
         with self._lock:
-            before = _copy(self._data)
+            before = {}
             changed = False
             active_keys = set()
             for dl_id, (key, sub_id) in active.items():
@@ -709,6 +735,7 @@ class SubscriptionStore:
                     continue
                 active_keys.add(key)
                 if entry.get("downloadId") != dl_id or entry.get("status") != "queued":
+                    self._snapshot_archive_entry_locked(before, key)
                     entry["downloadId"] = dl_id
                     entry["subscriptionId"] = sub_id or entry.get("subscriptionId", "")
                     entry["status"] = "queued"
@@ -717,6 +744,7 @@ class SubscriptionStore:
                     changed = True
             for key, entry in self._data["archive"].items():
                 if entry.get("status") in {"reserved", "queued"} and key not in active_keys:
+                    self._snapshot_archive_entry_locked(before, key)
                     entry["status"] = "failed"
                     entry["downloadId"] = ""
                     entry["lastError"] = "Scheduled download was interrupted; it will retry on the next scan."
@@ -729,7 +757,7 @@ class SubscriptionStore:
                     )
                     changed = True
             if changed and not self._save_locked():
-                self._data = before
+                self._restore_archive_locked(before)
                 return False
             return True
 
@@ -752,12 +780,13 @@ class SubscriptionStore:
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             changed = False
-            before = _copy(self._data)
-            for entry in self._data["archive"].values():
+            before = {}
+            for key, entry in self._data["archive"].items():
                 if entry.get("subscriptionId") != subscription_id:
                     continue
                 if entry.get("status") != "failed":
                     continue
+                self._snapshot_archive_entry_locked(before, key)
                 entry["attempts"] = 0
                 entry["nextRetryAt"] = None
                 entry["lastError"] = ""
@@ -766,7 +795,7 @@ class SubscriptionStore:
             if not changed:
                 return True
             if not self._save_locked():
-                self._data = before
+                self._restore_archive_locked(before)
                 return False
             return True
 
@@ -777,7 +806,8 @@ class SubscriptionStore:
             entry = self._data["archive"].get(key)
             if not entry:
                 return False
-            before = _copy(self._data)
+            before = {}
+            self._snapshot_archive_entry_locked(before, key)
             entry["status"] = status
             entry["downloadId"] = self._clean(downloadId, "", 120)
             entry["lastError"] = self._clean(lastError, "", 500)
@@ -790,13 +820,13 @@ class SubscriptionStore:
             else:
                 entry["nextRetryAt"] = None
             if not self._save_locked():
-                self._data = before
+                self._restore_archive_locked(before)
                 return False
             return True
 
     def _trim_archive_locked(self):
         if len(self._data["archive"]) <= self.max_archive_entries:
-            return
+            return {}
         ordered = sorted(
             self._data["archive"].items(),
             key=lambda item: (
@@ -805,7 +835,13 @@ class SubscriptionStore:
             ),
             reverse=True,
         )
-        self._data["archive"] = dict(ordered[: self.max_archive_entries])
+        kept = dict(ordered[: self.max_archive_entries])
+        removed = {
+            key: entry for key, entry in self._data["archive"].items()
+            if key not in kept
+        }
+        self._data["archive"] = kept
+        return removed
 
 
 class SubscriptionManager:
