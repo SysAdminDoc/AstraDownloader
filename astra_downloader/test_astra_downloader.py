@@ -126,6 +126,7 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(cfg["ConcurrentFragments"], 32)
         self.assertEqual(cfg["RateLimit"], "2M")
         self.assertEqual(cfg["Proxy"], "")
+        self.assertEqual(cfg["PacingJitterPercent"], 0)
         self.assertEqual(cfg["JavaScriptRuntime"], "auto")
         self.assertFalse(cfg["EmbedMetadata"])
         self.assertFalse(cfg["LegacyHealthTokenEcho"])
@@ -134,6 +135,8 @@ class NormalizationTests(unittest.TestCase):
 
         node_cfg = ad.sanitize_config({"JavaScriptRuntime": "NODE"})
         self.assertEqual(node_cfg["JavaScriptRuntime"], "node")
+        jitter_cfg = ad.sanitize_config({"PacingJitterPercent": 999})
+        self.assertEqual(jitter_cfg["PacingJitterPercent"], 100)
 
     def test_default_download_path_prefers_the_windows_known_folder(self):
         import config as config_module
@@ -2160,6 +2163,35 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
             finally:
                 _retire_test_window(window)
 
+    def test_rate_limited_card_shows_the_live_host_countdown(self):
+        from PyQt6.QtWidgets import QApplication, QLabel
+
+        _get_qapp_or_skip(self)
+        history = FakeHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        download = ad.Download(
+            "rate-card", "https://www.example.com/video", title="Rate-limited video"
+        )
+        download.status = "failed"
+        download.error_code = "rate-limited"
+        download.error = "HTTP 429"
+        download.error_advice = "This site is temporarily rate-limited."
+        manager.downloads[download.id] = download
+
+        with mock.patch.object(manager, "host_backoff_remaining", return_value=65), \
+                mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                card = window._download_card(download, recent=True)
+                QApplication.processEvents()
+                labels = [label.text() for label in card.findChildren(QLabel)]
+                self.assertTrue(any("1m 5s" in label for label in labels), labels)
+                self.assertTrue(any("This host is paused" in label for label in labels), labels)
+            finally:
+                _retire_test_window(window)
+
 
 class TransferReliabilityArgvTests(unittest.TestCase):
     """Throttle recovery, timeouts and format verification reach the argv."""
@@ -2257,6 +2289,24 @@ class TransferReliabilityArgvTests(unittest.TestCase):
         argv = self._argv({"SleepIntervalSeconds": 9, "MaxSleepIntervalSeconds": 3})
         self.assertEqual(argv[argv.index("--sleep-interval") + 1], "9")
         self.assertNotIn("--max-sleep-interval", argv)
+
+        argv = self._argv({
+            "SleepIntervalSeconds": 5,
+            "PacingJitterPercent": 20,
+        })
+        self.assertEqual(argv[argv.index("--sleep-interval") + 1], "5")
+        self.assertEqual(argv[argv.index("--max-sleep-interval") + 1], "6")
+
+    def test_retry_after_text_is_bounded_and_understands_minutes(self):
+        self.assertEqual(
+            ad.parse_retry_after_seconds(["ERROR: HTTP 429", "Retry-After: 2 minutes"]),
+            120,
+        )
+        self.assertEqual(
+            ad.parse_retry_after_seconds("retry in 4 seconds"),
+            4,
+        )
+        self.assertIsNone(ad.parse_retry_after_seconds(["HTTP 429 without a header"]))
 
     def test_a_429_is_classified_as_rate_limited_not_as_a_dead_network(self):
         self.assertEqual(
@@ -3301,6 +3351,64 @@ class DownloadManagerTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn('queue is full', retry_err.lower())
         self.assertEqual(manager.capacity()['total'], ad.MAX_QUEUED_TOTAL)
+
+
+class HostBackoffTests(unittest.TestCase):
+    def test_a_blocked_domain_does_not_hide_another_host_from_the_scheduler(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        blocked = ad.Download(
+            "blocked", "https://media.example.com/blocked", title="Blocked"
+        )
+        blocked.status = "pending"
+        blocked.queue_order = 1
+        other = ad.Download(
+            "other", "https://other.test/video", title="Other"
+        )
+        other.status = "pending"
+        other.queue_order = 2
+        manager.downloads.update({blocked.id: blocked, other.id: other})
+        manager._host_backoffs["example.com"] = {
+            "until": time.monotonic() + 60,
+            "retry_after": 60,
+            "failures": 1,
+        }
+
+        with mock.patch.object(manager, "_arm_host_backoff_wakeup") as arm_wakeup, \
+                mock.patch.object(manager, "_launch_workers") as launch:
+            manager._schedule()
+
+        self.assertEqual(blocked.status, "pending")
+        self.assertEqual(other.status, "queued")
+        self.assertIn(other.id, manager._running_ids)
+        launch.assert_called_once_with([other])
+        arm_wakeup.assert_called_once()
+
+    def test_retry_after_is_recorded_by_registrable_domain_and_blocks_manual_retry(self):
+        manager = ad.DownloadManager(
+            FakeConfig({"PacingJitterPercent": 0}), FakeHistory()
+        )
+        with mock.patch.object(manager, "_arm_host_backoff_wakeup"):
+            remaining = manager._record_host_backoff(
+                "https://cdn.example.co.uk/watch", retry_after_seconds=4
+            )
+
+        self.assertIn("example.co.uk", manager._host_backoffs)
+        self.assertGreaterEqual(remaining, 3.0)
+        self.assertLessEqual(remaining, 4.0)
+        self.assertGreater(
+            manager.host_backoff_remaining("https://www.example.co.uk/other"),
+            0,
+        )
+        self.assertEqual(manager.host_backoff_remaining("https://other.test/video"), 0)
+
+        failed = ad.Download("limited", "https://www.example.co.uk/retry")
+        failed.status = "failed"
+        failed.error_code = "rate-limited"
+        failed.mark_terminal()
+        manager.downloads[failed.id] = failed
+        ok, error = manager.retry(failed.id)
+        self.assertFalse(ok)
+        self.assertIn("retry in", error)
 
 
 class PoTokenProviderNudgeTests(unittest.TestCase):

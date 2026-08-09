@@ -234,6 +234,9 @@ DEFAULT_CONFIG = {
     "SleepIntervalSeconds": 0,
     "MaxSleepIntervalSeconds": 0,
     "SleepRequestsSeconds": 0,
+    # Randomise host backoffs and the yt-dlp sleep range by this percentage.
+    # Zero keeps the historical fixed pacing behaviour.
+    "PacingJitterPercent": 0,
     "SubLangs": "en",
     # Creator-written captions, the machine transcript, or the former with the
     # latter as fallback (which is what this app has always done).
@@ -1094,6 +1097,9 @@ def sanitize_config(raw):
             data["MaxSleepIntervalSeconds"] < data["SleepIntervalSeconds"]):
         data["MaxSleepIntervalSeconds"] = data["SleepIntervalSeconds"]
     data["SleepRequestsSeconds"] = clamp_int(data.get("SleepRequestsSeconds"), 0, 0, 60)
+    data["PacingJitterPercent"] = clamp_int(
+        data.get("PacingJitterPercent"), 0, 0, 100
+    )
     data["ImpersonateTarget"] = normalize_impersonate_target(data.get("ImpersonateTarget"))
     data["Proxy"] = normalize_proxy(data.get("Proxy"))
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")

@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -38,6 +39,8 @@ __all__ = (
     "DOWNLOAD_RUNNING_STATES", "DOWNLOAD_PENDING_STATES",
     "DOWNLOAD_TERMINAL_STATES", "DOWNLOAD_RETRYABLE_ERROR_CODES",
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
+    "HOST_BACKOFF_BASE_SECONDS", "HOST_BACKOFF_MAX_SECONDS",
+    "HOST_BACKOFF_MAX_ENTRIES", "parse_retry_after_seconds",
     "build_impersonate_args",
     "build_subtitle_args",
     "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
@@ -63,6 +66,9 @@ __all__ = (
 
 MAX_CONCURRENT = 3
 MAX_QUEUED_TOTAL = 200
+HOST_BACKOFF_BASE_SECONDS = 60
+HOST_BACKOFF_MAX_SECONDS = 30 * 60
+HOST_BACKOFF_MAX_ENTRIES = 64
 DOWNLOAD_STALL_TIMEOUT_SECONDS = 1800
 DOWNLOAD_WATCHDOG_POLL_SECONDS = 15
 DOWNLOAD_QUEUE_SCHEMA_VERSION = 1
@@ -186,8 +192,9 @@ DOWNLOAD_FAILURE_RECOVERY = {
     'rate-limited': {
         'error': 'The site refused further requests for now (HTTP 429).',
         'advice': (
-            'Raise the request pacing in Settings — a bandwidth cap does not '
-            'help here — then retry. Fewer simultaneous downloads also helps.'
+            'This site is paused for the rest of its retry window. Raise the '
+            'request pacing in Settings — a bandwidth cap does not help here — '
+            'then retry. Other sites can continue downloading.'
         ),
         'next_action': 'slow-down-and-retry',
     },
@@ -1462,6 +1469,34 @@ def _is_benign_failure_noise(line):
     return False
 
 
+_RETRY_AFTER_RE = re.compile(
+    r'\bretry(?:[- ]after| in)\s*(?:[:=]\s*)?'
+    r'(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)?',
+    re.IGNORECASE,
+)
+
+
+def parse_retry_after_seconds(lines):
+    """Extract a bounded Retry-After-style wait from yt-dlp output."""
+    if isinstance(lines, str):
+        text = lines
+    else:
+        text = '\n'.join(str(line or '') for line in (lines or []))
+    for match in _RETRY_AFTER_RE.finditer(text):
+        try:
+            value = float(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        unit = str(match.group(2) or '').lower()
+        if unit.startswith('hour') or unit.startswith('hr'):
+            value *= 3600
+        elif unit.startswith('minute') or unit.startswith('min'):
+            value *= 60
+        value = max(1, min(HOST_BACKOFF_MAX_SECONDS, math.ceil(value)))
+        return int(value)
+    return None
+
+
 def classify_download_failure(message='', lines=None):
     # Two-pass: classify the definitive final error message first, and only
     # consult the output tail when the message alone is unrecognized. Without
@@ -1521,6 +1556,7 @@ def _classify_failure_text(text):
     # connection and its fix is pacing, not retrying harder.
     if any(marker in text for marker in (
         'http error 429', 'too many requests', 'rate-limited', 'rate limited',
+        'rate limit exceeded', 'throttled', 'throttling', 'slow down', 'slowdown',
     )):
         return 'rate-limited'
     # Before the network bucket: a 403 is a refusal, not a broken connection,
@@ -1826,6 +1862,12 @@ class DownloadManagerCore:
         self._next_order = 0
         self._lock = threading.Lock()
         self._running_ids = set()
+        # A rate limit belongs to the site's registrable domain, not to one
+        # queue record. The map is session-only: a restart restores the queue
+        # but never silently carries a stale server-imposed wait forward.
+        self._host_backoffs = {}
+        self._host_backoff_timer = None
+        self._host_backoff_timer_due = 0.0
         # Bound concurrent `yt-dlp -J` format probes: each one holds a
         # waitress worker thread for up to 60s, and the pool only has 8 —
         # unbounded probes could starve /health, /status and /download.
@@ -2196,6 +2238,147 @@ class DownloadManagerCore:
                 if self.active_count() == 0:
                     self.maybe_refresh_ytdlp('queue-idle')
 
+    @staticmethod
+    def _host_backoff_key(url):
+        """Return the registrable domain used to isolate throttled hosts."""
+        try:
+            host = (urlparse(str(url or '')).hostname or '').strip().lower()
+        except ValueError:
+            host = ''
+        if not host:
+            return ''
+        # `registrable_domain` is intentionally small and is not an IP parser;
+        # keep public IPs and IPv6 literals intact rather than collapsing an
+        # address into the last two labels.
+        if ':' in host or re.fullmatch(r'\d+(?:\.\d+){3}', host):
+            return host
+        return registrable_domain(host)
+
+    def _host_backoff_remaining_locked(self, url):
+        key = self._host_backoff_key(url)
+        if not key:
+            return 0.0
+        state = self._host_backoffs.get(key)
+        if not state:
+            return 0.0
+        remaining = float(state.get('until', 0.0)) - time.monotonic()
+        if remaining <= 0:
+            self._host_backoffs.pop(key, None)
+            return 0.0
+        return remaining
+
+    def host_backoff_remaining(self, url):
+        """Return the live host pause in seconds for a queue item's URL."""
+        with self._lock:
+            return self._host_backoff_remaining_locked(url)
+
+    def _pacing_jitter_multiplier(self):
+        try:
+            percentage = int(self.config.get('PacingJitterPercent', 0) or 0)
+        except (TypeError, ValueError, OverflowError):
+            percentage = 0
+        percentage = max(0, min(100, percentage))
+        if not percentage:
+            return 1.0
+        spread = percentage / 100.0
+        return random.uniform(max(0.0, 1.0 - spread), 1.0 + spread)
+
+    def _record_host_backoff(self, url, retry_after_seconds=None):
+        """Pause one registrable domain after a classified throttle failure."""
+        key = self._host_backoff_key(url)
+        if not key:
+            return 0.0
+        now = time.monotonic()
+        try:
+            explicit = float(retry_after_seconds)
+        except (TypeError, ValueError, OverflowError):
+            explicit = 0.0
+        explicit = (
+            max(1.0, min(float(HOST_BACKOFF_MAX_SECONDS), explicit))
+            if explicit > 0 else None
+        )
+        with self._lock:
+            previous = self._host_backoffs.get(key)
+            previous_until = float(previous.get('until', 0.0)) if previous else 0.0
+            active = previous_until > now
+            failures = int(previous.get('failures', 0) or 0) + 1 if active else 1
+            if explicit is not None:
+                retry_after = explicit
+            else:
+                exponent = min(10, max(0, failures - 1))
+                retry_after = min(
+                    float(HOST_BACKOFF_MAX_SECONDS),
+                    float(HOST_BACKOFF_BASE_SECONDS) * (2 ** exponent),
+                )
+            delay = max(1.0, retry_after * self._pacing_jitter_multiplier())
+            until = max(previous_until if active else 0.0, now + delay)
+            self._host_backoffs[key] = {
+                'until': until,
+                'retry_after': retry_after,
+                'failures': failures,
+            }
+            # The map is bounded even if a long-running session encounters a
+            # large number of unrelated hosts. Expired entries are cheaper to
+            # discard now than to make every scheduler pass carry them.
+            for old_key, state in tuple(self._host_backoffs.items()):
+                if float(state.get('until', 0.0)) <= now:
+                    self._host_backoffs.pop(old_key, None)
+            if len(self._host_backoffs) > HOST_BACKOFF_MAX_ENTRIES:
+                oldest = sorted(
+                    self._host_backoffs.items(),
+                    key=lambda item: float(item[1].get('until', 0.0)),
+                )
+                for old_key, _state in oldest[:-HOST_BACKOFF_MAX_ENTRIES]:
+                    self._host_backoffs.pop(old_key, None)
+            remaining = max(0.0, until - now)
+        self._dependencies['write_persistent_log'](
+            f"Host backoff for {key}: retry after {math.ceil(retry_after)}s "
+            f"(scheduled {math.ceil(remaining)}s, failure {failures})"
+        )
+        self._arm_host_backoff_wakeup(remaining)
+        return remaining
+
+    def _arm_host_backoff_wakeup(self, delay):
+        """Wake the scheduler at the earliest blocked-host expiry."""
+        try:
+            delay = max(0.05, float(delay))
+        except (TypeError, ValueError, OverflowError):
+            return
+        deadline = time.monotonic() + delay
+        previous = None
+        with self._lock:
+            if self._closing:
+                return
+            current = self._host_backoff_timer
+            if current is not None and current.is_alive():
+                if self._host_backoff_timer_due <= deadline + 0.05:
+                    return
+                previous = current
+            if previous is not None:
+                previous.cancel()
+            timer = threading.Timer(delay, self._wake_host_backoff)
+            timer.daemon = True
+            self._host_backoff_timer = timer
+            self._host_backoff_timer_due = deadline
+        try:
+            timer.start()
+        except RuntimeError:
+            with self._lock:
+                if self._host_backoff_timer is timer:
+                    self._host_backoff_timer = None
+                    self._host_backoff_timer_due = 0.0
+
+    def _wake_host_backoff(self):
+        current = threading.current_thread()
+        with self._lock:
+            if self._host_backoff_timer is not current:
+                return
+            self._host_backoff_timer = None
+            self._host_backoff_timer_due = 0.0
+            closing = self._closing
+        if not closing:
+            self._schedule()
+
     def _max_concurrent(self):
         """Configured simultaneous-download limit, clamped. Defaults to the
         historical MAX_CONCURRENT (3) when unset."""
@@ -2209,20 +2392,29 @@ class DownloadManagerCore:
 
     def _schedule(self):
         to_start = []
+        wake_delay = None
         with self._lock:
             if self._closing or self.intake_paused:
                 return
             available = max(0, self._max_concurrent() - len(self._running_ids))
             if available <= 0:
                 return
-            candidates = [
-                dl for dl in self._ordered_pending_locked()
-                if dl.status == 'pending'
-            ][:available]
-            for dl in candidates:
+            # Do not slice before checking the host pause: a throttled item
+            # at the head of the queue must not hide work for another site.
+            for dl in self._ordered_pending_locked():
+                if dl.status != 'pending':
+                    continue
+                remaining = self._host_backoff_remaining_locked(dl.url)
+                if remaining > 0:
+                    wake_delay = remaining if wake_delay is None else min(wake_delay, remaining)
+                    continue
                 dl.status = 'queued'
                 self._running_ids.add(dl.id)
                 to_start.append(dl)
+                if len(to_start) >= available:
+                    break
+        if wake_delay is not None:
+            self._arm_host_backoff_wakeup(wake_delay)
         if to_start:
             self.progress_updated.emit()
             self._launch_workers(to_start)
@@ -2808,12 +3000,26 @@ class DownloadManagerCore:
         # per-request rate limit; spacing the requests is the actual lever.
         sleep_interval = int(self.config.get("SleepIntervalSeconds", 0) or 0)
         max_sleep = int(self.config.get("MaxSleepIntervalSeconds", 0) or 0)
+        try:
+            pacing_jitter = max(0, min(100, int(
+                self.config.get("PacingJitterPercent", 0) or 0
+            )))
+        except (TypeError, ValueError, OverflowError):
+            pacing_jitter = 0
         if sleep_interval > 0:
             args += ['--sleep-interval', str(sleep_interval)]
-            if max_sleep >= sleep_interval:
-                args += ['--max-sleep-interval', str(max_sleep)]
+            jitter_max = math.ceil(
+                sleep_interval * (1 + pacing_jitter / 100.0)
+            ) if pacing_jitter else 0
+            effective_max_sleep = max(max_sleep, jitter_max)
+            if effective_max_sleep >= sleep_interval:
+                args += ['--max-sleep-interval', str(effective_max_sleep)]
         sleep_requests = int(self.config.get("SleepRequestsSeconds", 0) or 0)
         if sleep_requests > 0:
+            if pacing_jitter:
+                sleep_requests = max(
+                    1, round(sleep_requests * self._pacing_jitter_multiplier())
+                )
             args += ['--sleep-requests', str(sleep_requests)]
         proxy = self.config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
@@ -2888,6 +3094,8 @@ class DownloadManagerCore:
         stop_watchdog = None
         watchdog_thread = None
         watchdog_killed = {'value': None}
+        last_lines = []
+        last_error = None
         try:
             env = self._dependencies['_build_subprocess_env']()
             proc = self._dependencies['spawn_ytdlp'](
@@ -2910,9 +3118,6 @@ class DownloadManagerCore:
                     self._dependencies['write_persistent_log'](
                         f"WARNING: pre-spawn process termination failed: {error}"
                     )
-            last_lines = []
-            last_error = None
-
             # Stall watchdog (see DOWNLOAD_STALL_TIMEOUT_SECONDS): kill a wedged
             # yt-dlp/ffmpeg tree that produces no output for too long so it can't
             # block a worker thread / hold a concurrency slot forever.
@@ -3223,6 +3428,10 @@ class DownloadManagerCore:
                     # reason: cookie cleanup is idempotent after worker failure or cancellation
                     pass
                 dl.cookies_file = None
+            if dl.error_code == 'rate-limited':
+                self._record_host_backoff(
+                    dl.url, parse_retry_after_seconds(last_lines)
+                )
 
         dl.mark_terminal()
         if dl.status == "complete":
@@ -3363,6 +3572,13 @@ class DownloadManagerCore:
                 satisfied, still_missing = self.recovery_precondition(dl)
                 if not satisfied:
                     return False, still_missing
+            if dl.status == 'failed' and dl.error_code == 'rate-limited':
+                remaining = self._host_backoff_remaining_locked(dl.url)
+                if remaining > 0:
+                    return False, (
+                        'This site is still rate-limited; retry in '
+                        f'{math.ceil(remaining)} seconds.'
+                    )
             if self._capacity_locked()['total'] >= MAX_QUEUED_TOTAL:
                 return False, (
                     f"Download queue is full ({MAX_QUEUED_TOTAL}/{MAX_QUEUED_TOTAL}). "
@@ -3504,7 +3720,12 @@ class DownloadManagerCore:
             # will restore those records paused/needs-auth rather than silently
             # starting them or losing user intent.
             self._closing = True
+            backoff_timer = self._host_backoff_timer
+            self._host_backoff_timer = None
+            self._host_backoff_timer_due = 0.0
             active = [d for d in self.downloads.values() if d.status in DOWNLOAD_ACTIVE_STATES]
+        if backoff_timer is not None:
+            backoff_timer.cancel()
         for dl in active:
             dl.status = "cancelled"
             dl.error = "Cancelled (app shutdown)."

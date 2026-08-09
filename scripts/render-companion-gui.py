@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import json
+import time
 import traceback
 from pathlib import Path
 from unittest import mock
@@ -24,6 +25,7 @@ CAPTURE_NAMES = (
     "downloads-clipboard-staged",
     "downloads-subtitles-only",
     "downloads-recovery-terminal",
+    "downloads-rate-limited",
     "history-populated",
     "history-cleared-undo",
     "history-restored",
@@ -474,6 +476,24 @@ def main():
                     for dl_id in ("paused", "needsauth", "failed", "complete")
                 }
                 manager._running_ids.clear()
+            elif scenario == "downloads-rate-limited":
+                limited = manager.downloads["failed"]
+                limited.error = "HTTP 429: Too Many Requests"
+                limited.error_code = "rate-limited"
+                limited.error_advice = (
+                    "This site is paused for the rest of its retry window."
+                )
+                limited.error_action = "slow-down-and-retry"
+                manager.downloads = {
+                    dl_id: manager.downloads[dl_id]
+                    for dl_id in ("failed",)
+                }
+                manager._host_backoffs["youtube.com"] = {
+                    "until": time.monotonic() + 125,
+                    "retry_after": 125,
+                    "failures": 1,
+                }
+                manager._running_ids.clear()
             elif scenario == "reflow-900x620-hidpi-large-font":
                 manager.downloads = {
                     dl_id: manager.downloads[dl_id]
@@ -562,6 +582,12 @@ def main():
                             "Finished tutorial",
                         },
                     )
+                elif scenario == "downloads-rate-limited":
+                    rendered = visible_text(window)
+                    if not any("retry in" in text for text in rendered):
+                        raise RuntimeError("Rate-limited queue item has no host countdown")
+                    if not any("This host is paused" in text for text in rendered):
+                        raise RuntimeError("Rate-limited recovery callout is missing")
             capture_window(
                 window, scenario,
                 dpr=2 if scenario == "reflow-900x620-hidpi-large-font" else 1,
