@@ -8,6 +8,6 @@ InstallerType: portable
 Installers:
 - Architecture: x64
   InstallerUrl: https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.5.0/AstraDownloader.exe
-  InstallerSha256: 1ad5dc667445922c6e2c4bde7d4f0a069ccca07304ede7c2e142489ce5cb611d
+  InstallerSha256: 2612b5d2797d95a3f044585becc3fa1039ea85796c0a0c0d30d4f37c35bf8946
 ManifestType: installer
 ManifestVersion: 1.12.0
