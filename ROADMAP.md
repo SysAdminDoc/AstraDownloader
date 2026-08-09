@@ -166,14 +166,6 @@ Notes on existing items above — read these before starting them:
 
 ### P1
 
-- [ ] P1 — Give the format probe the same identity the download gets
-  Why: The quality picker probes a link and narrows the ladder to what it reports, but the probe runs logged-out, un-impersonated and un-proxied — so on exactly the links those features exist for, the picker states a ceiling the real download does not have, and disables the clip fields against a format table the download would never see.
-  Evidence: `build_impersonate_args` appears once in the module, on the download path (`download.py:2739`); `--proxy` once, at `:2684`; `--cookies` at `:2697`. `_list_formats_gated` (`download.py:3424-3435`) and `_preview_playlist_gated` (`:3568-3582`) build argv with the extractor and JS-runtime args only. `_apply_format_probe` treats a successful probe as truth — it narrows the ladder (`gui.py:5164-5170`), asserts "This link tops out at {height}p" (`:5171-5174`) and drives `_apply_sabr_limits` (`:5163`). A probe *failure* is correctly ignored (`:5158-5161`); the damage comes from a probe that succeeds with a restricted answer.
-  Touches: `astra_downloader/download.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: the format probe, the playlist preview and the subscription scan carry the stored sign-in for the target site, the configured impersonation target and the configured proxy, under the same `_cookie_jar_matches_target` scoping the download uses; a test asserts the probe argv for a signed-in domain.
-  Complexity: M
-
-
 - [ ] P1 — Bound the retries a subscription spends on a candidate it cannot download
   Why: An archive entry that reaches `failed` is not in the set that blocks re-reservation, and nothing counts attempts or backs off. One members-only or geo-blocked video in a watched channel makes the app spawn the same doomed yt-dlp job every 5 minutes, unattended, for as long as the subscription exists — the realistic outcome is rate-limiting from the extractor host.
   Evidence: `reserve_archive` refuses only `{"reserved", "queued", "complete"}` (`subscriptions.py:534`), while both failure paths write `"failed"` (`release_archive` `:563-570`, `mark_download`/`handle_download_completed` `:832-859`, `:882-888`). `SUBSCRIPTION_MIN_INTERVAL_MINUTES = 5` (`:38`) and the scheduler runs unattended (`:758-766`). No `attempts` field exists on an archive entry anywhere in the module. Retrying a *transient* failure is the intended behaviour — the defect is the missing cap, not the retry.

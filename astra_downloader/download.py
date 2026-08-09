@@ -367,12 +367,12 @@ def write_cookies_netscape(cookies, target_path, *, logger=None, domain_filter=N
 
 
 # ── Site logins ───────────────────────────────────────────────────────────
-# Sites other than YouTube (X, Instagram, Facebook, members-only Vimeo, adult
-# and paywalled sites) serve media only to a signed-in session. The extension's
-# YouTube cookie bridge cannot help there: it is YouTube-scoped by design, and
-# it only runs on YouTube pages. So the companion keeps its own store — one
-# protected Netscape jar per site, imported once, attached automatically to
-# downloads for that site and to nothing else.
+# Sites with sign-in (X, Instagram, Facebook, members-only Vimeo, adult and
+# paywalled sites, plus YouTube when no fresh extension cookies are available)
+# serve media only to a signed-in session. The extension's cookie bridge is
+# page-scoped, so the companion keeps its own store — one protected Netscape
+# jar per site, imported once, attached automatically to downloads for that
+# site and to nothing else.
 #
 # Import sources, in order of reliability on Windows:
 #   1. A cookies.txt file or pasted text exported from the browser.
@@ -1709,9 +1709,9 @@ class DownloadManagerCore:
             )
             if self._queue_path is not None else None
         )
-        # Signed-in downloads for sites other than YouTube. Rooted in the
-        # install dir alongside the transient per-download jars so one sweep
-        # and one ACL policy cover both.
+        # Signed-in downloads for every supported site. Rooted in the install
+        # dir alongside the transient per-download jars so one sweep and one
+        # ACL policy cover both.
         self.site_logins = SiteLoginStore(
             self._dependencies['INSTALL_DIR'](),
             logger=lambda message: self._dependencies['write_persistent_log'](message),
@@ -1956,10 +1956,11 @@ class DownloadManagerCore:
             # bridge on every site the extension cannot reach. Request-supplied
             # cookies still win: they are fresher than anything on disk.
             site_login_used = False
-            if not cookies and not self._dependencies['is_youtube_url'](dl.url):
+            if not cookies:
                 jar_path = self._dependencies['INSTALL_DIR']() / f".cookies.{dl.id}.txt"
-                # One lookup, not two: this runs for every queued non-YouTube
-                # download and each site_key_for_url call re-reads the index.
+                # One lookup, not two: the stored site-login jar is the
+                # fallback identity for every target, including YouTube
+                # subscription downloads. Fresh extension cookies still win.
                 exported, scope = self.site_logins.export_jar_for_site(dl.url, jar_path)
                 if exported:
                     dl.cookies_file = exported
@@ -2736,9 +2737,14 @@ class DownloadManagerCore:
             configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
         )
         args += self._dependencies['build_javascript_runtime_args'](runtime)
-        args += build_impersonate_args(
-            self.config, self._dependencies['probe_impersonate_targets'](),
+        configured_target = str(
+            self.config.get('ImpersonateTarget', '') or ''
+        ).strip()
+        available_targets = (
+            self._dependencies['probe_impersonate_targets']()
+            if configured_target else []
         )
+        args += build_impersonate_args(self.config, available_targets)
 
         args.append(dl.url)
 
@@ -3439,6 +3445,8 @@ class DownloadManagerCore:
             configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
         )
         args += self._dependencies['build_javascript_runtime_args'](runtime)
+        identity_args, identity_cleanup = self._build_probe_identity_args(url)
+        args += identity_args
         args.append(url)
         try:
             env = self._dependencies['_build_subprocess_env']()
@@ -3449,6 +3457,7 @@ class DownloadManagerCore:
                 env=env,
             )
         except Exception as exc:  # noqa: BLE001
+            identity_cleanup()
             return None, f'Could not start yt-dlp: {exc}'
         try:
             out, errout = proc.communicate(timeout=timeout)
@@ -3461,6 +3470,8 @@ class DownloadManagerCore:
                     f"WARNING: format-probe termination failed: {error}"
                 )
             return None, 'Timed out while listing formats.'
+        finally:
+            identity_cleanup()
         if proc.returncode != 0:
             tail = [ln.strip() for ln in (errout or '').splitlines() if ln.strip()]
             msg = next((ln for ln in reversed(tail) if not _is_benign_failure_noise(ln)), '')
@@ -3553,6 +3564,59 @@ class DownloadManagerCore:
                 f"WARNING: temporary cookie file cleanup failed: {error}"
             )
 
+    def _build_probe_identity_args(self, url):
+        """Build the auth, proxy and browser-fingerprint args for a probe.
+
+        A probe is a real yt-dlp invocation, so it must see the same identity
+        as the eventual download. Stored cookies are exported to a transient
+        jar because yt-dlp may update ``--cookies`` on exit; the cleanup
+        callback keeps that copy out of the install directory after the probe.
+        The temporary ``Download`` object deliberately reuses the download
+        path's cookie-scope predicate rather than duplicating its rules.
+        """
+        args = []
+        proxy = self.config.get("Proxy", "")
+        if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
+            args += ['--proxy', proxy]
+
+        probe = Download("__probe__", url)
+        jar_path = Path(self._dependencies['INSTALL_DIR']()) / (
+            f".cookies.probe.{uuid.uuid4().hex}.txt"
+        )
+        try:
+            exported, scope = self.site_logins.export_jar_for_site(url, jar_path)
+        except Exception as error:  # noqa: BLE001
+            self._dependencies['write_persistent_log'](
+                f"WARNING: probe sign-in export failed: {error}"
+            )
+            exported, scope = None, ""
+        if exported:
+            probe.cookies_file = exported
+            probe.cookies_scope = scope
+
+        cookie_path = probe.cookies_file
+        if cookie_path and self._cookie_jar_matches_target(probe):
+            args += ['--cookies', cookie_path]
+        else:
+            cookie_path = None
+
+        configured_target = str(
+            self.config.get('ImpersonateTarget', '') or ''
+        ).strip()
+        available_targets = (
+            self._dependencies['probe_impersonate_targets']()
+            if configured_target else []
+        )
+        args += build_impersonate_args(self.config, available_targets)
+
+        def cleanup():
+            if cookie_path:
+                self._unlink_quietly(cookie_path)
+            elif exported:
+                self._unlink_quietly(exported)
+
+        return args, cleanup
+
     def preview_playlist(self, url, timeout=60):
         """Return a bounded flat-playlist preview without downloading media."""
         url, err = self._dependencies['normalize_url'](url)
@@ -3583,6 +3647,8 @@ class DownloadManagerCore:
             configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
         )
         args += self._dependencies['build_javascript_runtime_args'](runtime)
+        identity_args, identity_cleanup = self._build_probe_identity_args(url)
+        args += identity_args
         args.append(url)
         try:
             proc = self._dependencies['spawn_ytdlp'](
@@ -3596,6 +3662,7 @@ class DownloadManagerCore:
                 env=self._dependencies['_build_subprocess_env'](),
             )
         except Exception as exc:  # noqa: BLE001
+            identity_cleanup()
             return None, f'Could not start yt-dlp: {exc}'
         try:
             out, errout = proc.communicate(timeout=timeout)
@@ -3607,6 +3674,8 @@ class DownloadManagerCore:
                     f"WARNING: playlist-probe termination failed: {error}"
                 )
             return None, 'Timed out while previewing the playlist.'
+        finally:
+            identity_cleanup()
         if proc.returncode != 0:
             tail = [line.strip() for line in (errout or '').splitlines() if line.strip()]
             message = next(

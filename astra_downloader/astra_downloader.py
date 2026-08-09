@@ -528,6 +528,7 @@ def probe_subscription_uploads(
     url,
     timeout=SUBSCRIPTION_PROBE_TIMEOUT_SECONDS,
     configured_runtime='auto',
+    identity_builder=None,
 ):
     """Read a bounded flat upload listing without downloading media."""
     normalized, error = normalize_url(url)
@@ -545,6 +546,13 @@ def probe_subscription_uploads(
     args += build_javascript_runtime_args(
         probe_javascript_runtime(configured_runtime=configured_runtime)
     )
+    identity_cleanup = None
+    if identity_builder is not None:
+        try:
+            identity_args, identity_cleanup = identity_builder(normalized)
+            args += identity_args
+        except Exception as exc:  # noqa: BLE001
+            return [], f"Could not prepare the subscription identity: {exc}"
     args.append(normalized)
     try:
         proc = spawn_ytdlp(
@@ -558,6 +566,8 @@ def probe_subscription_uploads(
             env=_build_subprocess_env(),
         )
     except Exception as exc:  # noqa: BLE001
+        if identity_cleanup:
+            identity_cleanup()
         return [], f"Could not start yt-dlp: {exc}"
     try:
         output, error_output = proc.communicate(timeout=timeout)
@@ -569,6 +579,9 @@ def probe_subscription_uploads(
                 f"WARNING: subscription probe termination failed: {error}"
             )
         return [], "Timed out while scanning the subscription."
+    finally:
+        if identity_cleanup:
+            identity_cleanup()
     if proc.returncode != 0:
         lines = [line.strip() for line in (error_output or '').splitlines() if line.strip()]
         return [], (lines[-1] if lines else "yt-dlp could not scan the subscription.")[:240]
@@ -3437,6 +3450,7 @@ def build_subscription_manager(config, dl_manager):
         probe=lambda url: probe_subscription_uploads(
             url,
             configured_runtime=config.get('JavaScriptRuntime', 'auto'),
+            identity_builder=dl_manager._build_probe_identity_args,
         ),
         enqueue=enqueue,
         status_reader=lambda download_id: dl_manager.status_of(download_id, default='failed'),

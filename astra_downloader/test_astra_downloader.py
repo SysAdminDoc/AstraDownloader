@@ -11721,6 +11721,93 @@ class SiteLoginDownloadTests(unittest.TestCase):
         self.assertNotIn('--cookies', argv)
 
 
+class ProbeIdentityTests(unittest.TestCase):
+    """Metadata probes use the same site, proxy and browser identity as runs."""
+
+    class _StoredLogin:
+        def export_jar_for_site(self, url, target_path):
+            key = "youtube.com" if "youtube" in str(url) else "x.com"
+            target_path = Path(target_path)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(
+                "# Netscape HTTP Cookie File\n"
+                f".{key}\tTRUE\t/\tTRUE\t2000000000\tauth\tPROBE\n",
+                encoding="utf-8",
+            )
+            return str(target_path), key
+
+    class _FakeProc:
+        returncode = 0
+
+        def communicate(self, timeout=None):
+            self.timeout = timeout
+            return json.dumps({
+                "id": "fixture",
+                "title": "Fixture",
+                "formats": [],
+                "entries": [{"id": "video-1", "title": "One"}],
+                "playlist_count": 1,
+            }), ""
+
+    def _manager(self, root):
+        manager = ad.DownloadManager(
+            FakeConfig({
+                "Proxy": "https://proxy.example:8443",
+                "ImpersonateTarget": "Chrome-136",
+            }),
+            FakeHistory(),
+        )
+        manager._dependencies["INSTALL_DIR"] = lambda: Path(root)
+        manager._dependencies["probe_impersonate_targets"] = lambda: ["Chrome-136"]
+        manager.site_logins = self._StoredLogin()
+        return manager
+
+    def test_format_probe_carries_scoped_login_proxy_and_impersonation(self):
+        captured = []
+        with tempfile.TemporaryDirectory() as root:
+            manager = self._manager(root)
+            with mock.patch.object(ad, "spawn_ytdlp", side_effect=lambda args, **_kwargs: captured.append(list(args)) or self._FakeProc()), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "probe_javascript_runtime", return_value={}):
+                result, error = manager.list_formats("https://x.com/video", timeout=7)
+
+            self.assertIsNone(error)
+            self.assertEqual(result["id"], "fixture")
+            args = captured[0]
+            self.assertEqual(args[args.index("--proxy") + 1], "https://proxy.example:8443")
+            self.assertEqual(args[args.index("--impersonate") + 1], "Chrome-136")
+            cookie_path = Path(args[args.index("--cookies") + 1])
+            self.assertFalse(cookie_path.exists(), "probe jars must be transient")
+
+    def test_playlist_and_subscription_probes_share_identity_builder(self):
+        captured = []
+        with tempfile.TemporaryDirectory() as root:
+            manager = self._manager(root)
+            with mock.patch.object(ad, "spawn_ytdlp", side_effect=lambda args, **_kwargs: captured.append(list(args)) or self._FakeProc()), \
+                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                 mock.patch.object(ad, "probe_javascript_runtime", return_value={}):
+                result, error = manager.preview_playlist(
+                    "https://www.youtube.com/playlist?list=fixture",
+                    timeout=7,
+                )
+                self.assertIsNone(error)
+                self.assertEqual(result["id"], "fixture")
+
+                result, error = ad.probe_subscription_uploads(
+                    "https://www.youtube.com/channel/fixture",
+                    timeout=7,
+                    identity_builder=manager._build_probe_identity_args,
+                )
+                self.assertIsNone(error)
+                self.assertEqual(result[0]["id"], "video-1")
+
+            self.assertEqual(len(captured), 2)
+            for args in captured:
+                self.assertIn("--proxy", args)
+                self.assertIn("--cookies", args)
+                self.assertIn("--impersonate", args)
+
+
 class SiteLoginApiTests(unittest.TestCase):
     """/site-logins is authenticated, write-only for secrets, and URL-policed."""
 
