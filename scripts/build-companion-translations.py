@@ -170,6 +170,30 @@ CATALOGS = {
             "cookies.txt importieren",
         "Connection":
             "Verbindung",
+        "Profile":
+            "Profil",
+        "Site profiles":
+            "Site-Profile",
+        "Site profile":
+            "Site-Profil",
+        "Site profile summary":
+            "Zusammenfassung des Site-Profils",
+        "Automatic site profile":
+            "Automatisches Site-Profil",
+        "No profile (one-off)":
+            "Kein Profil (einmalig)",
+        "No site profile for this download.":
+            "Kein Site-Profil für diesen Download.",
+        "Named site profiles":
+            "Benannte Site-Profile",
+        'Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]':
+            'Beispiel: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]',
+        "One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.":
+            "Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Format, Qualität, Proxy, Impersonation und Anfragepausen; speichern Sie hier keine Cookies oder Passwörter.",
+        "Automatic matching is on; no profile matches this link.":
+            "Die automatische Zuordnung ist aktiv; kein Profil passt zu diesem Link.",
+        "Using site profile: {name}.":
+            "Site-Profil wird verwendet: {name}.",
         "Reveal":
             "Anzeigen",
         "Copy":

@@ -33,6 +33,10 @@ pasting a link never needs it.
 - **Sign in to sites.** Private and members-only videos work: import a
   `cookies.txt`, or read a browser profile. One jar per site, filtered to
   that site's registrable domain and attached to that site alone.
+- **Site profiles.** Name a domain-bound profile in Settings for automatic
+  format, quality, proxy, impersonation and pacing defaults. The paste box
+  shows the matched profile and offers a one-off profile or no-profile choice;
+  cookies and credentials remain in the separate sign-in store.
 - **Durable queue.** Downloads survive a restart. Pause intake, retry a
   failure, cancel a run.
 - **Keeps output folders clean.** Partial and merge files use a private,
