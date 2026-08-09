@@ -1194,6 +1194,12 @@ def sanitize_history_entries(raw, limit=500):
             "date": clean_text(item.get("date"), "", 40),
             "duration": max(0, clamp_int(item.get("duration"), 0, 0, 60 * 60 * 24 * 30)),
             "status": clean_text(item.get("status"), "complete", 32) or "complete",
+            "errorCode": clean_text(
+                item.get("errorCode") or item.get("error_code"), "", 80
+            ),
+            "error": clean_text(
+                item.get("error") or item.get("errorText"), "", 1000
+            ),
         }
         if section:
             entry["section"] = section

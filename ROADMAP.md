@@ -166,13 +166,6 @@ Notes on existing items above — read these before starting them:
 
 ### P0
 
-- [ ] P0 — Give a failed download somewhere to live
-  Why: A download that fails leaves no trace anywhere in the product after five minutes. Nothing can answer "what failed overnight?", which is the question a queue-based downloader exists to answer.
-  Evidence: measured 2026-08-06. `history.add` is called only inside `if dl.status == "complete":` (`download.py:3087-3091`), so failures never reach history. `cleanup_old` deletes any terminal download 5 minutes after it finishes (`download.py:3835-3842`), driven by the 60 s timer at `gui.py:1177-1179`. The Download page shows `recent[:8]` (`gui.py:3935`). A non-retryable failure gets `action = "none"` (`gui.py:3701-3713`) and the context menu is gated on `recent and dl.status == "complete"` (`gui.py:3790-3798`), so it offers no retry, no copy-link and no copy-error. The same root cause makes the History status filter inert: it offers only "All statuses" and "Complete" (`gui.py:2058-2061`) while `query_history_entries` defaults a missing status to `"complete"` (`config.py:1227`), so both selections return identical rows.
-  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`, `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: terminal downloads of every status reach history carrying `errorCode` and error text; the status filter offers the statuses that now exist and changes the result set; a failed row exposes retry (when retryable), copy link and copy error; the 5-minute eviction no longer destroys the only record of a failure.
-  Complexity: M
-
 - [ ] P0 — Route the self-relocating exe copy through the verified-update transaction
   Why: One path writes the managed `AstraDownloader.exe` with no digest check, no version comparison, no backup and no rollback — so running an older release from Downloads silently downgrades the install, and a short write leaves a successfully-replaced corrupt binary. It is also the blocker for winget packaging.
   Evidence: `ensure_installed_executable` (`astra_downloader.py:2590-2619`) does `shutil.copy2` into a temp then `os.replace`, on every frozen launch from any other path, reached from `ensure_system_integrations` (`:4156`) **before** the single-instance guard (`:4162`). The repo already owns the correct primitive: `atomic_copy_verified` (`:770-799`) hashes the source, copies, fsyncs, re-hashes, then replaces — and its docstring exists precisely because "a normal `copy2` can leave a truncated destination". `COMPANION_ROLLBACK_FILENAME` is never touched here.
