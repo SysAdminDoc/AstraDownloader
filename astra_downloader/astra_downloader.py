@@ -306,7 +306,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 
 
 def portable_mode_requested(argv=None):
