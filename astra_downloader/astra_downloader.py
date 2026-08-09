@@ -1530,6 +1530,39 @@ def _write_update_state(path, **fields):
     return state
 
 
+def _reconcile_stale_companion_activation():
+    """Turn an abandoned restart marker into a visible failed attempt."""
+    path = _companion_update_state_path()
+    state = _read_update_state(path)
+    if state.get('status') != 'activation-pending':
+        return state
+    updated_at = state.get('updated_at')
+    stale = True
+    if isinstance(updated_at, str):
+        try:
+            stamp = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
+            stale = (datetime.now() - stamp).total_seconds() > COMPANION_UPDATE_TIMEOUT_SECONDS
+        except ValueError:
+            # A pending marker with an unreadable timestamp cannot be safely
+            # kept pending across restarts; fail closed and invite a retry.
+            stale = True
+    if not stale:
+        return state
+    reconciled = _write_update_state(
+        path,
+        status='activation-failed',
+        active_version=str(state.get('active_version') or APP_VERSION)[:32],
+        rollback_version=str(state.get('rollback_version') or '')[:32],
+        active_sha256='',
+        error_code='activation-timeout',
+    )
+    write_persistent_log(
+        'Companion update activation was left pending past its timeout; '
+        'marked the attempt failed so a later update can retry.'
+    )
+    return reconciled
+
+
 def read_update_recovery_status():
     """Return the allowlisted, path-free updater state exposed by /health."""
     result = {}
@@ -2988,6 +3021,7 @@ def unregister_native_host_registry_value(key_path):
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
     except FileNotFoundError:
+        # reason: revocation is idempotent when the pointer is already absent
         pass
     except OSError as error:
         write_persistent_log(
@@ -4275,6 +4309,7 @@ def main():
     visual_smoke = '--visual-smoke' in sys.argv
     startup_command = startup_command_from_argv()
     start_minimized = '-Background' in sys.argv or '--background' in sys.argv or startup_command == 'start'
+    _reconcile_stale_companion_activation()
     log_update_recovery_status()
 
     if is_frozen_app() and not visual_smoke:

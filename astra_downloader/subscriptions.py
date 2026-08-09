@@ -137,6 +137,15 @@ def _next_retry_at(attempts, now):
     return now + SUBSCRIPTION_RETRY_BASE_SECONDS * (2 ** (attempts - 1))
 
 
+def _archive_status_priority(entry):
+    status = entry.get("status") if isinstance(entry, dict) else ""
+    if status in {"reserved", "queued"}:
+        return 2
+    if status == "complete":
+        return 1
+    return 0
+
+
 def _safe_candidate_id(value):
     cleaned = _default_clean_text(value, "", 120)
     return cleaned if cleaned and _ID_RE.fullmatch(cleaned) else ""
@@ -330,6 +339,13 @@ class SubscriptionStore:
         next_scan = _finite_timestamp(raw.get("nextScanAt"), None)
         if next_scan is None and enabled:
             next_scan = now
+        elif enabled:
+            # A clock jump or a hand-edited state file must not silently put
+            # an enabled subscription beyond its next legitimate interval.
+            next_scan = min(
+                next_scan,
+                now + interval * 60,
+            )
         return {
             "id": sub_id,
             "url": url,
@@ -370,7 +386,13 @@ class SubscriptionStore:
                 "nextRetryAt": _finite_timestamp(value.get("nextRetryAt"), None),
             }
             entries.append((key, entry))
-        entries.sort(key=lambda item: item[1]["updatedAt"], reverse=True)
+        entries.sort(
+            key=lambda item: (
+                _archive_status_priority(item[1]),
+                item[1]["updatedAt"],
+            ),
+            reverse=True,
+        )
         return dict(entries[: self.max_archive_entries])
 
     def _save_locked(self):
@@ -738,8 +760,7 @@ class SubscriptionStore:
         ordered = sorted(
             self._data["archive"].items(),
             key=lambda item: (
-                2 if item[1].get("status") in {"reserved", "queued"}
-                else 1 if item[1].get("status") == "complete" else 0,
+                _archive_status_priority(item[1]),
                 item[1].get("updatedAt", 0),
             ),
             reverse=True,

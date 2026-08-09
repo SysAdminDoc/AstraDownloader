@@ -22,6 +22,9 @@ repository's git log.
   increasing delays, stop after three attempts with the title and last error
   shown on the subscription row, and get a fresh budget when the user starts
   a manual rescan.
+- **Subscription and update state recover safely.** Future scan times are
+  clamped, load-time archive trimming keeps live claims, and an abandoned
+  companion activation is marked failed after its timeout so it can be retried.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
