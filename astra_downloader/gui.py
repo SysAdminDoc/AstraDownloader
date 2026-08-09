@@ -1414,6 +1414,7 @@ class MainWindowCore(QMainWindow):
     def _make_settings_group(self, title):
         group = QFrame()
         group.setProperty("class", "settingsGroup")
+        group.setProperty("settingsSearchTitle", str(title))
         outer = QHBoxLayout(group)
         outer.setContentsMargins(0, 13, 0, 13)
         outer.setSpacing(24)
@@ -1424,7 +1425,100 @@ class MainWindowCore(QMainWindow):
         content = QVBoxLayout()
         content.setSpacing(9)
         outer.addLayout(content, 1)
+        if hasattr(self, "_settings_group_specs"):
+            self._settings_group_specs.append((group, content, str(title)))
         return group, content
+
+    def _settings_search_text(self, widget):
+        """Return safe, user-visible text used by the Settings filter."""
+        parts = []
+        try:
+            property_text = widget.property("settingsSearchText")
+        except Exception:
+            property_text = ""
+        if property_text:
+            parts.append(str(property_text))
+        for method_name in (
+            "accessibleName", "accessibleDescription", "toolTip",
+            "placeholderText",
+        ):
+            method = getattr(widget, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                value = method()
+            except Exception:
+                value = ""
+            if value:
+                parts.append(str(value))
+        if isinstance(widget, (QLabel, QCheckBox, QPushButton)):
+            try:
+                value = widget.text()
+            except Exception:
+                value = ""
+            if value:
+                parts.append(str(value))
+        if isinstance(widget, QComboBox):
+            for index in range(widget.count()):
+                try:
+                    parts.append(widget.itemText(index))
+                except Exception:
+                    continue
+        # Never put a private token or an arbitrary path value into the search
+        # index. Labels, accessible names and placeholders already identify
+        # those controls without treating their current contents as metadata.
+        if widget is getattr(self, "cfg_token", None):
+            return " ".join(parts)
+        if isinstance(widget, QLineEdit):
+            try:
+                parts.append(widget.text())
+            except Exception:
+                # reason: a transient Qt widget can disappear during a filter refresh
+                pass
+        return " ".join(str(part) for part in parts if part).casefold()
+
+    def _settings_item_search_text(self, item):
+        widget = item.widget()
+        if widget is not None:
+            return self._settings_search_text(widget)
+        layout = item.layout()
+        if layout is None:
+            return ""
+        return " ".join(
+            self._settings_item_search_text(layout.itemAt(index))
+            for index in range(layout.count())
+        ).casefold()
+
+    def _set_settings_item_visible(self, item, visible):
+        widget = item.widget()
+        if widget is not None:
+            widget.setVisible(bool(visible))
+            return
+        layout = item.layout()
+        if layout is None:
+            return
+        for index in range(layout.count()):
+            self._set_settings_item_visible(layout.itemAt(index), visible)
+
+    def _filter_settings(self, query):
+        """Show only matching settings rows while keeping their group visible."""
+        query = str(query or "").strip().casefold()
+        matched_groups = 0
+        for group, content, title in getattr(self, "_settings_group_specs", []):
+            group_matches = not query or query in str(title).casefold()
+            row_matches = False
+            for index in range(content.count()):
+                item = content.itemAt(index)
+                matches = group_matches or query in self._settings_item_search_text(item)
+                self._set_settings_item_visible(item, matches)
+                row_matches = row_matches or matches
+            visible = not query or group_matches or row_matches
+            group.setVisible(visible)
+            if visible and query:
+                matched_groups += 1
+        empty = getattr(self, "settings_filter_empty", None)
+        if empty is not None:
+            empty.setVisible(bool(query) and matched_groups == 0)
 
     def _make_tool_button(self, text, class_name="secondary", target=""):
         """A tool button, optionally named for the row it acts on.
@@ -3209,6 +3303,7 @@ class MainWindowCore(QMainWindow):
         self._refresh_subscriptions(force=True)
 
     def _build_settings(self):
+        self._settings_group_specs = []
         page = QWidget()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -3220,6 +3315,24 @@ class MainWindowCore(QMainWindow):
         layout.addLayout(self._make_page_header("Settings", ""))
         layout.addSpacing(14)
         layout.addWidget(make_divider())
+
+        filter_row = QHBoxLayout()
+        filter_row.setContentsMargins(0, 14, 0, 0)
+        filter_row.addWidget(make_label("Find a setting", "fieldLabel"))
+        self.settings_filter = QLineEdit()
+        self.settings_filter.setAccessibleName(tr("Filter settings"))
+        self.settings_filter.setPlaceholderText(
+            tr("Search settings by name or group")
+        )
+        self.settings_filter.setClearButtonEnabled(True)
+        self.settings_filter.textChanged.connect(self._filter_settings)
+        filter_row.addWidget(self.settings_filter, 1)
+        layout.addLayout(filter_row)
+        self.settings_filter_empty = make_label(
+            "No settings match this search.", "fieldHint"
+        )
+        self.settings_filter_empty.setVisible(False)
+        layout.addWidget(self.settings_filter_empty)
 
         # Connection
         conn_card, conn_l = self._make_settings_group("Connection")
@@ -3862,8 +3975,8 @@ class MainWindowCore(QMainWindow):
         perf_l.addLayout(channel_row)
         layout.addWidget(perf_card)
 
-        # Behavior
-        beh_card, beh_l = self._make_settings_group("Tray behavior")
+        # Language
+        language_card, language_l = self._make_settings_group("Language")
         language_row = QHBoxLayout()
         language_row.addWidget(make_label("Language", "fieldLabel"))
         language_row.addStretch()
@@ -3892,7 +4005,15 @@ class MainWindowCore(QMainWindow):
             tr("Language changes apply the next time Astra Downloader starts.")
         )
         language_row.addWidget(self.cfg_language)
-        beh_l.addLayout(language_row)
+        language_l.addLayout(language_row)
+        language_l.addWidget(make_label(
+            "Language changes apply after restarting Astra Downloader.",
+            "fieldHint", word_wrap=True,
+        ))
+        layout.addWidget(language_card)
+
+        # Behavior
+        beh_card, beh_l = self._make_settings_group("Tray behavior")
         self.cfg_autoupdate = QCheckBox(tr("Keep yt-dlp up to date automatically"))
         self.cfg_autoupdate.setChecked(self.config.get("AutoUpdateYtDlp", True))
         # The real cadence: throttled to once per 12 hours, checked when the
@@ -3960,8 +4081,8 @@ class MainWindowCore(QMainWindow):
         tools_row.addWidget(btn_reinstall_ffmpeg)
         tools_row.addStretch()
         tools_l.addLayout(tools_row)
-        tools_l.addWidget(make_divider())
-        tools_l.addWidget(make_label(
+        transfer_card, transfer_l = self._make_settings_group("Import and export")
+        transfer_l.addWidget(make_label(
             "Move this install to another machine, or recover from a config "
             "you cannot open. The bundle carries settings and subscriptions. "
             "Stored sign-ins are listed by site but never exported — "
@@ -3992,8 +4113,9 @@ class MainWindowCore(QMainWindow):
         self.btn_undo_settings_import.hide()
         bundle_row.addWidget(self.btn_undo_settings_import)
         bundle_row.addStretch()
-        tools_l.addLayout(bundle_row)
+        transfer_l.addLayout(bundle_row)
         layout.addWidget(tools_card)
+        layout.addWidget(transfer_card)
 
         save_row = QHBoxLayout()
         save_row.setContentsMargins(166, 14, 0, 0)
@@ -4004,6 +4126,14 @@ class MainWindowCore(QMainWindow):
         btn_save.clicked.connect(self._save_settings)
         self.btn_save = btn_save
         save_row.addWidget(btn_save)
+        self.btn_restore_defaults = self._make_tool_button(
+            "Restore defaults", "ghost"
+        )
+        self.btn_restore_defaults.setToolTip(tr(
+            "Restore the editable settings to their shipped defaults."
+        ))
+        self.btn_restore_defaults.clicked.connect(self._restore_default_settings)
+        save_row.addWidget(self.btn_restore_defaults)
         layout.addLayout(save_row)
         layout.addStretch()
 
@@ -4051,9 +4181,10 @@ class MainWindowCore(QMainWindow):
             self.cfg_closetotray.toggled,
             self.cfg_startmin.toggled,
             self.cfg_notify.toggled,
-            self.cfg_clipboard.toggled,
+        self.cfg_clipboard.toggled,
         ):
             signal.connect(self._mark_settings_dirty)
+        self._filter_settings("")
 
         self.tabs.addTab(scroll, "Settings")
 
@@ -5077,6 +5208,99 @@ class MainWindowCore(QMainWindow):
         # Signals stay blocked throughout, so refreshing the form does not
         # mark it dirty — the import's own status line is left standing.
         return refreshed
+
+    def _restore_default_settings(self):
+        """Restore the editable Settings form and report what changed."""
+        defaults = self._value("DEFAULT_CONFIG")
+        keys = [key for _attribute, key, _kind in self._SETTINGS_FORM_FIELDS]
+        keys.append("SponsorBlockCategories")
+        values = {key: defaults.get(key) for key in dict.fromkeys(keys)}
+        current = {
+            key: self.config.get(key, defaults.get(key))
+            for key in values
+        }
+        changed = [key for key in values if current.get(key) != values[key]]
+        if not changed:
+            self._show_settings_status(
+                tr("Settings already use their defaults."), "neutral"
+            )
+            return False
+
+        persisted_get = getattr(self.config, "get_persisted", self.config.get)
+        old_port = self._dependencies["clamp_int"](
+            persisted_get("ServerPort", self._value("SERVER_PORT")),
+            self._value("SERVER_PORT"), 1024, 65535,
+        )
+        old_effective_port = self._dependencies["clamp_int"](
+            self.config.get("ServerPort", self._value("SERVER_PORT")),
+            self._value("SERVER_PORT"), 1024, 65535,
+        )
+        old_language = self.config.get("Language", "system")
+        update = getattr(self.config, "update", None)
+        if not callable(update):
+            self._show_settings_status(
+                tr("Could not restore defaults. Nothing changed; check disk permissions and retry."),
+                "danger",
+            )
+            return False
+        try:
+            saved = bool(update(values))
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not restore settings defaults: {error}")
+            saved = False
+        if not saved:
+            self._show_settings_status(
+                tr("Could not restore defaults. Nothing changed; check disk permissions and retry."),
+                "danger",
+            )
+            return False
+
+        self._reload_settings_form()
+        self._dependencies["reset_deno_runtime_cache"]()
+        self._start_readiness_probe()
+        new_port = self._dependencies["clamp_int"](
+            values.get("ServerPort"), self._value("SERVER_PORT"), 1024, 65535,
+        )
+        port_changed = (
+            new_port != old_port or new_port != old_effective_port
+        )
+        restarted_server = bool(port_changed and self.server_running)
+        if restarted_server:
+            self._stop_server()
+            self._start_server()
+        else:
+            self._sync_connection_ui()
+
+        labels = []
+        for key in changed:
+            if key == "SponsorBlockCategories":
+                labels.append(tr("SponsorBlock categories"))
+                continue
+            attribute = next(
+                (
+                    attribute for attribute, field_key, _kind
+                    in self._SETTINGS_FORM_FIELDS
+                    if field_key == key
+                ),
+                "",
+            )
+            widget = getattr(self, attribute, None)
+            label = widget.accessibleName() if widget is not None else ""
+            labels.append(label or key)
+        summary = tr(
+            "Restored defaults for {count} settings: {names}."
+        ).format(count=len(changed), names=", ".join(labels))
+        if restarted_server:
+            summary = tr("Settings restored and server restarted.") + " " + summary
+        elif old_language != values.get("Language"):
+            summary = tr(
+                "Settings restored. Restart Astra Downloader to apply the language."
+            ) + " " + summary
+        self._show_settings_status(summary, "success")
+        self._append_log(
+            "Restored Settings defaults: " + ", ".join(changed)
+        )
+        return True
 
     def _export_settings_bundle(self):
         """Write settings and subscriptions to a portable JSON bundle."""

@@ -118,6 +118,36 @@ CATALOGS = {
             "Das Abonnement konnte nicht wiederhergestellt werden.",
         "Closing now will cancel {count} active downloads.":
             "Beim Schließen werden {count} aktive Downloads abgebrochen.",
+        "Find a setting":
+            "Einstellung suchen",
+        "Filter settings":
+            "Einstellungen filtern",
+        "Search settings by name or group":
+            "Einstellungen nach Name oder Gruppe durchsuchen",
+        "No settings match this search.":
+            "Keine Einstellungen entsprechen dieser Suche.",
+        "Language":
+            "Sprache",
+        "Language changes apply after restarting Astra Downloader.":
+            "Sprachänderungen werden nach einem Neustart von Astra Downloader angewendet.",
+        "Import and export":
+            "Import und Export",
+        "Restore defaults":
+            "Standards wiederherstellen",
+        "Restore the editable settings to their shipped defaults.":
+            "Bearbeitbare Einstellungen auf die mitgelieferten Standards zurücksetzen.",
+        "Settings already use their defaults.":
+            "Die Einstellungen verwenden bereits ihre Standards.",
+        "Could not restore defaults. Nothing changed; check disk permissions and retry.":
+            "Standards konnten nicht wiederhergestellt werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+        "SponsorBlock categories":
+            "SponsorBlock-Kategorien",
+        "Restored defaults for {count} settings: {names}.":
+            "Standards für {count} Einstellungen wiederhergestellt: {names}.",
+        "Settings restored and server restarted.":
+            "Einstellungen wiederhergestellt und Server neu gestartet.",
+        "Settings restored. Restart Astra Downloader to apply the language.":
+            "Einstellungen wiederhergestellt. Starten Sie Astra Downloader neu, um die Sprache anzuwenden.",
         "Export filtered":
             "Gefilterte exportieren",
         "0 of 0 retained":

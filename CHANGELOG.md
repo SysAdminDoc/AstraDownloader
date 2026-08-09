@@ -57,6 +57,10 @@ repository's git log.
   restores its last page, geometry and maximised state; sign-in, subscription
   and settings-bundle changes have one-step undo; and closing reports how many
   active downloads it is about to cancel.
+- **Settings are easier to navigate and recover.** Search now narrows the
+  form to matching controls and groups, Language and Import and export have
+  dedicated sections, and one action restores editable settings to their
+  shipped defaults while reporting what changed.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the
