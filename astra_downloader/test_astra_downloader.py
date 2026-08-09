@@ -137,6 +137,20 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(node_cfg["JavaScriptRuntime"], "node")
         jitter_cfg = ad.sanitize_config({"PacingJitterPercent": 999})
         self.assertEqual(jitter_cfg["PacingJitterPercent"], 100)
+        archive_cfg = ad.sanitize_config({
+            "WriteInfoJson": "yes",
+            "WriteDescription": "yes",
+            "WriteThumbnail": True,
+            "SplitChapters": "true",
+            "LiveFromStart": "on",
+            "WaitForVideoSeconds": 9999,
+        })
+        for key in (
+            "WriteInfoJson", "WriteDescription", "WriteThumbnail",
+            "SplitChapters", "LiveFromStart",
+        ):
+            self.assertTrue(archive_cfg[key], key)
+        self.assertEqual(archive_cfg["WaitForVideoSeconds"], 3600)
 
     def test_network_workaround_settings_are_opt_in_and_shape_checked(self):
         defaults = ad.sanitize_config({})
@@ -11370,6 +11384,30 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         self.assertIn('--force-ipv4', argv)
         self.assertEqual(argv[argv.index('--sleep-interval') + 1], '3')
         self.assertEqual(argv[argv.index('--max-sleep-interval') + 1], '5')
+
+    def test_archive_options_compile_without_changing_embed_flags(self):
+        argv = self._argv_for(
+            "https://example.com/live",
+            config_overrides={
+                "EmbedMetadata": True,
+                "EmbedThumbnail": True,
+                "EmbedChapters": True,
+                "WriteInfoJson": True,
+                "WriteDescription": True,
+                "WriteThumbnail": True,
+                "SplitChapters": True,
+                "LiveFromStart": True,
+                "WaitForVideoSeconds": 45,
+            },
+            with_cookies=False,
+        )
+        for flag in (
+            "--embed-metadata", "--embed-thumbnail", "--embed-chapters",
+            "--write-info-json", "--write-description", "--write-thumbnail",
+            "--split-chapters", "--live-from-start",
+        ):
+            self.assertIn(flag, argv)
+        self.assertEqual(argv[argv.index("--wait-for-video") + 1], "45")
 
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",

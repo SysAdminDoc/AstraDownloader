@@ -76,6 +76,9 @@ repository's git log.
 - **Site profiles are URL-aware.** Named domain profiles can set output format,
   quality, impersonation, proxy and request pacing defaults; matching happens
   when a link is pasted, with an explicit one-off profile or no-profile choice.
+- **Archive output is opt-in.** Settings can write info JSON, descriptions and
+  thumbnails beside media, split chapters into files, start live streams from
+  the beginning, or wait a bounded interval for a scheduled live event.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the

@@ -439,6 +439,10 @@
       <translation>Site profile</translation>
     </message>
     <message>
+      <source>Automatic site profile</source>
+      <translation>Automatic site profile</translation>
+    </message>
+    <message>
       <source>Download type</source>
       <translation>Download type</translation>
     </message>
@@ -521,10 +525,6 @@
     <message>
       <source>Pause starting pending downloads. Downloads already running will continue.</source>
       <translation>Pause starting pending downloads. Downloads already running will continue.</translation>
-    </message>
-    <message>
-      <source>Automatic site profile</source>
-      <translation>Automatic site profile</translation>
     </message>
     <message>
       <source>No profile (one-off)</source>
@@ -887,6 +887,34 @@
       <translation>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.</translation>
     </message>
     <message>
+      <source>Write info JSON sidecar</source>
+      <translation>Write info JSON sidecar</translation>
+    </message>
+    <message>
+      <source>Write description sidecar</source>
+      <translation>Write description sidecar</translation>
+    </message>
+    <message>
+      <source>Write thumbnail sidecar</source>
+      <translation>Write thumbnail sidecar</translation>
+    </message>
+    <message>
+      <source>Split chapters into files</source>
+      <translation>Split chapters into files</translation>
+    </message>
+    <message>
+      <source>Start live streams from the beginning</source>
+      <translation>Start live streams from the beginning</translation>
+    </message>
+    <message>
+      <source>Wait for live video</source>
+      <translation>Wait for live video</translation>
+    </message>
+    <message>
+      <source> seconds</source>
+      <translation> seconds</translation>
+    </message>
+    <message>
       <source>Tracks</source>
       <translation>Tracks</translation>
     </message>
@@ -905,6 +933,18 @@
     <message>
       <source>Subtitle languages</source>
       <translation>Subtitle languages</translation>
+    </message>
+    <message>
+      <source>Archive output</source>
+      <translation>Archive output</translation>
+    </message>
+    <message>
+      <source>Optional sidecars, chapter splitting and live-event controls. These do not change the existing embed options.</source>
+      <translation>Optional sidecars, chapter splitting and live-event controls. These do not change the existing embed options.</translation>
+    </message>
+    <message>
+      <source>0 disables waiting; use this when a scheduled live event has not started.</source>
+      <translation>0 disables waiting; use this when a scheduled live event has not started.</translation>
     </message>
     <message>
       <source>Use SponsorBlock segments</source>

@@ -43,6 +43,10 @@ pasting a link never needs it.
   per-download staging folder and only the finished file is moved into the
   destination. The Settings page can put intermediates beside the output for
   diagnosis.
+- **Archive deliberately.** Opt into info JSON, descriptions, thumbnails and
+  split chapter files, or start a live stream from its beginning. A bounded
+  wait-for-live-video setting handles scheduled events without changing the
+  existing embed options.
 - **It tells you why.** A failure names its cause — missing JavaScript
   runtime, expired sign-in, size cap, SABR-limited formats, a site refusing
   the request — and offers the control that fixes it.

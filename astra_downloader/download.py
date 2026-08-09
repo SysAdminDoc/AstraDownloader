@@ -3623,6 +3623,21 @@ class DownloadManagerCore:
                 args.append('--embed-thumbnail')
             if effective_config.get("EmbedChapters"):
                 args.append('--embed-chapters')
+        if effective_config.get("WriteInfoJson"):
+            args.append('--write-info-json')
+        if effective_config.get("WriteDescription"):
+            args.append('--write-description')
+        if effective_config.get("WriteThumbnail"):
+            args.append('--write-thumbnail')
+        if effective_config.get("SplitChapters"):
+            args.append('--split-chapters')
+        if effective_config.get("LiveFromStart"):
+            args.append('--live-from-start')
+        wait_for_video = self._dependencies['clamp_int'](
+            effective_config.get("WaitForVideoSeconds", 0), 0, 0, 3600
+        )
+        if wait_for_video > 0:
+            args += ['--wait-for-video', str(wait_for_video)]
         args += build_subtitle_args(effective_config, subtitles_only=subtitles_only)
         if subtitles_only:
             args.append('--skip-download')

@@ -439,6 +439,10 @@
       <translation>Site-Profil</translation>
     </message>
     <message>
+      <source>Automatic site profile</source>
+      <translation>Automatisches Site-Profil</translation>
+    </message>
+    <message>
       <source>Download type</source>
       <translation>Downloadtyp</translation>
     </message>
@@ -521,10 +525,6 @@
     <message>
       <source>Pause starting pending downloads. Downloads already running will continue.</source>
       <translation>Starten ausstehender Downloads pausieren. Bereits laufende Downloads werden fortgesetzt.</translation>
-    </message>
-    <message>
-      <source>Automatic site profile</source>
-      <translation>Automatisches Site-Profil</translation>
     </message>
     <message>
       <source>No profile (one-off)</source>
@@ -887,6 +887,34 @@
       <translation>Die .part-, .f###- und .ytdl-Dateien neben der Ausgabe ablegen und zur Diagnose behalten. Standardmäßig deaktiviert: Sie werden in einem privaten temporären Ordner verwendet und nach erfolgreichem Download entfernt.</translation>
     </message>
     <message>
+      <source>Write info JSON sidecar</source>
+      <translation>Info-JSON als Begleitdatei schreiben</translation>
+    </message>
+    <message>
+      <source>Write description sidecar</source>
+      <translation>Beschreibung als Begleitdatei schreiben</translation>
+    </message>
+    <message>
+      <source>Write thumbnail sidecar</source>
+      <translation>Vorschaubild als Begleitdatei schreiben</translation>
+    </message>
+    <message>
+      <source>Split chapters into files</source>
+      <translation>Kapitel in einzelne Dateien aufteilen</translation>
+    </message>
+    <message>
+      <source>Start live streams from the beginning</source>
+      <translation>Livestreams von Anfang an starten</translation>
+    </message>
+    <message>
+      <source>Wait for live video</source>
+      <translation>Auf Live-Video warten</translation>
+    </message>
+    <message>
+      <source> seconds</source>
+      <translation> Sekunden</translation>
+    </message>
+    <message>
       <source>Tracks</source>
       <translation>Spuren</translation>
     </message>
@@ -905,6 +933,18 @@
     <message>
       <source>Subtitle languages</source>
       <translation>Untertitelsprachen</translation>
+    </message>
+    <message>
+      <source>Archive output</source>
+      <translation>Archiv-Ausgabe</translation>
+    </message>
+    <message>
+      <source>Optional sidecars, chapter splitting and live-event controls. These do not change the existing embed options.</source>
+      <translation>Optionale Begleitdateien, Kapitelaufteilung und Live-Ereignissteuerung. Die bestehenden Einbettungsoptionen bleiben unverändert.</translation>
+    </message>
+    <message>
+      <source>0 disables waiting; use this when a scheduled live event has not started.</source>
+      <translation>0 deaktiviert das Warten; verwenden Sie dies, wenn ein geplanter Livestream noch nicht begonnen hat.</translation>
     </message>
     <message>
       <source>Use SponsorBlock segments</source>

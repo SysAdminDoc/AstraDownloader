@@ -206,6 +206,26 @@ CATALOGS = {
             "Durchsuchen",
         "Post-processing":
             "Nachbearbeitung",
+        "Write info JSON sidecar":
+            "Info-JSON als Begleitdatei schreiben",
+        "Write description sidecar":
+            "Beschreibung als Begleitdatei schreiben",
+        "Write thumbnail sidecar":
+            "Vorschaubild als Begleitdatei schreiben",
+        "Split chapters into files":
+            "Kapitel in einzelne Dateien aufteilen",
+        "Start live streams from the beginning":
+            "Livestreams von Anfang an starten",
+        "Wait for live video":
+            "Auf Live-Video warten",
+        " seconds":
+            " Sekunden",
+        "Archive output":
+            "Archiv-Ausgabe",
+        "Optional sidecars, chapter splitting and live-event controls. These do not change the existing embed options.":
+            "Optionale Begleitdateien, Kapitelaufteilung und Live-Ereignissteuerung. Die bestehenden Einbettungsoptionen bleiben unverändert.",
+        "0 disables waiting; use this when a scheduled live event has not started.":
+            "0 deaktiviert das Warten; verwenden Sie dies, wenn ein geplanter Livestream noch nicht begonnen hat.",
         "Format preferences":
             "Formatwünsche",
         "Preferred video codec":
