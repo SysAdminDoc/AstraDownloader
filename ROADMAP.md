@@ -161,25 +161,11 @@ Notes on existing items above — read these before starting them:
 
 ### P2
 
-- [ ] P2 — Back off per host, not per download
-  Why: The taxonomy already classifies HTTP 429, but recovery is per-download and unquantified — so a rate-limited site keeps its downloads cycling through the same limit while the rest of the queue waits behind them, and the advice is prose rather than a wait.
-  Evidence: retries are per-`Download` (`DownloadRetries` → `--retries`/`--fragment-retries`, `download.py:2611-2612`) and `DOWNLOAD_FAILURE_RECOVERY` carries `error`/`advice`/`next_action` strings with no duration field (`download.py:78-183`). Nothing keys any state by host. The model to copy is JDownloader, whose plugins raise a temporarily-unavailable status carrying an explicit wait duration and disable that host after N failures rather than stalling the queue; TubeArchivist's companion pattern is a randomised ±50% jitter on its request sleep, because a fixed sleep is itself a fingerprint (the app currently offers a fixed `--sleep-interval` plus an optional max, `download.py:2673-2681`).
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: a 429 or throttle failure records a retry-after per registrable domain; other hosts keep downloading; the card shows a countdown rather than a static message; the existing pacing settings gain a jitter option.
-  Complexity: M
-
 - [ ] P2 — Translate the strings that never reach `gui.py`
   Why: The text a user reads at the moment they need help is the one category that never translates. Different mechanism from the existing "strings the extractor cannot see" item — those are runtime `setText` calls *inside* `gui.py`; these live in modules the extractor does not read at all, and they include every failure explanation and every screen-reader label.
   Evidence: `scripts/extract_companion_strings.py:32-34` scans `astra_downloader/gui.py` only. `DOWNLOAD_FAILURE_RECOVERY` is 14 codes × `error`/`advice`/`next_action` as plain literals in `download.py:78-183`, rendered raw at `gui.py:3780-3783` and `:3880-3885`; `SABR_LIMITED_NOTICE` (`download.py:1186-1189`) and `MANAGED_BINARY_ANTIVIRUS_ADVICE` (`health.py:143-146`) have the same shape. Counted in `gui.py` on 2026-08-06: 30 `setToolTip` calls of which 1 is wrapped in `tr()`, and 88 `setAccessibleName` calls of which 2 are — so every screen-reader label is English in 10 of the 11 advertised locales.
   Touches: `astra_downloader/download.py`, `astra_downloader/health.py`, `astra_downloader/gui.py`, `scripts/extract_companion_strings.py`
   Acceptance: the extractor reads every module owning user-facing text; failure explanations, tooltips and accessible names are translatable and present in the catalogues; `npm run check` fails when one is added without reaching them.
-  Complexity: M
-
-- [ ] P2 — Make the gates able to fail
-  Why: Three checks can report success without having checked anything, which is worse than not having them — the dependency audit in particular is a control `SECURITY.md` leans on.
-  Evidence: (a) `scripts/audit-python-deps.js:136` defaults `dependencies` to `[]` on any shape mismatch and `:188` derives `status` purely from `actionableFindings.length`, so an empty or renamed pip-audit result reports `pass` having audited zero packages; `tool.exitCode` is recorded at `:194` and never compared, which also defeats the `--strict` flag passed at `:250`. (b) `buildCompanionInventory`/`inspectCompanionInventory` (`scripts/companion-license-inventory.js:267-434`) have exactly one consumer — `tests/companion-license-inventory.test.js`, on synthetic fixtures; no npm script runs them against a real staged artifact, and `:268-269` returns an empty inventory rather than erroring when the exe is absent. (c) `scripts/yt-dlp-smoke.py` runs `sys.executable -m yt_dlp`, exercising the pip pin `yt-dlp==2026.7.4`, while `YtDlpUpdateChannel` defaults to `nightly` (`config.py:209`) and the provisioned binary here is 2026.08.04.234419 — the gate proves a version no user runs. (d) `requirements.txt` carries reasoned floors for Flask, Werkzeug, Jinja2, requests and waitress but none for `urllib3`, which is transitive through requests and carries two 2026 High advisories (CVE-2026-44431/44432, cross-origin header forwarding on proxied redirects and a decompression-bomb bypass); the release graph pins 2.7.0 but a source install can resolve lower.
-  Touches: `scripts/audit-python-deps.js`, `scripts/companion-license-inventory.js`, `scripts/yt-dlp-smoke.py`, `astra_downloader/requirements.txt`, `package.json`
-  Acceptance: the audit asserts every requirement line appears in the result and fails on a zero-dependency report or a non-zero tool exit; the license inventory runs against a real staged artifact and errors on a missing one; the smoke gate can target the provisioned `yt-dlp.exe`; `urllib3` gains a reasoned floor.
   Complexity: M
 
 - [ ] P2 — Remember the window, and let the destructive actions be taken back

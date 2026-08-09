@@ -615,6 +615,18 @@
       <translation>Upper bound when the pause is randomised. Ignored below the pause above.</translation>
     </message>
     <message>
+      <source>Pacing jitter</source>
+      <translation>Pacing jitter</translation>
+    </message>
+    <message>
+      <source>Randomise host wait times and yt-dlp pacing by ± this percentage. 0 keeps fixed timing.</source>
+      <translation>Randomise host wait times and yt-dlp pacing by ± this percentage. 0 keeps fixed timing.</translation>
+    </message>
+    <message>
+      <source>Off</source>
+      <translation>Off</translation>
+    </message>
+    <message>
       <source>Pause between requests</source>
       <translation>Pause between requests</translation>
     </message>
@@ -645,10 +657,6 @@
     <message>
       <source>Sends a real browser's TLS fingerprint. The usual fix for a site that returns 403, though it can itself trigger rate limiting.</source>
       <translation>Sends a real browser's TLS fingerprint. The usual fix for a site that returns 403, though it can itself trigger rate limiting.</translation>
-    </message>
-    <message>
-      <source>Off</source>
-      <translation>Off</translation>
     </message>
     <message>
       <source>Checking installed yt-dlp…</source>
@@ -981,6 +989,14 @@
     <message>
       <source>from</source>
       <translation>from</translation>
+    </message>
+    <message>
+      <source>This host is paused — retry in {duration}.</source>
+      <translation>This host is paused — retry in {duration}.</translation>
+    </message>
+    <message>
+      <source>Host paused · retry in {duration}</source>
+      <translation>Host paused · retry in {duration}</translation>
     </message>
     <message>
       <source>unknown</source>

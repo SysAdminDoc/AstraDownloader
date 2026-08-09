@@ -4,6 +4,7 @@ import os
 import csv
 import hmac
 import json
+import math
 import queue
 import socket
 import threading
@@ -3527,6 +3528,25 @@ class MainWindowCore(QMainWindow):
         self.cfg_sleep_max.setFixedWidth(86)
         pace_max_row.addWidget(self.cfg_sleep_max)
         perf_l.addLayout(pace_max_row)
+        pace_jitter_row = QHBoxLayout()
+        pace_jitter_copy = QVBoxLayout()
+        pace_jitter_copy.setSpacing(2)
+        pace_jitter_copy.addWidget(make_label("Pacing jitter", "fieldLabel"))
+        pace_jitter_copy.addWidget(make_label(
+            "Randomise host wait times and yt-dlp pacing by ± this percentage. "
+            "0 keeps fixed timing.", "fieldHint", word_wrap=True,
+        ))
+        pace_jitter_row.addLayout(pace_jitter_copy, 1)
+        self.cfg_pacing_jitter = QSpinBox()
+        self.cfg_pacing_jitter.setAccessibleName("Pacing jitter percentage")
+        self.cfg_pacing_jitter.setRange(0, 100)
+        self.cfg_pacing_jitter.setSuffix("%")
+        self.cfg_pacing_jitter.setSpecialValueText(tr("Off"))
+        self.cfg_pacing_jitter.setValue(self._dependencies['clamp_int'](
+            self.config.get("PacingJitterPercent", 0), 0, 0, 100))
+        self.cfg_pacing_jitter.setFixedWidth(86)
+        pace_jitter_row.addWidget(self.cfg_pacing_jitter)
+        perf_l.addLayout(pace_jitter_row)
         pace_req_row = QHBoxLayout()
         pace_req_copy = QVBoxLayout()
         pace_req_copy.setSpacing(2)
@@ -3812,6 +3832,7 @@ class MainWindowCore(QMainWindow):
             self.cfg_impersonate.currentIndexChanged,
             self.cfg_sleep_interval.valueChanged,
             self.cfg_sleep_max.valueChanged,
+            self.cfg_pacing_jitter.valueChanged,
             self.cfg_sleep_requests.valueChanged,
             self.cfg_proxy.textChanged,
             self.cfg_js_runtime.currentIndexChanged,
@@ -4231,6 +4252,31 @@ class MainWindowCore(QMainWindow):
             and dl.error_code in self._value('DOWNLOAD_RETRYABLE_ERROR_CODES')
         ))
 
+    def _download_host_backoff_seconds(self, dl):
+        """Return a rounded host pause without making the GUI own policy."""
+        remaining = getattr(self.dl_manager, 'host_backoff_remaining', None)
+        if not callable(remaining):
+            return 0
+        try:
+            return max(0, math.ceil(float(remaining(dl.url))))
+        except (TypeError, ValueError, OverflowError, OSError):
+            return 0
+
+    def _download_recovery_text(self, dl):
+        recovery_text = dl.error_advice
+        if dl.error_code == "rate-limited":
+            seconds = self._download_host_backoff_seconds(dl)
+            if seconds:
+                recovery_text = (
+                    f"{recovery_text}\n"
+                    + tr("This host is paused — retry in {duration}.").format(
+                        duration=format_duration(seconds)
+                    )
+                )
+        if dl.error_action:
+            recovery_text = f"{recovery_text}\nNext: {dl.error_action}"
+        return recovery_text
+
     def _download_card_structure(self, dl, recent=False):
         """Return the widget structure needed for a download's current state."""
         if recent:
@@ -4272,6 +4318,14 @@ class MainWindowCore(QMainWindow):
             meta_parts.append(dl.format.upper())
         if dl.quality:
             meta_parts.append(str(dl.quality))
+        if dl.status in self._value('DOWNLOAD_PENDING_STATES'):
+            seconds = self._download_host_backoff_seconds(dl)
+            if seconds:
+                meta_parts.append(
+                    tr("Host paused · retry in {duration}").format(
+                        duration=format_duration(seconds)
+                    )
+                )
         if dl.error:
             meta_parts.append(dl.error)
         elif dl.filename:
@@ -4311,10 +4365,7 @@ class MainWindowCore(QMainWindow):
 
         recovery = refs.get("recovery")
         if recovery is not None:
-            recovery_text = dl.error_advice
-            if dl.error_action:
-                recovery_text = f"{recovery_text}\nNext: {dl.error_action}"
-            recovery.setText(recovery_text)
+            recovery.setText(self._download_recovery_text(dl))
 
     def _download_card(self, dl, recent=False):
         card = QFrame()
@@ -4412,10 +4463,9 @@ class MainWindowCore(QMainWindow):
         card_l.addWidget(meta)
         recovery_label = None
         if dl.error and dl.error_advice:
-            recovery = dl.error_advice
-            if dl.error_action:
-                recovery = f"{recovery}\nNext: {dl.error_action}"
-            recovery_label = make_label(recovery, "errorCallout", word_wrap=True)
+            recovery_label = make_label(
+                self._download_recovery_text(dl), "errorCallout", word_wrap=True
+            )
             card_l.addWidget(recovery_label)
         card._astra_structure = self._download_card_structure(dl, recent)
         card._astra_refs = {
@@ -4651,7 +4701,8 @@ class MainWindowCore(QMainWindow):
         signature = tuple(
             (d.id, d.status, d.queue_order, round(d.progress, 1), d.speed, d.eta,
              d.title, d.error, d.error_code, d.error_advice, d.error_action,
-             d.filename, d.format, d.quality, d.url)
+             d.filename, d.format, d.quality, d.url,
+             self._download_host_backoff_seconds(d))
             for d in active + pending + recent[:8]
         ) + ((capacity['intakePaused'], capacity['total']),)
         if signature == self._downloads_signature:
@@ -4746,6 +4797,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_extractor_retries", "ExtractorRetries", "number"),
         ("cfg_sleep_interval", "SleepIntervalSeconds", "number"),
         ("cfg_sleep_max", "MaxSleepIntervalSeconds", "number"),
+        ("cfg_pacing_jitter", "PacingJitterPercent", "number"),
         ("cfg_sleep_requests", "SleepRequestsSeconds", "number"),
         ("cfg_playlist_max", "PlaylistMaxItems", "number"),
         ("cfg_playlist_min_duration", "PlaylistMinDurationSeconds", "number"),
@@ -5569,6 +5621,7 @@ class MainWindowCore(QMainWindow):
             "ExtractorRetries": self.cfg_extractor_retries.value(),
             "SleepIntervalSeconds": self.cfg_sleep_interval.value(),
             "MaxSleepIntervalSeconds": self.cfg_sleep_max.value(),
+            "PacingJitterPercent": self.cfg_pacing_jitter.value(),
             "SleepRequestsSeconds": self.cfg_sleep_requests.value(),
             "SubLangs": sublangs,
             "SubtitleMode": self._dependencies['normalize_subtitle_mode'](

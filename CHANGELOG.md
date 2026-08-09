@@ -26,7 +26,7 @@ repository's git log.
   clamped, load-time archive trimming keeps live claims, and an abandoned
   companion activation is marked failed after its timeout so it can be retried.
 - **Translation catalogues track every companion UI string.** The checked-in
-  source catalogues now cover all 249 extracted strings across all 11 locales,
+  source catalogues now cover all 253 extracted strings across all 11 locales,
   and the translation gate fails when generated keys drift from the GUI.
 - **Update and archive keys reject ambiguity.** Checksum sidecars must identify
   the requested asset, long URL-only subscription keys use a bounded digest,
@@ -52,6 +52,10 @@ repository's git log.
   off the GUI thread and reports a starting state, history distinguishes an
   unreadable store from an empty one, subscription rows show active scans, and
   format probing tells the user when it is looking up available formats.
+- **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
+  pause only the registrable domain that returned them, honour a bounded
+  Retry-After hint with optional jitter, keep other sites moving, and show the
+  remaining wait directly on the download card.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
