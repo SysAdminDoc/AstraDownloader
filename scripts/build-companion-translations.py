@@ -384,6 +384,22 @@ CATALOGS = {
             "Kapitel einbetten",
         "Download subtitles":
             "Untertitel herunterladen",
+        "Generate local subtitles when no track exists":
+            "Lokale Untertitel erzeugen, wenn keine Spur vorhanden ist",
+        "After a video download, use the locally provisioned Whisper model to write an SRT sidecar only when yt-dlp found no subtitle track.":
+            "Nach einem Videodownload das lokal bereitgestellte Whisper-Modell verwenden, um nur dann eine SRT-Begleitdatei zu schreiben, wenn yt-dlp keine Untertitelspur gefunden hat.",
+        "Uses the bundled multilingual Whisper model and the first language in Subtitle languages. Setup downloads the model when this option is enabled.":
+            "Verwendet das gebündelte mehrsprachige Whisper-Modell und die erste Sprache unter Untertitelsprachen. Beim Aktivieren dieser Option lädt die Einrichtung das Modell herunter.",
+        "Ready":
+            "Bereit",
+        "Local transcription is enabled and the pinned Whisper model is ready.":
+            "Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell ist bereit.",
+        "Repair needed":
+            "Reparatur erforderlich",
+        "The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.":
+            "Das lokale Whisper-Modell ist vorhanden, aber unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um es abzurufen.",
+        "Run setup to provision the local Whisper model before downloading.":
+            "Führen Sie die Einrichtung aus, um das lokale Whisper-Modell vor dem Download bereitzustellen.",
         "Keep intermediate files":
             "Zwischendateien behalten",
         "Tracks":
@@ -936,12 +952,26 @@ CATALOGS = {
             "Serverstart fehlgeschlagen. Prüfen Sie das Protokoll auf Details.",
         "Installing yt-dlp...":
             "yt-dlp wird installiert…",
+        "Preparing transcription model...":
+            "Transkriptionsmodell wird vorbereitet…",
         "{label} status indicator: {value}":
             "{label} Statusindikator: {value}",
         "{label} status: {value}":
             "{label} Status: {value}",
         "Required":
             "Erforderlich",
+        "The local transcription model is missing or damaged.":
+            "Das lokale Transkriptionsmodell fehlt oder ist beschädigt.",
+        "Run setup with local subtitle generation enabled, then retry the download.":
+            "Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie den Download.",
+        "run-setup":
+            "Einrichtung ausführen",
+        "Local subtitle generation failed after the media downloaded.":
+            "Die lokale Untertitelerzeugung ist nach dem Mediendownload fehlgeschlagen.",
+        "Check the ffmpeg and local transcription model readiness rows, then retry the download.":
+            "Prüfen Sie die Bereitschaftszeilen für ffmpeg und das lokale Transkriptionsmodell und wiederholen Sie den Download.",
+        "retry":
+            "Erneut versuchen",
         "Optional":
             "Optional",
         "No subscriptions match these filters":

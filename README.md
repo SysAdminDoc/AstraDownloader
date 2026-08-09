@@ -61,6 +61,10 @@ pasting a link never needs it.
 - **Subtitles, the ones you asked for.** Creator captions, the machine
   transcript, or the former falling back to the latter. Pick languages from a
   list, normalise everything to SRT, or fetch subtitles without the video.
+- **Transcribe locally when needed.** Enable local subtitle generation in
+  Settings and a successful video with no subtitle track gets an SRT sidecar
+  beside it. The pinned multilingual Whisper model is downloaded during setup
+  only after you opt in; audio-only and subtitle-only jobs never invoke it.
 - **Sets itself up.** First launch fetches yt-dlp and ffmpeg, plus a
   JavaScript runtime if YouTube needs one — Deno if it can be had, otherwise a
   2 MB QuickJS build. No separate installer, no PATH surgery. yt-dlp keeps
@@ -146,7 +150,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 712 tests
+py -3.12 -m pytest          # 824 tests
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

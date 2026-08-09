@@ -355,6 +355,10 @@
       <translation>Missing</translation>
     </message>
     <message>
+      <source>Optional</source>
+      <translation>Optional</translation>
+    </message>
+    <message>
       <source>Supported</source>
       <translation>Supported</translation>
     </message>
@@ -891,6 +895,18 @@
       <translation>Fetch subtitle tracks and embed them in the file. The Subtitles download type fetches them without the video.</translation>
     </message>
     <message>
+      <source>Generate local subtitles when no track exists</source>
+      <translation>Generate local subtitles when no track exists</translation>
+    </message>
+    <message>
+      <source>After a video download, use the locally provisioned Whisper model to write an SRT sidecar only when yt-dlp found no subtitle track.</source>
+      <translation>After a video download, use the locally provisioned Whisper model to write an SRT sidecar only when yt-dlp found no subtitle track.</translation>
+    </message>
+    <message>
+      <source>Uses the bundled multilingual Whisper model and the first language in Subtitle languages. Setup downloads the model when this option is enabled.</source>
+      <translation>Uses the bundled multilingual Whisper model and the first language in Subtitle languages. Setup downloads the model when this option is enabled.</translation>
+    </message>
+    <message>
       <source>Keep intermediate files</source>
       <translation>Keep intermediate files</translation>
     </message>
@@ -1411,6 +1427,14 @@
       <translation>Unavailable</translation>
     </message>
     <message>
+      <source>Ready</source>
+      <translation>Ready</translation>
+    </message>
+    <message>
+      <source>Local transcription is enabled and the pinned Whisper model is ready.</source>
+      <translation>Local transcription is enabled and the pinned Whisper model is ready.</translation>
+    </message>
+    <message>
       <source>Downloads use the web client with proof-of-origin tokens.</source>
       <translation>Downloads use the web client with proof-of-origin tokens.</translation>
     </message>
@@ -1675,12 +1699,20 @@
       <translation>{label} status: {value}</translation>
     </message>
     <message>
-      <source>Required</source>
-      <translation>Required</translation>
+      <source>Repair needed</source>
+      <translation>Repair needed</translation>
     </message>
     <message>
-      <source>Optional</source>
-      <translation>Optional</translation>
+      <source>The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.</source>
+      <translation>The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.</translation>
+    </message>
+    <message>
+      <source>Run setup to provision the local Whisper model before downloading.</source>
+      <translation>Run setup to provision the local Whisper model before downloading.</translation>
+    </message>
+    <message>
+      <source>Required</source>
+      <translation>Required</translation>
     </message>
     <message>
       <source>No subscriptions match these filters</source>
@@ -1923,12 +1955,8 @@
       <translation>Closing now will cancel {count} active downloads.</translation>
     </message>
     <message>
-      <source>Registering shortcuts and protocols...</source>
-      <translation>Registering shortcuts and protocols...</translation>
-    </message>
-    <message>
-      <source>Finishing setup...</source>
-      <translation>Finishing setup...</translation>
+      <source>Preparing transcription model...</source>
+      <translation>Preparing transcription model...</translation>
     </message>
     <message>
       <source>cookie session expired</source>
@@ -1953,6 +1981,14 @@
     <message>
       <source>Host paused · retry in {duration}</source>
       <translation>Host paused · retry in {duration}</translation>
+    </message>
+    <message>
+      <source>Registering shortcuts and protocols...</source>
+      <translation>Registering shortcuts and protocols...</translation>
+    </message>
+    <message>
+      <source>Finishing setup...</source>
+      <translation>Finishing setup...</translation>
     </message>
     <message>
       <source>unknown</source>
@@ -2157,6 +2193,30 @@
     <message>
       <source>free-disk-space-and-retry</source>
       <translation>free-disk-space-and-retry</translation>
+    </message>
+    <message>
+      <source>The local transcription model is missing or damaged.</source>
+      <translation>The local transcription model is missing or damaged.</translation>
+    </message>
+    <message>
+      <source>Run setup with local subtitle generation enabled, then retry the download.</source>
+      <translation>Run setup with local subtitle generation enabled, then retry the download.</translation>
+    </message>
+    <message>
+      <source>run-setup</source>
+      <translation>run-setup</translation>
+    </message>
+    <message>
+      <source>Local subtitle generation failed after the media downloaded.</source>
+      <translation>Local subtitle generation failed after the media downloaded.</translation>
+    </message>
+    <message>
+      <source>Check the ffmpeg and local transcription model readiness rows, then retry the download.</source>
+      <translation>Check the ffmpeg and local transcription model readiness rows, then retry the download.</translation>
+    </message>
+    <message>
+      <source>retry</source>
+      <translation>retry</translation>
     </message>
     <message>
       <source>This link only offers SABR streams. {options} do not apply to them and will be ignored.</source>

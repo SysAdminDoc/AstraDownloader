@@ -201,6 +201,9 @@ DEFAULT_CONFIG = {
     "EmbedThumbnail": True,
     "EmbedChapters": True,
     "EmbedSubs": False,
+    # Local Whisper transcription is opt-in. When enabled, a successful
+    # media download with no subtitle track is followed by an SRT sidecar.
+    "GenerateSubtitles": False,
     # Archive sidecars and chapter/live capture are opt-in. They write beside
     # the finished media and deliberately do not alter the existing embed
     # switches above.
@@ -1405,6 +1408,7 @@ def sanitize_config(raw):
     data["ServerToken"] = token if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", token) else uuid.uuid4().hex
     for key in (
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
+        "GenerateSubtitles",
         "WriteInfoJson", "WriteDescription", "WriteThumbnail",
         "SplitChapters", "LiveFromStart",
         "WindowsFilenames",

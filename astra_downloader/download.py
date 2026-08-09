@@ -44,7 +44,10 @@ __all__ = (
     "HOST_BACKOFF_MAX_ENTRIES", "parse_retry_after_seconds",
     "build_impersonate_args",
     "build_network_workaround_args",
-    "build_subtitle_args",
+    "build_subtitle_args", "build_local_subtitle_args",
+    "local_subtitle_output_path", "local_subtitle_sidecar_exists",
+    "should_generate_local_subtitles", "subtitle_language_for_transcription",
+    "escape_ffmpeg_filter_value",
     "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
     "snapshot_download_fields", "restore_download_fields",
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
@@ -80,7 +83,9 @@ DOWNLOAD_WATCHDOG_POLL_SECONDS = 15
 DOWNLOAD_QUEUE_SCHEMA_VERSION = 1
 DOWNLOAD_INTERMEDIATE_DIRNAME = 'download-temp'
 PLAYLIST_PREVIEW_LIMIT = 200
-DOWNLOAD_RUNNING_STATES = {'queued', 'downloading', 'merging', 'extracting', 'trimming'}
+DOWNLOAD_RUNNING_STATES = {
+    'queued', 'downloading', 'merging', 'extracting', 'trimming', 'transcribing',
+}
 DOWNLOAD_PENDING_STATES = {'pending', 'paused', 'needs-auth'}
 DOWNLOAD_ACTIVE_STATES = DOWNLOAD_RUNNING_STATES | DOWNLOAD_PENDING_STATES
 # 'skipped' = yt-dlp exited 0 without writing media (size cap, no downloadable
@@ -95,6 +100,8 @@ DOWNLOAD_RETRYABLE_ERROR_CODES = {
     'po-token-required',
     'cookie-jar-failed',
     'worker-start-failed',
+    'transcription-model-missing',
+    'transcription-failed',
 }
 
 DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
@@ -219,6 +226,22 @@ DOWNLOAD_FAILURE_RECOVERY = {
         'error': 'There is not enough free disk space for this download.',
         'advice': 'Free space on the destination drive, then retry the download.',
         'next_action': 'free-disk-space-and-retry',
+    },
+    'transcription-model-missing': {
+        'error': 'The local transcription model is missing or damaged.',
+        'advice': (
+            'Run setup with local subtitle generation enabled, then retry the '
+            'download.'
+        ),
+        'next_action': 'run-setup',
+    },
+    'transcription-failed': {
+        'error': 'Local subtitle generation failed after the media downloaded.',
+        'advice': (
+            'Check the ffmpeg and local transcription model readiness rows, '
+            'then retry the download.'
+        ),
+        'next_action': 'retry',
     },
 }
 
@@ -1600,6 +1623,109 @@ def build_subtitle_args(config, subtitles_only=False):
     return args
 
 
+def escape_ffmpeg_filter_value(value):
+    """Escape a local path for an ffmpeg filter option.
+
+    The process is spawned with an argv list, so shell quoting is neither
+    needed nor wanted. The whisper filter still uses ``:`` as its option
+    separator, though, which makes a Windows drive letter special. Convert
+    separators to forward slashes and escape the filter punctuation only.
+    """
+    text = str(value or '').replace('\\', '/')
+    for character in (':', ',', '[', ']', ';', "'"):
+        text = text.replace(character, '\\' + character)
+    return text
+
+
+def local_subtitle_output_path(media_path):
+    """Return the deterministic SRT sidecar path for one finished media file."""
+    path = Path(media_path)
+    if path.suffix:
+        return path.with_suffix('.srt')
+    return path.with_name(path.name + '.srt')
+
+
+def local_subtitle_sidecar_exists(media_path):
+    """Whether yt-dlp or an earlier transcription already wrote a sidecar."""
+    path = Path(media_path)
+    try:
+        siblings = path.parent.iterdir()
+    except OSError:
+        return False
+    stem = path.stem.casefold()
+    formats = {'.srt', '.vtt', '.ass', '.lrc'}
+    for candidate in siblings:
+        try:
+            if not candidate.is_file() or candidate.suffix.casefold() not in formats:
+                continue
+            name = candidate.name.casefold()
+        except OSError:
+            continue
+        if name == f'{stem}{candidate.suffix.casefold()}' or name.startswith(f'{stem}.'):
+            return True
+    return False
+
+
+def subtitle_language_for_transcription(config):
+    """Choose the first configured language Whisper should transcribe."""
+    read = getattr(config, 'get', None)
+    raw = read('SubLangs') if callable(read) else ''
+    for candidate in str(raw or '').split(','):
+        code = candidate.strip().lower().replace('_', '-')
+        if not code:
+            continue
+        # Whisper's filter accepts ISO language codes, not yt-dlp's regional
+        # subtitle variants. The base code is the useful, deterministic
+        # interpretation for values such as ``zh-Hans``.
+        base = code.split('-', 1)[0]
+        if re.fullmatch(r'[a-z]{2,3}', base):
+            return base
+    return 'auto'
+
+
+def build_local_subtitle_args(ffmpeg_path, media_path, model_path,
+                              output_path, language='auto'):
+    """Build the server-owned ffmpeg Whisper command for one SRT sidecar."""
+    model = escape_ffmpeg_filter_value(model_path)
+    destination = escape_ffmpeg_filter_value(output_path)
+    language = str(language or 'auto').strip().lower()
+    if not re.fullmatch(r'[a-z]{2,3}', language):
+        language = 'auto'
+    filter_graph = (
+        'aformat=sample_rates=16000:channel_layouts=mono,'
+        f'whisper=model={model}:language={language}:queue=3:use_gpu=0:'
+        f'destination={destination}:format=srt'
+    )
+    return [
+        str(ffmpeg_path), '-hide_banner', '-nostdin', '-y',
+        '-i', str(media_path), '-vn', '-af', filter_graph,
+        '-progress', 'pipe:1', '-nostats', '-f', 'null', '-',
+    ]
+
+
+def should_generate_local_subtitles(config, download):
+    """Gate local transcription to opt-in video jobs with no subtitle track."""
+    read = getattr(config, 'get', None)
+    if not callable(read) or not bool(read('GenerateSubtitles')):
+        return False
+    if bool(getattr(download, 'audio_only', False)) or bool(
+        getattr(download, 'subtitles_only', False)
+    ):
+        return False
+    if bool(getattr(download, 'subtitle_written', False)):
+        return False
+    filename = str(getattr(download, 'filename', '') or '').strip()
+    if not filename:
+        return False
+    media = Path(filename)
+    try:
+        if not media.is_file():
+            return False
+    except OSError:
+        return False
+    return not local_subtitle_sidecar_exists(media)
+
+
 def build_playlist_bound_args(config):
     """Compile the bounds that keep a pasted playlist from queueing all of it.
 
@@ -2206,6 +2332,10 @@ class Download:
         self.speed = ""
         self.eta = ""
         self.filename = ""
+        # Set when yt-dlp reports a creator or auto-generated track. This is
+        # separate from the sidecar check because --embed-subs can consume the
+        # temporary subtitle file before the local-transcription stage runs.
+        self.subtitle_written = False
         self.error = ""
         self.error_code = ""
         self.error_advice = ""
@@ -2359,6 +2489,8 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'CREATE_NO_WINDOW',
     'FFMPEG_PATH',
     'INSTALL_DIR',
+    'WHISPER_MODEL_MIN_BYTES',
+    'WHISPER_MODEL_PATH',
     'YTDLP_PATH',
     '_build_subprocess_env',
     'allowed_output_roots',
@@ -2373,6 +2505,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'is_supported_media_url',
     'is_youtube_url',
     'load_json_file',
+    'managed_binary_state',
     'normalize_output_dir',
     'normalize_sponsorblock_categories',
     'normalize_download_section',
@@ -3413,12 +3546,15 @@ class DownloadManagerCore:
 
             # A subtitles-only run passes --skip-download, and the after_move
             # print hook above never fires without a media file, so the card
-            # would finish with nothing to reveal. This line is the report.
-            if getattr(dl, 'subtitles_only', False):
-                written = SUBTITLE_WRITTEN_RE.match(line)
-                if written:
+            # would finish with nothing to reveal. This line is also how the
+            # local-transcription stage knows that --embed-subs already found
+            # a track, even if yt-dlp removes the temporary sidecar afterward.
+            written = SUBTITLE_WRITTEN_RE.match(line)
+            if written:
+                dl.subtitle_written = True
+                if getattr(dl, 'subtitles_only', False):
                     dl.filename = self._converted_subtitle_path(written.group(1))
-                    continue
+                continue
 
             # Structured progress (MDLP prefix, legacy fallback)
             m = re.match(r'^MDLP\s+(\d+\.?\d*)%?\s+(\S+)\s+(\S+)', line)
@@ -3541,6 +3677,154 @@ class DownloadManagerCore:
             suffix = uuid.uuid5(uuid.NAMESPACE_URL, raw_id).hex[:12]
             candidate = root / f'download-{suffix}'
         return candidate
+
+    def _run_local_subtitles(self, dl, effective_config):
+        """Transcribe a successful video into an atomic SRT sidecar."""
+        if not should_generate_local_subtitles(effective_config, dl):
+            return True
+
+        model_path = Path(self._dependencies['WHISPER_MODEL_PATH']())
+        model_state = self._dependencies['managed_binary_state'](
+            model_path, self._dependencies['WHISPER_MODEL_MIN_BYTES']()
+        )
+        if model_state != 'ok':
+            dl.status = 'failed'
+            dl.error = (
+                'Local subtitle generation needs the Whisper model, but the '
+                'model is missing or damaged.'
+            )
+            apply_download_failure_classification(
+                dl, 'transcription-model-missing', error=dl.error
+            )
+            return False
+
+        media_path = Path(dl.filename)
+        output_path = local_subtitle_output_path(media_path)
+        temporary = output_path.with_name(
+            f'.{output_path.name}.{uuid.uuid4().hex}.tmp'
+        )
+        args = build_local_subtitle_args(
+            self._dependencies['FFMPEG_PATH'](),
+            media_path,
+            model_path,
+            temporary,
+            language=subtitle_language_for_transcription(effective_config),
+        )
+        dl.status = 'transcribing'
+        dl.speed = 'local transcription'
+        dl.eta = ''
+        dl.progress = min(99.0, max(0.0, float(dl.progress or 0.0)))
+        self.progress_updated.emit()
+        proc = None
+        output_lines = []
+        try:
+            proc = self._dependencies['spawn_media_process'](
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                creationflags=(
+                    self._dependencies['CREATE_NO_WINDOW']
+                    | self._dependencies['CREATE_NEW_PROCESS_GROUP']
+                ),
+                env=self._dependencies['_build_subprocess_env'](),
+            )
+            dl.process = proc
+            with self._lock:
+                cancelled_pre_spawn = dl.status == 'cancelled'
+            if cancelled_pre_spawn:
+                self._dependencies['terminate_process_tree'](proc)
+            for raw_line in getattr(proc, 'stdout', ()):
+                line = str(raw_line or '').strip()
+                if not line:
+                    continue
+                output_lines.append(line)
+                if len(output_lines) > 30:
+                    output_lines = output_lines[-30:]
+                if line.startswith('out_time_ms='):
+                    # FFmpeg's filter does not expose the input duration on
+                    # the progress pipe. Report an active stage immediately,
+                    # then reserve 100 for an atomically committed SRT.
+                    dl.progress = max(1.0, min(99.0, float(dl.progress or 0.0)))
+                    self.progress_updated.emit()
+                elif line == 'progress=end':
+                    dl.progress = 99.0
+                    self.progress_updated.emit()
+            proc.wait()
+            if dl.status == 'cancelled':
+                return False
+            if proc.returncode == 0 and temporary.is_file():
+                try:
+                    if temporary.stat().st_size > 0:
+                        os.replace(temporary, output_path)
+                        dl.status = 'complete'
+                        dl.progress = 100.0
+                        dl.speed = ''
+                        dl.eta = ''
+                        self.progress_updated.emit()
+                        return True
+                except OSError:
+                    # Fall through to the same actionable failure as a
+                    # transcription process that produced no output.
+                    # reason: the destination can be locked or removed
+                    # between the size check and the atomic replacement
+                    pass
+            if dl.status == 'cancelled':
+                return False
+            detail = ' '.join(
+                line for line in output_lines
+                if 'error' in line.lower() or 'failed' in line.lower()
+            )[-240:]
+            dl.status = 'failed'
+            dl.error = 'ffmpeg could not generate local subtitles.' + (
+                f' {detail}' if detail else ''
+            )
+            apply_download_failure_classification(
+                dl, 'transcription-failed', error=dl.error
+            )
+            return False
+        except FileNotFoundError:
+            if dl.status != 'cancelled':
+                dl.status = 'failed'
+                dl.error = 'ffmpeg not found. Run setup first.'
+                apply_download_failure_classification(
+                    dl, 'transcription-failed', error=dl.error
+                )
+            return False
+        except Exception as error:
+            if dl.status != 'cancelled':
+                dl.status = 'failed'
+                dl.error = 'Unexpected local subtitle error. Check Astra Downloader logs.'
+                apply_download_failure_classification(
+                    dl, 'transcription-failed', error=dl.error
+                )
+                self._dependencies['write_persistent_log'](
+                    f'Local subtitles for {dl.id} failed: '
+                    f'{_redact_download_secrets(error, dl)}'
+                )
+            return False
+        finally:
+            dl.process = None
+            try:
+                if getattr(proc, 'stdout', None) is not None:
+                    proc.stdout.close()
+            except Exception:
+                # reason: cleanup must not replace a completed transcription
+                pass
+            if proc is not None and proc.poll() is None:
+                try:
+                    self._dependencies['terminate_process_tree'](proc)
+                except Exception as error:
+                    self._dependencies['write_persistent_log'](
+                        f'WARNING: local subtitle termination failed: {error}'
+                    )
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                # reason: a locked partial transcript is safe to retry later
+                pass
 
     def _run_download(self, dl):
         with self._lock:
@@ -4075,6 +4359,8 @@ class DownloadManagerCore:
                 if self._recut_section(dl, env):
                     dl.status = "complete"
                     dl.progress = 100
+            if dl.status == 'complete':
+                self._run_local_subtitles(dl, effective_config)
 
         except FileNotFoundError:
             if dl.status != "cancelled":
