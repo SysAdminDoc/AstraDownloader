@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Find every user-facing literal the companion GUI puts through Qt.
+"""Find every user-facing literal the companion puts through Qt.
 
 The catalogue source list used to be a hand-written tuple, which is why it
 held 21 strings against a window that shows hundreds: nothing connected the
 tuple to the code, so every string added after it was written simply never
 reached a translator, while the catalogues still reported themselves whole.
 
-This walks the GUI's syntax tree instead.
+This walks the GUI's syntax tree instead and also reads the marked recovery
+catalogues owned by the download and health modules. Those modules must not
+depend on Qt, so their literals are translated at the GUI boundary.
 
 The part that matters is that the set of translating calls is DISCOVERED, not
 listed. `tr()` and `make_label()` are the roots, but most strings never touch
@@ -29,13 +31,34 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GUI_SOURCES = (
+SOURCE_FILES = (
     ROOT / "astra_downloader" / "gui.py",
+    ROOT / "astra_downloader" / "download.py",
+    ROOT / "astra_downloader" / "health.py",
 )
+# Retain the old name for callers that used the extractor as a small library.
+GUI_SOURCES = SOURCE_FILES
 
 # The calls that translate their first argument outright. Everything else is
-# derived from these.
-ROOT_TRANSLATING_CALLS = {"tr": (0,), "make_label": (0,)}
+# derived from these. Placeholder examples are intentionally not included:
+# timestamps, URLs, field syntax, and sample paths are data, not prose.
+ROOT_TRANSLATING_CALLS = {
+    "tr": (0,),
+    "make_label": (0,),
+    # These Qt methods are translated at their call sites below. Listing them
+    # here lets the fixpoint follow an accessible name or tooltip passed
+    # through a helper such as `_add_settings_number`.
+    "setAccessibleName": (0,),
+    "setAccessibleDescription": (0,),
+    "setToolTip": (0,),
+}
+
+RUNTIME_TEXT_ASSIGNMENTS = {
+    "DOWNLOAD_FAILURE_RECOVERY",
+    "SABR_LIMITED_NOTICE",
+    "MANAGED_BINARY_ANTIVIRUS_ADVICE",
+}
+RUNTIME_TEXT_FIELDS = {"error", "advice", "next_action"}
 
 # Literals that reach Qt but must not be translated, and why. Kept explicit
 # rather than filtered by a rule, so adding one is a decision someone made
@@ -107,11 +130,42 @@ def discover_translating_calls(tree):
     return {name: tuple(sorted(indices)) for name, indices in table.items()}
 
 
+def _runtime_literals(tree):
+    """Return marked user-facing literals owned by non-GUI modules."""
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if not any(
+            isinstance(target, ast.Name) and target.id in RUNTIME_TEXT_ASSIGNMENTS
+            for target in targets
+        ):
+            continue
+        value = node.value
+        if isinstance(value, ast.Dict):
+            for mapping in ast.walk(value):
+                if not isinstance(mapping, ast.Dict):
+                    continue
+                for key, child in zip(mapping.keys, mapping.values):
+                    if _literal(key) not in RUNTIME_TEXT_FIELDS:
+                        continue
+                    literal = _literal(child)
+                    if literal:
+                        found.append(literal)
+        else:
+            for child in ast.walk(value):
+                literal = _literal(child)
+                if literal:
+                    found.append(literal)
+    return found
+
+
 def extract_from_source(text):
     """Return the translatable literals in one Python source file, in order."""
     tree = ast.parse(text)
     table = discover_translating_calls(tree)
-    found = []
+    found = _runtime_literals(tree)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue

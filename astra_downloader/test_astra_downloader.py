@@ -9052,6 +9052,9 @@ class SabrReadinessTests(unittest.TestCase):
         calls = []
         win = types.SimpleNamespace(
             _set_readiness=lambda key, text, tone="neutral", tooltip="": calls.append((key, text, tone)),
+            # The readiness method also refreshes the browser-impersonation
+            # choices; this fixture only exercises the status rows.
+            _apply_impersonate_targets=lambda _targets: None,
             _dependencies={
                 'evaluate_sabr_support': lambda v: self._sabr_result,
                 'managed_binary_state': lambda _path: 'ok',
@@ -11005,6 +11008,33 @@ class TranslationCoverageTests(unittest.TestCase):
         translated, total = coverage["de"]
         self.assertEqual(translated, total,
                          f"German lost translations: {translated}/{total}")
+
+    def test_extractor_covers_runtime_modules_and_accessibility_help(self):
+        # Recovery guidance lives outside gui.py so the extractor must prove
+        # that its source boundary follows the module that owns each message.
+        import importlib.util
+
+        root = Path(ad.__file__).parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "extract_companion_strings",
+            root / "scripts" / "extract_companion_strings.py",
+        )
+        extractor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(extractor)
+        self.assertEqual(
+            {path.name for path in extractor.SOURCE_FILES},
+            {"gui.py", "download.py", "health.py"},
+        )
+        strings = set(extractor.extract_all())
+        for expected in (
+            "The site refused further requests for now (HTTP 429).",
+            "This link only offers SABR streams. {options} do not apply to them and will be ignored.",
+            "Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.",
+            "Review the redacted support payload before copying it.",
+            "{label} status indicator: {value}",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, strings)
 
     def test_an_undeclared_string_is_not_counted_as_translated(self):
         # The measurement itself: the builder writes a missing entry out as

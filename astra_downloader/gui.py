@@ -678,7 +678,7 @@ class SetupWorkerCore(QThread):
         """
         state = self._dependencies['managed_binary_state'](path)
         if state == 'damaged':
-            advice = self._value('MANAGED_BINARY_ANTIVIRUS_ADVICE').format(
+            advice = tr(self._value('MANAGED_BINARY_ANTIVIRUS_ADVICE')).format(
                 path=self._value('INSTALL_DIR')
             )
             message = (
@@ -1216,10 +1216,10 @@ class MainWindowCore(QMainWindow):
         status_row.setSpacing(8)
         self.status_dot = make_label("\u2022", "stateDot")
         self.status_dot.setProperty("tone", "neutral")
-        self.status_dot.setAccessibleName("Server status indicator: Stopped")
+        self.status_dot.setAccessibleName(tr("Server status indicator: Stopped"))
         self.status_label = make_state_label("Stopped", "neutral")
-        self.status_label.setText("Stopped")
-        self.status_label.setAccessibleName("Server status: Stopped")
+        self.status_label.setText(tr("Stopped"))
+        self.status_label.setAccessibleName(tr("Server status: Stopped"))
         status_row.addWidget(self.status_dot)
         status_row.addWidget(self.status_label)
         status_row.addStretch()
@@ -1230,7 +1230,7 @@ class MainWindowCore(QMainWindow):
         # Tab stack
         self.tabs = QTabWidget()
         self.tabs.tabBar().hide()
-        self.tabs.setAccessibleName("Companion pages")
+        self.tabs.setAccessibleName(tr("Companion pages"))
         main_layout.addWidget(self.tabs)
 
         # readiness_values is populated by every page that owns a status
@@ -1271,7 +1271,7 @@ class MainWindowCore(QMainWindow):
         # It fails soft: no taskbar bar is a missing nicety, not a broken app.
         self._taskbar_progress = self._dependencies['TaskbarProgress']()
         self._last_notified_file = ""
-        self.tray.setToolTip(f"{self._value('APP_NAME')} - Running")
+        self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Running')}")
         self.tray.show()
         self._clipboard = QApplication.clipboard()
         self._clipboard.dataChanged.connect(self._handle_clipboard_change)
@@ -1341,7 +1341,7 @@ class MainWindowCore(QMainWindow):
         copy.addWidget(make_label(hint, "fieldHint", word_wrap=True))
         row.addLayout(copy, 1)
         box = QSpinBox()
-        box.setAccessibleName(accessible)
+        box.setAccessibleName(tr(accessible))
         box.setRange(minimum, maximum)
         box.setValue(current)
         box.setFixedWidth(86)
@@ -1355,7 +1355,7 @@ class MainWindowCore(QMainWindow):
         row = QHBoxLayout()
         row.addWidget(make_label(label, "fieldLabel"), 1)
         combo = QComboBox()
-        combo.setAccessibleName(accessible)
+        combo.setAccessibleName(tr(accessible))
         for text_label, value in choices:
             combo.addItem(text_label, value)
         restored = combo.findData(current)
@@ -1405,14 +1405,22 @@ class MainWindowCore(QMainWindow):
         dot = make_label("●", "readinessDot")
         dot.setProperty("tone", "neutral")
         dot.setProperty("statusLabel", label_text)
-        dot.setAccessibleName(f"{label_text} status indicator: {value_text}")
+        dot.setAccessibleName(
+            tr("{label} status indicator: {value}").format(
+                label=tr(label_text), value=tr(value_text)
+            )
+        )
         dot.setFixedWidth(12)
         row_layout.addWidget(dot)
         name = make_label(label_text, "fieldHint")
         row_layout.addWidget(name, 1)
         value = make_label(value_text, "readinessValue")
         value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        value.setAccessibleName(f"{label_text} status: {value_text}")
+        value.setAccessibleName(
+            tr("{label} status: {value}").format(
+                label=tr(label_text), value=tr(value_text)
+            )
+        )
         row_layout.addWidget(value)
         self.readiness_values[key] = (dot, value)
         return row
@@ -1423,12 +1431,23 @@ class MainWindowCore(QMainWindow):
             return
         dot, value = widgets
         dot.setProperty("tone", tone)
-        value.setText(text)
+        translated_text = tr(text)
+        value.setText(translated_text)
         label_text = str(dot.property("statusLabel") or key)
-        dot.setAccessibleName(f"{label_text} status indicator: {text}")
-        value.setAccessibleName(f"{label_text} status: {text}")
-        value.setToolTip(tooltip)
-        dot.setToolTip(tooltip)
+        translated_label = tr(label_text)
+        dot.setAccessibleName(
+            tr("{label} status indicator: {value}").format(
+                label=translated_label, value=translated_text
+            )
+        )
+        value.setAccessibleName(
+            tr("{label} status: {value}").format(
+                label=translated_label, value=translated_text
+            )
+        )
+        translated_tooltip = tr(tooltip)
+        value.setToolTip(translated_tooltip)
+        dot.setToolTip(translated_tooltip)
         repolish(dot)
 
     def _start_readiness_probe(self):
@@ -1469,7 +1488,7 @@ class MainWindowCore(QMainWindow):
             return
         self._set_readiness(
             key, "Removed?", "danger",
-            self._value('MANAGED_BINARY_ANTIVIRUS_ADVICE').format(
+            tr(self._value('MANAGED_BINARY_ANTIVIRUS_ADVICE')).format(
                 path=self._value('INSTALL_DIR')
             ),
         )
@@ -1585,7 +1604,9 @@ class MainWindowCore(QMainWindow):
         state_row.setSpacing(10)
         self.server_badge = make_label("\u25cf", "stateDot")
         self.server_badge.setProperty("tone", "neutral")
-        self.server_badge.setAccessibleName("Extension server status indicator: Offline")
+        self.server_badge.setAccessibleName(
+            tr("Extension server status indicator: Offline")
+        )
         self.dash_status = make_label("Server offline", "heroTitle")
         state_row.addWidget(self.server_badge)
         state_row.addWidget(self.dash_status)
@@ -1666,19 +1687,19 @@ class MainWindowCore(QMainWindow):
         btn_clear_log.clicked.connect(self._clear_log)
         log_header.addWidget(btn_clear_log)
         btn_diag = self._make_tool_button("Review diagnostics", "ghost")
-        btn_diag.setToolTip("Review the redacted support payload before copying it.")
+        btn_diag.setToolTip(tr("Review the redacted support payload before copying it."))
         btn_diag.clicked.connect(self._copy_diagnostics)
         log_header.addWidget(btn_diag)
         btn_reveal_log = self._make_tool_button("Reveal log file", "ghost")
-        btn_reveal_log.setToolTip("Open the persisted server log in File Explorer.")
+        btn_reveal_log.setToolTip(tr("Open the persisted server log in File Explorer."))
         btn_reveal_log.clicked.connect(self._reveal_log_file)
         log_header.addWidget(btn_reveal_log)
         layout.addLayout(log_header)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setAccessibleName("Server log")
+        self.log_text.setAccessibleName(tr("Server log"))
         self.log_text.setAccessibleDescription(
-            "Recent local companion events. Use Clear to remove visible entries."
+            tr("Recent local companion events. Use Clear to remove visible entries.")
         )
         self.log_text.setMinimumHeight(180)
         self.log_text.document().setMaximumBlockCount(300)
@@ -1705,7 +1726,7 @@ class MainWindowCore(QMainWindow):
         url_row = QHBoxLayout()
         self.quick_download_url = QLineEdit()
         self.quick_download_url.setProperty("class", "heroUrl")
-        self.quick_download_url.setAccessibleName("Video URL")
+        self.quick_download_url.setAccessibleName(tr("Video URL"))
         self.quick_download_url.setPlaceholderText(
             tr("Paste a video link, or several at once")
         )
@@ -1720,7 +1741,7 @@ class MainWindowCore(QMainWindow):
         options_row = QHBoxLayout()
         options_row.setSpacing(8)
         self.quick_download_type = QComboBox()
-        self.quick_download_type.setAccessibleName("Download type")
+        self.quick_download_type.setAccessibleName(tr("Download type"))
         self.quick_download_type.addItem(tr("Video"), "video")
         self.quick_download_type.addItem(tr("Audio"), "audio")
         self.quick_download_type.addItem(tr("Subtitles"), "subtitles")
@@ -1729,10 +1750,10 @@ class MainWindowCore(QMainWindow):
         )
         options_row.addWidget(self.quick_download_type)
         self.quick_download_format = QComboBox()
-        self.quick_download_format.setAccessibleName("Download format")
+        self.quick_download_format.setAccessibleName(tr("Download format"))
         options_row.addWidget(self.quick_download_format)
         self.quick_download_quality = QComboBox()
-        self.quick_download_quality.setAccessibleName("Download quality")
+        self.quick_download_quality.setAccessibleName(tr("Download quality"))
         self._set_quality_choices(self._value('QUALITY_LADDER'))
         options_row.addWidget(self.quick_download_quality)
         # A pasted link is probed for the formats it really has, so the picker
@@ -1747,20 +1768,20 @@ class MainWindowCore(QMainWindow):
         self._quick_download_dir = ""
         self.btn_quick_download_dest = self._make_tool_button("Save to", "ghost")
         self.btn_quick_download_dest.setToolTip(
-            "Send this download somewhere other than the default folder."
+            tr("Send this download somewhere other than the default folder.")
         )
         self.btn_quick_download_dest.clicked.connect(self._pick_quick_download_dir)
         options_row.addWidget(self.btn_quick_download_dest)
         options_row.addStretch()
         options_row.addWidget(make_label("Clip from", "fieldHint"))
         self.quick_download_start = QLineEdit()
-        self.quick_download_start.setAccessibleName("Clip start timestamp")
+        self.quick_download_start.setAccessibleName(tr("Clip start timestamp"))
         self.quick_download_start.setPlaceholderText("0:00")
         self.quick_download_start.setMaximumWidth(84)
         options_row.addWidget(self.quick_download_start)
         options_row.addWidget(make_label("to", "fieldHint"))
         self.quick_download_end = QLineEdit()
-        self.quick_download_end.setAccessibleName("Clip end timestamp")
+        self.quick_download_end.setAccessibleName(tr("Clip end timestamp"))
         self.quick_download_end.setPlaceholderText("1:30")
         self.quick_download_end.setMaximumWidth(84)
         options_row.addWidget(self.quick_download_end)
@@ -1771,13 +1792,13 @@ class MainWindowCore(QMainWindow):
         )
         quick_layout.addWidget(self.quick_download_clip_hint)
         self.quick_download_subs_hint = make_label("", "fieldHint", word_wrap=True)
-        self.quick_download_subs_hint.setAccessibleName("Subtitle request summary")
+        self.quick_download_subs_hint.setAccessibleName(tr("Subtitle request summary"))
         self.quick_download_subs_hint.hide()
         quick_layout.addWidget(self.quick_download_subs_hint)
         # Whether the link in the box serves nothing but SABR streams.
         self._sabr_limited = False
         self.quick_download_status = make_label("", "fieldHint")
-        self.quick_download_status.setAccessibleName("Quick download status")
+        self.quick_download_status.setAccessibleName(tr("Quick download status"))
         self.quick_download_status.hide()
         quick_layout.addWidget(self.quick_download_status)
         layout.addWidget(quick_card)
@@ -1788,11 +1809,11 @@ class MainWindowCore(QMainWindow):
         # work, and a user who never opens the extension page still needs to
         # see it.
         self.setup_status = make_label("", "fieldHint")
-        self.setup_status.setAccessibleName("Download tool setup status")
+        self.setup_status.setAccessibleName(tr("Download tool setup status"))
         self.setup_status.hide()
         self.setup_progress = QProgressBar()
         self.setup_progress.setRange(0, 100)
-        self.setup_progress.setAccessibleName("Download tool setup progress")
+        self.setup_progress.setAccessibleName(tr("Download tool setup progress"))
         self.setup_progress.setValue(0)
         self.setup_progress.setTextVisible(False)
         self.setup_progress.hide()
@@ -1838,7 +1859,7 @@ class MainWindowCore(QMainWindow):
         # download whose history entry could not be written, or a queue that
         # could not be saved. Both leave the app looking like it worked.
         self.persistence_notice = make_label("", "errorCallout", word_wrap=True)
-        self.persistence_notice.setAccessibleName("Storage problem")
+        self.persistence_notice.setAccessibleName(tr("Storage problem"))
         self.persistence_notice.hide()
         layout.addWidget(self.persistence_notice)
 
@@ -1852,7 +1873,7 @@ class MainWindowCore(QMainWindow):
         quarantine_layout.setContentsMargins(0, 0, 0, 0)
         quarantine_layout.setSpacing(6)
         self.quarantine_notice = make_label("", "errorCallout", word_wrap=True)
-        self.quarantine_notice.setAccessibleName("Quarantined state file")
+        self.quarantine_notice.setAccessibleName(tr("Quarantined state file"))
         quarantine_layout.addWidget(self.quarantine_notice)
         quarantine_actions = QHBoxLayout()
         quarantine_actions.addStretch()
@@ -1873,14 +1894,16 @@ class MainWindowCore(QMainWindow):
 
         toolbar = QHBoxLayout()
         self.queue_capacity_badge = make_label("0 / 200 jobs", "toolbarMeta")
-        self.queue_capacity_badge.setToolTip("Running and pending downloads stored in the durable queue.")
+        self.queue_capacity_badge.setToolTip(
+            tr("Running and pending downloads stored in the durable queue.")
+        )
         toolbar.addWidget(self.queue_capacity_badge)
         toolbar.addStretch()
         self.btn_queue_pause = self._make_tool_button(
             "Pause intake", "ghost"
         )
         self.btn_queue_pause.setToolTip(
-            "Pause starting pending downloads. Downloads already running will continue."
+            tr("Pause starting pending downloads. Downloads already running will continue.")
         )
         self.btn_queue_pause.clicked.connect(self._toggle_queue_intake)
         toolbar.addWidget(self.btn_queue_pause)
@@ -2195,15 +2218,15 @@ class MainWindowCore(QMainWindow):
             name = Path(self._quick_download_dir).name or self._quick_download_dir
             self.btn_quick_download_dest.setText(name)
             self.btn_quick_download_dest.setToolTip(
-                f"This download goes to {self._quick_download_dir}. "
-                "Click to use the default folder again."
+                tr("This download goes to {path}. Click to use the default folder again.")
+                .format(path=self._quick_download_dir)
             )
             self.btn_quick_download_dest.setAccessibleName(
                 f"{tr('Save to')}: {self._quick_download_dir}")
         else:
             self.btn_quick_download_dest.setText(tr("Save to"))
             self.btn_quick_download_dest.setToolTip(
-                "Send this download somewhere other than the default folder."
+                tr("Send this download somewhere other than the default folder.")
             )
             self.btn_quick_download_dest.setAccessibleName(tr("Save to"))
 
@@ -2221,16 +2244,22 @@ class MainWindowCore(QMainWindow):
         header = QHBoxLayout()
         header.addLayout(self._make_page_header("History", ""), 1)
         self.btn_clear_history = self._make_tool_button("Clear history", "ghost")
-        self.btn_clear_history.setToolTip("Remove saved history entries. Downloaded files are not deleted.")
+        self.btn_clear_history.setToolTip(
+            tr("Remove saved history entries. Downloaded files are not deleted.")
+        )
         self.btn_clear_history.clicked.connect(self._clear_history)
         header.addWidget(self.btn_clear_history, 0, Qt.AlignmentFlag.AlignTop)
         self.btn_undo_clear_history = self._make_tool_button("Undo clear", "ghost")
-        self.btn_undo_clear_history.setToolTip("Restore the history entries cleared in this session.")
+        self.btn_undo_clear_history.setToolTip(
+            tr("Restore the history entries cleared in this session.")
+        )
         self.btn_undo_clear_history.clicked.connect(self._undo_clear_history)
         self.btn_undo_clear_history.hide()
         header.addWidget(self.btn_undo_clear_history, 0, Qt.AlignmentFlag.AlignTop)
         self.btn_export_history = self._make_tool_button("Export filtered", "secondary")
-        self.btn_export_history.setToolTip("Export every row matching the current filters as CSV.")
+        self.btn_export_history.setToolTip(
+            tr("Export every row matching the current filters as CSV.")
+        )
         self.btn_export_history.clicked.connect(self._export_history)
         header.addWidget(self.btn_export_history, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header)
@@ -2238,12 +2267,12 @@ class MainWindowCore(QMainWindow):
         filters = QHBoxLayout()
         filters.setSpacing(8)
         self.history_search = QLineEdit()
-        self.history_search.setAccessibleName("Search download history")
+        self.history_search.setAccessibleName(tr("Search download history"))
         self.history_search.setPlaceholderText("Search title or filename")
         self.history_search.setClearButtonEnabled(True)
         filters.addWidget(self.history_search, 2)
         self.history_status = QComboBox()
-        self.history_status.setAccessibleName("History status")
+        self.history_status.setAccessibleName(tr("History status"))
         self.history_status.addItem(tr("All statuses"), "")
         self.history_status.addItem(tr("Complete"), "complete")
         for status, label in (
@@ -2254,13 +2283,13 @@ class MainWindowCore(QMainWindow):
             self.history_status.addItem(tr(label), status)
         filters.addWidget(self.history_status)
         self.history_format = QComboBox()
-        self.history_format.setAccessibleName("History format")
+        self.history_format.setAccessibleName(tr("History format"))
         self.history_format.addItem(tr("All formats"), "")
         for fmt in ("mp4", "mkv", "webm", "mp3", "m4a", "opus", "flac", "wav"):
             self.history_format.addItem(fmt.upper(), fmt)
         filters.addWidget(self.history_format)
         self.history_sort = QComboBox()
-        self.history_sort.setAccessibleName("History sort order")
+        self.history_sort.setAccessibleName(tr("History sort order"))
         self.history_sort.addItem(tr("Newest first"), "newest")
         self.history_sort.addItem(tr("Oldest first"), "oldest")
         filters.addWidget(self.history_sort)
@@ -2270,13 +2299,13 @@ class MainWindowCore(QMainWindow):
         range_row.setSpacing(8)
         range_row.addWidget(make_label("Saved from", "fieldHint"))
         self.history_date_from = QLineEdit()
-        self.history_date_from.setAccessibleName("History start date")
+        self.history_date_from.setAccessibleName(tr("History start date"))
         self.history_date_from.setPlaceholderText("YYYY-MM-DD")
         self.history_date_from.setMaximumWidth(125)
         range_row.addWidget(self.history_date_from)
         range_row.addWidget(make_label("through", "fieldHint"))
         self.history_date_to = QLineEdit()
-        self.history_date_to.setAccessibleName("History end date")
+        self.history_date_to.setAccessibleName(tr("History end date"))
         self.history_date_to.setPlaceholderText("YYYY-MM-DD")
         self.history_date_to.setMaximumWidth(125)
         range_row.addWidget(self.history_date_to)
@@ -2296,7 +2325,7 @@ class MainWindowCore(QMainWindow):
         # here produced no visible response at all. Every other page has one
         # of these.
         self.history_page_status = make_label("", "fieldHint", word_wrap=True)
-        self.history_page_status.setAccessibleName("History status message")
+        self.history_page_status.setAccessibleName(tr("History status message"))
         self.history_page_status.hide()
         layout.addWidget(self.history_page_status)
 
@@ -2354,7 +2383,9 @@ class MainWindowCore(QMainWindow):
         add_card, add_layout = self._make_settings_group("New subscription")
         url_row = QHBoxLayout()
         self.subscription_url = QLineEdit()
-        self.subscription_url.setAccessibleName("Subscription channel or playlist URL")
+        self.subscription_url.setAccessibleName(
+            tr("Subscription channel or playlist URL")
+        )
         self.subscription_url.setPlaceholderText("https://www.youtube.com/@channel or playlist URL")
         url_row.addWidget(self.subscription_url, 1)
         interval_label = make_label("Every", "fieldHint")
@@ -2363,7 +2394,9 @@ class MainWindowCore(QMainWindow):
         self.subscription_interval.setRange(5, 10080)
         self.subscription_interval.setValue(60)
         self.subscription_interval.setSuffix(" min")
-        self.subscription_interval.setAccessibleName("Subscription scan interval in minutes")
+        self.subscription_interval.setAccessibleName(
+            tr("Subscription scan interval in minutes")
+        )
         url_row.addWidget(self.subscription_interval)
         self.btn_add_subscription = self._make_tool_button("Add subscription", "primary")
         self.btn_add_subscription.clicked.connect(self._add_subscription)
@@ -2499,7 +2532,9 @@ class MainWindowCore(QMainWindow):
             row_layout.setSpacing(10)
             enabled = QCheckBox()
             enabled.setChecked(bool(record.get("enabled", True)))
-            enabled.setAccessibleName(f"Enable subscription {record.get('title') or record.get('url')}")
+            enabled.setAccessibleName(
+                f"{tr('Enable subscription')} {record.get('title') or record.get('url')}"
+            )
             enabled.toggled.connect(
                 lambda checked, sub_id=record.get("id"): self._set_subscription_enabled(sub_id, checked)
             )
@@ -2559,7 +2594,7 @@ class MainWindowCore(QMainWindow):
         add_card, add_layout = self._make_settings_group(tr("Add a site sign-in"))
         site_row = QHBoxLayout()
         self.site_login_url = QLineEdit()
-        self.site_login_url.setAccessibleName("Site address for the sign-in")
+        self.site_login_url.setAccessibleName(tr("Site address for the sign-in"))
         self.site_login_url.setPlaceholderText(
             tr("Site address you signed in to — x.com, instagram.com, vimeo.com")
         )
@@ -2570,7 +2605,7 @@ class MainWindowCore(QMainWindow):
         source_row.setSpacing(8)
         source_row.addWidget(make_label(tr("Read from"), "fieldHint"))
         self.site_login_browser = QComboBox()
-        self.site_login_browser.setAccessibleName("Browser to read cookies from")
+        self.site_login_browser.setAccessibleName(tr("Browser to read cookies from"))
         for browser in self._value('SITE_LOGIN_BROWSERS'):
             self.site_login_browser.addItem(browser.title(), browser)
         # Firefox is the one browser whose cookie store can still be read from
@@ -2581,7 +2616,7 @@ class MainWindowCore(QMainWindow):
             self.site_login_browser.setCurrentIndex(firefox_index)
         source_row.addWidget(self.site_login_browser)
         self.site_login_profile = QLineEdit()
-        self.site_login_profile.setAccessibleName("Browser profile name or path")
+        self.site_login_profile.setAccessibleName(tr("Browser profile name or path"))
         self.site_login_profile.setPlaceholderText(tr("Profile (optional)"))
         self.site_login_profile.setMaximumWidth(220)
         source_row.addWidget(self.site_login_profile)
@@ -2603,7 +2638,7 @@ class MainWindowCore(QMainWindow):
             word_wrap=True,
         ))
         self.site_login_status = make_label("", "fieldHint", word_wrap=True)
-        self.site_login_status.setAccessibleName("Site sign-in status")
+        self.site_login_status.setAccessibleName(tr("Site sign-in status"))
         self.site_login_status.hide()
         add_layout.addWidget(self.site_login_status)
         layout.addWidget(add_card)
@@ -3042,7 +3077,7 @@ class MainWindowCore(QMainWindow):
         port_copy.addWidget(self.cfg_port_session_hint)
         port_row.addLayout(port_copy, 1)
         self.cfg_port = QSpinBox()
-        self.cfg_port.setAccessibleName("Local API port")
+        self.cfg_port.setAccessibleName(tr("Local API port"))
         self.cfg_port.setRange(1024, 65535)
         # Read the PERSISTED port: a session fallback must never be echoed back
         # into the spinbox, or the next save would write it to disk.
@@ -3060,12 +3095,12 @@ class MainWindowCore(QMainWindow):
         token_row = QHBoxLayout()
         token_row.setSpacing(8)
         self.cfg_token = QLineEdit(self.config.get("ServerToken", ""))
-        self.cfg_token.setAccessibleName("Private API token")
+        self.cfg_token.setAccessibleName(tr("Private API token"))
         self.cfg_token.setReadOnly(True)
         self.cfg_token.setEchoMode(QLineEdit.EchoMode.Password)
         token_row.addWidget(self.cfg_token, 1)
         self.btn_token_reveal = self._make_tool_button("Reveal")
-        self.btn_token_reveal.setAccessibleName("Reveal private token")
+        self.btn_token_reveal.setAccessibleName(tr("Reveal private token"))
         self.btn_token_reveal.clicked.connect(self._toggle_token_visible)
         token_row.addWidget(self.btn_token_reveal)
         btn_token_copy = self._make_tool_button("Copy")
@@ -3084,7 +3119,7 @@ class MainWindowCore(QMainWindow):
         row = QHBoxLayout()
         row.setSpacing(8)
         self.cfg_dl_path = QLineEdit(self.config.get("DownloadPath", ""))
-        self.cfg_dl_path.setAccessibleName("Video download folder")
+        self.cfg_dl_path.setAccessibleName(tr("Video download folder"))
         self.cfg_dl_path.setPlaceholderText(
             str(Path(default_download_path()) / "YouTube")
         )
@@ -3099,7 +3134,7 @@ class MainWindowCore(QMainWindow):
         row2 = QHBoxLayout()
         row2.setSpacing(8)
         self.cfg_audio_path = QLineEdit(self.config.get("AudioDownloadPath", ""))
-        self.cfg_audio_path.setAccessibleName("Audio download folder")
+        self.cfg_audio_path.setAccessibleName(tr("Audio download folder"))
         self.cfg_audio_path.setPlaceholderText("Same as video folder")
         row2.addWidget(self.cfg_audio_path, 1)
         btn2 = self._make_tool_button("Browse")
@@ -3117,7 +3152,7 @@ class MainWindowCore(QMainWindow):
             "fieldHint", word_wrap=True,
         ))
         self.cfg_outtmpl = QLineEdit(self.config.get("OutputTemplate", ""))
-        self.cfg_outtmpl.setAccessibleName("Filename template")
+        self.cfg_outtmpl.setAccessibleName(tr("Filename template"))
         self.cfg_outtmpl.setPlaceholderText("%(title)s.%(ext)s")
         paths_l.addWidget(self.cfg_outtmpl)
         layout.addWidget(paths_card)
@@ -3131,16 +3166,16 @@ class MainWindowCore(QMainWindow):
         self.cfg_chapters = QCheckBox(tr("Embed chapters"))
         self.cfg_chapters.setChecked(self.config.get("EmbedChapters", True))
         self.cfg_subs = QCheckBox(tr("Download subtitles"))
-        self.cfg_subs.setToolTip(
+        self.cfg_subs.setToolTip(tr(
             "Fetch subtitle tracks and embed them in the file. The Subtitles "
             "download type fetches them without the video."
-        )
+        ))
         self.cfg_subs.setChecked(self.config.get("EmbedSubs", False))
         self.cfg_keep_intermediates = QCheckBox(tr("Keep intermediate files"))
-        self.cfg_keep_intermediates.setToolTip(
+        self.cfg_keep_intermediates.setToolTip(tr(
             "Keep the .part, .f### and .ytdl files a finished download leaves "
             "behind. Off by default: one download, one file."
-        )
+        ))
         self.cfg_keep_intermediates.setChecked(
             self.config.get("KeepIntermediateFiles", False))
         # cfg_keep_intermediates is added after the subtitle rows below: the
@@ -3158,7 +3193,7 @@ class MainWindowCore(QMainWindow):
         track_row.addSpacing(28)
         track_row.addWidget(make_label("Tracks", "fieldHint"))
         self.cfg_subtitle_mode = QComboBox()
-        self.cfg_subtitle_mode.setAccessibleName("Subtitle tracks")
+        self.cfg_subtitle_mode.setAccessibleName(tr("Subtitle tracks"))
         for label, value in (
             ("Creator, else auto-generated", "prefer-manual"),
             ("Creator only", "manual"),
@@ -3174,7 +3209,7 @@ class MainWindowCore(QMainWindow):
         track_row.addSpacing(12)
         track_row.addWidget(make_label("Save as", "fieldHint"))
         self.cfg_subtitle_format = QComboBox()
-        self.cfg_subtitle_format.setAccessibleName("Subtitle format")
+        self.cfg_subtitle_format.setAccessibleName(tr("Subtitle format"))
         for label, value in (
             ("Same as source", ""), ("SRT", "srt"), ("WebVTT", "vtt"),
             ("ASS", "ass"), ("LRC", "lrc"),
@@ -3194,7 +3229,7 @@ class MainWindowCore(QMainWindow):
         sub_row.addSpacing(28)
         sub_row.addWidget(make_label("Subtitle languages", "fieldHint"))
         self.cfg_sublangs = QLineEdit(self.config.get("SubLangs", "en"))
-        self.cfg_sublangs.setAccessibleName("Subtitle languages")
+        self.cfg_sublangs.setAccessibleName(tr("Subtitle languages"))
         self.cfg_sublangs.setPlaceholderText("en,es")
         self.cfg_sublangs.setFixedWidth(140)
         self.cfg_sublangs.textEdited.connect(self._sync_sublang_checkboxes)
@@ -3214,7 +3249,7 @@ class MainWindowCore(QMainWindow):
                 lang_row.addSpacing(28)
                 pp_l.addLayout(lang_row)
             box = QCheckBox(tr(label))
-            box.setAccessibleName(f"Subtitle language {label}")
+            box.setAccessibleName(f"{tr('Subtitle language')} {tr(label)}")
             box.toggled.connect(self._sublang_box_toggled)
             box._sublang_code = code
             self._sublang_boxes.append(box)
@@ -3233,7 +3268,7 @@ class MainWindowCore(QMainWindow):
         sb_row.addSpacing(28)
         sb_row.addWidget(make_label("Action", "fieldHint"))
         self.cfg_sb_action = QComboBox()
-        self.cfg_sb_action.setAccessibleName("SponsorBlock action")
+        self.cfg_sb_action.setAccessibleName(tr("SponsorBlock action"))
         self.cfg_sb_action.addItem(tr("Remove segments"), "remove")
         self.cfg_sb_action.addItem(tr("Mark segments"), "mark")
         current_action = self.config.get("SponsorBlockAction", "remove")
@@ -3350,7 +3385,7 @@ class MainWindowCore(QMainWindow):
         date_row.addLayout(date_copy, 1)
         self.cfg_playlist_dateafter = QLineEdit(
             str(self.config.get("PlaylistDateAfter", "") or ""))
-        self.cfg_playlist_dateafter.setAccessibleName("Playlist uploaded after")
+        self.cfg_playlist_dateafter.setAccessibleName(tr("Playlist uploaded after"))
         self.cfg_playlist_dateafter.setPlaceholderText("today-30days")
         self.cfg_playlist_dateafter.setFixedWidth(160)
         date_row.addWidget(self.cfg_playlist_dateafter)
@@ -3382,7 +3417,7 @@ class MainWindowCore(QMainWindow):
         frag_copy.addWidget(make_label("More can improve fast connections.", "fieldHint", word_wrap=True))
         frag_row.addLayout(frag_copy, 1)
         self.cfg_fragments = QSpinBox()
-        self.cfg_fragments.setAccessibleName("Concurrent fragments")
+        self.cfg_fragments.setAccessibleName(tr("Concurrent fragments"))
         self.cfg_fragments.setRange(1, 32)
         self.cfg_fragments.setValue(self._dependencies['clamp_int'](self.config.get("ConcurrentFragments", 4), 4, 1, 32))
         self.cfg_fragments.setFixedWidth(86)
@@ -3397,7 +3432,7 @@ class MainWindowCore(QMainWindow):
         conc_copy.addWidget(make_label("How many downloads run at once.", "fieldHint", word_wrap=True))
         conc_row.addLayout(conc_copy, 1)
         self.cfg_maxconcurrent = QSpinBox()
-        self.cfg_maxconcurrent.setAccessibleName("Simultaneous downloads")
+        self.cfg_maxconcurrent.setAccessibleName(tr("Simultaneous downloads"))
         self.cfg_maxconcurrent.setRange(1, 10)
         self.cfg_maxconcurrent.setValue(self._dependencies['clamp_int'](self.config.get("MaxConcurrentDownloads", 3), 3, 1, 10))
         self.cfg_maxconcurrent.setFixedWidth(86)
@@ -3412,7 +3447,7 @@ class MainWindowCore(QMainWindow):
         retries_copy.addWidget(make_label("Retry attempts on transient network errors.", "fieldHint", word_wrap=True))
         retries_row.addLayout(retries_copy, 1)
         self.cfg_retries = QSpinBox()
-        self.cfg_retries.setAccessibleName("Download retries")
+        self.cfg_retries.setAccessibleName(tr("Download retries"))
         self.cfg_retries.setRange(0, 50)
         self.cfg_retries.setValue(self._dependencies['clamp_int'](self.config.get("DownloadRetries", 10), 10, 0, 50))
         self.cfg_retries.setFixedWidth(86)
@@ -3426,7 +3461,7 @@ class MainWindowCore(QMainWindow):
         rate_copy.addWidget(make_label("Optional, such as 500K or 2M.", "fieldHint", word_wrap=True))
         rate_row.addLayout(rate_copy, 1)
         self.cfg_ratelimit = QLineEdit(self.config.get("RateLimit", ""))
-        self.cfg_ratelimit.setAccessibleName("Rate limit")
+        self.cfg_ratelimit.setAccessibleName(tr("Rate limit"))
         self.cfg_ratelimit.setPlaceholderText("No limit")
         self.cfg_ratelimit.setFixedWidth(120)
         rate_row.addWidget(self.cfg_ratelimit)
@@ -3443,7 +3478,7 @@ class MainWindowCore(QMainWindow):
         ))
         throttle_row.addLayout(throttle_copy, 1)
         self.cfg_throttled = QLineEdit(self.config.get("ThrottledRate", ""))
-        self.cfg_throttled.setAccessibleName("Throttle floor")
+        self.cfg_throttled.setAccessibleName(tr("Throttle floor"))
         self.cfg_throttled.setPlaceholderText("Off")
         self.cfg_throttled.setFixedWidth(120)
         throttle_row.addWidget(self.cfg_throttled)
@@ -3459,7 +3494,7 @@ class MainWindowCore(QMainWindow):
         ))
         socket_row.addLayout(socket_copy, 1)
         self.cfg_socket_timeout = QSpinBox()
-        self.cfg_socket_timeout.setAccessibleName("Socket timeout in seconds")
+        self.cfg_socket_timeout.setAccessibleName(tr("Socket timeout in seconds"))
         self.cfg_socket_timeout.setRange(0, 300)
         self.cfg_socket_timeout.setValue(self._dependencies['clamp_int'](
             self.config.get("SocketTimeoutSeconds", 0), 0, 0, 300))
@@ -3477,7 +3512,7 @@ class MainWindowCore(QMainWindow):
         ))
         extractor_row.addLayout(extractor_copy, 1)
         self.cfg_extractor_retries = QSpinBox()
-        self.cfg_extractor_retries.setAccessibleName("Extractor retries")
+        self.cfg_extractor_retries.setAccessibleName(tr("Extractor retries"))
         self.cfg_extractor_retries.setRange(0, 20)
         self.cfg_extractor_retries.setValue(self._dependencies['clamp_int'](
             self.config.get("ExtractorRetries", 0), 0, 0, 20))
@@ -3486,10 +3521,10 @@ class MainWindowCore(QMainWindow):
         perf_l.addLayout(extractor_row)
         perf_l.addWidget(make_divider())
         self.cfg_verify_formats = QCheckBox(tr("Verify formats before downloading"))
-        self.cfg_verify_formats.setToolTip(
+        self.cfg_verify_formats.setToolTip(tr(
             "Check that a chosen format can actually be downloaded before "
             "committing to it. Costs an extra request per candidate format."
-        )
+        ))
         self.cfg_verify_formats.setChecked(self.config.get("VerifyFormats", False))
         perf_l.addWidget(self.cfg_verify_formats)
         perf_l.addWidget(make_divider())
@@ -3504,7 +3539,7 @@ class MainWindowCore(QMainWindow):
         ))
         pace_row.addLayout(pace_copy, 1)
         self.cfg_sleep_interval = QSpinBox()
-        self.cfg_sleep_interval.setAccessibleName("Pause between downloads in seconds")
+        self.cfg_sleep_interval.setAccessibleName(tr("Pause between downloads in seconds"))
         self.cfg_sleep_interval.setRange(0, 600)
         self.cfg_sleep_interval.setValue(self._dependencies['clamp_int'](
             self.config.get("SleepIntervalSeconds", 0), 0, 0, 600))
@@ -3521,7 +3556,7 @@ class MainWindowCore(QMainWindow):
         ))
         pace_max_row.addLayout(pace_max_copy, 1)
         self.cfg_sleep_max = QSpinBox()
-        self.cfg_sleep_max.setAccessibleName("Longest pause in seconds")
+        self.cfg_sleep_max.setAccessibleName(tr("Longest pause in seconds"))
         self.cfg_sleep_max.setRange(0, 600)
         self.cfg_sleep_max.setValue(self._dependencies['clamp_int'](
             self.config.get("MaxSleepIntervalSeconds", 0), 0, 0, 600))
@@ -3538,7 +3573,7 @@ class MainWindowCore(QMainWindow):
         ))
         pace_jitter_row.addLayout(pace_jitter_copy, 1)
         self.cfg_pacing_jitter = QSpinBox()
-        self.cfg_pacing_jitter.setAccessibleName("Pacing jitter percentage")
+        self.cfg_pacing_jitter.setAccessibleName(tr("Pacing jitter percentage"))
         self.cfg_pacing_jitter.setRange(0, 100)
         self.cfg_pacing_jitter.setSuffix("%")
         self.cfg_pacing_jitter.setSpecialValueText(tr("Off"))
@@ -3557,7 +3592,7 @@ class MainWindowCore(QMainWindow):
         ))
         pace_req_row.addLayout(pace_req_copy, 1)
         self.cfg_sleep_requests = QSpinBox()
-        self.cfg_sleep_requests.setAccessibleName("Pause between requests in seconds")
+        self.cfg_sleep_requests.setAccessibleName(tr("Pause between requests in seconds"))
         self.cfg_sleep_requests.setRange(0, 60)
         self.cfg_sleep_requests.setValue(self._dependencies['clamp_int'](
             self.config.get("SleepRequestsSeconds", 0), 0, 0, 60))
@@ -3577,10 +3612,10 @@ class MainWindowCore(QMainWindow):
         ))
         maxsize_row.addLayout(maxsize_copy, 1)
         self.cfg_maxsize = QSpinBox()
-        self.cfg_maxsize.setAccessibleName("Max file size in megabytes")
+        self.cfg_maxsize.setAccessibleName(tr("Max file size in megabytes"))
         self.cfg_maxsize.setRange(0, 102400)
         self.cfg_maxsize.setSuffix(" MB")
-        self.cfg_maxsize.setSpecialValueText("No limit")
+        self.cfg_maxsize.setSpecialValueText(tr("No limit"))
         self.cfg_maxsize.setValue(self._dependencies['clamp_int'](
             self.config.get("MaxFileSizeMB", 0), 0, 0, 102400
         ))
@@ -3594,7 +3629,7 @@ class MainWindowCore(QMainWindow):
         proxy_copy.addWidget(make_label("Optional HTTP(S) or SOCKS proxy.", "fieldHint", word_wrap=True))
         proxy_row.addLayout(proxy_copy, 1)
         self.cfg_proxy = QLineEdit(self.config.get("Proxy", ""))
-        self.cfg_proxy.setAccessibleName("Proxy")
+        self.cfg_proxy.setAccessibleName(tr("Proxy"))
         self.cfg_proxy.setPlaceholderText("https://proxy.example:8080")
         self.cfg_proxy.setMinimumWidth(260)
         proxy_row.addWidget(self.cfg_proxy)
@@ -3612,7 +3647,7 @@ class MainWindowCore(QMainWindow):
         ))
         impersonate_row.addLayout(impersonate_copy, 1)
         self.cfg_impersonate = QComboBox()
-        self.cfg_impersonate.setAccessibleName("Imitate a browser")
+        self.cfg_impersonate.setAccessibleName(tr("Imitate a browser"))
         self.cfg_impersonate.addItem(tr("Off"), "")
         configured = self._dependencies['normalize_impersonate_target'](
             self.config.get("ImpersonateTarget", ""))
@@ -3639,7 +3674,7 @@ class MainWindowCore(QMainWindow):
         ))
         runtime_row.addLayout(runtime_copy, 1)
         self.cfg_js_runtime = QComboBox()
-        self.cfg_js_runtime.setAccessibleName("JavaScript runtime")
+        self.cfg_js_runtime.setAccessibleName(tr("JavaScript runtime"))
         self.cfg_js_runtime.addItem(tr("Auto"), "auto")
         self.cfg_js_runtime.addItem("Deno", "deno")
         self.cfg_js_runtime.addItem("Node 22+", "node")
@@ -3659,7 +3694,7 @@ class MainWindowCore(QMainWindow):
         ))
         channel_row.addLayout(channel_copy, 1)
         self.cfg_ytdlp_channel = QComboBox()
-        self.cfg_ytdlp_channel.setAccessibleName("yt-dlp update channel")
+        self.cfg_ytdlp_channel.setAccessibleName(tr("yt-dlp update channel"))
         self.cfg_ytdlp_channel.addItem(tr("Nightly (recommended)"), "nightly")
         self.cfg_ytdlp_channel.addItem(tr("Stable"), "stable")
         selected_channel = self.config.get("YtDlpUpdateChannel", "nightly")
@@ -3717,14 +3752,18 @@ class MainWindowCore(QMainWindow):
         self.cfg_clipboard = QCheckBox(tr("Stage copied video links for review"))
         self.cfg_clipboard.setChecked(self.config.get("ClipboardLinkGrabber", False))
         self.cfg_clipboard.setToolTip(
-            "Watch clipboard changes for video links from any supported site. "
-            "Matching links fill the Quick download field but are never "
-            "downloaded until you confirm."
+            tr(
+                "Watch clipboard changes for video links from any supported site. "
+                "Matching links fill the Quick download field but are never "
+                "downloaded until you confirm."
+            )
         )
         self.cfg_clipboard.setAccessibleDescription(
-            "Off by default. Clipboard content that does not look like a video "
-            "link is ignored, and a matching link is staged without starting a "
-            "download."
+            tr(
+                "Off by default. Clipboard content that does not look like a video "
+                "link is ignored, and a matching link is staged without starting a "
+                "download."
+            )
         )
         for w in [
             self.cfg_autoupdate, self.cfg_closetotray, self.cfg_startmin,
@@ -3737,14 +3776,16 @@ class MainWindowCore(QMainWindow):
         tools_card, tools_l = self._make_settings_group("Maintenance")
         tools_l.addWidget(make_label("Installed tools", "fieldLabel"))
         self.tools_status = make_label("Checking installed tools…", "fieldHint", word_wrap=True)
-        self.tools_status.setAccessibleName("Installed tools status")
+        self.tools_status.setAccessibleName(tr("Installed tools status"))
         tools_l.addWidget(self.tools_status)
         tools_row = QHBoxLayout()
         tools_row.setSpacing(8)
         self.btn_check_updates = self._make_tool_button(
             "Check for yt-dlp updates",
         )
-        self.btn_check_updates.setToolTip("Check for a yt-dlp update. Active downloads must finish first.")
+        self.btn_check_updates.setToolTip(
+            tr("Check for a yt-dlp update. Active downloads must finish first.")
+        )
         self.btn_check_updates.clicked.connect(self._force_ytdlp_update)
         tools_row.addWidget(self.btn_check_updates)
         btn_reinstall_ffmpeg = self._make_tool_button(
@@ -3752,10 +3793,10 @@ class MainWindowCore(QMainWindow):
         )
         # _reinstall_ffmpeg stages and verifies a fresh copy first; nothing is
         # deleted unless the replacement verifies.
-        btn_reinstall_ffmpeg.setToolTip(
+        btn_reinstall_ffmpeg.setToolTip(tr(
             "Download a fresh ffmpeg and verify its checksum. The installed copy "
             "stays in place until the replacement verifies."
-        )
+        ))
         btn_reinstall_ffmpeg.clicked.connect(self._reinstall_ffmpeg)
         tools_row.addWidget(btn_reinstall_ffmpeg)
         tools_row.addStretch()
@@ -3771,15 +3812,15 @@ class MainWindowCore(QMainWindow):
         bundle_row = QHBoxLayout()
         bundle_row.setSpacing(8)
         self.btn_export_settings = self._make_tool_button("Export settings")
-        self.btn_export_settings.setToolTip(
+        self.btn_export_settings.setToolTip(tr(
             "Write settings and subscriptions to a JSON bundle."
-        )
+        ))
         self.btn_export_settings.clicked.connect(self._export_settings_bundle)
         bundle_row.addWidget(self.btn_export_settings)
         self.btn_import_settings = self._make_tool_button("Import settings")
-        self.btn_import_settings.setToolTip(
+        self.btn_import_settings.setToolTip(tr(
             "Read a bundle written by Export settings and apply it."
-        )
+        ))
         self.btn_import_settings.clicked.connect(self._import_settings_bundle)
         bundle_row.addWidget(self.btn_import_settings)
         bundle_row.addStretch()
@@ -3789,7 +3830,7 @@ class MainWindowCore(QMainWindow):
         save_row = QHBoxLayout()
         save_row.setContentsMargins(166, 14, 0, 0)
         self.settings_status = make_label("", "fieldHint")
-        self.settings_status.setAccessibleName("Settings status")
+        self.settings_status.setAccessibleName(tr("Settings status"))
         save_row.addWidget(self.settings_status, 1)
         btn_save = self._make_tool_button("Save changes", "primary")
         btn_save.clicked.connect(self._save_settings)
@@ -4167,63 +4208,63 @@ class MainWindowCore(QMainWindow):
     def _update_server_ui(self):
         if self._server_starting:
             self.status_dot.setProperty("tone", "neutral")
-            self.status_dot.setAccessibleName("Server status indicator: Starting")
-            self.status_label.setText("Starting")
+            self.status_dot.setAccessibleName(tr("Server status indicator: Starting"))
+            self.status_label.setText(tr("Starting"))
             self.status_label.setProperty("tone", "neutral")
-            self.status_label.setAccessibleName("Server status: Starting")
-            self.dash_status.setText("Starting server")
-            self.dash_hint.setText("Checking local ports and preparing the API")
+            self.status_label.setAccessibleName(tr("Server status: Starting"))
+            self.dash_status.setText(tr("Starting server"))
+            self.dash_hint.setText(tr("Checking local ports and preparing the API"))
             self.server_badge.setProperty("tone", "neutral")
             self.server_badge.setAccessibleName(
-                "Extension server status indicator: Starting"
+                tr("Extension server status indicator: Starting")
             )
-            self.btn_startstop.setText("Starting server…")
+            self.btn_startstop.setText(tr("Starting server…"))
             self.btn_startstop.setIcon(make_line_icon("Starting server"))
             self.btn_startstop.setProperty("class", "secondary")
             self.btn_startstop.setEnabled(False)
-            self.tray_startstop.setText("Starting server…")
+            self.tray_startstop.setText(tr("Starting server…"))
             self.tray_startstop.setEnabled(False)
-            self.tray.setToolTip(f"{self._value('APP_NAME')} - Starting")
+            self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Starting')}")
             self._set_readiness("server", "Starting", "neutral")
         elif self.server_running:
             self.status_dot.setProperty("tone", "success")
-            self.status_dot.setAccessibleName("Server status indicator: Running")
-            self.status_label.setText("Running")
+            self.status_dot.setAccessibleName(tr("Server status indicator: Running"))
+            self.status_label.setText(tr("Running"))
             self.status_label.setProperty("tone", "success")
-            self.status_label.setAccessibleName("Server status: Running")
-            self.dash_status.setText("Server online")
-            self.dash_hint.setText("Local only \u00b7 ready for Astra Deck")
+            self.status_label.setAccessibleName(tr("Server status: Running"))
+            self.dash_status.setText(tr("Server online"))
+            self.dash_hint.setText(tr("Local only \u00b7 ready for Astra Deck"))
             self.server_badge.setProperty("tone", "success")
             self.server_badge.setAccessibleName(
-                "Extension server status indicator: Online"
+                tr("Extension server status indicator: Online")
             )
-            self.btn_startstop.setText("Stop server")
+            self.btn_startstop.setText(tr("Stop server"))
             self.btn_startstop.setIcon(make_line_icon("Stop server"))
             self.btn_startstop.setProperty("class", "secondary")
             self.btn_startstop.setEnabled(True)
-            self.tray_startstop.setText("Stop server")
+            self.tray_startstop.setText(tr("Stop server"))
             self.tray_startstop.setEnabled(True)
-            self.tray.setToolTip(f"{self._value('APP_NAME')} - Running")
+            self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Running')}")
             self._set_readiness("server", "Running", "success")
         else:
             self.status_dot.setProperty("tone", "neutral")
-            self.status_dot.setAccessibleName("Server status indicator: Stopped")
-            self.status_label.setText("Stopped")
+            self.status_dot.setAccessibleName(tr("Server status indicator: Stopped"))
+            self.status_label.setText(tr("Stopped"))
             self.status_label.setProperty("tone", "neutral")
-            self.status_label.setAccessibleName("Server status: Stopped")
-            self.dash_status.setText("Server offline")
-            self.dash_hint.setText("Local only \u00b7 start before downloading")
+            self.status_label.setAccessibleName(tr("Server status: Stopped"))
+            self.dash_status.setText(tr("Server offline"))
+            self.dash_hint.setText(tr("Local only \u00b7 start before downloading"))
             self.server_badge.setProperty("tone", "neutral")
             self.server_badge.setAccessibleName(
-                "Extension server status indicator: Offline"
+                tr("Extension server status indicator: Offline")
             )
-            self.btn_startstop.setText("Start server")
+            self.btn_startstop.setText(tr("Start server"))
             self.btn_startstop.setIcon(make_line_icon("Start server"))
             self.btn_startstop.setProperty("class", "primary")
             self.btn_startstop.setEnabled(True)
-            self.tray_startstop.setText("Start server")
+            self.tray_startstop.setText(tr("Start server"))
             self.tray_startstop.setEnabled(True)
-            self.tray.setToolTip(f"{self._value('APP_NAME')} - Stopped")
+            self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Stopped')}")
             self._set_readiness("server", "Stopped", "neutral")
         repolish(self.btn_startstop)
         repolish(self.server_badge)
@@ -4263,7 +4304,7 @@ class MainWindowCore(QMainWindow):
             return 0
 
     def _download_recovery_text(self, dl):
-        recovery_text = dl.error_advice
+        recovery_text = tr(dl.error_advice)
         if dl.error_code == "rate-limited":
             seconds = self._download_host_backoff_seconds(dl)
             if seconds:
@@ -4274,7 +4315,7 @@ class MainWindowCore(QMainWindow):
                     )
                 )
         if dl.error_action:
-            recovery_text = f"{recovery_text}\nNext: {dl.error_action}"
+            recovery_text = f"{recovery_text}\nNext: {tr(dl.error_action)}"
         return recovery_text
 
     def _download_card_structure(self, dl, recent=False):
@@ -4347,9 +4388,12 @@ class MainWindowCore(QMainWindow):
             else "Preparing download"
         )
         state_label = refs["state"]
-        state_label.setText(f"\u25cf  {human_status(dl.status)}")
+        translated_status = tr(human_status(dl.status))
+        state_label.setText(f"\u25cf  {translated_status}")
         state_label.setAccessibleName(
-            f"{dl.title or 'Download'} status: {human_status(dl.status)}"
+            tr("{title} status: {status}").format(
+                title=dl.title or tr("Download"), status=translated_status
+            )
         )
         tone = download_status_tone(dl.status)
         if state_label.property("tone") != tone:
@@ -4359,8 +4403,14 @@ class MainWindowCore(QMainWindow):
         progress = refs.get("progress")
         if progress is not None:
             progress.setValue(int(min(max(dl.progress, 0), 100)))
-            progress.setAccessibleName(f"{dl.title or 'Download'} progress")
-            progress.setAccessibleDescription(f"{dl.progress:.1f} percent complete")
+            progress.setAccessibleName(
+                tr("{title} progress").format(title=dl.title or tr("Download"))
+            )
+            progress.setAccessibleDescription(
+                tr("{progress} percent complete").format(
+                    progress=f"{dl.progress:.1f}"
+                )
+            )
         refs["meta"].setText(self._download_meta_text(dl))
 
         recovery = refs.get("recovery")
@@ -4396,13 +4446,13 @@ class MainWindowCore(QMainWindow):
         if not recent and dl.status in self._value('DOWNLOAD_PENDING_STATES'):
             if dl.status != 'needs-auth':
                 btn_up = self._make_tool_button("Up", "ghost", card_target)
-                btn_up.setToolTip("Move this pending download earlier.")
+                btn_up.setToolTip(tr("Move this pending download earlier."))
                 btn_up.clicked.connect(
                     lambda checked=False, dl_id=dl.id: self._move_pending_download(dl_id, -1)
                 )
                 top.addWidget(btn_up)
                 btn_down = self._make_tool_button("Down", "ghost", card_target)
-                btn_down.setToolTip("Move this pending download later.")
+                btn_down.setToolTip(tr("Move this pending download later."))
                 btn_down.clicked.connect(
                     lambda checked=False, dl_id=dl.id: self._move_pending_download(dl_id, 1)
                 )
@@ -4413,7 +4463,7 @@ class MainWindowCore(QMainWindow):
                 # starts every paused download — so resuming one started all
                 # of them.
                 btn_resume = self._make_tool_button("Resume", "ghost", card_target)
-                btn_resume.setToolTip("Resume this download.")
+                btn_resume.setToolTip(tr("Resume this download."))
                 btn_resume.clicked.connect(
                     lambda checked=False, dl_id=dl.id: self._resume_one_download(dl_id)
                 )
@@ -4425,7 +4475,7 @@ class MainWindowCore(QMainWindow):
                 # that reports it offers the way there instead of only Cancel.
                 btn_signin = self._make_tool_button("Add sign-in", "ghost", card_target)
                 btn_signin.setToolTip(
-                    "Store this site's signed-in session so the download can run."
+                    tr("Store this site's signed-in session so the download can run.")
                 )
                 btn_signin.clicked.connect(
                     lambda checked=False, url=dl.url: self._open_site_login_for(url)
@@ -4694,9 +4744,11 @@ class MainWindowCore(QMainWindow):
             "Resume queue" if capacity['intakePaused'] else "Pause intake"
         ))
         self.btn_queue_pause.setToolTip(
-            "Resume pending downloads explicitly. Items needing sign-in remain paused."
+            tr(
+                "Resume pending downloads explicitly. Items needing sign-in remain paused."
+            )
             if capacity['intakePaused'] else
-            "Pause starting pending downloads. Downloads already running will continue."
+            tr("Pause starting pending downloads. Downloads already running will continue.")
         )
         signature = tuple(
             (d.id, d.status, d.queue_order, round(d.progress, 1), d.speed, d.eta,
@@ -5363,7 +5415,9 @@ class MainWindowCore(QMainWindow):
         )
         self.settings_status.setStyleSheet(f"color: {color}; font-size: 12px;")
         self.settings_status.setAccessibleName(
-            f"Settings status: {message or 'No current message'}"
+            tr("Settings status: {message}").format(
+                message=tr(message) if message else tr("No current message")
+            )
         )
 
     def _clear_settings_status_if_current(self, generation):
@@ -5394,7 +5448,12 @@ class MainWindowCore(QMainWindow):
             )
             hint.setText(message)
             hint.setVisible(True)
-            self.cfg_port.setAccessibleDescription(message)
+            self.cfg_port.setAccessibleDescription(
+                tr(
+                    "Port {configured} was unavailable at startup; bound to fallback "
+                    "port {port} for this session. Restart to retry {configured}."
+                ).format(configured=configured, port=port)
+            )
         else:
             hint.setText("")
             hint.setVisible(False)
@@ -5546,7 +5605,7 @@ class MainWindowCore(QMainWindow):
         def mark_error(field, message):
             nonlocal has_error, first_error
             self._set_input_error(field, True)
-            field.setAccessibleDescription(message)
+            field.setAccessibleDescription(tr(message))
             has_error = True
             if first_error is None:
                 first_error = field
@@ -5748,7 +5807,7 @@ class MainWindowCore(QMainWindow):
             if limited:
                 field.clear()
         if limited:
-            notice = self._value('SABR_LIMITED_NOTICE').format(
+            notice = tr(self._value('SABR_LIMITED_NOTICE')).format(
                 options=self._dependencies['describe_sabr_voided_options']()
             )
             self.quick_download_clip_hint.setText(notice)
@@ -5945,7 +6004,7 @@ class MainWindowCore(QMainWindow):
         preview = QTextEdit()
         preview.setReadOnly(True)
         preview.setPlainText(text)
-        preview.setAccessibleName("Redacted diagnostics preview")
+        preview.setAccessibleName(tr("Redacted diagnostics preview"))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         save_button = buttons.addButton("Save diagnostics", QDialogButtonBox.ButtonRole.ActionRole)
         save_button.clicked.connect(lambda: self._save_diagnostics_text(text))
@@ -6027,8 +6086,10 @@ class MainWindowCore(QMainWindow):
     def _toggle_token_visible(self):
         showing = self.cfg_token.echoMode() == QLineEdit.EchoMode.Normal
         self.cfg_token.setEchoMode(QLineEdit.EchoMode.Password if showing else QLineEdit.EchoMode.Normal)
-        self.btn_token_reveal.setText("Reveal" if showing else "Hide")
-        self.btn_token_reveal.setAccessibleName("Reveal private token" if showing else "Hide private token")
+        self.btn_token_reveal.setText(tr("Reveal") if showing else tr("Hide"))
+        self.btn_token_reveal.setAccessibleName(
+            tr("Reveal private token") if showing else tr("Hide private token")
+        )
 
     def _regenerate_token(self):
         self.cfg_token.setText(uuid.uuid4().hex)
@@ -6057,19 +6118,21 @@ class MainWindowCore(QMainWindow):
         """Report startup failures without stealing focus from the active desktop."""
         try:
             self._append_log(f"Server failed to start: {msg}")
-            self.status_label.setText("Server error")
+            self.status_label.setText(tr("Server error"))
             self.status_label.setProperty("tone", "danger")
-            self.status_label.setAccessibleName("Server status: Error")
+            self.status_label.setAccessibleName(tr("Server status: Error"))
             self.status_dot.setProperty("tone", "danger")
-            self.status_dot.setAccessibleName("Server status indicator: Error")
+            self.status_dot.setAccessibleName(tr("Server status indicator: Error"))
             self.server_badge.setProperty("tone", "danger")
             self.server_badge.setAccessibleName(
-                "Extension server status indicator: Error"
+                tr("Extension server status indicator: Error")
             )
             repolish(self.status_label)
             repolish(self.status_dot)
             repolish(self.server_badge)
-            self.dash_hint.setText("Server failed to start. Check the log for details.")
+            self.dash_hint.setText(
+                tr("Server failed to start. Check the log for details.")
+            )
             if self.tray.isVisible():
                 self.tray.showMessage(
                     "Astra Downloader",
@@ -6279,12 +6342,12 @@ class MainWindowCore(QMainWindow):
             return
         self._setup_running = True
         self._append_log("Refreshing ffmpeg..." if force_ffmpeg else "Running first-time setup...")
-        self.setup_status.setText("Installing required download tools...")
+        self.setup_status.setText(tr("Installing required download tools..."))
         self.setup_status.show()
         self.setup_progress.setValue(0)
         self.setup_progress.show()
         self.btn_startstop.setEnabled(False)
-        self.btn_startstop.setText("Setting Up")
+        self.btn_startstop.setText(tr("Setting Up"))
         self.setup_worker = self._dependencies['SetupWorker'](
             force_ffmpeg=force_ffmpeg,
             auto_update_ytdlp=self.config.get("AutoUpdateYtDlp", True),
@@ -6300,13 +6363,13 @@ class MainWindowCore(QMainWindow):
     def _setup_progress(self, value):
         self.setup_progress.setValue(value)
         if value < 30:
-            self.setup_status.setText("Installing yt-dlp...")
+            self.setup_status.setText(tr("Installing yt-dlp..."))
         elif value < 70:
-            self.setup_status.setText("Installing ffmpeg...")
+            self.setup_status.setText(tr("Installing ffmpeg..."))
         elif value < 95:
-            self.setup_status.setText("Registering shortcuts and protocols...")
+            self.setup_status.setText(tr("Registering shortcuts and protocols..."))
         else:
-            self.setup_status.setText("Finishing setup...")
+            self.setup_status.setText(tr("Finishing setup..."))
 
     def _setup_done(self):
         ffmpeg_refresh = bool(getattr(getattr(self, 'setup_worker', None), 'force_ffmpeg', False))

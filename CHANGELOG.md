@@ -26,8 +26,9 @@ repository's git log.
   clamped, load-time archive trimming keeps live claims, and an abandoned
   companion activation is marked failed after its timeout so it can be retried.
 - **Translation catalogues track every companion UI string.** The checked-in
-  source catalogues now cover all 253 extracted strings across all 11 locales,
-  and the translation gate fails when generated keys drift from the GUI.
+  source catalogues now cover all 448 extracted strings across all 11 locales,
+  including download and health recovery guidance, tooltips and accessibility
+  labels; the translation gate fails when generated keys drift from the code.
 - **Update and archive keys reject ambiguity.** Checksum sidecars must identify
   the requested asset, long URL-only subscription keys use a bounded digest,
   and uninstall clears the integration stamp so a same-version reinstall

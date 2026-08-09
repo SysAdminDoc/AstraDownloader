@@ -161,11 +161,6 @@ Notes on existing items above — read these before starting them:
 
 ### P2
 
-- [ ] P2 — Translate the strings that never reach `gui.py`
-  Why: The text a user reads at the moment they need help is the one category that never translates. Different mechanism from the existing "strings the extractor cannot see" item — those are runtime `setText` calls *inside* `gui.py`; these live in modules the extractor does not read at all, and they include every failure explanation and every screen-reader label.
-  Evidence: `scripts/extract_companion_strings.py:32-34` scans `astra_downloader/gui.py` only. `DOWNLOAD_FAILURE_RECOVERY` is 14 codes × `error`/`advice`/`next_action` as plain literals in `download.py:78-183`, rendered raw at `gui.py:3780-3783` and `:3880-3885`; `SABR_LIMITED_NOTICE` (`download.py:1186-1189`) and `MANAGED_BINARY_ANTIVIRUS_ADVICE` (`health.py:143-146`) have the same shape. Counted in `gui.py` on 2026-08-06: 30 `setToolTip` calls of which 1 is wrapped in `tr()`, and 88 `setAccessibleName` calls of which 2 are — so every screen-reader label is English in 10 of the 11 advertised locales.
-  Touches: `astra_downloader/download.py`, `astra_downloader/health.py`, `astra_downloader/gui.py`, `scripts/extract_companion_strings.py`
-  Acceptance: the extractor reads every module owning user-facing text; failure explanations, tooltips and accessible names are translatable and present in the catalogues; `npm run check` fails when one is added without reaching them.
   Complexity: M
 
 - [ ] P2 — Remember the window, and let the destructive actions be taken back
