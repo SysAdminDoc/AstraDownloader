@@ -183,12 +183,6 @@ Notes on existing items above — read these before starting them:
 
 
 
-- [ ] P1 — Stop probing yt-dlp synchronously before the first frame
-  Why: The window blocks on a yt-dlp subprocess during construction — the exact thing this file documents itself as deliberately deferring in two other places.
-  Evidence: `_build_settings` calls `probe_impersonate_targets()` inline at `gui.py:3179`, and `_build_settings` runs from `__init__` at `gui.py:1137`. The probe shells out with a 20 s timeout (`astra_downloader.py:1076-1080`). Measured 2026-08-06: `yt-dlp --list-impersonate-targets` takes 1.7–1.9 s warm, so every cold launch shows a blank window for that long, bounded at 20 s if the binary is being scanned or is damaged. Contrast the comments at `gui.py:1201-1208` ("Let the first window frame render before probing external tools") and `gui.py:1655-1659` ("never probe yt-dlp --version synchronously here").
-  Touches: `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: the impersonation combo is built with the configured value plus a pending marker and populated from the existing deferred readiness worker; a test asserts no yt-dlp spawn occurs during window construction.
-  Complexity: S
 
 ### P2
 

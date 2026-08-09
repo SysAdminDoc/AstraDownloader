@@ -134,6 +134,9 @@ repository's git log.
 - **Native-messaging access is revocable and machine-local.** Clearing an
   extension allowlist removes its manifest and registry pointer, and settings
   bundles explicitly report that both native-extension lists are not carried.
+- **The impersonation picker no longer blocks first paint.** It starts with
+  the saved value and a pending marker, then fills from the deferred readiness
+  worker after yt-dlp has been probed off the GUI thread.
 - **The no-provider YouTube fallback now starts with `visionos`.** The client
   chain is pinned to the 2026-08-08 measurement while keeping the fallback
   explicit for the next yt-dlp extractor drift check.
