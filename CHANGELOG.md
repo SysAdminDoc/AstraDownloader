@@ -78,6 +78,11 @@ repository's git log.
   downloads with no subtitle track can now produce a cancellable SRT sidecar.
 - **The release build has an antivirus fallback.** It now emits a normal
   one-folder zip with its own SHA-256 sidecar alongside the one-file executable.
+- **Subscription archive scans avoid document-sized rollback copies.** Failed
+  mutations now restore only touched entries. On this Windows 11 / CPython
+  3.12.10 machine, a 50-candidate scan against 20,000 archive entries fell
+  from a 20.66 s median before the change to 3.20 s after it (103 JSON writes
+  in each run).
 - **Site profiles are URL-aware.** Named domain profiles can set output format,
   quality, impersonation, proxy and request pacing defaults; matching happens
   when a link is pasted, with an explicit one-off profile or no-profile choice.
