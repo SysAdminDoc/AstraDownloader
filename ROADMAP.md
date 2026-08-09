@@ -121,13 +121,6 @@ Notes on existing items above — read these before starting them:
 
 ### P2
 
-- [ ] P2 — Make the Settings page navigable
-  Why: 66 interactive controls in one 811-line method, with no search, no reset, and the most-wanted setting filed under the wrong heading.
-  Evidence: `_build_settings` is `gui.py:2598-3408`; 44 named `cfg_*` controls plus 10 SponsorBlock category boxes (`:2843-2856`) and 12 subtitle-language boxes (`:2789-2800`), with Performance alone holding 16 (`:2956-3229`). No filter field on the page, and no `Reset`/`Restore default` anywhere in `gui.py` — `DEFAULT_CONFIG` is read only as an import fallback (`:4217`), so a user who breaks `OutputTemplate` has no way back. `cfg_language` sits in the "Tray behavior" group (`:3234-3236`) with its restart requirement only in a tooltip (`:3257-3259`); Export/Import settings sit under "Maintenance" (`:3331-3346`).
-  Touches: `astra_downloader/gui.py`
-  Acceptance: a filter box narrows to matching controls and their group; every control has a per-field revert, or the page has a restore-defaults action that reports what changed; Language and Export/Import move to groups that name them.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Generate subtitles locally for a video that has none
