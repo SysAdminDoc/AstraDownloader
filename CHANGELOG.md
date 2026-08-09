@@ -28,6 +28,10 @@ repository's git log.
 - **Translation catalogues track every companion UI string.** The checked-in
   source catalogues now cover all 221 extracted strings across all 11 locales,
   and the translation gate fails when generated keys drift from the GUI.
+- **Update and archive keys reject ambiguity.** Checksum sidecars must identify
+  the requested asset, long URL-only subscription keys use a bounded digest,
+  and uninstall clears the integration stamp so a same-version reinstall
+  restores its registrations.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
