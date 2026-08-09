@@ -751,6 +751,50 @@
       <translation>Reveal private token</translation>
     </message>
     <message>
+      <source>Force IP version</source>
+      <translation>Force IP version</translation>
+    </message>
+    <message>
+      <source>Use IPv4 or IPv6 for every request. Off uses the system route.</source>
+      <translation>Use IPv4 or IPv6 for every request. Off uses the system route.</translation>
+    </message>
+    <message>
+      <source>Off</source>
+      <translation>Off</translation>
+    </message>
+    <message>
+      <source>IPv4</source>
+      <translation>IPv4</translation>
+    </message>
+    <message>
+      <source>IPv6</source>
+      <translation>IPv6</translation>
+    </message>
+    <message>
+      <source>Source address</source>
+      <translation>Source address</translation>
+    </message>
+    <message>
+      <source>Bind requests to a local IPv4 or IPv6 address. Blank uses the system route.</source>
+      <translation>Bind requests to a local IPv4 or IPv6 address. Blank uses the system route.</translation>
+    </message>
+    <message>
+      <source>Geo X-Forwarded-For</source>
+      <translation>Geo X-Forwarded-For</translation>
+    </message>
+    <message>
+      <source>Country code (US) or CIDR block for geo verification. Blank leaves it off.</source>
+      <translation>Country code (US) or CIDR block for geo verification. Blank leaves it off.</translation>
+    </message>
+    <message>
+      <source>Geo verification proxy</source>
+      <translation>Geo verification proxy</translation>
+    </message>
+    <message>
+      <source>Optional HTTP(S) or SOCKS proxy used only for region checks.</source>
+      <translation>Optional HTTP(S) or SOCKS proxy used only for region checks.</translation>
+    </message>
+    <message>
       <source>Video download folder</source>
       <translation>Video download folder</translation>
     </message>
@@ -969,10 +1013,6 @@
     <message>
       <source>Pacing jitter percentage</source>
       <translation>Pacing jitter percentage</translation>
-    </message>
-    <message>
-      <source>Off</source>
-      <translation>Off</translation>
     </message>
     <message>
       <source>Pause between requests</source>
@@ -1209,6 +1249,18 @@
     <message>
       <source>Enter an http, https, or socks proxy URL.</source>
       <translation>Enter an http, https, or socks proxy URL.</translation>
+    </message>
+    <message>
+      <source>Enter a local IPv4 or IPv6 address, or leave this blank.</source>
+      <translation>Enter a local IPv4 or IPv6 address, or leave this blank.</translation>
+    </message>
+    <message>
+      <source>Enter a two-letter country code or CIDR block, or leave this blank.</source>
+      <translation>Enter a two-letter country code or CIDR block, or leave this blank.</translation>
+    </message>
+    <message>
+      <source>Enter an http, https, or socks proxy URL, or leave this blank.</source>
+      <translation>Enter an http, https, or socks proxy URL, or leave this blank.</translation>
     </message>
     <message>
       <source>The private API token cannot be empty.</source>
@@ -1939,12 +1991,24 @@
       <translation>The site refused the request (HTTP 403).</translation>
     </message>
     <message>
-      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps.</source>
-      <translation>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps.</translation>
+      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</source>
+      <translation>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</translation>
     </message>
     <message>
       <source>impersonate-and-retry</source>
       <translation>impersonate-and-retry</translation>
+    </message>
+    <message>
+      <source>The site says this media is unavailable in your region.</source>
+      <translation>The site says this media is unavailable in your region.</translation>
+    </message>
+    <message>
+      <source>Set `--xff` to a two-letter country code or CIDR block in Settings for geo verification. If that path is still blocked, add a `--geo-verification-proxy` there, then retry.</source>
+      <translation>Set `--xff` to a two-letter country code or CIDR block in Settings for geo verification. If that path is still blocked, add a `--geo-verification-proxy` there, then retry.</translation>
+    </message>
+    <message>
+      <source>configure-geo-and-retry</source>
+      <translation>configure-geo-and-retry</translation>
     </message>
     <message>
       <source>The site refused further requests for now (HTTP 429).</source>

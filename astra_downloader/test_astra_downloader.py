@@ -138,6 +138,35 @@ class NormalizationTests(unittest.TestCase):
         jitter_cfg = ad.sanitize_config({"PacingJitterPercent": 999})
         self.assertEqual(jitter_cfg["PacingJitterPercent"], 100)
 
+    def test_network_workaround_settings_are_opt_in_and_shape_checked(self):
+        defaults = ad.sanitize_config({})
+        self.assertEqual(defaults["ForceIPVersion"], "")
+        self.assertEqual(defaults["SourceAddress"], "")
+        self.assertEqual(defaults["Xff"], "")
+        self.assertEqual(defaults["GeoVerificationProxy"], "")
+
+        valid = ad.sanitize_config({
+            "ForceIPVersion": "IPV4",
+            "SourceAddress": "2001:db8::10",
+            "Xff": "us",
+            "GeoVerificationProxy": "https://proxy.example:8443",
+        })
+        self.assertEqual(valid["ForceIPVersion"], "ipv4")
+        self.assertEqual(valid["SourceAddress"], "2001:db8::10")
+        self.assertEqual(valid["Xff"], "US")
+        self.assertEqual(valid["GeoVerificationProxy"], "https://proxy.example:8443")
+
+        invalid = ad.sanitize_config({
+            "ForceIPVersion": "dual-stack",
+            "SourceAddress": "not-an-ip",
+            "Xff": "US; --no-playlist",
+            "GeoVerificationProxy": "http://[",
+        })
+        self.assertEqual(invalid["ForceIPVersion"], "")
+        self.assertEqual(invalid["SourceAddress"], "")
+        self.assertEqual(invalid["Xff"], "")
+        self.assertEqual(invalid["GeoVerificationProxy"], "")
+
     def test_default_download_path_prefers_the_windows_known_folder(self):
         import config as config_module
 
@@ -1361,6 +1390,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_ratelimit = TextField("")
         window.cfg_throttled = TextField("")
         window.cfg_proxy = TextField("")
+        window.cfg_force_ip_version = ComboField("")
+        window.cfg_source_address = TextField("")
+        window.cfg_xff = TextField("")
+        window.cfg_geo_verification_proxy = TextField("")
         window.cfg_verify_formats = CheckField()
         window.cfg_metadata = CheckField()
         window.cfg_thumbnail = CheckField()
@@ -1411,6 +1444,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "clamp_int": ad.clamp_int,
             "normalize_output_dir": ad.normalize_output_dir,
             "normalize_proxy": ad.normalize_proxy,
+            "normalize_force_ip_version": ad.normalize_force_ip_version,
+            "normalize_source_address": ad.normalize_source_address,
+            "normalize_xff": ad.normalize_xff,
             "normalize_rate_limit": ad.normalize_rate_limit,
             "normalize_playlist_date": ad.normalize_playlist_date,
             "normalize_impersonate_target": ad.normalize_impersonate_target,
@@ -1464,6 +1500,12 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_sublangs = Field("en")
         window.cfg_ratelimit = Field("")
         window.cfg_proxy = Field("")
+        window.cfg_force_ip_version = type("ComboField", (), {
+            "currentData": lambda self: "",
+        })()
+        window.cfg_source_address = Field("")
+        window.cfg_xff = Field("")
+        window.cfg_geo_verification_proxy = Field("")
         window.cfg_outtmpl = Field("")
         window.statuses = []
         window._set_input_error = lambda field, value: setattr(field, "has_error", value)
@@ -1473,6 +1515,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "normalize_output_dir": lambda value, fallback: (fallback, "invalid"),
             "normalize_output_template": ad.normalize_output_template,
             "normalize_proxy": ad.normalize_proxy,
+            "normalize_force_ip_version": ad.normalize_force_ip_version,
+            "normalize_source_address": ad.normalize_source_address,
+            "normalize_xff": ad.normalize_xff,
             "normalize_rate_limit": ad.normalize_rate_limit,
             "normalize_playlist_date": ad.normalize_playlist_date,
             "normalize_impersonate_target": ad.normalize_impersonate_target,
@@ -10849,6 +10894,25 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         self.assertNotIn('--no-playlist', argv,
                          "YouTube keeps its historical playlist semantics")
 
+    def test_network_workarounds_reach_the_download_invocation(self):
+        argv = self._argv_for(
+            "https://example.com/video",
+            config_overrides={
+                "ForceIPVersion": "ipv6",
+                "SourceAddress": "2001:db8::10",
+                "Xff": "US",
+                "GeoVerificationProxy": "https://proxy.example:8443",
+            },
+            with_cookies=False,
+        )
+        self.assertIn('--force-ipv6', argv)
+        self.assertEqual(argv[argv.index('--source-address') + 1], '2001:db8::10')
+        self.assertEqual(argv[argv.index('--xff') + 1], 'US')
+        self.assertEqual(
+            argv[argv.index('--geo-verification-proxy') + 1],
+            'https://proxy.example:8443',
+        )
+
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",
                               with_cookies=False)
@@ -14987,6 +15051,31 @@ Edge-101        Windows-10   curl_cffi
             ad.build_impersonate_args({"ImpersonateTarget": "Chrome-136"}, []), []
         )
 
+    def test_network_workaround_args_are_ordered_and_shape_checked(self):
+        self.assertEqual(
+            ad.build_network_workaround_args({
+                "ForceIPVersion": "ipv4",
+                "SourceAddress": "192.0.2.10",
+                "Xff": "us",
+                "GeoVerificationProxy": "https://proxy.example:8443",
+            }),
+            [
+                "--force-ipv4",
+                "--source-address", "192.0.2.10",
+                "--xff", "US",
+                "--geo-verification-proxy", "https://proxy.example:8443",
+            ],
+        )
+        self.assertEqual(
+            ad.build_network_workaround_args({
+                "ForceIPVersion": "both",
+                "SourceAddress": "; calc.exe",
+                "Xff": "US; --exec",
+                "GeoVerificationProxy": "file:///tmp/nope",
+            }),
+            [],
+        )
+
     def test_the_stored_value_is_shape_checked(self):
         for value in ("; rm -rf /", "--exec=calc", "Chrome", "notareal", "  "):
             with self.subTest(value=value):
@@ -15006,6 +15095,17 @@ Edge-101        Windows-10   curl_cffi
     def test_the_403_advice_names_the_remedy(self):
         advice = ad.download_error_payload("blocked-by-site")["advice"]
         self.assertIn("imitate", advice.lower())
+        self.assertIn("--force-ipv4", advice)
+
+    def test_geo_restriction_is_classified_and_names_xff(self):
+        self.assertEqual(
+            ad.classify_download_failure(
+                "ERROR: This video is not available in your country"
+            ),
+            "geo-restricted",
+        )
+        advice = ad.download_error_payload("geo-restricted")["advice"]
+        self.assertIn("--xff", advice)
 
     def test_a_403_becomes_retryable_once_a_browser_is_chosen(self):
         # Not transient, so not in DOWNLOAD_RETRYABLE_ERROR_CODES — it is
@@ -15042,6 +15142,23 @@ Edge-101        Windows-10   curl_cffi
             satisfied, missing = manager.recovery_precondition(dl)
         self.assertFalse(satisfied)
         self.assertIn("Chrome-999", missing)
+
+    def test_geo_restriction_becomes_retryable_after_a_geo_workaround_is_set(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            dl = ad.Download("dl_geo", "https://example.com/v")
+            dl.status = "failed"
+            dl.error_code = "geo-restricted"
+
+            satisfied, missing = manager.recovery_precondition(dl)
+            self.assertFalse(satisfied)
+            self.assertIn("--xff", missing)
+
+            manager.config = FakeConfig({**settings, "Xff": "US"})
+            manager._precondition_cache.clear()
+            satisfied, _missing = manager.recovery_precondition(dl)
+            self.assertTrue(satisfied)
 
     # ── Against the real binary ──────────────────────────────────────────
 

@@ -2,6 +2,7 @@
 
 import getpass
 import glob
+import ipaddress
 import json
 import logging
 import math
@@ -42,6 +43,7 @@ __all__ = (
     "HOST_BACKOFF_BASE_SECONDS", "HOST_BACKOFF_MAX_SECONDS",
     "HOST_BACKOFF_MAX_ENTRIES", "parse_retry_after_seconds",
     "build_impersonate_args",
+    "build_network_workaround_args",
     "build_subtitle_args",
     "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
     "snapshot_download_fields", "restore_download_fields",
@@ -189,9 +191,19 @@ DOWNLOAD_FAILURE_RECOVERY = {
         'advice': (
             'Set a browser to imitate in Settings — this is the usual remedy '
             'for a Cloudflare or TLS-fingerprint block. A stored sign-in for '
-            'the site also helps.'
+            'the site also helps. If a dual-stack route is returning the 403, '
+            'try `--force-ipv4` in Settings.'
         ),
         'next_action': 'impersonate-and-retry',
+    },
+    'geo-restricted': {
+        'error': 'The site says this media is unavailable in your region.',
+        'advice': (
+            'Set `--xff` to a two-letter country code or CIDR block in Settings '
+            'for geo verification. If that path is still blocked, add a '
+            '`--geo-verification-proxy` there, then retry.'
+        ),
+        'next_action': 'configure-geo-and-retry',
     },
     'rate-limited': {
         'error': 'The site refused further requests for now (HTTP 429).',
@@ -1412,6 +1424,62 @@ def build_impersonate_args(config, available_targets):
     return ['--impersonate', target]
 
 
+def build_network_workaround_args(config):
+    """Compile the opt-in IP and geo workarounds, dropping unsafe values.
+
+    Config values are normally sanitized before they reach a manager, but
+    this builder is also used by probes and direct callers. Validate again at
+    the subprocess boundary so a stale or hand-built config cannot inject an
+    arbitrary yt-dlp argument.
+    """
+    read = getattr(config, 'get', None)
+    if not callable(read):
+        return []
+
+    args = []
+    force_ip = str(read('ForceIPVersion') or '').strip().lower()
+    if force_ip == 'ipv4':
+        args.append('--force-ipv4')
+    elif force_ip == 'ipv6':
+        args.append('--force-ipv6')
+
+    source = str(read('SourceAddress') or '').strip()
+    try:
+        source = str(ipaddress.ip_address(source)) if source else ''
+    except ValueError:
+        source = ''
+    if source:
+        args += ['--source-address', source]
+
+    xff = str(read('Xff') or '').strip()
+    lowered_xff = xff.lower()
+    if lowered_xff in {'default', 'never'}:
+        xff = lowered_xff
+    elif re.fullmatch(r'[A-Za-z]{2}', xff):
+        xff = xff.upper()
+    else:
+        try:
+            xff = str(ipaddress.ip_network(xff, strict=False)) if xff else ''
+        except ValueError:
+            xff = ''
+    if xff:
+        args += ['--xff', xff]
+
+    geo_proxy = str(read('GeoVerificationProxy') or '').strip()
+    try:
+        parsed = urlparse(geo_proxy)
+        schemes = {'http', 'https', 'socks', 'socks4', 'socks4a', 'socks5', 'socks5h'}
+        valid_proxy = (
+            bool(geo_proxy) and len(geo_proxy) <= 512
+            and parsed.scheme.lower() in schemes and bool(parsed.netloc)
+        )
+    except ValueError:
+        valid_proxy = False
+    if valid_proxy:
+        args += ['--geo-verification-proxy', geo_proxy]
+    return args
+
+
 # The argv half of the subtitle vocabulary declared in config.py. A user
 # token maps to the yt-dlp flags that fetch that kind of track; a test pins
 # the two vocabularies together so neither can gain a value the other does
@@ -1969,6 +2037,14 @@ def _classify_failure_text(text):
         'rate limit exceeded', 'throttled', 'throttling', 'slow down', 'slowdown',
     )):
         return 'rate-limited'
+    if any(marker in text for marker in (
+        'not available in your country', 'not available in your region',
+        'not available in this region', 'geo-restricted', 'geo restricted',
+        'geoblocked', 'geographical restriction', 'country restriction',
+        'outside your region', 'available only in your',
+        'available only for viewers in', 'only available in your',
+    )):
+        return 'geo-restricted'
     # Before the network bucket: a 403 is a refusal, not a broken connection,
     # and "check your firewall" is wrong advice for it.
     if any(marker in text for marker in (
@@ -3510,6 +3586,7 @@ class DownloadManagerCore:
         proxy = self.config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
+        args += build_network_workaround_args(self.config)
         max_filesize = int(self.config.get("MaxFileSizeMB", 0) or 0)
         if max_filesize > 0:
             args += ['--max-filesize', f'{max_filesize}M']
@@ -4450,6 +4527,7 @@ class DownloadManagerCore:
                 '--dump-single-json', '--no-playlist', '--socket-timeout', '10',
                 '--retries', '1', '--fragment-retries', '1',
                 '--extractor-retries', '1', *auth_args,
+                *build_network_workaround_args(self.config),
                 f'https://{key}/',
             ]
             try:
@@ -4514,6 +4592,7 @@ class DownloadManagerCore:
         proxy = self.config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
+        args += build_network_workaround_args(self.config)
 
         probe = Download("__probe__", url)
         jar_path = Path(self._dependencies['INSTALL_DIR']()) / (
@@ -4750,6 +4829,7 @@ class DownloadManagerCore:
         'ffmpeg-missing-or-stale': 'ffmpeg',
         'sign-in-required': 'sign-in',
         'blocked-by-site': 'impersonate',
+        'geo-restricted': 'geo',
     }
 
     # The GUI asks this for every failed card on every refresh, and the
@@ -4804,6 +4884,8 @@ class DownloadManagerCore:
                 return True, None
             return False, 'FFmpeg is still missing. Refresh it from Settings, then retry.'
         if requirement == 'impersonate':
+            if str(self.config.get('ForceIPVersion', '') or '').strip().lower() == 'ipv4':
+                return True, None
             target = self._dependencies['normalize_impersonate_target'](
                 self.config.get('ImpersonateTarget', '')
             )
@@ -4818,6 +4900,14 @@ class DownloadManagerCore:
             return False, (
                 'Choose a browser to imitate in Settings — the usual remedy '
                 'for this refusal — then retry.'
+            )
+        if requirement == 'geo':
+            workaround_args = build_network_workaround_args(self.config)
+            if '--xff' in workaround_args or '--geo-verification-proxy' in workaround_args:
+                return True, None
+            return False, (
+                'Set a country code or CIDR block for `--xff`, or a geo '
+                'verification proxy, in Settings, then retry.'
             )
         if requirement == 'sign-in':
             if dl.requires_auth:
@@ -4872,6 +4962,7 @@ DownloadManager = DownloadManagerCore
 
 _OWNED_EXPORTS = {
     "Download", "build_video_format_args", "is_playlist_url",
+    "build_network_workaround_args",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
     "po_provider_nudge_advice", "PO_PROVIDER_NUDGE_CODES", "PO_PROVIDER_NUDGE",

@@ -1042,6 +1042,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_impersonate_target',
     'probe_impersonate_targets',
     'normalize_proxy',
+    'normalize_force_ip_version',
+    'normalize_source_address',
+    'normalize_xff',
     'normalize_rate_limit',
     'normalize_sponsorblock_categories',
     'normalize_sublangs',
@@ -3481,6 +3484,81 @@ class MainWindowCore(QMainWindow):
         btn_token_reset.clicked.connect(self._regenerate_token)
         token_row.addWidget(btn_token_reset)
         conn_l.addLayout(token_row)
+        conn_l.addWidget(make_divider())
+
+        force_ip_row = QHBoxLayout()
+        force_ip_copy = QVBoxLayout()
+        force_ip_copy.setSpacing(2)
+        force_ip_copy.addWidget(make_label("Force IP version", "fieldLabel"))
+        force_ip_copy.addWidget(make_label(
+            "Use IPv4 or IPv6 for every request. Off uses the system route.",
+            "fieldHint", word_wrap=True,
+        ))
+        force_ip_row.addLayout(force_ip_copy, 1)
+        self.cfg_force_ip_version = QComboBox()
+        self.cfg_force_ip_version.setAccessibleName(tr("Force IP version"))
+        self.cfg_force_ip_version.addItem(tr("Off"), "")
+        self.cfg_force_ip_version.addItem(tr("IPv4"), "ipv4")
+        self.cfg_force_ip_version.addItem(tr("IPv6"), "ipv6")
+        force_ip = self._dependencies['normalize_force_ip_version'](
+            self.config.get("ForceIPVersion", "")
+        )
+        restored_force_ip = self.cfg_force_ip_version.findData(force_ip)
+        self.cfg_force_ip_version.setCurrentIndex(
+            restored_force_ip if restored_force_ip >= 0 else 0
+        )
+        force_ip_row.addWidget(self.cfg_force_ip_version)
+        conn_l.addLayout(force_ip_row)
+
+        source_row = QHBoxLayout()
+        source_copy = QVBoxLayout()
+        source_copy.setSpacing(2)
+        source_copy.addWidget(make_label("Source address", "fieldLabel"))
+        source_copy.addWidget(make_label(
+            "Bind requests to a local IPv4 or IPv6 address. Blank uses the system route.",
+            "fieldHint", word_wrap=True,
+        ))
+        source_row.addLayout(source_copy, 1)
+        self.cfg_source_address = QLineEdit(self.config.get("SourceAddress", ""))
+        self.cfg_source_address.setAccessibleName(tr("Source address"))
+        self.cfg_source_address.setPlaceholderText("192.0.2.10")
+        self.cfg_source_address.setMinimumWidth(260)
+        source_row.addWidget(self.cfg_source_address)
+        conn_l.addLayout(source_row)
+
+        xff_row = QHBoxLayout()
+        xff_copy = QVBoxLayout()
+        xff_copy.setSpacing(2)
+        xff_copy.addWidget(make_label("Geo X-Forwarded-For", "fieldLabel"))
+        xff_copy.addWidget(make_label(
+            "Country code (US) or CIDR block for geo verification. Blank leaves it off.",
+            "fieldHint", word_wrap=True,
+        ))
+        xff_row.addLayout(xff_copy, 1)
+        self.cfg_xff = QLineEdit(self.config.get("Xff", ""))
+        self.cfg_xff.setAccessibleName(tr("Geo X-Forwarded-For"))
+        self.cfg_xff.setPlaceholderText("US or 203.0.113.0/24")
+        self.cfg_xff.setMinimumWidth(260)
+        xff_row.addWidget(self.cfg_xff)
+        conn_l.addLayout(xff_row)
+
+        geo_proxy_row = QHBoxLayout()
+        geo_proxy_copy = QVBoxLayout()
+        geo_proxy_copy.setSpacing(2)
+        geo_proxy_copy.addWidget(make_label("Geo verification proxy", "fieldLabel"))
+        geo_proxy_copy.addWidget(make_label(
+            "Optional HTTP(S) or SOCKS proxy used only for region checks.",
+            "fieldHint", word_wrap=True,
+        ))
+        geo_proxy_row.addLayout(geo_proxy_copy, 1)
+        self.cfg_geo_verification_proxy = QLineEdit(
+            self.config.get("GeoVerificationProxy", "")
+        )
+        self.cfg_geo_verification_proxy.setAccessibleName(tr("Geo verification proxy"))
+        self.cfg_geo_verification_proxy.setPlaceholderText("https://proxy.example:8080")
+        self.cfg_geo_verification_proxy.setMinimumWidth(260)
+        geo_proxy_row.addWidget(self.cfg_geo_verification_proxy)
+        conn_l.addLayout(geo_proxy_row)
         layout.addWidget(conn_card)
 
         # Storage
@@ -4274,6 +4352,10 @@ class MainWindowCore(QMainWindow):
             self.cfg_pacing_jitter.valueChanged,
             self.cfg_sleep_requests.valueChanged,
             self.cfg_proxy.textChanged,
+            self.cfg_force_ip_version.currentIndexChanged,
+            self.cfg_source_address.textChanged,
+            self.cfg_xff.textChanged,
+            self.cfg_geo_verification_proxy.textChanged,
             self.cfg_js_runtime.currentIndexChanged,
             self.cfg_ytdlp_channel.currentIndexChanged,
             self.cfg_language.currentIndexChanged,
@@ -5229,6 +5311,9 @@ class MainWindowCore(QMainWindow):
         ("cfg_ratelimit", "RateLimit", "text"),
         ("cfg_throttled", "ThrottledRate", "text"),
         ("cfg_proxy", "Proxy", "text"),
+        ("cfg_source_address", "SourceAddress", "text"),
+        ("cfg_xff", "Xff", "text"),
+        ("cfg_geo_verification_proxy", "GeoVerificationProxy", "text"),
         ("cfg_playlist_dateafter", "PlaylistDateAfter", "text"),
         ("cfg_metadata", "EmbedMetadata", "check"),
         ("cfg_thumbnail", "EmbedThumbnail", "check"),
@@ -5263,6 +5348,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_audio_codec", "AudioCodecPreference", "combo"),
         ("cfg_frame_rate", "PreferredFrameRate", "combo"),
         ("cfg_impersonate", "ImpersonateTarget", "combo"),
+        ("cfg_force_ip_version", "ForceIPVersion", "combo"),
         ("cfg_subtitle_mode", "SubtitleMode", "combo"),
         ("cfg_subtitle_format", "SubtitleFormat", "combo"),
         ("cfg_language", "Language", "combo"),
@@ -6131,6 +6217,8 @@ class MainWindowCore(QMainWindow):
         validated_fields = (
             self.cfg_token, self.cfg_dl_path, self.cfg_audio_path,
             self.cfg_sublangs, self.cfg_ratelimit, self.cfg_proxy,
+            self.cfg_source_address, self.cfg_xff,
+            self.cfg_geo_verification_proxy,
             self.cfg_outtmpl,
         )
         for field in validated_fields:
@@ -6153,6 +6241,17 @@ class MainWindowCore(QMainWindow):
         sublangs = self._dependencies['normalize_sublangs'](self.cfg_sublangs.text())
         rate = self._dependencies['normalize_rate_limit'](self.cfg_ratelimit.text())
         proxy = self.cfg_proxy.text().strip()
+        force_ip = self._dependencies['normalize_force_ip_version'](
+            self.cfg_force_ip_version.currentData()
+        )
+        source_address_raw = self.cfg_source_address.text().strip()
+        source_address = self._dependencies['normalize_source_address'](
+            source_address_raw
+        )
+        xff_raw = self.cfg_xff.text().strip()
+        xff = self._dependencies['normalize_xff'](xff_raw)
+        geo_proxy_raw = self.cfg_geo_verification_proxy.text().strip()
+        geo_proxy = self._dependencies['normalize_proxy'](geo_proxy_raw)
         has_error = False
         first_error = None
 
@@ -6179,6 +6278,21 @@ class MainWindowCore(QMainWindow):
             mark_error(self.cfg_proxy, "Enter an http, https, or socks proxy URL.")
         else:
             proxy = self._dependencies['normalize_proxy'](proxy)
+        if source_address_raw and not source_address:
+            mark_error(
+                self.cfg_source_address,
+                "Enter a local IPv4 or IPv6 address, or leave this blank.",
+            )
+        if xff_raw and not xff:
+            mark_error(
+                self.cfg_xff,
+                "Enter a two-letter country code or CIDR block, or leave this blank.",
+            )
+        if geo_proxy_raw and not geo_proxy:
+            mark_error(
+                self.cfg_geo_verification_proxy,
+                "Enter an http, https, or socks proxy URL, or leave this blank.",
+            )
         if not new_token:
             mark_error(self.cfg_token, "The private API token cannot be empty.")
         outtmpl_raw = self.cfg_outtmpl.text().strip()
@@ -6207,6 +6321,9 @@ class MainWindowCore(QMainWindow):
         self._sync_sublang_checkboxes(sublangs)
         self.cfg_ratelimit.setText(rate)
         self.cfg_proxy.setText(proxy)
+        self.cfg_source_address.setText(source_address)
+        self.cfg_xff.setText(xff)
+        self.cfg_geo_verification_proxy.setText(geo_proxy)
         self.cfg_outtmpl.setText(outtmpl)
         saved = self.config.update({
             "ServerPort": new_port,
@@ -6255,6 +6372,10 @@ class MainWindowCore(QMainWindow):
             "MaxFileSizeMB": self.cfg_maxsize.value(),
             "RateLimit": rate,
             "Proxy": proxy,
+            "ForceIPVersion": force_ip,
+            "SourceAddress": source_address,
+            "Xff": xff,
+            "GeoVerificationProxy": geo_proxy,
             "JavaScriptRuntime": self.cfg_js_runtime.currentData(),
             "YtDlpUpdateChannel": self.cfg_ytdlp_channel.currentData(),
             "Language": (

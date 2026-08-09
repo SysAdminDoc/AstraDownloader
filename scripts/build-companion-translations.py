@@ -398,6 +398,32 @@ CATALOGS = {
             "Proxy",
         "Optional HTTP(S) or SOCKS proxy.":
             "Optionaler HTTP(S)- oder SOCKS-Proxy.",
+        "Force IP version":
+            "IP-Version erzwingen",
+        "Use IPv4 or IPv6 for every request. Off uses the system route.":
+            "IPv4 oder IPv6 für jede Anfrage verwenden. Aus nutzt die Systemroute.",
+        "IPv4":
+            "IPv4",
+        "IPv6":
+            "IPv6",
+        "Source address":
+            "Quelladresse",
+        "Bind requests to a local IPv4 or IPv6 address. Blank uses the system route.":
+            "Anfragen an eine lokale IPv4- oder IPv6-Adresse binden. Leer nutzt die Systemroute.",
+        "Geo X-Forwarded-For":
+            "Geo-X-Forwarded-For",
+        "Country code (US) or CIDR block for geo verification. Blank leaves it off.":
+            "Ländercode (US) oder CIDR-Block für die Geoprüfung. Leer lässt die Option aus.",
+        "Geo verification proxy":
+            "Proxy für Geoprüfung",
+        "Optional HTTP(S) or SOCKS proxy used only for region checks.":
+            "Optionaler HTTP(S)- oder SOCKS-Proxy nur für Regionsprüfungen.",
+        "Enter a local IPv4 or IPv6 address, or leave this blank.":
+            "Geben Sie eine lokale IPv4- oder IPv6-Adresse ein oder lassen Sie das Feld leer.",
+        "Enter a two-letter country code or CIDR block, or leave this blank.":
+            "Geben Sie einen zweistelligen Ländercode oder CIDR-Block ein oder lassen Sie das Feld leer.",
+        "Enter an http, https, or socks proxy URL, or leave this blank.":
+            "Geben Sie eine http-, https- oder socks-Proxy-URL ein oder lassen Sie das Feld leer.",
         "Imitate a browser":
             "Browser nachahmen",
         "Sends a real browser's TLS fingerprint. The usual fix for a site that returns 403, though it can itself trigger rate limiting.":
@@ -1010,6 +1036,14 @@ CATALOGS = {
             "Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls.",
         "impersonate-and-retry":
             "impersonate-and-retry",
+        "The site says this media is unavailable in your region.":
+            "Die Website meldet, dass dieses Medium in Ihrer Region nicht verfügbar ist.",
+        "Set `--xff` to a two-letter country code or CIDR block in Settings for geo verification. If that path is still blocked, add a `--geo-verification-proxy` there, then retry.":
+            "Setzen Sie `--xff` in den Einstellungen auf einen zweistelligen Ländercode oder CIDR-Block für die Geoprüfung. Wenn dieser Weg weiterhin blockiert ist, fügen Sie dort einen `--geo-verification-proxy` hinzu und versuchen Sie es erneut.",
+        "configure-geo-and-retry":
+            "configure-geo-and-retry",
+        "Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.":
+            "Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls. Wenn eine Dual-Stack-Route den 403 verursacht, versuchen Sie `--force-ipv4` in den Einstellungen.",
         "The site refused further requests for now (HTTP 429).":
             "Die Website hat weitere Anfragen vorerst abgelehnt (HTTP 429).",
         "This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.":

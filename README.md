@@ -44,6 +44,9 @@ pasting a link never needs it.
   the request — and offers the control that fixes it.
 - **Get past a block.** Imitate a real browser's TLS fingerprint, chosen from
   the targets your yt-dlp actually ships, for sites that answer 403.
+- **Work around network geography.** Force IPv4 or IPv6, bind a source address,
+  send a geo X-Forwarded-For value, or use a verification-only proxy when a
+  site or route needs more than a whole-session proxy.
 - **Subtitles, the ones you asked for.** Creator captions, the machine
   transcript, or the former falling back to the latter. Pick languages from a
   list, normalise everything to SRT, or fetch subtitles without the video.
