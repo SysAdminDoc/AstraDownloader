@@ -11,6 +11,10 @@
       <translation>Gestoppt</translation>
     </message>
     <message>
+      <source>Removed?</source>
+      <translation>Entfernt?</translation>
+    </message>
+    <message>
       <source>Server offline</source>
       <translation>Server offline</translation>
     </message>
@@ -72,7 +76,7 @@
     </message>
     <message>
       <source>Reveal log file</source>
-      <translation>Reveal log file</translation>
+      <translation>Protokolldatei anzeigen</translation>
     </message>
     <message>
       <source>Download</source>
@@ -89,6 +93,10 @@
     <message>
       <source>Dismiss</source>
       <translation>Ausblenden</translation>
+    </message>
+    <message>
+      <source>Limited</source>
+      <translation>Eingeschränkt</translation>
     </message>
     <message>
       <source>0 / 200 jobs</source>
@@ -203,6 +211,10 @@
       <translation>Nach so vielen Einträgen einer Playlist stoppen. 0 nimmt alle.</translation>
     </message>
     <message>
+      <source>Maximum playlist items</source>
+      <translation>Maximale Playlist-Einträge</translation>
+    </message>
+    <message>
       <source>Shortest item (seconds)</source>
       <translation>Kürzester Eintrag (Sekunden)</translation>
     </message>
@@ -211,12 +223,20 @@
       <translation>Kürzere Einträge überspringen — so bleiben die Shorts eines Kanals außen vor. 0 nimmt jede Länge.</translation>
     </message>
     <message>
+      <source>Shortest playlist item in seconds</source>
+      <translation>Kürzestes Playlist-Element in Sekunden</translation>
+    </message>
+    <message>
       <source>Longest item (seconds)</source>
       <translation>Längster Eintrag (Sekunden)</translation>
     </message>
     <message>
       <source>Skip items longer than this, which is how multi-hour streams are left behind. 0 takes any length.</source>
       <translation>Längere Einträge überspringen — so bleiben mehrstündige Streams außen vor. 0 nimmt jede Länge.</translation>
+    </message>
+    <message>
+      <source>Longest playlist item in seconds</source>
+      <translation>Längstes Playlist-Element in Sekunden</translation>
     </message>
     <message>
       <source>Performance</source>
@@ -255,6 +275,26 @@
       <translation>Änderungen speichern</translation>
     </message>
     <message>
+      <source>Unsaved changes</source>
+      <translation>Ungespeicherte Änderungen</translation>
+    </message>
+    <message>
+      <source>Checking yt-dlp. The verified current copy stays available until the update passes.</source>
+      <translation>yt-dlp wird geprüft. Die verifizierte aktuelle Kopie bleibt erhalten, bis das Update erfolgreich ist.</translation>
+    </message>
+    <message>
+      <source>yt-dlp update failed. The previous working copy was kept; check the log for details.</source>
+      <translation>Das yt-dlp-Update ist fehlgeschlagen. Die vorherige funktionierende Kopie wurde beibehalten; prüfen Sie das Protokoll.</translation>
+    </message>
+    <message>
+      <source>Refreshing ffmpeg. The current verified copy stays available until replacement succeeds.</source>
+      <translation>ffmpeg wird aktualisiert. Die aktuelle verifizierte Kopie bleibt verfügbar, bis der Ersatz erfolgreich ist.</translation>
+    </message>
+    <message>
+      <source>Token copied. It will clear from the clipboard in 60 seconds if unchanged.</source>
+      <translation>Token kopiert. Es wird in 60 Sekunden aus der Zwischenablage gelöscht, falls es unverändert bleibt.</translation>
+    </message>
+    <message>
       <source>Review the redacted support payload</source>
       <translation>Bereinigte Supportdaten prüfen</translation>
     </message>
@@ -263,12 +303,52 @@
       <translation>Pfade, URLs, Token, cookieähnliche Werte und undurchsichtige Kennungen werden entfernt. Kopieren Sie diese Daten nur, wenn Sie mit der Weitergabe des Rests einverstanden sind.</translation>
     </message>
     <message>
+      <source>New token ready. Save settings to apply it.</source>
+      <translation>Neues Token bereit. Speichern Sie die Einstellungen, um es anzuwenden.</translation>
+    </message>
+    <message>
+      <source>Server status indicator: Stopped</source>
+      <translation>Indikator für Serverstatus: Gestoppt</translation>
+    </message>
+    <message>
+      <source>Server status: Stopped</source>
+      <translation>Serverstatus: Gestoppt</translation>
+    </message>
+    <message>
+      <source>Companion pages</source>
+      <translation>Companion-Seiten</translation>
+    </message>
+    <message>
+      <source>Missing</source>
+      <translation>Fehlt</translation>
+    </message>
+    <message>
+      <source>Supported</source>
+      <translation>Unterstützt</translation>
+    </message>
+    <message>
+      <source>The installed yt-dlp streams SABR formats through fallback clients. Updates flip this automatically once native support ships.</source>
+      <translation>Das installierte yt-dlp streamt SABR-Formate über Fallback-Clients. Updates schalten dies automatisch um, sobald native Unterstützung verfügbar ist.</translation>
+    </message>
+    <message>
+      <source>Update</source>
+      <translation>Aktualisieren</translation>
+    </message>
+    <message>
+      <source>Proof-of-origin provider is running but out of date. Downloads use the web client with PO tokens.</source>
+      <translation>Der Proof-of-Origin-Anbieter läuft, ist aber veraltet. Downloads verwenden den Webclient mit PO-Tokens.</translation>
+    </message>
+    <message>
       <source>Browser extension</source>
       <translation>Browser-Erweiterung</translation>
     </message>
     <message>
       <source>Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.</source>
       <translation>Astra Downloader betreibt eine lokale API, damit die Astra-Deck-Browsererweiterung Downloads direkt von einer Seite senden kann. Zum Herunterladen per eingefügtem Link wird dieser Server nie benötigt.</translation>
+    </message>
+    <message>
+      <source>Extension server status indicator: Offline</source>
+      <translation>Indikator für Erweiterungsserverstatus: Offline</translation>
     </message>
     <message>
       <source>Pairing</source>
@@ -283,6 +363,18 @@
       <translation>Serverprotokoll</translation>
     </message>
     <message>
+      <source>Review the redacted support payload before copying it.</source>
+      <translation>Redigierte Support-Nutzdaten vor dem Kopieren prüfen.</translation>
+    </message>
+    <message>
+      <source>Open the persisted server log in File Explorer.</source>
+      <translation>Gespeichertes Serverprotokoll im Datei-Explorer öffnen.</translation>
+    </message>
+    <message>
+      <source>Recent local companion events. Use Clear to remove visible entries.</source>
+      <translation>Aktuelle lokale Companion-Ereignisse. Mit „Leeren“ sichtbare Einträge entfernen.</translation>
+    </message>
+    <message>
       <source>Download a video</source>
       <translation>Video herunterladen</translation>
     </message>
@@ -291,8 +383,16 @@
       <translation>Fügen Sie einen Link von fast jeder Website ein — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.</translation>
     </message>
     <message>
+      <source>Video URL</source>
+      <translation>Video-URL</translation>
+    </message>
+    <message>
       <source>Paste a video link, or several at once</source>
       <translation>Videolink einfügen, auch mehrere auf einmal</translation>
+    </message>
+    <message>
+      <source>Download type</source>
+      <translation>Downloadtyp</translation>
     </message>
     <message>
       <source>Video</source>
@@ -307,20 +407,92 @@
       <translation>Untertitel</translation>
     </message>
     <message>
+      <source>Download format</source>
+      <translation>Downloadformat</translation>
+    </message>
+    <message>
+      <source>Download quality</source>
+      <translation>Downloadqualität</translation>
+    </message>
+    <message>
+      <source>Send this download somewhere other than the default folder.</source>
+      <translation>Diesen Download in einem anderen Ordner als dem Standardordner speichern.</translation>
+    </message>
+    <message>
       <source>Clip from</source>
       <translation>Ausschnitt von</translation>
+    </message>
+    <message>
+      <source>Clip start timestamp</source>
+      <translation>Startzeit des Clips</translation>
     </message>
     <message>
       <source>to</source>
       <translation>bis</translation>
     </message>
     <message>
+      <source>Clip end timestamp</source>
+      <translation>Endzeit des Clips</translation>
+    </message>
+    <message>
       <source>Clip ranges apply to a single link.</source>
       <translation>Ausschnitte gelten nur für einen einzelnen Link.</translation>
     </message>
     <message>
+      <source>Subtitle request summary</source>
+      <translation>Zusammenfassung der Untertitelanforderung</translation>
+    </message>
+    <message>
+      <source>Quick download status</source>
+      <translation>Status des Schnell-Downloads</translation>
+    </message>
+    <message>
+      <source>Download tool setup status</source>
+      <translation>Status der Download-Tool-Einrichtung</translation>
+    </message>
+    <message>
+      <source>Download tool setup progress</source>
+      <translation>Fortschritt der Download-Tool-Einrichtung</translation>
+    </message>
+    <message>
+      <source>Storage problem</source>
+      <translation>Speicherproblem</translation>
+    </message>
+    <message>
+      <source>Quarantined state file</source>
+      <translation>In Quarantäne verschobene Zustandsdatei</translation>
+    </message>
+    <message>
+      <source>Running and pending downloads stored in the durable queue.</source>
+      <translation>Laufende und ausstehende Downloads in der dauerhaften Warteschlange.</translation>
+    </message>
+    <message>
+      <source>Pause starting pending downloads. Downloads already running will continue.</source>
+      <translation>Starten ausstehender Downloads pausieren. Bereits laufende Downloads werden fortgesetzt.</translation>
+    </message>
+    <message>
       <source>History</source>
       <translation>Verlauf</translation>
+    </message>
+    <message>
+      <source>Remove saved history entries. Downloaded files are not deleted.</source>
+      <translation>Gespeicherte Verlaufseinträge entfernen. Heruntergeladene Dateien werden nicht gelöscht.</translation>
+    </message>
+    <message>
+      <source>Restore the history entries cleared in this session.</source>
+      <translation>In dieser Sitzung gelöschte Verlaufseinträge wiederherstellen.</translation>
+    </message>
+    <message>
+      <source>Export every row matching the current filters as CSV.</source>
+      <translation>Alle Zeilen, die den aktuellen Filtern entsprechen, als CSV exportieren.</translation>
+    </message>
+    <message>
+      <source>Search download history</source>
+      <translation>Downloadverlauf durchsuchen</translation>
+    </message>
+    <message>
+      <source>History status</source>
+      <translation>Verlaufsstatus</translation>
     </message>
     <message>
       <source>All statuses</source>
@@ -331,8 +503,16 @@
       <translation>Abgeschlossen</translation>
     </message>
     <message>
+      <source>History format</source>
+      <translation>Verlaufsformat</translation>
+    </message>
+    <message>
       <source>All formats</source>
       <translation>Alle Formate</translation>
+    </message>
+    <message>
+      <source>History sort order</source>
+      <translation>Sortierreihenfolge des Verlaufs</translation>
     </message>
     <message>
       <source>Newest first</source>
@@ -347,8 +527,20 @@
       <translation>Gespeichert ab</translation>
     </message>
     <message>
+      <source>History start date</source>
+      <translation>Startdatum des Verlaufs</translation>
+    </message>
+    <message>
       <source>through</source>
       <translation>bis</translation>
+    </message>
+    <message>
+      <source>History end date</source>
+      <translation>Enddatum des Verlaufs</translation>
+    </message>
+    <message>
+      <source>History status message</source>
+      <translation>Statusmeldung des Verlaufs</translation>
     </message>
     <message>
       <source>File</source>
@@ -363,16 +555,24 @@
       <translation>YouTube-Kanäle oder Playlists nach Zeitplan beobachten und nur neue Uploads einreihen.</translation>
     </message>
     <message>
+      <source>Subscription channel or playlist URL</source>
+      <translation>URL des Abonnementkanals oder der Playlist</translation>
+    </message>
+    <message>
+      <source>Subscription scan interval in minutes</source>
+      <translation>Scanintervall des Abonnements in Minuten</translation>
+    </message>
+    <message>
       <source>Search subscriptions</source>
-      <translation>Search subscriptions</translation>
+      <translation>Abonnements durchsuchen</translation>
     </message>
     <message>
       <source>Search title, URL, or error</source>
-      <translation>Search title, URL, or error</translation>
+      <translation>Titel, URL oder Fehler durchsuchen</translation>
     </message>
     <message>
       <source>Subscription status</source>
-      <translation>Subscription status</translation>
+      <translation>Abonnementstatus</translation>
     </message>
     <message>
       <source>Scan now</source>
@@ -391,24 +591,40 @@
       <translation>Website-Anmeldung hinzufügen</translation>
     </message>
     <message>
+      <source>Site address for the sign-in</source>
+      <translation>Adresse der Website für die Anmeldung</translation>
+    </message>
+    <message>
       <source>Site address you signed in to — x.com, instagram.com, vimeo.com</source>
       <translation>Adresse der Website, bei der Sie angemeldet sind — x.com, instagram.com, vimeo.com</translation>
+    </message>
+    <message>
+      <source>Browser to read cookies from</source>
+      <translation>Browser zum Lesen von Cookies</translation>
+    </message>
+    <message>
+      <source>Browser profile name or path</source>
+      <translation>Name oder Pfad des Browserprofils</translation>
     </message>
     <message>
       <source>Profile (optional)</source>
       <translation>Profil (optional)</translation>
     </message>
     <message>
+      <source>Site sign-in status</source>
+      <translation>Status der Website-Anmeldung</translation>
+    </message>
+    <message>
       <source>Search stored sign-ins</source>
-      <translation>Search stored sign-ins</translation>
+      <translation>Gespeicherte Anmeldungen durchsuchen</translation>
     </message>
     <message>
       <source>Search site or source</source>
-      <translation>Search site or source</translation>
+      <translation>Website oder Quelle durchsuchen</translation>
     </message>
     <message>
       <source>Stored sign-in status</source>
-      <translation>Stored sign-in status</translation>
+      <translation>Status der gespeicherten Anmeldung</translation>
     </message>
     <message>
       <source>Import this site's cookies to unblock the download waiting on it.</source>
@@ -424,7 +640,7 @@
     </message>
     <message>
       <source>Testing the stored sign-in…</source>
-      <translation>Testing the stored sign-in…</translation>
+      <translation>Gespeicherte Anmeldung wird getestet…</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -445,6 +661,14 @@
     <message>
       <source>Authorizes extension requests on this computer.</source>
       <translation>Autorisiert Anfragen der Erweiterung auf diesem Computer.</translation>
+    </message>
+    <message>
+      <source>Private API token</source>
+      <translation>Privates API-Token</translation>
+    </message>
+    <message>
+      <source>Reveal private token</source>
+      <translation>Privates Token anzeigen</translation>
     </message>
     <message>
       <source>Video download folder</source>
@@ -487,16 +711,32 @@
       <translation>Untertitel herunterladen</translation>
     </message>
     <message>
+      <source>Fetch subtitle tracks and embed them in the file. The Subtitles download type fetches them without the video.</source>
+      <translation>Untertitelspuren abrufen und in die Datei einbetten. Der Downloadtyp „Untertitel“ ruft sie ohne das Video ab.</translation>
+    </message>
+    <message>
       <source>Keep intermediate files</source>
       <translation>Zwischendateien behalten</translation>
+    </message>
+    <message>
+      <source>Keep the .part, .f### and .ytdl files a finished download leaves behind. Off by default: one download, one file.</source>
+      <translation>Die .part-, .f###- und .ytdl-Dateien behalten, die ein abgeschlossener Download hinterlässt. Standardmäßig deaktiviert: ein Download, eine Datei.</translation>
     </message>
     <message>
       <source>Tracks</source>
       <translation>Spuren</translation>
     </message>
     <message>
+      <source>Subtitle tracks</source>
+      <translation>Untertitelspuren</translation>
+    </message>
+    <message>
       <source>Save as</source>
       <translation>Speichern als</translation>
+    </message>
+    <message>
+      <source>Subtitle format</source>
+      <translation>Untertitelformat</translation>
     </message>
     <message>
       <source>Subtitle languages</source>
@@ -509,6 +749,10 @@
     <message>
       <source>Action</source>
       <translation>Aktion</translation>
+    </message>
+    <message>
+      <source>SponsorBlock action</source>
+      <translation>SponsorBlock-Aktion</translation>
     </message>
     <message>
       <source>Remove segments</source>
@@ -537,6 +781,10 @@
     <message>
       <source>A date as YYYYMMDD, or a relative one such as today-30days. Empty takes any date.</source>
       <translation>Ein Datum als JJJJMMTT oder relativ wie today-30days. Leer bedeutet jedes Datum.</translation>
+    </message>
+    <message>
+      <source>Playlist uploaded after</source>
+      <translation>Playlist hochgeladen nach</translation>
     </message>
     <message>
       <source>Concurrent fragments</source>
@@ -587,6 +835,10 @@
       <translation>Sekunden, bevor eine hängende Verbindung abgebrochen wird. 0 verwendet den Standard von yt-dlp.</translation>
     </message>
     <message>
+      <source>Socket timeout in seconds</source>
+      <translation>Socket-Timeout in Sekunden</translation>
+    </message>
+    <message>
       <source>Extractor retries</source>
       <translation>Extractor-Wiederholungen</translation>
     </message>
@@ -599,12 +851,20 @@
       <translation>Formate vor dem Herunterladen prüfen</translation>
     </message>
     <message>
+      <source>Check that a chosen format can actually be downloaded before committing to it. Costs an extra request per candidate format.</source>
+      <translation>Prüfen, ob ein ausgewähltes Format tatsächlich heruntergeladen werden kann, bevor es übernommen wird. Verursacht eine zusätzliche Anfrage pro Kandidatenformat.</translation>
+    </message>
+    <message>
       <source>Pause between downloads</source>
       <translation>Pause zwischen Downloads</translation>
     </message>
     <message>
       <source>Seconds to wait before each download. A bandwidth cap does not prevent an HTTP 429; spacing the requests does. 0 disables it.</source>
       <translation>Wartezeit in Sekunden vor jedem Download. Eine Bandbreitenbegrenzung verhindert keinen HTTP 429, zeitliche Abstände schon. 0 deaktiviert dies.</translation>
+    </message>
+    <message>
+      <source>Pause between downloads in seconds</source>
+      <translation>Pause zwischen Downloads in Sekunden</translation>
     </message>
     <message>
       <source>Longest pause</source>
@@ -615,12 +875,20 @@
       <translation>Obergrenze, wenn die Pause zufällig gewählt wird. Wird ignoriert, wenn sie unter der Pause oben liegt.</translation>
     </message>
     <message>
+      <source>Longest pause in seconds</source>
+      <translation>Längste Pause in Sekunden</translation>
+    </message>
+    <message>
       <source>Pacing jitter</source>
-      <translation>Pacing jitter</translation>
+      <translation>Pacing-Jitter</translation>
     </message>
     <message>
       <source>Randomise host wait times and yt-dlp pacing by ± this percentage. 0 keeps fixed timing.</source>
-      <translation>Randomise host wait times and yt-dlp pacing by ± this percentage. 0 keeps fixed timing.</translation>
+      <translation>Host-Wartezeiten und yt-dlp-Pacing um diesen Prozentsatz zufällig variieren. 0 verwendet feste Zeiten.</translation>
+    </message>
+    <message>
+      <source>Pacing jitter percentage</source>
+      <translation>Pacing-Jitter in Prozent</translation>
     </message>
     <message>
       <source>Off</source>
@@ -635,12 +903,24 @@
       <translation>Sekunden zwischen den Datenanfragen innerhalb eines Downloads.</translation>
     </message>
     <message>
+      <source>Pause between requests in seconds</source>
+      <translation>Pause zwischen Anfragen in Sekunden</translation>
+    </message>
+    <message>
       <source>Max file size</source>
       <translation>Maximale Dateigröße</translation>
     </message>
     <message>
       <source>Skip anything larger. 0 means no limit.</source>
       <translation>Größeres überspringen. 0 bedeutet keine Begrenzung.</translation>
+    </message>
+    <message>
+      <source>Max file size in megabytes</source>
+      <translation>Maximale Dateigröße in Megabyte</translation>
+    </message>
+    <message>
+      <source>No limit</source>
+      <translation>Keine Begrenzung</translation>
     </message>
     <message>
       <source>Proxy</source>
@@ -660,7 +940,7 @@
     </message>
     <message>
       <source>Checking installed yt-dlp…</source>
-      <translation>Checking installed yt-dlp…</translation>
+      <translation>Installierte yt-dlp-Version wird geprüft…</translation>
     </message>
     <message>
       <source>JavaScript runtime</source>
@@ -727,20 +1007,60 @@
       <translation>Kopierte Videolinks zur Prüfung vormerken</translation>
     </message>
     <message>
+      <source>Watch clipboard changes for video links from any supported site. Matching links fill the Quick download field but are never downloaded until you confirm.</source>
+      <translation>Zwischenablage auf Videolinks von unterstützten Websites überwachen. Passende Links füllen das Schnell-Download-Feld, werden aber erst nach Ihrer Bestätigung heruntergeladen.</translation>
+    </message>
+    <message>
+      <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
+      <translation>Standardmäßig deaktiviert. Zwischenablageinhalte, die nicht wie ein Videolink aussehen, werden ignoriert; passende Links werden bereitgestellt, ohne einen Download zu starten.</translation>
+    </message>
+    <message>
       <source>Installed tools</source>
       <translation>Installierte Werkzeuge</translation>
+    </message>
+    <message>
+      <source>Installed tools status</source>
+      <translation>Status der installierten Tools</translation>
+    </message>
+    <message>
+      <source>Check for a yt-dlp update. Active downloads must finish first.</source>
+      <translation>Nach einem yt-dlp-Update suchen. Aktive Downloads müssen zuerst abgeschlossen werden.</translation>
+    </message>
+    <message>
+      <source>Download a fresh ffmpeg and verify its checksum. The installed copy stays in place until the replacement verifies.</source>
+      <translation>Frisches ffmpeg herunterladen und Prüfsumme verifizieren. Die installierte Kopie bleibt erhalten, bis der Ersatz verifiziert ist.</translation>
     </message>
     <message>
       <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported — cookies stay on this machine.</source>
       <translation>Diese Installation auf einen anderen Computer übertragen oder eine nicht mehr lesbare Konfiguration wiederherstellen. Das Paket enthält Einstellungen und Abonnements. Gespeicherte Anmeldungen werden nur nach Website aufgeführt, aber nie exportiert — Cookies bleiben auf diesem Computer.</translation>
     </message>
     <message>
+      <source>Write settings and subscriptions to a JSON bundle.</source>
+      <translation>Einstellungen und Abonnements in ein JSON-Bundle schreiben.</translation>
+    </message>
+    <message>
+      <source>Read a bundle written by Export settings and apply it.</source>
+      <translation>Ein von „Einstellungen exportieren“ geschriebenes Bundle lesen und anwenden.</translation>
+    </message>
+    <message>
+      <source>Settings status</source>
+      <translation>Einstellungsstatus</translation>
+    </message>
+    <message>
+      <source>Starting</source>
+      <translation>Wird gestartet</translation>
+    </message>
+    <message>
       <source>Cancel</source>
       <translation>Abbrechen</translation>
     </message>
     <message>
+      <source>Could not save the imported settings. Check disk space and permissions, then retry.</source>
+      <translation>Importierte Einstellungen konnten nicht gespeichert werden. Prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
       <source>Loading history…</source>
-      <translation>Loading history…</translation>
+      <translation>Verlauf wird geladen…</translation>
     </message>
     <message>
       <source>Play</source>
@@ -756,11 +1076,67 @@
     </message>
     <message>
       <source>Copy error</source>
-      <translation>Copy error</translation>
+      <translation>Fehler kopieren</translation>
     </message>
     <message>
       <source>Download again</source>
       <translation>Erneut herunterladen</translation>
+    </message>
+    <message>
+      <source>Install yt-dlp before checking for updates.</source>
+      <translation>Installieren Sie yt-dlp, bevor Sie nach Updates suchen.</translation>
+    </message>
+    <message>
+      <source>Wait for active downloads to finish before updating yt-dlp.</source>
+      <translation>Warten Sie, bis aktive Downloads abgeschlossen sind, bevor Sie yt-dlp aktualisieren.</translation>
+    </message>
+    <message>
+      <source>Setup is already running.</source>
+      <translation>Die Einrichtung läuft bereits.</translation>
+    </message>
+    <message>
+      <source>Wait for active downloads to finish before refreshing ffmpeg.</source>
+      <translation>Warten Sie, bis aktive Downloads abgeschlossen sind, bevor Sie ffmpeg aktualisieren.</translation>
+    </message>
+    <message>
+      <source>Choose a valid local video download folder.</source>
+      <translation>Wählen Sie einen gültigen lokalen Video-Downloadordner.</translation>
+    </message>
+    <message>
+      <source>Choose a valid local audio download folder.</source>
+      <translation>Wählen Sie einen gültigen lokalen Audio-Downloadordner.</translation>
+    </message>
+    <message>
+      <source>Enter one or more language codes, such as en or en,es.</source>
+      <translation>Geben Sie einen oder mehrere Sprachcodes ein, z. B. en oder en,es.</translation>
+    </message>
+    <message>
+      <source>Use a rate such as 500K or 2M, or leave this blank.</source>
+      <translation>Verwenden Sie eine Rate wie 500K oder 2M oder lassen Sie das Feld leer.</translation>
+    </message>
+    <message>
+      <source>Enter an http, https, or socks proxy URL.</source>
+      <translation>Geben Sie eine HTTP-, HTTPS- oder SOCKS-Proxy-URL ein.</translation>
+    </message>
+    <message>
+      <source>The private API token cannot be empty.</source>
+      <translation>Das private API-Token darf nicht leer sein.</translation>
+    </message>
+    <message>
+      <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.</source>
+      <translation>Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s, %(uploader)s — keine absoluten Pfade oder '..'.</translation>
+    </message>
+    <message>
+      <source>Check the highlighted fields before saving.</source>
+      <translation>Prüfen Sie die markierten Felder vor dem Speichern.</translation>
+    </message>
+    <message>
+      <source>Could not save settings. Nothing changed; check disk permissions and retry.</source>
+      <translation>Einstellungen konnten nicht gespeichert werden. Nichts wurde geändert; prüfen Sie die Schreibrechte und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Settings saved and server restarted.</source>
+      <translation>Einstellungen gespeichert und Server neu gestartet.</translation>
     </message>
     <message>
       <source>Saved</source>
@@ -772,11 +1148,43 @@
     </message>
     <message>
       <source>Looking up available formats…</source>
-      <translation>Looking up available formats…</translation>
+      <translation>Verfügbare Formate werden gesucht…</translation>
+    </message>
+    <message>
+      <source>Copied token cleared from the clipboard.</source>
+      <translation>Kopiertes Token wurde aus der Zwischenablage entfernt.</translation>
+    </message>
+    <message>
+      <source>Redacted diagnostics preview</source>
+      <translation>Vorschau der redigierten Diagnosedaten</translation>
+    </message>
+    <message>
+      <source>Installing required download tools...</source>
+      <translation>Erforderliche Download-Tools werden installiert…</translation>
+    </message>
+    <message>
+      <source>Setting Up</source>
+      <translation>Einrichtung</translation>
     </message>
     <message>
       <source>Status</source>
       <translation>Status</translation>
+    </message>
+    <message>
+      <source>Unavailable</source>
+      <translation>Nicht verfügbar</translation>
+    </message>
+    <message>
+      <source>Downloads use the web client with proof-of-origin tokens.</source>
+      <translation>Downloads verwenden den Webclient mit Proof-of-Origin-Tokens.</translation>
+    </message>
+    <message>
+      <source>Fallback</source>
+      <translation>Fallback</translation>
+    </message>
+    <message>
+      <source>No proof-of-origin provider is running. Downloads fall back to the token-exempt tv and android_vr clients.</source>
+      <translation>Kein Proof-of-Origin-Anbieter läuft. Downloads fallen auf die tokenfreien tv- und android_vr-Clients zurück.</translation>
     </message>
     <message>
       <source>Subscriptions unavailable</source>
@@ -812,7 +1220,7 @@
     </message>
     <message>
       <source>Run a bounded metadata-only sign-in test.</source>
-      <translation>Run a bounded metadata-only sign-in test.</translation>
+      <translation>Begrenzten Metadaten-Test der Anmeldung ausführen.</translation>
     </message>
     <message>
       <source>Signed in to</source>
@@ -828,11 +1236,39 @@
     </message>
     <message>
       <source>Test passed</source>
-      <translation>Test passed</translation>
+      <translation>Test bestanden</translation>
     </message>
     <message>
       <source>Subscription scan started. This row will update when it finishes.</source>
-      <translation>Subscription scan started. This row will update when it finishes.</translation>
+      <translation>Abonnement-Scan gestartet. Diese Zeile wird aktualisiert, sobald er abgeschlossen ist.</translation>
+    </message>
+    <message>
+      <source>Server status indicator: Starting</source>
+      <translation>Indikator für Serverstatus: Wird gestartet</translation>
+    </message>
+    <message>
+      <source>Server status: Starting</source>
+      <translation>Serverstatus: Wird gestartet</translation>
+    </message>
+    <message>
+      <source>Starting server</source>
+      <translation>Server wird gestartet</translation>
+    </message>
+    <message>
+      <source>Checking local ports and preparing the API</source>
+      <translation>Lokale Ports werden geprüft und die API wird vorbereitet</translation>
+    </message>
+    <message>
+      <source>Extension server status indicator: Starting</source>
+      <translation>Indikator für Erweiterungsserverstatus: Wird gestartet</translation>
+    </message>
+    <message>
+      <source>Starting server…</source>
+      <translation>Server wird gestartet…</translation>
+    </message>
+    <message>
+      <source>Running</source>
+      <translation>Läuft</translation>
     </message>
     <message>
       <source>Up</source>
@@ -851,12 +1287,16 @@
       <translation>Anmeldung hinzufügen</translation>
     </message>
     <message>
+      <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
+      <translation>Ausstehende Downloads explizit fortsetzen. Elemente, die eine Anmeldung benötigen, bleiben pausiert.</translation>
+    </message>
+    <message>
       <source>History unavailable</source>
-      <translation>History unavailable</translation>
+      <translation>Verlauf nicht verfügbar</translation>
     </message>
     <message>
       <source>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</source>
-      <translation>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</translation>
+      <translation>Downloadverlauf konnte nicht gelesen werden. Die unlesbare Datei wurde beiseitegelegt; stellen Sie sie aus dem Status-Hinweis wieder her oder prüfen Sie die Diagnose.</translation>
     </message>
     <message>
       <source>No downloads yet</source>
@@ -887,12 +1327,68 @@
       <translation>Wiederholen</translation>
     </message>
     <message>
+      <source>Settings saved. Restart Astra Downloader to apply the language.</source>
+      <translation>Einstellungen gespeichert. Starten Sie Astra Downloader neu, um die Sprache anzuwenden.</translation>
+    </message>
+    <message>
+      <source>Settings saved.</source>
+      <translation>Einstellungen gespeichert.</translation>
+    </message>
+    <message>
+      <source>Hide</source>
+      <translation>Ausblenden</translation>
+    </message>
+    <message>
+      <source>Hide private token</source>
+      <translation>Privates Token ausblenden</translation>
+    </message>
+    <message>
+      <source>Server error</source>
+      <translation>Serverfehler</translation>
+    </message>
+    <message>
+      <source>Server status: Error</source>
+      <translation>Serverstatus: Fehler</translation>
+    </message>
+    <message>
+      <source>Server status indicator: Error</source>
+      <translation>Indikator für Serverstatus: Fehler</translation>
+    </message>
+    <message>
+      <source>Extension server status indicator: Error</source>
+      <translation>Indikator für Erweiterungsserverstatus: Fehler</translation>
+    </message>
+    <message>
+      <source>Server failed to start. Check the log for details.</source>
+      <translation>Serverstart fehlgeschlagen. Prüfen Sie das Protokoll auf Details.</translation>
+    </message>
+    <message>
+      <source>Installing yt-dlp...</source>
+      <translation>yt-dlp wird installiert…</translation>
+    </message>
+    <message>
+      <source>{label} status indicator: {value}</source>
+      <translation>{label} Statusindikator: {value}</translation>
+    </message>
+    <message>
+      <source>{label} status: {value}</source>
+      <translation>{label} Status: {value}</translation>
+    </message>
+    <message>
+      <source>Required</source>
+      <translation>Erforderlich</translation>
+    </message>
+    <message>
+      <source>Optional</source>
+      <translation>Optional</translation>
+    </message>
+    <message>
       <source>No subscriptions match these filters</source>
-      <translation>No subscriptions match these filters</translation>
+      <translation>Keine Abonnements entsprechen diesen Filtern</translation>
     </message>
     <message>
       <source>Try a different search or choose All subscriptions.</source>
-      <translation>Try a different search or choose All subscriptions.</translation>
+      <translation>Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Abonnements“.</translation>
     </message>
     <message>
       <source>No stored sign-ins</source>
@@ -904,11 +1400,11 @@
     </message>
     <message>
       <source>No sign-ins match these filters</source>
-      <translation>No sign-ins match these filters</translation>
+      <translation>Keine Anmeldungen entsprechen diesen Filtern</translation>
     </message>
     <message>
       <source>Try a different search or choose All sign-ins.</source>
-      <translation>Try a different search or choose All sign-ins.</translation>
+      <translation>Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Anmeldungen“.</translation>
     </message>
     <message>
       <source>Missing on disk — import it again</source>
@@ -920,11 +1416,59 @@
     </message>
     <message>
       <source>Stored sign-in test passed.</source>
-      <translation>Stored sign-in test passed.</translation>
+      <translation>Test der gespeicherten Anmeldung bestanden.</translation>
     </message>
     <message>
       <source>No preference</source>
       <translation>Keine Bevorzugung</translation>
+    </message>
+    <message>
+      <source>Server status indicator: Running</source>
+      <translation>Indikator für Serverstatus: Läuft</translation>
+    </message>
+    <message>
+      <source>Server status: Running</source>
+      <translation>Serverstatus: Läuft</translation>
+    </message>
+    <message>
+      <source>Server online</source>
+      <translation>Server online</translation>
+    </message>
+    <message>
+      <source>Local only · ready for Astra Deck</source>
+      <translation>Nur lokal · bereit für Astra Deck</translation>
+    </message>
+    <message>
+      <source>Extension server status indicator: Online</source>
+      <translation>Indikator für Erweiterungsserverstatus: Online</translation>
+    </message>
+    <message>
+      <source>Stop server</source>
+      <translation>Server stoppen</translation>
+    </message>
+    <message>
+      <source>Local only · start before downloading</source>
+      <translation>Nur lokal · vor dem Download starten</translation>
+    </message>
+    <message>
+      <source>{title} status: {status}</source>
+      <translation>{title} Status: {status}</translation>
+    </message>
+    <message>
+      <source>Move this pending download earlier.</source>
+      <translation>Diesen ausstehenden Download nach oben verschieben.</translation>
+    </message>
+    <message>
+      <source>Move this pending download later.</source>
+      <translation>Diesen ausstehenden Download nach unten verschieben.</translation>
+    </message>
+    <message>
+      <source>Resume this download.</source>
+      <translation>Diesen Download fortsetzen.</translation>
+    </message>
+    <message>
+      <source>Store this site's signed-in session so the download can run.</source>
+      <translation>Gespeicherte Anmeldung für diese Website ablegen, damit der Download ausgeführt werden kann.</translation>
     </message>
     <message>
       <source>Nothing downloading yet</source>
@@ -940,19 +1484,27 @@
     </message>
     <message>
       <source>History could not be read</source>
-      <translation>History could not be read</translation>
+      <translation>Verlauf konnte nicht gelesen werden</translation>
     </message>
     <message>
       <source>Astra Downloader kept the unreadable history aside instead of showing an empty list.</source>
-      <translation>Astra Downloader kept the unreadable history aside instead of showing an empty list.</translation>
+      <translation>Astra Downloader hat den unlesbaren Verlauf beiseitegelegt, statt eine leere Liste anzuzeigen.</translation>
     </message>
     <message>
       <source>Open diagnostics</source>
-      <translation>Open diagnostics</translation>
+      <translation>Diagnose öffnen</translation>
+    </message>
+    <message>
+      <source>Settings status: {message}</source>
+      <translation>Einstellungsstatus: {message}</translation>
     </message>
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>Dieser Link bietet höchstens {height}p.</translation>
+    </message>
+    <message>
+      <source>Installing ffmpeg...</source>
+      <translation>ffmpeg wird installiert…</translation>
     </message>
     <message>
       <source>page</source>
@@ -963,12 +1515,20 @@
       <translation>Öffnen</translation>
     </message>
     <message>
+      <source>This download goes to {path}. Click to use the default folder again.</source>
+      <translation>Dieser Download wird in {path} gespeichert. Klicken Sie, um wieder den Standardordner zu verwenden.</translation>
+    </message>
+    <message>
       <source>{shown} of {total} shown</source>
-      <translation>{shown} of {total} shown</translation>
+      <translation>{shown} von {total} angezeigt</translation>
+    </message>
+    <message>
+      <source>Enable subscription</source>
+      <translation>Abonnement aktivieren</translation>
     </message>
     <message>
       <source>Every {minutes} min · scanning now…</source>
-      <translation>Every {minutes} min · scanning now…</translation>
+      <translation>Alle {minutes} Min. · Scan läuft…</translation>
     </message>
     <message>
       <source>Session cookies — valid until the site signs you out</source>
@@ -980,11 +1540,39 @@
     </message>
     <message>
       <source>Test failed</source>
-      <translation>Test failed</translation>
+      <translation>Test fehlgeschlagen</translation>
+    </message>
+    <message>
+      <source>Subtitle language</source>
+      <translation>Untertitelsprache</translation>
+    </message>
+    <message>
+      <source>{title} progress</source>
+      <translation>{title} Fortschritt</translation>
+    </message>
+    <message>
+      <source>{progress} percent complete</source>
+      <translation>{progress} Prozent abgeschlossen</translation>
     </message>
     <message>
       <source>Could not read download history: {error}</source>
-      <translation>Could not read download history: {error}</translation>
+      <translation>Downloadverlauf konnte nicht gelesen werden: {error}</translation>
+    </message>
+    <message>
+      <source>No current message</source>
+      <translation>Keine aktuelle Meldung</translation>
+    </message>
+    <message>
+      <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
+      <translation>Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.</translation>
+    </message>
+    <message>
+      <source>Registering shortcuts and protocols...</source>
+      <translation>Verknüpfungen und Protokolle werden registriert…</translation>
+    </message>
+    <message>
+      <source>Finishing setup...</source>
+      <translation>Einrichtung wird abgeschlossen…</translation>
     </message>
     <message>
       <source>from</source>
@@ -992,11 +1580,11 @@
     </message>
     <message>
       <source>This host is paused — retry in {duration}.</source>
-      <translation>This host is paused — retry in {duration}.</translation>
+      <translation>Dieser Host ist pausiert — erneut versuchen in {duration}.</translation>
     </message>
     <message>
       <source>Host paused · retry in {duration}</source>
-      <translation>Host paused · retry in {duration}</translation>
+      <translation>Host pausiert · erneut versuchen in {duration}</translation>
     </message>
     <message>
       <source>unknown</source>
@@ -1013,6 +1601,198 @@
     <message>
       <source>cookies</source>
       <translation>Cookies</translation>
+    </message>
+    <message>
+      <source>YouTube requires a PO token for this video. Start the PO-token provider, then retry the download.</source>
+      <translation>YouTube benötigt für dieses Video ein PO-Token. Starten Sie den PO-Token-Anbieter und versuchen Sie den Download erneut.</translation>
+    </message>
+    <message>
+      <source>Start bgutil-ytdlp-pot-provider on 127.0.0.1:4416 and retry.</source>
+      <translation>Starten Sie bgutil-ytdlp-pot-provider auf 127.0.0.1:4416 und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>start-po-token-provider</source>
+      <translation>start-po-token-provider</translation>
+    </message>
+    <message>
+      <source>The PO-token provider is reachable but looks stale or failed to issue a usable token.</source>
+      <translation>Der PO-Token-Anbieter ist erreichbar, wirkt aber veraltet oder konnte kein nutzbares Token ausstellen.</translation>
+    </message>
+    <message>
+      <source>Update or restart bgutil-ytdlp-pot-provider, then retry.</source>
+      <translation>Aktualisieren oder starten Sie bgutil-ytdlp-pot-provider neu und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>update-po-token-provider</source>
+      <translation>update-po-token-provider</translation>
+    </message>
+    <message>
+      <source>This video only exposes SABR-limited formats that this yt-dlp path cannot download yet.</source>
+      <translation>Dieses Video bietet nur SABR-beschränkte Formate, die dieser yt-dlp-Pfad noch nicht herunterladen kann.</translation>
+    </message>
+    <message>
+      <source>Clip ranges, the bandwidth cap and concurrent fragments do not apply to SABR streams and were ignored. Update yt-dlp when SABR support lands, or retry after YouTube exposes standard formats.</source>
+      <translation>Clipbereiche, Bandbreitenbegrenzung und gleichzeitige Fragmente gelten nicht für SABR-Streams und wurden ignoriert. Aktualisieren Sie yt-dlp, sobald SABR-Unterstützung verfügbar ist, oder versuchen Sie es erneut, nachdem YouTube Standardformate anbietet.</translation>
+    </message>
+    <message>
+      <source>update-ytdlp-or-retry-later</source>
+      <translation>update-ytdlp-or-retry-later</translation>
+    </message>
+    <message>
+      <source>yt-dlp needs the Deno JavaScript runtime to solve recent YouTube signature challenges.</source>
+      <translation>yt-dlp benötigt die Deno-JavaScript-Laufzeit, um aktuelle YouTube-Signatur-Herausforderungen zu lösen.</translation>
+    </message>
+    <message>
+      <source>Install Deno with winget install DenoLand.Deno, then restart Astra Downloader.</source>
+      <translation>Installieren Sie Deno mit winget install DenoLand.Deno und starten Sie Astra Downloader anschließend neu.</translation>
+    </message>
+    <message>
+      <source>install-deno</source>
+      <translation>install-deno</translation>
+    </message>
+    <message>
+      <source>The installed Deno runtime is too old for this yt-dlp build to solve recent YouTube signature challenges.</source>
+      <translation>Die installierte Deno-Laufzeit ist für diesen yt-dlp-Build zu alt, um aktuelle YouTube-Signatur-Herausforderungen zu lösen.</translation>
+    </message>
+    <message>
+      <source>Upgrade Deno to 2.3.0 or newer with winget upgrade DenoLand.Deno, then retry.</source>
+      <translation>Führen Sie ein Upgrade auf Deno 2.3.0 oder neuer mit winget upgrade DenoLand.Deno durch und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>upgrade-deno</source>
+      <translation>upgrade-deno</translation>
+    </message>
+    <message>
+      <source>yt-dlp needs a configured JavaScript runtime for YouTube challenges.</source>
+      <translation>yt-dlp benötigt eine konfigurierte JavaScript-Laufzeit für YouTube-Herausforderungen.</translation>
+    </message>
+    <message>
+      <source>Provision Deno, or install Node 22+ and select it in companion settings.</source>
+      <translation>Stellen Sie Deno bereit oder installieren Sie Node 22+ und wählen Sie es in den Companion-Einstellungen aus.</translation>
+    </message>
+    <message>
+      <source>configure-javascript-runtime</source>
+      <translation>configure-javascript-runtime</translation>
+    </message>
+    <message>
+      <source>Astra Downloader could not verify the configured JavaScript runtime.</source>
+      <translation>Astra Downloader konnte die konfigurierte JavaScript-Laufzeit nicht verifizieren.</translation>
+    </message>
+    <message>
+      <source>Repair or replace the selected runtime, then retry.</source>
+      <translation>Reparieren oder ersetzen Sie die ausgewählte Laufzeit und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>repair-javascript-runtime</source>
+      <translation>repair-javascript-runtime</translation>
+    </message>
+    <message>
+      <source>The configured JavaScript runtime is below yt-dlp's supported floor.</source>
+      <translation>Die konfigurierte JavaScript-Laufzeit liegt unter der von yt-dlp unterstützten Mindestversion.</translation>
+    </message>
+    <message>
+      <source>Upgrade to Deno 2.3+ or Node 22+, then retry.</source>
+      <translation>Führen Sie ein Upgrade auf Deno 2.3+ oder Node 22+ durch und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>upgrade-javascript-runtime</source>
+      <translation>upgrade-javascript-runtime</translation>
+    </message>
+    <message>
+      <source>The configured runtime could not execute the yt-dlp EJS capability probe.</source>
+      <translation>Die konfigurierte Laufzeit konnte die EJS-Fähigkeitsprüfung von yt-dlp nicht ausführen.</translation>
+    </message>
+    <message>
+      <source>Repair or replace the selected JavaScript runtime, then retry.</source>
+      <translation>Reparieren oder ersetzen Sie die ausgewählte JavaScript-Laufzeit und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Sign in to confirm YouTube access. Grant browser cookies or open the video while signed in, then retry.</source>
+      <translation>Melden Sie sich an, um den YouTube-Zugriff zu bestätigen. Gewähren Sie Browser-Cookies oder öffnen Sie das Video während der Anmeldung und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Sign in to YouTube in this browser and allow Astra Deck to attach YouTube cookies.</source>
+      <translation>Melden Sie sich in diesem Browser bei YouTube an und erlauben Sie Astra Deck, YouTube-Cookies anzuhängen.</translation>
+    </message>
+    <message>
+      <source>sign-in-and-retry</source>
+      <translation>sign-in-and-retry</translation>
+    </message>
+    <message>
+      <source>ffmpeg is missing, stale, or failed during merge/extract.</source>
+      <translation>ffmpeg fehlt, ist veraltet oder ist beim Zusammenführen/Extrahieren fehlgeschlagen.</translation>
+    </message>
+    <message>
+      <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
+      <translation>Öffnen Sie Astra Downloader und aktualisieren Sie ffmpeg, bevor Sie es erneut versuchen.</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
+    </message>
+    <message>
+      <source>Astra Downloader could not reach the site or a required provider.</source>
+      <translation>Astra Downloader konnte die Website oder einen erforderlichen Anbieter nicht erreichen.</translation>
+    </message>
+    <message>
+      <source>Check the network, VPN, firewall, and provider process, then retry.</source>
+      <translation>Prüfen Sie Netzwerk, VPN, Firewall und den Anbieterprozess und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>check-network-and-retry</source>
+      <translation>check-network-and-retry</translation>
+    </message>
+    <message>
+      <source>Astra Downloader could not create a protected YouTube cookie jar.</source>
+      <translation>Astra Downloader konnte kein geschütztes YouTube-Cookie-Archiv erstellen.</translation>
+    </message>
+    <message>
+      <source>Retry from Astra Deck so fresh cookies can be supplied.</source>
+      <translation>Versuchen Sie es erneut über Astra Deck, damit neue Cookies bereitgestellt werden können.</translation>
+    </message>
+    <message>
+      <source>The site refused the request (HTTP 403).</source>
+      <translation>Die Website hat die Anfrage abgelehnt (HTTP 403).</translation>
+    </message>
+    <message>
+      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps.</source>
+      <translation>Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls.</translation>
+    </message>
+    <message>
+      <source>impersonate-and-retry</source>
+      <translation>impersonate-and-retry</translation>
+    </message>
+    <message>
+      <source>The site refused further requests for now (HTTP 429).</source>
+      <translation>Die Website hat weitere Anfragen vorerst abgelehnt (HTTP 429).</translation>
+    </message>
+    <message>
+      <source>This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.</source>
+      <translation>Diese Website ist für den Rest des Wiederholungsfensters pausiert. Erhöhen Sie in den Einstellungen das Anfrage-Pacing — eine Bandbreitenbegrenzung hilft hier nicht — und versuchen Sie es erneut. Andere Websites können weiter herunterladen.</translation>
+    </message>
+    <message>
+      <source>slow-down-and-retry</source>
+      <translation>slow-down-and-retry</translation>
+    </message>
+    <message>
+      <source>There is not enough free disk space for this download.</source>
+      <translation>Nicht genügend freier Speicherplatz für diesen Download.</translation>
+    </message>
+    <message>
+      <source>Free space on the destination drive, then retry the download.</source>
+      <translation>Geben Sie Speicherplatz auf dem Ziellaufwerk frei und versuchen Sie den Download erneut.</translation>
+    </message>
+    <message>
+      <source>free-disk-space-and-retry</source>
+      <translation>free-disk-space-and-retry</translation>
+    </message>
+    <message>
+      <source>This link only offers SABR streams. {options} do not apply to them and will be ignored.</source>
+      <translation>Dieser Link bietet nur SABR-Streams. {options} gelten für sie nicht und werden ignoriert.</translation>
+    </message>
+    <message>
+      <source>Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.</source>
+      <translation>Antivirensoftware hat die Datei möglicherweise entfernt oder gekürzt. Fügen Sie eine Ausnahme für {path} hinzu und lassen Sie die Einrichtung sie erneut abrufen.</translation>
     </message>
   </context>
 </TS>

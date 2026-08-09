@@ -10,7 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "astra_downloader" / "translations"
-# The strings to translate are EXTRACTED from the GUI, never listed by hand.
+# The strings to translate are EXTRACTED from the companion sources, never
+# listed by hand.
 #
 # They used to be a hand-written tuple of 21 entries against a window that
 # shows 138, because nothing connected the tuple to the code: every string
@@ -471,6 +472,464 @@ CATALOGS = {
             "Cookie",
         "cookies":
             "Cookies",
+        "Removed?":
+            "Entfernt?",
+        "Reveal log file":
+            "Protokolldatei anzeigen",
+        "Limited":
+            "Eingeschränkt",
+        "Maximum playlist items":
+            "Maximale Playlist-Einträge",
+        "Shortest playlist item in seconds":
+            "Kürzestes Playlist-Element in Sekunden",
+        "Longest playlist item in seconds":
+            "Längstes Playlist-Element in Sekunden",
+        "Unsaved changes":
+            "Ungespeicherte Änderungen",
+        "Checking yt-dlp. The verified current copy stays available until the update passes.":
+            "yt-dlp wird geprüft. Die verifizierte aktuelle Kopie bleibt erhalten, bis das Update erfolgreich ist.",
+        "yt-dlp update failed. The previous working copy was kept; check the log for details.":
+            "Das yt-dlp-Update ist fehlgeschlagen. Die vorherige funktionierende Kopie wurde beibehalten; prüfen Sie das Protokoll.",
+        "Refreshing ffmpeg. The current verified copy stays available until replacement succeeds.":
+            "ffmpeg wird aktualisiert. Die aktuelle verifizierte Kopie bleibt verfügbar, bis der Ersatz erfolgreich ist.",
+        "Token copied. It will clear from the clipboard in 60 seconds if unchanged.":
+            "Token kopiert. Es wird in 60 Sekunden aus der Zwischenablage gelöscht, falls es unverändert bleibt.",
+        "New token ready. Save settings to apply it.":
+            "Neues Token bereit. Speichern Sie die Einstellungen, um es anzuwenden.",
+        "Server status indicator: Stopped":
+            "Indikator für Serverstatus: Gestoppt",
+        "Server status: Stopped":
+            "Serverstatus: Gestoppt",
+        "Companion pages":
+            "Companion-Seiten",
+        "Missing":
+            "Fehlt",
+        "Supported":
+            "Unterstützt",
+        "The installed yt-dlp streams SABR formats through fallback clients. Updates flip this automatically once native support ships.":
+            "Das installierte yt-dlp streamt SABR-Formate über Fallback-Clients. Updates schalten dies automatisch um, sobald native Unterstützung verfügbar ist.",
+        "Update":
+            "Aktualisieren",
+        "Proof-of-origin provider is running but out of date. Downloads use the web client with PO tokens.":
+            "Der Proof-of-Origin-Anbieter läuft, ist aber veraltet. Downloads verwenden den Webclient mit PO-Tokens.",
+        "Extension server status indicator: Offline":
+            "Indikator für Erweiterungsserverstatus: Offline",
+        "Review the redacted support payload before copying it.":
+            "Redigierte Support-Nutzdaten vor dem Kopieren prüfen.",
+        "Open the persisted server log in File Explorer.":
+            "Gespeichertes Serverprotokoll im Datei-Explorer öffnen.",
+        "Recent local companion events. Use Clear to remove visible entries.":
+            "Aktuelle lokale Companion-Ereignisse. Mit „Leeren“ sichtbare Einträge entfernen.",
+        "Video URL":
+            "Video-URL",
+        "Download type":
+            "Downloadtyp",
+        "Download format":
+            "Downloadformat",
+        "Download quality":
+            "Downloadqualität",
+        "Send this download somewhere other than the default folder.":
+            "Diesen Download in einem anderen Ordner als dem Standardordner speichern.",
+        "Clip start timestamp":
+            "Startzeit des Clips",
+        "Clip end timestamp":
+            "Endzeit des Clips",
+        "Subtitle request summary":
+            "Zusammenfassung der Untertitelanforderung",
+        "Quick download status":
+            "Status des Schnell-Downloads",
+        "Download tool setup status":
+            "Status der Download-Tool-Einrichtung",
+        "Download tool setup progress":
+            "Fortschritt der Download-Tool-Einrichtung",
+        "Storage problem":
+            "Speicherproblem",
+        "Quarantined state file":
+            "In Quarantäne verschobene Zustandsdatei",
+        "Running and pending downloads stored in the durable queue.":
+            "Laufende und ausstehende Downloads in der dauerhaften Warteschlange.",
+        "Pause starting pending downloads. Downloads already running will continue.":
+            "Starten ausstehender Downloads pausieren. Bereits laufende Downloads werden fortgesetzt.",
+        "Remove saved history entries. Downloaded files are not deleted.":
+            "Gespeicherte Verlaufseinträge entfernen. Heruntergeladene Dateien werden nicht gelöscht.",
+        "Restore the history entries cleared in this session.":
+            "In dieser Sitzung gelöschte Verlaufseinträge wiederherstellen.",
+        "Export every row matching the current filters as CSV.":
+            "Alle Zeilen, die den aktuellen Filtern entsprechen, als CSV exportieren.",
+        "Search download history":
+            "Downloadverlauf durchsuchen",
+        "History status":
+            "Verlaufsstatus",
+        "History format":
+            "Verlaufsformat",
+        "History sort order":
+            "Sortierreihenfolge des Verlaufs",
+        "History start date":
+            "Startdatum des Verlaufs",
+        "History end date":
+            "Enddatum des Verlaufs",
+        "History status message":
+            "Statusmeldung des Verlaufs",
+        "Subscription channel or playlist URL":
+            "URL des Abonnementkanals oder der Playlist",
+        "Subscription scan interval in minutes":
+            "Scanintervall des Abonnements in Minuten",
+        "Search subscriptions":
+            "Abonnements durchsuchen",
+        "Search title, URL, or error":
+            "Titel, URL oder Fehler durchsuchen",
+        "Subscription status":
+            "Abonnementstatus",
+        "Site address for the sign-in":
+            "Adresse der Website für die Anmeldung",
+        "Browser to read cookies from":
+            "Browser zum Lesen von Cookies",
+        "Browser profile name or path":
+            "Name oder Pfad des Browserprofils",
+        "Site sign-in status":
+            "Status der Website-Anmeldung",
+        "Search stored sign-ins":
+            "Gespeicherte Anmeldungen durchsuchen",
+        "Search site or source":
+            "Website oder Quelle durchsuchen",
+        "Stored sign-in status":
+            "Status der gespeicherten Anmeldung",
+        "Test":
+            "Test",
+        "Testing the stored sign-in…":
+            "Gespeicherte Anmeldung wird getestet…",
+        "Private API token":
+            "Privates API-Token",
+        "Reveal private token":
+            "Privates Token anzeigen",
+        "Fetch subtitle tracks and embed them in the file. The Subtitles download type fetches them without the video.":
+            "Untertitelspuren abrufen und in die Datei einbetten. Der Downloadtyp „Untertitel“ ruft sie ohne das Video ab.",
+        "Keep the .part, .f### and .ytdl files a finished download leaves behind. Off by default: one download, one file.":
+            "Die .part-, .f###- und .ytdl-Dateien behalten, die ein abgeschlossener Download hinterlässt. Standardmäßig deaktiviert: ein Download, eine Datei.",
+        "Subtitle tracks":
+            "Untertitelspuren",
+        "Subtitle format":
+            "Untertitelformat",
+        "SponsorBlock action":
+            "SponsorBlock-Aktion",
+        "Playlist uploaded after":
+            "Playlist hochgeladen nach",
+        "Socket timeout in seconds":
+            "Socket-Timeout in Sekunden",
+        "Check that a chosen format can actually be downloaded before committing to it. Costs an extra request per candidate format.":
+            "Prüfen, ob ein ausgewähltes Format tatsächlich heruntergeladen werden kann, bevor es übernommen wird. Verursacht eine zusätzliche Anfrage pro Kandidatenformat.",
+        "Pause between downloads in seconds":
+            "Pause zwischen Downloads in Sekunden",
+        "Longest pause in seconds":
+            "Längste Pause in Sekunden",
+        "Pacing jitter":
+            "Pacing-Jitter",
+        "Randomise host wait times and yt-dlp pacing by ± this percentage. 0 keeps fixed timing.":
+            "Host-Wartezeiten und yt-dlp-Pacing um diesen Prozentsatz zufällig variieren. 0 verwendet feste Zeiten.",
+        "Pacing jitter percentage":
+            "Pacing-Jitter in Prozent",
+        "Pause between requests in seconds":
+            "Pause zwischen Anfragen in Sekunden",
+        "Max file size in megabytes":
+            "Maximale Dateigröße in Megabyte",
+        "No limit":
+            "Keine Begrenzung",
+        "Checking installed yt-dlp…":
+            "Installierte yt-dlp-Version wird geprüft…",
+        "Watch clipboard changes for video links from any supported site. Matching links fill the Quick download field but are never downloaded until you confirm.":
+            "Zwischenablage auf Videolinks von unterstützten Websites überwachen. Passende Links füllen das Schnell-Download-Feld, werden aber erst nach Ihrer Bestätigung heruntergeladen.",
+        "Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.":
+            "Standardmäßig deaktiviert. Zwischenablageinhalte, die nicht wie ein Videolink aussehen, werden ignoriert; passende Links werden bereitgestellt, ohne einen Download zu starten.",
+        "Installed tools status":
+            "Status der installierten Tools",
+        "Check for a yt-dlp update. Active downloads must finish first.":
+            "Nach einem yt-dlp-Update suchen. Aktive Downloads müssen zuerst abgeschlossen werden.",
+        "Download a fresh ffmpeg and verify its checksum. The installed copy stays in place until the replacement verifies.":
+            "Frisches ffmpeg herunterladen und Prüfsumme verifizieren. Die installierte Kopie bleibt erhalten, bis der Ersatz verifiziert ist.",
+        "Write settings and subscriptions to a JSON bundle.":
+            "Einstellungen und Abonnements in ein JSON-Bundle schreiben.",
+        "Read a bundle written by Export settings and apply it.":
+            "Ein von „Einstellungen exportieren“ geschriebenes Bundle lesen und anwenden.",
+        "Settings status":
+            "Einstellungsstatus",
+        "Starting":
+            "Wird gestartet",
+        "Could not save the imported settings. Check disk space and permissions, then retry.":
+            "Importierte Einstellungen konnten nicht gespeichert werden. Prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.",
+        "Loading history…":
+            "Verlauf wird geladen…",
+        "Copy error":
+            "Fehler kopieren",
+        "Install yt-dlp before checking for updates.":
+            "Installieren Sie yt-dlp, bevor Sie nach Updates suchen.",
+        "Wait for active downloads to finish before updating yt-dlp.":
+            "Warten Sie, bis aktive Downloads abgeschlossen sind, bevor Sie yt-dlp aktualisieren.",
+        "Setup is already running.":
+            "Die Einrichtung läuft bereits.",
+        "Wait for active downloads to finish before refreshing ffmpeg.":
+            "Warten Sie, bis aktive Downloads abgeschlossen sind, bevor Sie ffmpeg aktualisieren.",
+        "Choose a valid local video download folder.":
+            "Wählen Sie einen gültigen lokalen Video-Downloadordner.",
+        "Choose a valid local audio download folder.":
+            "Wählen Sie einen gültigen lokalen Audio-Downloadordner.",
+        "Enter one or more language codes, such as en or en,es.":
+            "Geben Sie einen oder mehrere Sprachcodes ein, z. B. en oder en,es.",
+        "Use a rate such as 500K or 2M, or leave this blank.":
+            "Verwenden Sie eine Rate wie 500K oder 2M oder lassen Sie das Feld leer.",
+        "Enter an http, https, or socks proxy URL.":
+            "Geben Sie eine HTTP-, HTTPS- oder SOCKS-Proxy-URL ein.",
+        "The private API token cannot be empty.":
+            "Das private API-Token darf nicht leer sein.",
+        "Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.":
+            "Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s, %(uploader)s — keine absoluten Pfade oder '..'.",
+        "Check the highlighted fields before saving.":
+            "Prüfen Sie die markierten Felder vor dem Speichern.",
+        "Could not save settings. Nothing changed; check disk permissions and retry.":
+            "Einstellungen konnten nicht gespeichert werden. Nichts wurde geändert; prüfen Sie die Schreibrechte und versuchen Sie es erneut.",
+        "Settings saved and server restarted.":
+            "Einstellungen gespeichert und Server neu gestartet.",
+        "Looking up available formats…":
+            "Verfügbare Formate werden gesucht…",
+        "Copied token cleared from the clipboard.":
+            "Kopiertes Token wurde aus der Zwischenablage entfernt.",
+        "Redacted diagnostics preview":
+            "Vorschau der redigierten Diagnosedaten",
+        "Installing required download tools...":
+            "Erforderliche Download-Tools werden installiert…",
+        "Setting Up":
+            "Einrichtung",
+        "Unavailable":
+            "Nicht verfügbar",
+        "Downloads use the web client with proof-of-origin tokens.":
+            "Downloads verwenden den Webclient mit Proof-of-Origin-Tokens.",
+        "Fallback":
+            "Fallback",
+        "No proof-of-origin provider is running. Downloads fall back to the token-exempt tv and android_vr clients.":
+            "Kein Proof-of-Origin-Anbieter läuft. Downloads fallen auf die tokenfreien tv- und android_vr-Clients zurück.",
+        "Run a bounded metadata-only sign-in test.":
+            "Begrenzten Metadaten-Test der Anmeldung ausführen.",
+        "Test passed":
+            "Test bestanden",
+        "Subscription scan started. This row will update when it finishes.":
+            "Abonnement-Scan gestartet. Diese Zeile wird aktualisiert, sobald er abgeschlossen ist.",
+        "Server status indicator: Starting":
+            "Indikator für Serverstatus: Wird gestartet",
+        "Server status: Starting":
+            "Serverstatus: Wird gestartet",
+        "Starting server":
+            "Server wird gestartet",
+        "Checking local ports and preparing the API":
+            "Lokale Ports werden geprüft und die API wird vorbereitet",
+        "Extension server status indicator: Starting":
+            "Indikator für Erweiterungsserverstatus: Wird gestartet",
+        "Starting server…":
+            "Server wird gestartet…",
+        "Running":
+            "Läuft",
+        "Resume pending downloads explicitly. Items needing sign-in remain paused.":
+            "Ausstehende Downloads explizit fortsetzen. Elemente, die eine Anmeldung benötigen, bleiben pausiert.",
+        "History unavailable":
+            "Verlauf nicht verfügbar",
+        "Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.":
+            "Downloadverlauf konnte nicht gelesen werden. Die unlesbare Datei wurde beiseitegelegt; stellen Sie sie aus dem Status-Hinweis wieder her oder prüfen Sie die Diagnose.",
+        "Settings saved. Restart Astra Downloader to apply the language.":
+            "Einstellungen gespeichert. Starten Sie Astra Downloader neu, um die Sprache anzuwenden.",
+        "Settings saved.":
+            "Einstellungen gespeichert.",
+        "Hide":
+            "Ausblenden",
+        "Hide private token":
+            "Privates Token ausblenden",
+        "Server error":
+            "Serverfehler",
+        "Server status: Error":
+            "Serverstatus: Fehler",
+        "Server status indicator: Error":
+            "Indikator für Serverstatus: Fehler",
+        "Extension server status indicator: Error":
+            "Indikator für Erweiterungsserverstatus: Fehler",
+        "Server failed to start. Check the log for details.":
+            "Serverstart fehlgeschlagen. Prüfen Sie das Protokoll auf Details.",
+        "Installing yt-dlp...":
+            "yt-dlp wird installiert…",
+        "{label} status indicator: {value}":
+            "{label} Statusindikator: {value}",
+        "{label} status: {value}":
+            "{label} Status: {value}",
+        "Required":
+            "Erforderlich",
+        "Optional":
+            "Optional",
+        "No subscriptions match these filters":
+            "Keine Abonnements entsprechen diesen Filtern",
+        "Try a different search or choose All subscriptions.":
+            "Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Abonnements“.",
+        "No sign-ins match these filters":
+            "Keine Anmeldungen entsprechen diesen Filtern",
+        "Try a different search or choose All sign-ins.":
+            "Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Anmeldungen“.",
+        "Stored sign-in test passed.":
+            "Test der gespeicherten Anmeldung bestanden.",
+        "Server status indicator: Running":
+            "Indikator für Serverstatus: Läuft",
+        "Server status: Running":
+            "Serverstatus: Läuft",
+        "Server online":
+            "Server online",
+        "Local only · ready for Astra Deck":
+            "Nur lokal · bereit für Astra Deck",
+        "Extension server status indicator: Online":
+            "Indikator für Erweiterungsserverstatus: Online",
+        "Stop server":
+            "Server stoppen",
+        "Local only · start before downloading":
+            "Nur lokal · vor dem Download starten",
+        "{title} status: {status}":
+            "{title} Status: {status}",
+        "Move this pending download earlier.":
+            "Diesen ausstehenden Download nach oben verschieben.",
+        "Move this pending download later.":
+            "Diesen ausstehenden Download nach unten verschieben.",
+        "Resume this download.":
+            "Diesen Download fortsetzen.",
+        "Store this site's signed-in session so the download can run.":
+            "Gespeicherte Anmeldung für diese Website ablegen, damit der Download ausgeführt werden kann.",
+        "History could not be read":
+            "Verlauf konnte nicht gelesen werden",
+        "Astra Downloader kept the unreadable history aside instead of showing an empty list.":
+            "Astra Downloader hat den unlesbaren Verlauf beiseitegelegt, statt eine leere Liste anzuzeigen.",
+        "Open diagnostics":
+            "Diagnose öffnen",
+        "Settings status: {message}":
+            "Einstellungsstatus: {message}",
+        "Installing ffmpeg...":
+            "ffmpeg wird installiert…",
+        "This download goes to {path}. Click to use the default folder again.":
+            "Dieser Download wird in {path} gespeichert. Klicken Sie, um wieder den Standardordner zu verwenden.",
+        "{shown} of {total} shown":
+            "{shown} von {total} angezeigt",
+        "Enable subscription":
+            "Abonnement aktivieren",
+        "Every {minutes} min · scanning now…":
+            "Alle {minutes} Min. · Scan läuft…",
+        "Test failed":
+            "Test fehlgeschlagen",
+        "Subtitle language":
+            "Untertitelsprache",
+        "{title} progress":
+            "{title} Fortschritt",
+        "{progress} percent complete":
+            "{progress} Prozent abgeschlossen",
+        "Could not read download history: {error}":
+            "Downloadverlauf konnte nicht gelesen werden: {error}",
+        "No current message":
+            "Keine aktuelle Meldung",
+        "Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.":
+            "Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.",
+        "Registering shortcuts and protocols...":
+            "Verknüpfungen und Protokolle werden registriert…",
+        "Finishing setup...":
+            "Einrichtung wird abgeschlossen…",
+        "This host is paused — retry in {duration}.":
+            "Dieser Host ist pausiert — erneut versuchen in {duration}.",
+        "Host paused · retry in {duration}":
+            "Host pausiert · erneut versuchen in {duration}",
+        "YouTube requires a PO token for this video. Start the PO-token provider, then retry the download.":
+            "YouTube benötigt für dieses Video ein PO-Token. Starten Sie den PO-Token-Anbieter und versuchen Sie den Download erneut.",
+        "Start bgutil-ytdlp-pot-provider on 127.0.0.1:4416 and retry.":
+            "Starten Sie bgutil-ytdlp-pot-provider auf 127.0.0.1:4416 und versuchen Sie es erneut.",
+        "start-po-token-provider":
+            "start-po-token-provider",
+        "The PO-token provider is reachable but looks stale or failed to issue a usable token.":
+            "Der PO-Token-Anbieter ist erreichbar, wirkt aber veraltet oder konnte kein nutzbares Token ausstellen.",
+        "Update or restart bgutil-ytdlp-pot-provider, then retry.":
+            "Aktualisieren oder starten Sie bgutil-ytdlp-pot-provider neu und versuchen Sie es erneut.",
+        "update-po-token-provider":
+            "update-po-token-provider",
+        "This video only exposes SABR-limited formats that this yt-dlp path cannot download yet.":
+            "Dieses Video bietet nur SABR-beschränkte Formate, die dieser yt-dlp-Pfad noch nicht herunterladen kann.",
+        "Clip ranges, the bandwidth cap and concurrent fragments do not apply to SABR streams and were ignored. Update yt-dlp when SABR support lands, or retry after YouTube exposes standard formats.":
+            "Clipbereiche, Bandbreitenbegrenzung und gleichzeitige Fragmente gelten nicht für SABR-Streams und wurden ignoriert. Aktualisieren Sie yt-dlp, sobald SABR-Unterstützung verfügbar ist, oder versuchen Sie es erneut, nachdem YouTube Standardformate anbietet.",
+        "update-ytdlp-or-retry-later":
+            "update-ytdlp-or-retry-later",
+        "yt-dlp needs the Deno JavaScript runtime to solve recent YouTube signature challenges.":
+            "yt-dlp benötigt die Deno-JavaScript-Laufzeit, um aktuelle YouTube-Signatur-Herausforderungen zu lösen.",
+        "Install Deno with winget install DenoLand.Deno, then restart Astra Downloader.":
+            "Installieren Sie Deno mit winget install DenoLand.Deno und starten Sie Astra Downloader anschließend neu.",
+        "install-deno":
+            "install-deno",
+        "The installed Deno runtime is too old for this yt-dlp build to solve recent YouTube signature challenges.":
+            "Die installierte Deno-Laufzeit ist für diesen yt-dlp-Build zu alt, um aktuelle YouTube-Signatur-Herausforderungen zu lösen.",
+        "Upgrade Deno to 2.3.0 or newer with winget upgrade DenoLand.Deno, then retry.":
+            "Führen Sie ein Upgrade auf Deno 2.3.0 oder neuer mit winget upgrade DenoLand.Deno durch und versuchen Sie es erneut.",
+        "upgrade-deno":
+            "upgrade-deno",
+        "yt-dlp needs a configured JavaScript runtime for YouTube challenges.":
+            "yt-dlp benötigt eine konfigurierte JavaScript-Laufzeit für YouTube-Herausforderungen.",
+        "Provision Deno, or install Node 22+ and select it in companion settings.":
+            "Stellen Sie Deno bereit oder installieren Sie Node 22+ und wählen Sie es in den Companion-Einstellungen aus.",
+        "configure-javascript-runtime":
+            "configure-javascript-runtime",
+        "Astra Downloader could not verify the configured JavaScript runtime.":
+            "Astra Downloader konnte die konfigurierte JavaScript-Laufzeit nicht verifizieren.",
+        "Repair or replace the selected runtime, then retry.":
+            "Reparieren oder ersetzen Sie die ausgewählte Laufzeit und versuchen Sie es erneut.",
+        "Repair or replace the selected JavaScript runtime, then retry.":
+            "Reparieren oder ersetzen Sie die ausgewählte JavaScript-Laufzeit und versuchen Sie es erneut.",
+        "repair-javascript-runtime":
+            "repair-javascript-runtime",
+        "The configured JavaScript runtime is below yt-dlp's supported floor.":
+            "Die konfigurierte JavaScript-Laufzeit liegt unter der von yt-dlp unterstützten Mindestversion.",
+        "Upgrade to Deno 2.3+ or Node 22+, then retry.":
+            "Führen Sie ein Upgrade auf Deno 2.3+ oder Node 22+ durch und versuchen Sie es erneut.",
+        "upgrade-javascript-runtime":
+            "upgrade-javascript-runtime",
+        "The configured runtime could not execute the yt-dlp EJS capability probe.":
+            "Die konfigurierte Laufzeit konnte die EJS-Fähigkeitsprüfung von yt-dlp nicht ausführen.",
+        "Sign in to confirm YouTube access. Grant browser cookies or open the video while signed in, then retry.":
+            "Melden Sie sich an, um den YouTube-Zugriff zu bestätigen. Gewähren Sie Browser-Cookies oder öffnen Sie das Video während der Anmeldung und versuchen Sie es erneut.",
+        "Sign in to YouTube in this browser and allow Astra Deck to attach YouTube cookies.":
+            "Melden Sie sich in diesem Browser bei YouTube an und erlauben Sie Astra Deck, YouTube-Cookies anzuhängen.",
+        "sign-in-and-retry":
+            "sign-in-and-retry",
+        "ffmpeg is missing, stale, or failed during merge/extract.":
+            "ffmpeg fehlt, ist veraltet oder ist beim Zusammenführen/Extrahieren fehlgeschlagen.",
+        "Open Astra Downloader and refresh ffmpeg before retrying.":
+            "Öffnen Sie Astra Downloader und aktualisieren Sie ffmpeg, bevor Sie es erneut versuchen.",
+        "refresh-ffmpeg":
+            "refresh-ffmpeg",
+        "Astra Downloader could not reach the site or a required provider.":
+            "Astra Downloader konnte die Website oder einen erforderlichen Anbieter nicht erreichen.",
+        "Check the network, VPN, firewall, and provider process, then retry.":
+            "Prüfen Sie Netzwerk, VPN, Firewall und den Anbieterprozess und versuchen Sie es erneut.",
+        "check-network-and-retry":
+            "check-network-and-retry",
+        "Astra Downloader could not create a protected YouTube cookie jar.":
+            "Astra Downloader konnte kein geschütztes YouTube-Cookie-Archiv erstellen.",
+        "Retry from Astra Deck so fresh cookies can be supplied.":
+            "Versuchen Sie es erneut über Astra Deck, damit neue Cookies bereitgestellt werden können.",
+        "The site refused the request (HTTP 403).":
+            "Die Website hat die Anfrage abgelehnt (HTTP 403).",
+        "Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps.":
+            "Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls.",
+        "impersonate-and-retry":
+            "impersonate-and-retry",
+        "The site refused further requests for now (HTTP 429).":
+            "Die Website hat weitere Anfragen vorerst abgelehnt (HTTP 429).",
+        "This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.":
+            "Diese Website ist für den Rest des Wiederholungsfensters pausiert. Erhöhen Sie in den Einstellungen das Anfrage-Pacing — eine Bandbreitenbegrenzung hilft hier nicht — und versuchen Sie es erneut. Andere Websites können weiter herunterladen.",
+        "slow-down-and-retry":
+            "slow-down-and-retry",
+        "There is not enough free disk space for this download.":
+            "Nicht genügend freier Speicherplatz für diesen Download.",
+        "Free space on the destination drive, then retry the download.":
+            "Geben Sie Speicherplatz auf dem Ziellaufwerk frei und versuchen Sie den Download erneut.",
+        "free-disk-space-and-retry":
+            "free-disk-space-and-retry",
+        "This link only offers SABR streams. {options} do not apply to them and will be ignored.":
+            "Dieser Link bietet nur SABR-Streams. {options} gelten für sie nicht und werden ignoriert.",
+        "Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.":
+            "Antivirensoftware hat die Datei möglicherweise entfernt oder gekürzt. Fügen Sie eine Ausnahme für {path} hinzu und lassen Sie die Einrichtung sie erneut abrufen.",
     },
     "en": {},
     "es": {
