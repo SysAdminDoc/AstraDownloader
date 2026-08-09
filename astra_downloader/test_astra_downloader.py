@@ -583,6 +583,167 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(restored.archive_summary()["complete"], 1)
             self.assertEqual(restored.archive_entries()[key]["status"], "complete")
 
+    def test_begin_scan_moves_a_due_subscription_to_its_next_interval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "schedule.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel",
+                interval_minutes=5,
+                now=1000,
+            )
+            self.assertIsNone(error)
+            self.assertEqual(
+                [item["id"] for item in store.due_subscriptions(now=1000)],
+                [record["id"]],
+            )
+
+            started = store.begin_scan(record["id"], now=1000)
+
+            self.assertEqual(started["lastScanAt"], 1000)
+            self.assertEqual(started["nextScanAt"], 1300)
+            self.assertEqual(store.due_subscriptions(now=1000), [])
+            self.assertEqual(
+                [item["id"] for item in store.due_subscriptions(now=1300)],
+                [record["id"]],
+            )
+
+    def test_reconcile_reopens_an_interrupted_archive_claim_for_retry(self):
+        subs = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "interrupted.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel"
+            )
+            self.assertIsNone(error)
+            candidate = {
+                "id": "video-interrupted",
+                "url": "https://www.youtube.com/watch?v=video-interrupted",
+                "title": "Interrupted upload",
+            }
+            key = ad.subscription_archive_key(candidate)
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=1000),
+                subs.RESERVE_OK,
+            )
+            self.assertTrue(store.mark_archive_queued(key, "dl_orphan", now=1000))
+
+            self.assertTrue(store.reconcile_downloads([], now=1001))
+            orphan = store.archive_entries()[key]
+            self.assertEqual(orphan["status"], "failed")
+            self.assertEqual(orphan["downloadId"], "")
+            self.assertEqual(orphan["attempts"], 1)
+            self.assertIn("interrupted", orphan["lastError"])
+            retry_at = 1001 + subs.SUBSCRIPTION_RETRY_BASE_SECONDS
+            self.assertEqual(orphan["nextRetryAt"], retry_at)
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=retry_at),
+                subs.RESERVE_OK,
+            )
+
+    def test_runtime_archive_trim_keeps_live_claims_at_the_bound(self):
+        subs = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ad.SubscriptionStore(
+                path=Path(tmp) / "bounded.json",
+                reader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                max_archive_entries=2,
+            )
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel"
+            )
+            self.assertIsNone(error)
+            candidates = [
+                {
+                    "id": "video-live",
+                    "url": "https://www.youtube.com/watch?v=video-live",
+                    "title": "Live claim",
+                },
+                {
+                    "id": "video-complete",
+                    "url": "https://www.youtube.com/watch?v=video-complete",
+                    "title": "Completed claim",
+                },
+                {
+                    "id": "video-new",
+                    "url": "https://www.youtube.com/watch?v=video-new",
+                    "title": "New claim",
+                },
+            ]
+            keys = [ad.subscription_archive_key(candidate) for candidate in candidates]
+            self.assertEqual(
+                store.reserve_archive(keys[0], candidates[0], record["id"], now=1000),
+                subs.RESERVE_OK,
+            )
+            self.assertTrue(store.mark_archive_queued(keys[0], "dl_live", now=1000))
+            self.assertEqual(
+                store.reserve_archive(keys[1], candidates[1], record["id"], now=1001),
+                subs.RESERVE_OK,
+            )
+            self.assertTrue(store.mark_archive_queued(keys[1], "dl_complete", now=1001))
+            self.assertEqual(store.mark_download("dl_complete", "complete", now=1001), 1)
+            self.assertEqual(
+                store.reserve_archive(keys[2], candidates[2], record["id"], now=1002),
+                subs.RESERVE_OK,
+            )
+
+            entries = store.archive_entries()
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(set(entries), {keys[0], keys[2]})
+            self.assertEqual(entries[keys[0]]["status"], "queued")
+
+    def test_completed_download_updates_only_its_subscription_archive_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "completion.json")
+            first, error = store.add_subscription(
+                "https://www.youtube.com/@astra-first"
+            )
+            self.assertIsNone(error)
+            second, error = store.add_subscription(
+                "https://www.youtube.com/@astra-second"
+            )
+            self.assertIsNone(error)
+            candidates = [
+                {
+                    "id": "video-first",
+                    "url": "https://www.youtube.com/watch?v=video-first",
+                    "title": "First subscription upload",
+                },
+                {
+                    "id": "video-second",
+                    "url": "https://www.youtube.com/watch?v=video-second",
+                    "title": "Second subscription upload",
+                },
+            ]
+            keys = [ad.subscription_archive_key(candidate) for candidate in candidates]
+            self.assertEqual(
+                store.reserve_archive(keys[0], candidates[0], first["id"], now=1000),
+                subscriptions_module().RESERVE_OK,
+            )
+            self.assertTrue(store.mark_archive_queued(keys[0], "dl_first", now=1000))
+            self.assertEqual(
+                store.reserve_archive(keys[1], candidates[1], second["id"], now=1000),
+                subscriptions_module().RESERVE_OK,
+            )
+            self.assertTrue(store.mark_archive_queued(keys[1], "dl_second", now=1000))
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: ([], None),
+                enqueue=lambda *_args: (None, "not used"),
+                status_reader=lambda download_id: (
+                    "complete" if download_id == "dl_first" else "failed"
+                ),
+            )
+
+            self.assertEqual(manager.handle_download_completed("dl_first"), 1)
+
+            entries = store.archive_entries()
+            self.assertEqual(entries[keys[0]]["status"], "complete")
+            self.assertEqual(entries[keys[0]]["subscriptionId"], first["id"])
+            self.assertIsNotNone(entries[keys[0]]["completedAt"])
+            self.assertEqual(entries[keys[1]]["status"], "queued")
+            self.assertEqual(entries[keys[1]]["subscriptionId"], second["id"])
+
     def test_removed_subscription_can_be_restored_without_resetting_its_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self._store(Path(tmp) / "undo.json")
