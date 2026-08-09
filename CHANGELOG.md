@@ -116,6 +116,9 @@ repository's git log.
   carries its status, error code and explanation into History; the status
   filter lists those outcomes, and terminal queue rows offer retry, link and
   error actions where applicable.
+- **A forked launch cannot silently downgrade the managed app.** Frozen
+  executable relocation now uses byte-verified atomic copying, preserves a
+  newer installed binary, and leaves the previous target intact on failure.
 
 ## [2.4.0] - 2026-08-06
 

@@ -150,7 +150,7 @@ Notes on existing items above — read these before starting them:
   `ensure_installed_executable` (`astra_downloader.py:2590-2619`) copies the
   running exe into `%LOCALAPPDATA%` on every frozen launch, so a
   winget-managed copy forks into a second install that `winget uninstall`
-  cannot remove. Fix that first — it is also a P0 below.
+  cannot remove. Fix that before packaging.
 - *Give `subscriptions.py` a real test surface* — the scheduler defects filed
   below are what that missing coverage is hiding; the lifecycle tests should
   assert against them specifically.
@@ -165,13 +165,6 @@ Notes on existing items above — read these before starting them:
   designing this.
 
 ### P0
-
-- [ ] P0 — Route the self-relocating exe copy through the verified-update transaction
-  Why: One path writes the managed `AstraDownloader.exe` with no digest check, no version comparison, no backup and no rollback — so running an older release from Downloads silently downgrades the install, and a short write leaves a successfully-replaced corrupt binary. It is also the blocker for winget packaging.
-  Evidence: `ensure_installed_executable` (`astra_downloader.py:2590-2619`) does `shutil.copy2` into a temp then `os.replace`, on every frozen launch from any other path, reached from `ensure_system_integrations` (`:4156`) **before** the single-instance guard (`:4162`). The repo already owns the correct primitive: `atomic_copy_verified` (`:770-799`) hashes the source, copies, fsyncs, re-hashes, then replaces — and its docstring exists precisely because "a normal `copy2` can leave a truncated destination". `COMPANION_ROLLBACK_FILENAME` is never touched here.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: the copy goes through `atomic_copy_verified`; an older running exe does not overwrite a newer managed one without an explicit user action; a failed copy leaves the previous managed exe intact; the test asserts the file on disk, not the call shape.
-  Complexity: S
 
 - [ ] P0 — Produce the SHA-256 sidecar the updater and the README both depend on
   Why: Self-update fails closed when `AstraDownloader.exe.sha256` is missing from a release, and nothing in this repository generates it. Any release shipped without a hand-made sidecar breaks updating for every installed client, and the README tells users to verify against a file the build does not emit.
