@@ -1038,6 +1038,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_output_dir',
     'normalize_download_section',
     'normalize_output_template',
+    'output_template_preview',
     'normalize_playlist_date',
     'normalize_impersonate_target',
     'probe_impersonate_targets',
@@ -3738,6 +3739,20 @@ class MainWindowCore(QMainWindow):
         self.cfg_outtmpl.setAccessibleName(tr("Filename template"))
         self.cfg_outtmpl.setPlaceholderText("%(title)s.%(ext)s")
         paths_l.addWidget(self.cfg_outtmpl)
+        self.outtmpl_preview = make_label("", "fieldHint", word_wrap=True)
+        self.outtmpl_preview.setAccessibleName(tr("Filename template preview"))
+        paths_l.addWidget(self.outtmpl_preview)
+        self.cfg_windows_filenames = QCheckBox(tr("Use Windows-safe filenames"))
+        self.cfg_windows_filenames.setToolTip(tr(
+            "Ask yt-dlp to replace characters and names that Windows cannot store."
+        ))
+        self.cfg_windows_filenames.setChecked(
+            self.config.get("WindowsFilenames", True)
+        )
+        paths_l.addWidget(self.cfg_windows_filenames)
+        self.cfg_outtmpl.textChanged.connect(self._update_output_template_preview)
+        self.cfg_dl_path.textChanged.connect(self._update_output_template_preview)
+        self._update_output_template_preview()
         layout.addWidget(paths_card)
 
         # Post-processing
@@ -5492,6 +5507,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_dl_path", "DownloadPath", "text"),
         ("cfg_audio_path", "AudioDownloadPath", "text"),
         ("cfg_outtmpl", "OutputTemplate", "text"),
+        ("cfg_windows_filenames", "WindowsFilenames", "check"),
         ("cfg_sublangs", "SubLangs", "text"),
         ("cfg_ratelimit", "RateLimit", "text"),
         ("cfg_throttled", "ThrottledRate", "text"),
@@ -5590,6 +5606,7 @@ class MainWindowCore(QMainWindow):
             box.blockSignals(False)
         self._sync_sublang_checkboxes(self.cfg_sublangs.text())
         self._rebuild_quick_site_profiles()
+        self._update_output_template_preview()
         # Signals stay blocked throughout, so refreshing the form does not
         # mark it dirty — the import's own status line is left standing.
         return refreshed
@@ -6412,6 +6429,47 @@ class MainWindowCore(QMainWindow):
         # without deleting the live binary first.
         self._run_setup(force_ffmpeg=True)
 
+    def _update_output_template_preview(self, *_args):
+        """Show the rendered example and any Windows path hazards."""
+        label = getattr(self, "outtmpl_preview", None)
+        builder = self._dependencies.get("output_template_preview")
+        if label is None or not callable(builder):
+            return
+        report = builder(
+            self.cfg_outtmpl.text(),
+            self.cfg_dl_path.text(),
+        )
+        if not report.get("valid"):
+            label.setText(tr("Preview unavailable until the template is valid."))
+            label.setProperty("state", "error")
+            repolish(label)
+            return
+        warnings = []
+        reserved = report.get("reserved") or ()
+        if reserved:
+            warnings.append(tr(
+                "Reserved Windows name in preview: {name}."
+            ).format(name=", ".join(reserved)))
+        if report.get("too_long"):
+            warnings.append(tr(
+                "Rendered path is {length} characters; Windows maximum is {maximum}."
+            ).format(
+                length=report.get("length"),
+                maximum=report.get("max_path", 260),
+            ))
+        if warnings:
+            label.setText(" ".join(warnings))
+            label.setProperty("state", "error")
+        else:
+            label.setText(tr(
+                "Preview: {path} ({length} characters)."
+            ).format(
+                path=report.get("path"),
+                length=report.get("length"),
+            ))
+            label.setProperty("state", "neutral")
+        repolish(label)
+
     def _save_settings(self):
         site_profiles_field = getattr(self, "cfg_site_profiles", None)
         validated_fields = (
@@ -6518,6 +6576,19 @@ class MainWindowCore(QMainWindow):
                 "Keep %(ext)s and use only safe yt-dlp fields such as "
                 "%(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.",
             )
+        preview_builder = self._dependencies.get("output_template_preview")
+        if outtmpl_raw and outtmpl and callable(preview_builder):
+            report = preview_builder(outtmpl, dl_path)
+            if report.get("reserved"):
+                mark_error(
+                    self.cfg_outtmpl,
+                    "The template preview uses a reserved Windows name.",
+                )
+            if report.get("too_long"):
+                mark_error(
+                    self.cfg_outtmpl,
+                    "The rendered template path is too long for Windows.",
+                )
 
         if has_error:
             self._show_settings_status("Check the highlighted fields before saving.", "danger")
@@ -6545,7 +6616,9 @@ class MainWindowCore(QMainWindow):
         def checked_setting(attribute, key):
             widget = getattr(self, attribute, None)
             return widget.isChecked() if widget is not None else bool(
-                self.config.get(key, False)
+                self.config.get(
+                    key, self._value("DEFAULT_CONFIG").get(key, False)
+                )
             )
 
         def numeric_setting(attribute, key):
@@ -6560,6 +6633,9 @@ class MainWindowCore(QMainWindow):
             "DownloadPath": dl_path,
             "AudioDownloadPath": audio_path,
             "OutputTemplate": outtmpl,
+            "WindowsFilenames": checked_setting(
+                "cfg_windows_filenames", "WindowsFilenames"
+            ),
             "EmbedMetadata": self.cfg_metadata.isChecked(),
             "EmbedThumbnail": self.cfg_thumbnail.isChecked(),
             "EmbedChapters": self.cfg_chapters.isChecked(),

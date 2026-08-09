@@ -46,6 +46,7 @@ __all__ = (
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
+    "output_template_preview", "WINDOWS_MAX_PATH",
     "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
@@ -69,6 +70,7 @@ _OWNED_EXPORTS = {
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
+    "output_template_preview", "WINDOWS_MAX_PATH",
     "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
@@ -319,6 +321,7 @@ DEFAULT_CONFIG = {
     # allowlist so a template can never drive the output path with arbitrary
     # fields/traversal (CVE-2024-38519 posture).
     "OutputTemplate": "",
+    "WindowsFilenames": True,
     "NativeChromeExtensionIds": os.environ.get("ASTRA_NATIVE_CHROME_EXTENSION_IDS", ""),
     "NativeFirefoxExtensionIds": os.environ.get(
         "ASTRA_NATIVE_FIREFOX_EXTENSION_IDS",
@@ -773,6 +776,92 @@ def normalize_output_template(value):
     if "%" in stripped:
         return ""
     return bound_output_template_fields(norm)
+
+
+WINDOWS_MAX_PATH = 260
+_WINDOWS_RESERVED_NAMES = frozenset({
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+})
+_OUTPUT_TEMPLATE_PREVIEW_DEFAULT = "%(title).200B.%(ext)s"
+_OUTPUT_TEMPLATE_PREVIEW_VALUES = {
+    "title": "Example video",
+    "id": "abc123",
+    "ext": "mp4",
+    "uploader": "Astra channel",
+    "uploader_id": "astra",
+    "channel": "Astra channel",
+    "channel_id": "astra",
+    "upload_date": "20260809",
+    "release_date": "20260809",
+    "playlist_title": "Example playlist",
+    "playlist": "Example playlist",
+    "playlist_index": "1",
+    "resolution": "1920x1080",
+    "height": "1080",
+    "width": "1920",
+    "fps": "30",
+    "format_id": "137",
+    "autonumber": "1",
+    "epoch": "1786300000",
+    "duration_string": "12:34",
+    "season_number": "1",
+    "episode_number": "1",
+    "view_count": "1234",
+    "like_count": "123",
+}
+
+
+def _render_output_template_preview(template):
+    def replace(match):
+        field, _pad, precision, _conversion = match.groups()
+        value = str(_OUTPUT_TEMPLATE_PREVIEW_VALUES.get(field, field))
+        if precision:
+            value = value[:int(precision)]
+        return value
+
+    # A doubled percent is a literal percent in a yt-dlp template.
+    return _OUTPUT_TOKEN_RE.sub(replace, template.replace("%%", "%"))
+
+
+def _windows_reserved_output_component(component):
+    stem = str(component or "").rstrip(" .").split(".", 1)[0].upper()
+    return stem if stem in _WINDOWS_RESERVED_NAMES else ""
+
+
+def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PATH):
+    """Render a safe example and report Windows path hazards before saving."""
+    raw = clean_text(template, "", 300)
+    if raw:
+        normalized = normalize_output_template(raw)
+        if not normalized:
+            return {
+                "valid": False, "normalized": "", "relative": "", "path": "",
+                "length": 0, "max_path": int(max_path),
+                "reserved": (), "too_long": False,
+            }
+    else:
+        normalized = _OUTPUT_TEMPLATE_PREVIEW_DEFAULT
+    relative = _render_output_template_preview(normalized).replace("/", "\\")
+    root = clean_path_text(output_dir) or "C:\\Videos"
+    path = root.rstrip("\\/") + "\\" + relative
+    reserved = []
+    for component in relative.split("\\"):
+        name = _windows_reserved_output_component(component)
+        if name and name not in reserved:
+            reserved.append(name)
+    length = len(path)
+    return {
+        "valid": True,
+        "normalized": normalized,
+        "relative": relative,
+        "path": path,
+        "length": length,
+        "max_path": int(max_path),
+        "reserved": tuple(reserved),
+        "too_long": length > int(max_path),
+    }
 
 
 def normalize_url(value):
@@ -1318,6 +1407,7 @@ def sanitize_config(raw):
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
         "WriteInfoJson", "WriteDescription", "WriteThumbnail",
         "SplitChapters", "LiveFromStart",
+        "WindowsFilenames",
         "KeepIntermediateFiles", "VerifyFormats",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",

@@ -47,6 +47,9 @@ pasting a link never needs it.
   split chapter files, or start a live stream from its beginning. A bounded
   wait-for-live-video setting handles scheduled events without changing the
   existing embed options.
+- **Preview Windows-safe names.** Settings renders an example output path,
+  flags reserved names and overlong paths before saving, and enables yt-dlp's
+  Windows filename sanitization by default.
 - **It tells you why.** A failure names its cause — missing JavaScript
   runtime, expired sign-in, size cap, SABR-limited formats, a site refusing
   the request — and offers the control that fixes it.
