@@ -53,6 +53,10 @@ repository's git log.
   off the GUI thread and reports a starting state, history distinguishes an
   unreadable store from an empty one, subscription rows show active scans, and
   format probing tells the user when it is looking up available formats.
+- **Window state and destructive actions are recoverable.** The companion
+  restores its last page, geometry and maximised state; sign-in, subscription
+  and settings-bundle changes have one-step undo; and closing reports how many
+  active downloads it is about to cancel.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the

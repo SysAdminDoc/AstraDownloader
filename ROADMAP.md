@@ -161,15 +161,6 @@ Notes on existing items above — read these before starting them:
 
 ### P2
 
-  Complexity: M
-
-- [ ] P2 — Remember the window, and let the destructive actions be taken back
-  Why: A desktop app that reopens at 1120×760 on the Download page every launch reads as unfinished, and four irreversible actions have neither the confirmation this project bans nor the undo it prescribes instead.
-  Evidence: `setMinimumSize(900, 620)` + `resize(1120, 760)` unconditionally at `gui.py:1009-1010`; no `saveGeometry`/`restoreGeometry`/`QSettings` anywhere in the app modules; `_nav_click("Download")` hardcoded at `gui.py:1139`. Without undo or confirmation: remove sign-in (`gui.py:4538-4547`, deletes the jar), remove subscription (`:2587-2596`), import a settings bundle (`self.config.update(bundle["settings"])` at `:4322`, with `describe_bundle_changes` computed at `:4320` but reported only at `:4346-4354` — after the write), and `closeEvent` → `dl_manager.cancel_all()` (`:5504`), which with `CloseToTray` off kills every in-flight download with no indication any were running. History clear is the one that does it right (`gui.py:2040-2044`, `:4498-4517`), though its snapshot is session-only.
-  Touches: `astra_downloader/gui.py`, `astra_downloader/config.py`
-  Acceptance: window geometry, maximised state and last page persist; sign-in and subscription removal gain the same undo affordance history clear has; a settings import writes a restorable snapshot first; closing with downloads running says how many will be cancelled before doing it.
-  Complexity: M
-
 - [ ] P2 — Make the Settings page navigable
   Why: 66 interactive controls in one 811-line method, with no search, no reset, and the most-wanted setting filed under the wrong heading.
   Evidence: `_build_settings` is `gui.py:2598-3408`; 44 named `cfg_*` controls plus 10 SponsorBlock category boxes (`:2843-2856`) and 12 subtitle-language boxes (`:2789-2800`), with Performance alone holding 16 (`:2956-3229`). No filter field on the page, and no `Reset`/`Restore default` anywhere in `gui.py` — `DEFAULT_CONFIG` is read only as an import fallback (`:4217`), so a user who breaks `OutputTemplate` has no way back. `cfg_language` sits in the "Tray behavior" group (`:3234-3236`) with its restart requirement only in a tooltip (`:3257-3259`); Export/Import settings sit under "Maintenance" (`:3331-3346`).

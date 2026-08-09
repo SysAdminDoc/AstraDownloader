@@ -428,6 +428,7 @@ _MULTI_LABEL_SUFFIXES = frozenset({
     'co.kr', 'co.za', 'com.pl', 'com.ua', 'co.il', 'com.co', 'com.pe',
 })
 _SITE_KEY_RE = re.compile(r'[^a-z0-9.\-]')
+_SITE_LOGIN_UNDO_TOKEN_RE = re.compile(r'^[0-9a-f]{32}$')
 
 
 def registrable_domain(host):
@@ -538,6 +539,10 @@ class SiteLoginStore:
         self._reader = reader
         self._writer = writer
         self._lock = threading.RLock()
+        # Undo backups contain cookie values, so they are session-only and
+        # never survive a new store instance. A crash therefore cannot leave
+        # an unlisted live session in the protected directory indefinitely.
+        self._cleanup_undo_backups()
 
     # -- storage -----------------------------------------------------------
     def _log(self, message):
@@ -600,6 +605,42 @@ class SiteLoginStore:
 
     def _jar_path(self, key):
         return self.root / f"{key}.txt"
+
+    def _undo_path(self, token):
+        if not _SITE_LOGIN_UNDO_TOKEN_RE.fullmatch(str(token or "")):
+            return None
+        return self.root / f".undo-{token}.txt"
+
+    def _cleanup_undo_backups(self):
+        try:
+            if not self.root.exists():
+                return
+            for path in self.root.glob(".undo-*.txt"):
+                try:
+                    path.unlink()
+                except OSError as error:
+                    self._log(f"WARNING: stale site-login undo cleanup failed: {error}")
+        except OSError as error:
+            self._log(f"WARNING: site-login undo scan failed: {error}")
+
+    @staticmethod
+    def _undo_record(record):
+        """Keep only non-secret index metadata in an undo token."""
+        record = record if isinstance(record, dict) else {}
+
+        def nonnegative_int(value):
+            try:
+                return max(0, int(value or 0))
+            except (TypeError, ValueError, OverflowError):
+                return 0
+
+        return {
+            'label': str(record.get('label') or '')[:120],
+            'source': str(record.get('source') or 'import')[:60],
+            'cookies': nonnegative_int(record.get('cookies')),
+            'importedAt': nonnegative_int(record.get('importedAt')),
+            'earliestExpiry': nonnegative_int(record.get('earliestExpiry')),
+        }
 
     # -- reads -------------------------------------------------------------
     def entries(self):
@@ -739,6 +780,116 @@ class SiteLoginStore:
         if existed:
             self._log(f"Removed the stored site sign-in for {key}")
         return existed
+
+    def remove_with_undo(self, site):
+        """Remove one sign-in while keeping a protected, session-only undo.
+
+        Cookie bytes stay in the store's protected directory. The returned
+        token contains only the site name and non-secret index metadata, so a
+        GUI undo action never has to hold or serialize cookie values.
+        """
+        key = site_login_key(site)
+        if not key:
+            return None, 'Enter a valid site address.'
+        with self._lock:
+            index = self._load_index()
+            record = index.get(key)
+            if not isinstance(record, dict):
+                return None, 'That stored sign-in no longer exists.'
+            undo_record = self._undo_record(record)
+            self._ensure_root()
+            jar = self._jar_path(key)
+            token = uuid.uuid4().hex
+            backup = self._undo_path(token)
+            has_jar = jar.exists()
+            try:
+                if has_jar:
+                    jar.replace(backup)
+                updated = dict(index)
+                updated.pop(key, None)
+                if not self._save_index(updated):
+                    if has_jar:
+                        backup.replace(jar)
+                    return None, (
+                        'Could not remove the sign-in safely. The stored session '
+                        'was kept; check disk space and permissions, then retry.'
+                    )
+            except OSError as error:
+                if has_jar and backup.exists() and not jar.exists():
+                    try:
+                        backup.replace(jar)
+                    except OSError as rollback_error:
+                        self._log(
+                            f"WARNING: site-login undo rollback failed: {rollback_error}"
+                        )
+                self._log(f"WARNING: site-login removal failed: {error}")
+                return None, 'Could not remove the stored sign-in safely.'
+        self._log(f"Removed the stored site sign-in for {key}")
+        return {
+            'site': key,
+            'token': token,
+            'hasJar': has_jar,
+            'record': undo_record,
+        }, None
+
+    def restore_removed(self, undo):
+        """Restore the sign-in represented by a prior ``remove_with_undo``."""
+        if not isinstance(undo, dict):
+            return False, 'There is no sign-in removal to undo.'
+        key = site_login_key(undo.get('site'))
+        token = str(undo.get('token') or '')
+        backup = self._undo_path(token)
+        record = undo.get('record')
+        if not key or backup is None or not isinstance(record, dict):
+            return False, 'That sign-in undo snapshot is invalid.'
+        has_jar = bool(undo.get('hasJar'))
+        with self._lock:
+            index = self._load_index()
+            if key in index:
+                return False, 'That site already has a stored sign-in.'
+            jar = self._jar_path(key)
+            if not has_jar and jar.exists():
+                return False, 'A file already exists for that site; the undo was not applied.'
+            if has_jar and not backup.exists():
+                return False, 'The sign-in undo snapshot is no longer on disk.'
+            try:
+                if has_jar:
+                    backup.replace(jar)
+                updated = dict(index)
+                updated[key] = self._undo_record(record)
+                if not self._save_index(updated):
+                    if has_jar:
+                        jar.replace(backup)
+                    return False, (
+                        'Could not restore the sign-in. The undo snapshot is still '
+                        'available; check disk space and permissions, then retry.'
+                    )
+            except OSError as error:
+                if has_jar and jar.exists() and not backup.exists():
+                    try:
+                        jar.replace(backup)
+                    except OSError as rollback_error:
+                        self._log(
+                            f"WARNING: site-login restore rollback failed: {rollback_error}"
+                        )
+                self._log(f"WARNING: site-login restore failed: {error}")
+                return False, 'Could not restore the stored sign-in safely.'
+        self._log(f"Restored the stored site sign-in for {key}")
+        return True, None
+
+    def discard_removed(self, undo):
+        """Drop a superseded session-only undo backup."""
+        if not isinstance(undo, dict):
+            return False
+        backup = self._undo_path(undo.get('token'))
+        if backup is None:
+            return False
+        try:
+            backup.unlink(missing_ok=True)
+            return True
+        except OSError as error:
+            self._log(f"WARNING: site-login undo cleanup failed: {error}")
+            return False
 
     def export_jar_for_site(self, url, target_path):
         """Export the per-download jar and report which site it belongs to.

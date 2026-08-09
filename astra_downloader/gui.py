@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import (
-    QCoreApplication, QEasingCurve, QObject, QPropertyAnimation, QSize,
+    QByteArray, QCoreApplication, QEasingCurve, QObject, QPropertyAnimation, QSize,
     QThread, QTimer, Qt, pyqtSignal,
 )
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QTextCursor
@@ -1093,6 +1093,10 @@ class MainWindowCore(QMainWindow):
         self._clipboard_staged_url = ""
         self._site_login_test_states = {}
         self._site_login_testing = False
+        self._site_login_undo = None
+        self._subscription_undo = None
+        self._settings_import_undo = None
+        self._restoring_window_state = False
         self.log_message.connect(self._append_log)
         self.instance_command.connect(self._handle_instance_command)
         self.tools_update_finished.connect(self._finish_ytdlp_update)
@@ -1244,7 +1248,7 @@ class MainWindowCore(QMainWindow):
         self._build_extension()
         self._build_settings()
 
-        self._nav_click("Download")
+        self._restore_window_state(start_minimized)
 
         # System tray
         self.tray = QSystemTrayIcon(self)
@@ -1320,8 +1324,51 @@ class MainWindowCore(QMainWindow):
         self.tools_status_timer.timeout.connect(self._refresh_tools_status)
         self.tools_status_timer.start(0)
 
+    def _restore_window_state(self, start_minimized=False):
+        """Restore local geometry/page state, then apply background startup."""
+        self._restoring_window_state = True
+        try:
+            encoded = str(self.config.get("WindowGeometry", "") or "").strip()
+            if encoded:
+                try:
+                    self.restoreGeometry(QByteArray.fromBase64(encoded.encode("ascii")))
+                except (UnicodeEncodeError, TypeError, ValueError):
+                    # reason: a hand-edited or legacy geometry value is not a startup blocker
+                    pass
+            if self.config.get("WindowMaximized", False):
+                self.showMaximized()
+            page = self.config.get("LastPage", "Download")
+            if page not in self._page_names:
+                page = "Download"
+            self._nav_click(page)
+        finally:
+            self._restoring_window_state = False
         if start_minimized:
             QTimer.singleShot(100, self._minimize_to_tray)
+
+    def _persist_window_state(self):
+        """Save local window state without putting it in portable settings."""
+        if not hasattr(self, "tabs") or not hasattr(self, "_page_names"):
+            return False
+        try:
+            geometry = bytes(self.saveGeometry().toBase64()).decode("ascii")
+            state = {
+                "WindowGeometry": geometry,
+                "WindowMaximized": bool(self.isMaximized()),
+                "LastPage": self._page_names[self.tabs.currentIndex()],
+            }
+            update = getattr(self.config, "update", None)
+            if callable(update):
+                return bool(update(state))
+            for key, value in state.items():
+                setter = getattr(self.config, "set", None)
+                if callable(setter):
+                    setter(key, value)
+            saver = getattr(self.config, "save", None)
+            return bool(saver()) if callable(saver) else True
+        except (IndexError, OSError, TypeError, ValueError) as error:
+            self._append_log(f"Could not save window state: {error}")
+            return False
 
     def _make_page_header(self, title, subtitle):
         header = QVBoxLayout()
@@ -2375,10 +2422,19 @@ class MainWindowCore(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 38, 24)
         layout.setSpacing(14)
-        layout.addLayout(self._make_page_header(
+        header = QHBoxLayout()
+        header.addLayout(self._make_page_header(
             "Subscriptions",
             "Watch YouTube channels or playlists on a schedule and queue only new uploads.",
-        ))
+        ), 1)
+        self.btn_undo_subscription = self._make_tool_button("Undo remove", "ghost")
+        self.btn_undo_subscription.setToolTip(
+            tr("Restore the subscription removed in this session.")
+        )
+        self.btn_undo_subscription.clicked.connect(self._undo_subscription)
+        self.btn_undo_subscription.hide()
+        header.addWidget(self.btn_undo_subscription, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header)
 
         add_card, add_layout = self._make_settings_group("New subscription")
         url_row = QHBoxLayout()
@@ -2584,12 +2640,21 @@ class MainWindowCore(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 38, 24)
         layout.setSpacing(14)
-        layout.addLayout(self._make_page_header(
+        header = QHBoxLayout()
+        header.addLayout(self._make_page_header(
             "Sign-ins",
             tr("Store a signed-in session so private or members-only videos "
                "download. Cookies stay on this PC and are only ever sent to "
                "the site they came from."),
-        ))
+        ), 1)
+        self.btn_undo_site_login = self._make_tool_button("Undo remove", "ghost")
+        self.btn_undo_site_login.setToolTip(
+            tr("Restore the sign-in removed in this session.")
+        )
+        self.btn_undo_site_login.clicked.connect(self._undo_site_login)
+        self.btn_undo_site_login.hide()
+        header.addWidget(self.btn_undo_site_login, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header)
 
         add_card, add_layout = self._make_settings_group(tr("Add a site sign-in"))
         site_row = QHBoxLayout()
@@ -2823,6 +2888,7 @@ class MainWindowCore(QMainWindow):
             message += f" {skipped} {tr('cookies for other sites were discarded.')}"
         self._show_site_login_status(message, "success")
         self._append_log(f"Stored a site sign-in for {site} ({count} cookies).")
+        self._discard_site_login_undo()
         self._site_login_test_states.pop(site, None)
         self.site_login_url.clear()
         self._refresh_site_logins(force=True)
@@ -2908,15 +2974,66 @@ class MainWindowCore(QMainWindow):
         )
         self._apply_site_login_result(result, error)
 
+    def _discard_site_login_undo(self):
+        undo = self._site_login_undo
+        self._site_login_undo = None
+        store = self._site_login_store()
+        discard = getattr(store, "discard_removed", None) if store else None
+        if undo and callable(discard):
+            discard(undo)
+        if hasattr(self, "btn_undo_site_login"):
+            self.btn_undo_site_login.hide()
+
     def _remove_site_login(self, site):
         store = self._site_login_store()
         if store is None or not site:
             return
-        if store.remove(site):
+        remove_with_undo = getattr(store, "remove_with_undo", None)
+        undo = None
+        error = None
+        if callable(remove_with_undo):
+            undo, error = remove_with_undo(site)
+            removed = bool(undo)
+        else:
+            removed = bool(store.remove(site))
+        if error:
+            self._show_site_login_status(error, "error")
+        elif removed:
+            if self._site_login_undo:
+                previous = self._site_login_undo
+                self._site_login_undo = None
+                discard = getattr(store, "discard_removed", None)
+                if callable(discard):
+                    discard(previous)
+            self._site_login_undo = undo
+            if undo and hasattr(self, "btn_undo_site_login"):
+                self.btn_undo_site_login.show()
             self._show_site_login_status(
                 f"{tr('Removed the stored sign-in for')} {site}.", "neutral"
             )
             self._append_log(f"Removed the stored site sign-in for {site}.")
+        self._refresh_site_logins(force=True)
+
+    def _undo_site_login(self):
+        undo = self._site_login_undo
+        store = self._site_login_store()
+        restore = getattr(store, "restore_removed", None) if store else None
+        if not undo or not callable(restore):
+            if hasattr(self, "btn_undo_site_login"):
+                self.btn_undo_site_login.hide()
+            self._show_site_login_status(
+                tr("No sign-in removal is available to undo."), "warning"
+            )
+            return
+        restored, error = restore(undo)
+        if not restored:
+            self._show_site_login_status(
+                error or tr("Could not restore the stored sign-in."), "error"
+            )
+            return
+        self._site_login_undo = None
+        self.btn_undo_site_login.hide()
+        self._show_site_login_status(tr("The sign-in was restored."), "success")
         self._refresh_site_logins(force=True)
 
     def _test_site_login(self, site):
@@ -3040,13 +3157,55 @@ class MainWindowCore(QMainWindow):
         manager = self._subscription_manager()
         if manager is None:
             return
+        record = None
+        getter = getattr(manager, "get_subscription", None)
+        if callable(getter):
+            record = getter(sub_id)
+        if record is None:
+            try:
+                record = next(
+                    (
+                        item for item in manager.list_subscriptions()
+                        if str(item.get("id")) == str(sub_id)
+                    ),
+                    None,
+                )
+            except Exception:
+                record = None
         self._subscription_scan_pending.discard(str(sub_id))
         self._subscription_scan_seen.discard(str(sub_id))
         _removed, error = manager.remove_subscription(sub_id)
         if error:
             self.subscription_status.setText(error)
         else:
-            self.subscription_status.setText("Subscription removed. Downloaded files were not deleted.")
+            self._subscription_undo = record
+            if record and hasattr(self, "btn_undo_subscription"):
+                self.btn_undo_subscription.show()
+            self.subscription_status.setText(
+                tr("Subscription removed. Downloaded files were not deleted.")
+            )
+        self._refresh_subscriptions(force=True)
+
+    def _undo_subscription(self):
+        record = self._subscription_undo
+        manager = self._subscription_manager()
+        restore = getattr(manager, "restore_subscription", None) if manager else None
+        if not record or not callable(restore):
+            if hasattr(self, "btn_undo_subscription"):
+                self.btn_undo_subscription.hide()
+            self.subscription_status.setText(
+                tr("No subscription removal is available to undo.")
+            )
+            return
+        restored, error = restore(record)
+        if not restored:
+            self.subscription_status.setText(
+                error or tr("Could not restore the subscription.")
+            )
+            return
+        self._subscription_undo = None
+        self.btn_undo_subscription.hide()
+        self.subscription_status.setText(tr("The subscription was restored."))
         self._refresh_subscriptions(force=True)
 
     def _build_settings(self):
@@ -3823,6 +3982,15 @@ class MainWindowCore(QMainWindow):
         ))
         self.btn_import_settings.clicked.connect(self._import_settings_bundle)
         bundle_row.addWidget(self.btn_import_settings)
+        self.btn_undo_settings_import = self._make_tool_button(
+            "Undo import", "ghost"
+        )
+        self.btn_undo_settings_import.setToolTip(tr(
+            "Restore settings and subscriptions changed by the last import."
+        ))
+        self.btn_undo_settings_import.clicked.connect(self._undo_settings_import)
+        self.btn_undo_settings_import.hide()
+        bundle_row.addWidget(self.btn_undo_settings_import)
         bundle_row.addStretch()
         tools_l.addLayout(bundle_row)
         layout.addWidget(tools_card)
@@ -3902,6 +4070,8 @@ class MainWindowCore(QMainWindow):
             self._refresh_history()
         elif name == "Subscriptions":
             self._refresh_subscriptions(force=True)
+        if not self._restoring_window_state:
+            self._persist_window_state()
 
     def _pending_quarantines(self):
         read = self._dependencies.get('quarantined_state_files')
@@ -4979,6 +5149,15 @@ class MainWindowCore(QMainWindow):
             return False
         changes = self._dependencies['describe_bundle_changes'](
             self.config, bundle)
+        # Capture the incoming keys before the write. This is the same
+        # session-scoped, one-step model as history undo, and it deliberately
+        # excludes secrets because the bundle boundary already excludes them.
+        previous_settings = {
+            key: self.config.get(
+                key, self._value('DEFAULT_CONFIG').get(key)
+            )
+            for key in bundle["settings"]
+        }
         if not self.config.update(bundle["settings"]):
             self._show_settings_status(
                 "Could not save the imported settings. Check disk space and "
@@ -4988,10 +5167,11 @@ class MainWindowCore(QMainWindow):
             return False
         manager = self._subscription_manager()
         added, skipped = 0, 0
+        added_subscription_ids = []
         for record in bundle["subscriptions"]:
             if manager is None:
                 break
-            _created, add_error = manager.add_subscription(
+            created, add_error = manager.add_subscription(
                 record["url"],
                 interval_minutes=record["intervalMinutes"],
                 enabled=record["enabled"],
@@ -5003,6 +5183,13 @@ class MainWindowCore(QMainWindow):
                 skipped += 1
             else:
                 added += 1
+                if isinstance(created, dict) and created.get("id"):
+                    added_subscription_ids.append(str(created["id"]))
+        self._settings_import_undo = {
+            "settings": previous_settings,
+            "subscriptionIds": added_subscription_ids,
+        }
+        self.btn_undo_settings_import.show()
         parts = [f"Imported {len(changes['settings'])} changed settings"]
         if added or skipped:
             parts.append(f"{added} subscriptions added, {skipped} already present")
@@ -5024,6 +5211,49 @@ class MainWindowCore(QMainWindow):
         # The form still shows the pre-import values until it is rebuilt.
         self._reload_settings_form()
         return True
+
+    def _undo_settings_import(self):
+        snapshot = self._settings_import_undo
+        if not snapshot:
+            self.btn_undo_settings_import.hide()
+            self._show_settings_status(
+                tr("No settings import is available to undo."), "warning"
+            )
+            return
+        manager = self._subscription_manager()
+        remaining = []
+        for sub_id in snapshot.get("subscriptionIds", []):
+            if manager is None:
+                remaining.append(sub_id)
+                continue
+            try:
+                removed, error = manager.remove_subscription(sub_id)
+            except Exception as exc:  # noqa: BLE001
+                removed, error = False, str(exc)
+            if not removed or error:
+                remaining.append(sub_id)
+        restored = self.config.update(snapshot.get("settings", {}))
+        snapshot["subscriptionIds"] = remaining
+        if not restored:
+            self._show_settings_status(
+                "Could not restore the imported settings. The Undo snapshot is "
+                "still available; check disk space and permissions, then retry.",
+                "error",
+            )
+            self.btn_undo_settings_import.show()
+            return
+        if remaining:
+            self._show_settings_status(
+                tr("Settings were restored, but some imported subscriptions remain."),
+                "warning",
+            )
+            self.btn_undo_settings_import.show()
+        else:
+            self._settings_import_undo = None
+            self.btn_undo_settings_import.hide()
+            self._show_settings_status(tr("Settings import undone."), "success")
+        self._reload_settings_form()
+        self._refresh_subscriptions(force=True)
 
     def _export_history(self):
         result = self._history_query(offset=0, limit=500)
@@ -6288,7 +6518,21 @@ class MainWindowCore(QMainWindow):
         self._force_exit = True
         self.close()
 
+    def _downloads_that_will_be_cancelled(self):
+        """Count running and pending work before ``cancel_all`` is called."""
+        count = 0
+        for method_name in ("active_count", "pending_count"):
+            method = getattr(self.dl_manager, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                count += max(0, int(method()))
+            except (TypeError, ValueError, OverflowError):
+                continue
+        return count
+
     def closeEvent(self, event):
+        self._persist_window_state()
         if not self._force_exit and self.config.get("CloseToTray", True):
             event.ignore()
             self.hide()
@@ -6308,6 +6552,22 @@ class MainWindowCore(QMainWindow):
                 subscription_manager = self._subscription_manager()
                 if subscription_manager is not None:
                     subscription_manager.stop()
+            cancelling = self._downloads_that_will_be_cancelled()
+            if cancelling:
+                message = tr(
+                    "Closing now will cancel {count} active downloads."
+                ).format(count=cancelling)
+                # The close path must stay non-blocking. The log and tray
+                # warning tell the user what is about to happen immediately
+                # before the queue is cancelled, including for tray exit.
+                self._append_log(message)
+                if self.tray.isVisible():
+                    self.tray.showMessage(
+                        self._value('APP_NAME'),
+                        message,
+                        QSystemTrayIcon.MessageIcon.Warning,
+                        5000,
+                    )
             self.dl_manager.cancel_all()
             worker = getattr(self, "setup_worker", None)
             if worker is not None and worker.isRunning():

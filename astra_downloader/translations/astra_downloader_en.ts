@@ -131,6 +131,10 @@
       <translation>Next</translation>
     </message>
     <message>
+      <source>Undo remove</source>
+      <translation>Undo remove</translation>
+    </message>
+    <message>
       <source>New subscription</source>
       <translation>New subscription</translation>
     </message>
@@ -269,6 +273,10 @@
     <message>
       <source>Import settings</source>
       <translation>Import settings</translation>
+    </message>
+    <message>
+      <source>Undo import</source>
+      <translation>Undo import</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -555,6 +563,10 @@
       <translation>Watch YouTube channels or playlists on a schedule and queue only new uploads.</translation>
     </message>
     <message>
+      <source>Restore the subscription removed in this session.</source>
+      <translation>Restore the subscription removed in this session.</translation>
+    </message>
+    <message>
       <source>Subscription channel or playlist URL</source>
       <translation>Subscription channel or playlist URL</translation>
     </message>
@@ -585,6 +597,10 @@
     <message>
       <source>Sign-ins</source>
       <translation>Sign-ins</translation>
+    </message>
+    <message>
+      <source>Restore the sign-in removed in this session.</source>
+      <translation>Restore the sign-in removed in this session.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -639,8 +655,16 @@
       <translation>Reading cookies from the browser…</translation>
     </message>
     <message>
+      <source>The sign-in was restored.</source>
+      <translation>The sign-in was restored.</translation>
+    </message>
+    <message>
       <source>Testing the stored sign-in…</source>
       <translation>Testing the stored sign-in…</translation>
+    </message>
+    <message>
+      <source>The subscription was restored.</source>
+      <translation>The subscription was restored.</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -1043,6 +1067,10 @@
       <translation>Read a bundle written by Export settings and apply it.</translation>
     </message>
     <message>
+      <source>Restore settings and subscriptions changed by the last import.</source>
+      <translation>Restore settings and subscriptions changed by the last import.</translation>
+    </message>
+    <message>
       <source>Settings status</source>
       <translation>Settings status</translation>
     </message>
@@ -1057,6 +1085,10 @@
     <message>
       <source>Could not save the imported settings. Check disk space and permissions, then retry.</source>
       <translation>Could not save the imported settings. Check disk space and permissions, then retry.</translation>
+    </message>
+    <message>
+      <source>Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.</source>
+      <translation>Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.</translation>
     </message>
     <message>
       <source>Loading history…</source>
@@ -1235,12 +1267,24 @@
       <translation>Site sign-ins are unavailable in this session.</translation>
     </message>
     <message>
+      <source>No sign-in removal is available to undo.</source>
+      <translation>No sign-in removal is available to undo.</translation>
+    </message>
+    <message>
       <source>Test passed</source>
       <translation>Test passed</translation>
     </message>
     <message>
       <source>Subscription scan started. This row will update when it finishes.</source>
       <translation>Subscription scan started. This row will update when it finishes.</translation>
+    </message>
+    <message>
+      <source>Subscription removed. Downloaded files were not deleted.</source>
+      <translation>Subscription removed. Downloaded files were not deleted.</translation>
+    </message>
+    <message>
+      <source>No subscription removal is available to undo.</source>
+      <translation>No subscription removal is available to undo.</translation>
     </message>
     <message>
       <source>Server status indicator: Starting</source>
@@ -1289,6 +1333,18 @@
     <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
       <translation>Resume pending downloads explicitly. Items needing sign-in remain paused.</translation>
+    </message>
+    <message>
+      <source>No settings import is available to undo.</source>
+      <translation>No settings import is available to undo.</translation>
+    </message>
+    <message>
+      <source>Settings were restored, but some imported subscriptions remain.</source>
+      <translation>Settings were restored, but some imported subscriptions remain.</translation>
+    </message>
+    <message>
+      <source>Settings import undone.</source>
+      <translation>Settings import undone.</translation>
     </message>
     <message>
       <source>History unavailable</source>
@@ -1415,8 +1471,16 @@
       <translation>cookies for other sites were discarded.</translation>
     </message>
     <message>
+      <source>Could not restore the stored sign-in.</source>
+      <translation>Could not restore the stored sign-in.</translation>
+    </message>
+    <message>
       <source>Stored sign-in test passed.</source>
       <translation>Stored sign-in test passed.</translation>
+    </message>
+    <message>
+      <source>Could not restore the subscription.</source>
+      <translation>Could not restore the subscription.</translation>
     </message>
     <message>
       <source>No preference</source>
@@ -1535,10 +1599,6 @@
       <translation>Session cookies — valid until the site signs you out</translation>
     </message>
     <message>
-      <source>Removed the stored sign-in for</source>
-      <translation>Removed the stored sign-in for</translation>
-    </message>
-    <message>
       <source>Test failed</source>
       <translation>Test failed</translation>
     </message>
@@ -1567,6 +1627,10 @@
       <translation>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</translation>
     </message>
     <message>
+      <source>Closing now will cancel {count} active downloads.</source>
+      <translation>Closing now will cancel {count} active downloads.</translation>
+    </message>
+    <message>
       <source>Registering shortcuts and protocols...</source>
       <translation>Registering shortcuts and protocols...</translation>
     </message>
@@ -1577,6 +1641,10 @@
     <message>
       <source>from</source>
       <translation>from</translation>
+    </message>
+    <message>
+      <source>Removed the stored sign-in for</source>
+      <translation>Removed the stored sign-in for</translation>
     </message>
     <message>
       <source>This host is paused — retry in {duration}.</source>

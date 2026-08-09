@@ -84,6 +84,40 @@ CATALOGS = {
             "Verlauf löschen",
         "Undo clear":
             "Löschen rückgängig",
+        "Undo remove":
+            "Entfernen rückgängig",
+        "Undo import":
+            "Import rückgängig",
+        "Restore the subscription removed in this session.":
+            "In dieser Sitzung entferntes Abonnement wiederherstellen.",
+        "Restore the sign-in removed in this session.":
+            "In dieser Sitzung entfernte Anmeldung wiederherstellen.",
+        "The sign-in was restored.":
+            "Die Anmeldung wurde wiederhergestellt.",
+        "The subscription was restored.":
+            "Das Abonnement wurde wiederhergestellt.",
+        "Restore settings and subscriptions changed by the last import.":
+            "Durch den letzten Import geänderte Einstellungen und Abonnements wiederherstellen.",
+        "Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.":
+            "Die importierten Einstellungen konnten nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist weiterhin verfügbar; prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.",
+        "No sign-in removal is available to undo.":
+            "Keine entfernte Anmeldung zum Wiederherstellen verfügbar.",
+        "Subscription removed. Downloaded files were not deleted.":
+            "Abonnement entfernt. Heruntergeladene Dateien wurden nicht gelöscht.",
+        "No subscription removal is available to undo.":
+            "Kein entferntes Abonnement zum Wiederherstellen verfügbar.",
+        "No settings import is available to undo.":
+            "Kein Einstellungen-Import zum Rückgängigmachen verfügbar.",
+        "Settings were restored, but some imported subscriptions remain.":
+            "Einstellungen wurden wiederhergestellt, aber einige importierte Abonnements sind noch vorhanden.",
+        "Settings import undone.":
+            "Einstellungen-Import rückgängig gemacht.",
+        "Could not restore the stored sign-in.":
+            "Die gespeicherte Anmeldung konnte nicht wiederhergestellt werden.",
+        "Could not restore the subscription.":
+            "Das Abonnement konnte nicht wiederhergestellt werden.",
+        "Closing now will cancel {count} active downloads.":
+            "Beim Schließen werden {count} aktive Downloads abgebrochen.",
         "Export filtered":
             "Gefilterte exportieren",
         "0 of 0 retained":
