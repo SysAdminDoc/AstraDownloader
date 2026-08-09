@@ -214,6 +214,23 @@ test('companion staging metadata is accepted only for the exact EXE bytes', () =
     );
 });
 
+test('companion staging validates the SHA-256 sidecar pair', () => {
+    const { readValidatedSidecar } = require('../scripts/stage-companion-release');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-companion-sidecar-'));
+    const exe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2048, 7)]);
+    const digest = crypto.createHash('sha256').update(exe).digest('hex');
+    const sidecar = path.join(root, 'AstraDownloader.exe.sha256');
+
+    fs.writeFileSync(sidecar, `${digest}  AstraDownloader.exe\n`);
+    assert.equal(readValidatedSidecar(sidecar, exe), digest);
+
+    fs.writeFileSync(sidecar, `${'a'.repeat(64)}  AstraDownloader.exe\n`);
+    assert.throws(
+        () => readValidatedSidecar(sidecar, exe),
+        /sidecar does not match/
+    );
+});
+
 
 test('companion staging validates the opened descriptor rather than a path', () => {
     // Moved from the Astra Deck hardening suite with the script it pins.
@@ -226,6 +243,12 @@ test('companion staging validates the opened descriptor rather than a path', () 
         'companion staging must reject files without a Windows EXE header');
     assert.match(stageScriptSource, /build\/AstraDownloader\.exe/,
         'companion staging must stage the EXE into build/ for release manifest inclusion');
+    assert.match(stageScriptSource, /AstraDownloader\.exe\.sha256/,
+        'companion staging must carry the checksum sidecar beside the EXE');
+    assert.doesNotMatch(stageScriptSource, /release:manifest/,
+        'companion staging must not refer to a nonexistent release:manifest script');
+    assert.doesNotMatch(stageScriptSource, /build:userscript/,
+        'companion staging must name the Python build command that actually exists');
     assert.match(stageScriptSource, /companion-build-metadata\.json|COMPANION_BUILD_METADATA_NAME/,
         'companion staging must carry artifact-linked Python distribution metadata into the SBOM pipeline');
     assert.match(stageScriptSource, /metadata\.artifact\.sha256 !== sha256\(companionExe\)/,

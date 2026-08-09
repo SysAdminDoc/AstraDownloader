@@ -154,24 +154,15 @@ Notes on existing items above — read these before starting them:
 - *Give `subscriptions.py` a real test surface* — the scheduler defects filed
   below are what that missing coverage is hiding; the lifecycle tests should
   assert against them specifically.
-- *Close the highest-risk test gaps* — add `ensure_installed_executable`,
-  `read_last_installed_update_sha256` and `reserve_archive`'s status gate; each
-  is a P0/P1 below whose current coverage asserts shape, not outcome.
+- *Close the highest-risk test gaps* — the relocation and update-state paths
+  are now covered by outcome tests; `reserve_archive`'s status gate remains in
+  the P1 work below.
 - *Site profiles selected by URL pattern* — still the genuine leapfrog. Checked
   again 2026-08-06 against the field's fastest-growing new entrant (Youwee,
   1,378 stars since 2026-01-18): it has a plugin store and workflow
   automation but no per-site rules either. YTPTube's "cookie override via
   conditions" (v2.6.2) is the closest prior art and is worth reading before
   designing this.
-
-### P0
-
-- [ ] P0 — Produce the SHA-256 sidecar the updater and the README both depend on
-  Why: Self-update fails closed when `AstraDownloader.exe.sha256` is missing from a release, and nothing in this repository generates it. Any release shipped without a hand-made sidecar breaks updating for every installed client, and the README tells users to verify against a file the build does not emit.
-  Evidence: `COMPANION_UPDATE_SHA256_URL` (`astra_downloader.py:344`) is the only reference to that filename in the source, and it is a read. `fetch_expected_sha256` returns `None` on any non-200 (`:997`), producing `error_code: 'sha256-sidecar-missing'` (`:2379`). `build.py` writes the digest only *inside* `build/companion-build-metadata.json` (`:283`). `scripts/stage-companion-release.js:117` instructs the operator to run `npm run release:manifest -- --require-companion`, which does not exist in `package.json` (nor does `build:userscript`, referenced at `:69`). `CLAUDE.md:35` and `README.md:74` both assert the sidecar exists. On this machine the sidecar in the live install does not match the exe beside it (`f70869c1…` vs `5f6db0e3…`) — what a hand-maintained file looks like once it drifts.
-  Touches: `astra_downloader/build.py`, `scripts/stage-companion-release.js`, `package.json`, `astra_downloader/test_build.py`
-  Acceptance: `py -3.12 astra_downloader/build.py` writes `AstraDownloader.exe.sha256` beside the exe from the bytes it just produced; the staging script verifies the pair and fails when they disagree; the instruction naming a non-existent npm script is corrected.
-  Complexity: S
 
 ### P1
 

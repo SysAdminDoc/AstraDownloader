@@ -41,6 +41,20 @@ class ReleaseConstraintsTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     build.parse_release_constraints(path)
 
+    def test_sha256_sidecar_is_derived_from_the_exact_exe_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / 'AstraDownloader.exe'
+            sidecar = Path(tmp) / 'AstraDownloader.exe.sha256'
+            exe.write_bytes(b'MZ' + b'companion-build')
+
+            digest = build.write_sha256_sidecar(exe, sidecar)
+
+            self.assertEqual(digest, build.sha256_file(exe))
+            self.assertEqual(
+                sidecar.read_text(encoding='ascii'),
+                f'{digest}  AstraDownloader.exe\n',
+            )
+
     def _verify_fixture(self, app_requires=('dep>=2',), app_version='1.0'):
         distributions = {
             'app': FakeDistribution('app', app_version, app_requires),
