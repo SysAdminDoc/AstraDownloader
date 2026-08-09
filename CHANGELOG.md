@@ -128,6 +128,9 @@ repository's git log.
 - **The ffmpeg security floor now covers provisioned snapshots.** Undated
   snapshots remain unknown, while a dated master build is compared against
   the 2026-06-17 floor and an older build is re-fetched through verified setup.
+- **Failed yt-dlp updates now back off.** A failed attempt is persisted and
+  suppressed for one hour, while successful checks retain the normal 12-hour
+  interval.
 - **The no-provider YouTube fallback now starts with `visionos`.** The client
   chain is pinned to the 2026-08-08 measurement while keeping the fallback
   explicit for the next yt-dlp extractor drift check.

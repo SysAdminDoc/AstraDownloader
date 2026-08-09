@@ -5192,7 +5192,7 @@ class HealthAdditionsTests(unittest.TestCase):
 
 
 class AutoUpdateThrottleTests(unittest.TestCase):
-    """v1.2.0 B3 — yt-dlp auto-update runs at most once per 24h."""
+    """yt-dlp updates use a long success interval and short failure backoff."""
 
     def test_should_check_returns_true_with_no_prior_stamp(self):
         class _C:
@@ -5210,6 +5210,28 @@ class AutoUpdateThrottleTests(unittest.TestCase):
             def get(self, key, default=None):
                 return recent if key == "LastYtDlpUpdateCheck" else default
         self.assertFalse(ad.should_check_ytdlp_update(_C()))
+
+    def test_should_check_returns_false_with_recent_failed_attempt(self):
+        import datetime as _dt
+        recent = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        class _C:
+            def get(self, key, default=None):
+                return recent if key == "LastYtDlpUpdateFailure" else default
+
+        self.assertFalse(ad.should_check_ytdlp_update(_C()))
+
+    def test_should_check_allows_failed_attempt_after_short_backoff(self):
+        import datetime as _dt
+        old = (_dt.datetime.now() - _dt.timedelta(hours=2)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        class _C:
+            def get(self, key, default=None):
+                return old if key == "LastYtDlpUpdateFailure" else default
+
+        self.assertTrue(ad.should_check_ytdlp_update(_C()))
 
     def test_should_check_handles_corrupt_stamp(self):
         class _C:
@@ -8235,6 +8257,21 @@ class UpdateYtdlpEndpointTests(unittest.TestCase):
         self.assertIn("network unreachable", body.get("error"))
         # version_before == version_after on failure (no replacement happened).
         self.assertEqual(body.get("version_before"), body.get("version_after"))
+
+    def test_failed_update_records_attempt_and_short_backoff(self):
+        self._client()
+        config = {"AutoUpdateYtDlp": True, "LastYtDlpUpdateCheck": ""}
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="offline",
+        )
+        with mock.patch.object(ad.subprocess, 'run', return_value=completed), \
+             mock.patch.object(ad, '_probe_ytdlp_binary', return_value='2026.04.01'):
+            result = ad._run_ytdlp_self_update(config, source_tag='unit-test')
+
+        self.assertFalse(result['ok'])
+        self.assertTrue(config.get('LastYtDlpUpdateAttempt'))
+        self.assertTrue(config.get('LastYtDlpUpdateFailure'))
+        self.assertFalse(ad.should_check_ytdlp_update(config))
 
     def test_subprocess_timeout_returns_500_with_timeout_error(self):
         client = self._client()

@@ -173,12 +173,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: the format probe, the playlist preview and the subscription scan carry the stored sign-in for the target site, the configured impersonation target and the configured proxy, under the same `_cookie_jar_matches_target` scoping the download uses; a test asserts the probe argv for a signed-in domain.
   Complexity: M
 
-- [ ] P1 — Stop the yt-dlp updater retrying on every idle queue
-  Why: The 12-hour throttle marker is written only on success, so a persistently failing update — blocked proxy, AV write-lock — re-runs after every single download, forever.
-  Evidence: `mark_ytdlp_update_check` has exactly two call sites (`astra_downloader.py:1702`, `:1756`), both on success paths. Every failure return in `_run_ytdlp_self_update` skips it: `active-version-unverified` (`:1628`), `staging-failed` (`:1637`), `update-timeout` (`:1665`), `update-launch-failed` (`:1672`), `update-command-failed` (`:1686`), `staged-version-unverified` (`:1695`). `should_check_ytdlp_update` (`:1573`) therefore stays true and `maybe_refresh_ytdlp` fires on every drain to idle (`download.py:3390`). Each attempt runs `atomic_copy_verified` over the ~16 MB binary (three passes) plus a 120 s-timeout subprocess.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: a failed update also records an attempt, with a shorter backoff than the success interval rather than none; a test asserts a second attempt is refused immediately after a failure.
-  Complexity: S
 
 - [ ] P1 — Bound the retries a subscription spends on a candidate it cannot download
   Why: An archive entry that reaches `failed` is not in the set that blocks re-reservation, and nothing counts attempts or backs off. One members-only or geo-blocked video in a watched channel makes the app spawn the same doomed yt-dlp job every 5 minutes, unattended, for as long as the subscription exists — the realistic outcome is rate-limiting from the extractor host.
