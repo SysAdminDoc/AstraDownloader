@@ -112,6 +112,10 @@ repository's git log.
   suppression digest is written only after the detached helper verifies an
   active install, so activation and rollback failures can offer the release
   again.
+- **Failed downloads now have a durable history.** Every terminal outcome
+  carries its status, error code and explanation into History; the status
+  filter lists those outcomes, and terminal queue rows offer retry, link and
+  error actions where applicable.
 
 ## [2.4.0] - 2026-08-06
 

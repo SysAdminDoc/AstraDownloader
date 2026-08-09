@@ -1259,7 +1259,7 @@ class InstanceCommandTests(unittest.TestCase):
         self.assertEqual(received, ["s" * 32 + " show"])
 
     def test_instance_control_listener_rejects_an_untokened_command(self):
-        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtWidgets import QApplication, QPushButton
 
         _get_qapp_or_skip(self)
         token = "c" * 32
@@ -1631,6 +1631,75 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                                  f"repeated row actions must be distinguishable: {names}")
                 for index, name in enumerate(sorted(names)):
                     self.assertIn(f"clip{index}.mp4", name)
+            finally:
+                _retire_test_window(window)
+
+    def test_failed_history_row_shows_status_error_and_terminal_filters(self):
+        from PyQt6.QtWidgets import QApplication, QLabel
+
+        _get_qapp_or_skip(self)
+
+        class FailedHistory(FakeHistory):
+            def load(self):
+                return [{
+                    "id": "failed-row", "url": "https://example.com/private",
+                    "title": "Private video", "filename": "",
+                    "format": "mp4", "quality": "1080", "status": "failed",
+                    "errorCode": "sign-in-required", "error": "Sign in first.",
+                    "date": "2026-08-06 10:00:00", "duration": 4,
+                }]
+
+        history = FailedHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                window._refresh_history()
+                QApplication.processEvents()
+
+                labels = [label.text() for label in window.findChildren(QLabel)]
+                self.assertTrue(any("Failed" in label for label in labels), labels)
+                self.assertTrue(any("Sign in first." in label for label in labels), labels)
+                self.assertEqual(
+                    [window.history_status.itemData(index)
+                     for index in range(window.history_status.count())],
+                    ["", "complete", "failed", "cancelled", "skipped"],
+                )
+            finally:
+                _retire_test_window(window)
+
+    def test_retryable_failed_card_exposes_retry_link_and_error_actions(self):
+        from PyQt6.QtWidgets import QApplication, QPushButton
+
+        _get_qapp_or_skip(self)
+        history = FakeHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        download = ad.Download(
+            "failed-card", "https://example.com/private", title="Private video"
+        )
+        download.status = "failed"
+        download.error_code = "network-unreachable"
+        download.error = "Network is unavailable."
+        manager.downloads[download.id] = download
+
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                card = window._download_card(download, recent=True)
+                QApplication.processEvents()
+                self.assertEqual(
+                    [button.text() for button in card.findChildren(QPushButton)],
+                    ["Retry"],
+                )
+                menu = window._download_card_menu(download, card)
+                action_text = [action.text() for action in menu.actions()]
+                self.assertIn("Retry", action_text)
+                self.assertIn("Copy link", action_text)
+                self.assertIn("Copy error", action_text)
             finally:
                 _retire_test_window(window)
 
@@ -3784,6 +3853,39 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(result["filteredTotal"], 1)
         self.assertFalse(result["hasMore"])
         self.assertEqual(entries[0]["status"], "complete")
+
+    def test_history_preserves_terminal_diagnostics_and_filters_statuses(self):
+        entries = ad.sanitize_history_entries([
+            {
+                "id": "complete", "title": "Finished", "status": "complete",
+                "date": "2026-08-01",
+            },
+            {
+                "id": "failed", "title": "Private video", "status": "failed",
+                "errorCode": "sign-in-required", "error": "Sign in first.",
+                "date": "2026-08-02",
+            },
+            {
+                "id": "cancelled", "title": "Stopped", "status": "cancelled",
+                "error_code": "cancelled-by-user", "errorText": "Cancelled by user.",
+                "date": "2026-08-03",
+            },
+            {
+                "id": "skipped", "title": "No media", "status": "skipped",
+                "date": "2026-08-04",
+            },
+        ])
+
+        self.assertEqual(entries[1]["errorCode"], "sign-in-required")
+        self.assertEqual(entries[1]["error"], "Sign in first.")
+        self.assertEqual(entries[2]["errorCode"], "cancelled-by-user")
+        self.assertEqual(entries[2]["error"], "Cancelled by user.")
+
+        for status in ("complete", "failed", "cancelled", "skipped"):
+            with self.subTest(status=status):
+                result = ad.query_history_entries(entries, status=status)
+                self.assertEqual(result["filteredTotal"], 1)
+                self.assertEqual(result["history"][0]["status"], status)
 
     def test_history_route_exposes_filtered_page_metadata(self):
         token = "d" * 32
@@ -6666,6 +6768,9 @@ class EndToEndDownloadTests(unittest.TestCase):
             self.assertEqual(entry["filename"], "fake-video.mp4")
             self.assertEqual(entry["format"], "mp4")
             self.assertFalse(entry["audioOnly"])
+            self.assertEqual(entry["status"], "complete")
+            self.assertEqual(entry["errorCode"], "")
+            self.assertEqual(entry["error"], "")
 
     def test_accurate_section_recut_reencodes_then_atomically_replaces_source(self):
         captured = []
@@ -7017,8 +7122,11 @@ class EndToEndDownloadTests(unittest.TestCase):
                 "sign-in failures must expose a stable recovery code")
             self.assertEqual(dl.to_dict().get("next_action"), "sign-in-and-retry",
                 "status payload must expose the matching recovery action")
-            self.assertEqual(len(history.entries), 0,
-                "failed download must NOT write a history entry")
+            self.assertEqual(len(history.entries), 1,
+                "failed downloads must remain visible in History")
+            self.assertEqual(history.entries[0]["status"], "failed")
+            self.assertEqual(history.entries[0]["errorCode"], "sign-in-required")
+            self.assertIn("Sign in to confirm", history.entries[0]["error"])
 
     def test_yt_dlp_nonzero_exit_after_full_progress_still_marks_failed(self):
         token = "p" * 32
@@ -7053,8 +7161,11 @@ class EndToEndDownloadTests(unittest.TestCase):
             "late ffmpeg failures must expose the recovery code")
         self.assertEqual(dl.to_dict().get("next_action"), "refresh-ffmpeg",
             "status payload must expose the matching recovery action")
-        self.assertEqual(len(history.entries), 0,
-            "failed postprocessor exit must NOT write a history entry")
+        self.assertEqual(len(history.entries), 1,
+            "failed postprocessor exits must remain visible in History")
+        self.assertEqual(history.entries[0]["status"], "failed")
+        self.assertEqual(history.entries[0]["errorCode"], "ffmpeg-missing-or-stale")
+        self.assertIn("ffmpeg", history.entries[0]["error"].lower())
 
     def test_parse_loop_crash_terminates_orphan_and_purges_cookie_jar(self):
         """Audit fix: an unexpected exception inside the output-parsing loop
@@ -7132,7 +7243,9 @@ class EndToEndDownloadTests(unittest.TestCase):
                     leftovers = list(Path(tmpdir).glob(".cookies.*.txt"))
                     self.assertEqual(leftovers, [],
                         "cookie jar file must be unlinked after the orphan is killed")
-                    self.assertEqual(len(history.entries), 0)
+                    self.assertEqual(len(history.entries), 1)
+                    self.assertEqual(history.entries[0]["status"], "failed")
+                    self.assertIn("Unexpected download error", history.entries[0]["error"])
 
 
 class YtDlpLinkFilePolicyTests(unittest.TestCase):

@@ -2059,6 +2059,12 @@ class MainWindowCore(QMainWindow):
         self.history_status.setAccessibleName("History status")
         self.history_status.addItem(tr("All statuses"), "")
         self.history_status.addItem(tr("Complete"), "complete")
+        for status, label in (
+            ("failed", "Failed"),
+            ("cancelled", "Cancelled"),
+            ("skipped", "Nothing downloaded"),
+        ):
+            self.history_status.addItem(tr(label), status)
         filters.addWidget(self.history_status)
         self.history_format = QComboBox()
         self.history_format.setAccessibleName("History format")
@@ -3749,7 +3755,9 @@ class MainWindowCore(QMainWindow):
     def _update_download_card(self, card, dl):
         """Patch volatile card fields without replacing the focused widget."""
         refs = card._astra_refs
-        card_state = dl.status if dl.status in ("failed", "complete") else ""
+        card_state = dl.status if dl.status in (
+            "failed", "cancelled", "skipped", "complete"
+        ) else ""
         if card.property("state") != card_state:
             card.setProperty("state", card_state)
             repolish(card)
@@ -3787,9 +3795,9 @@ class MainWindowCore(QMainWindow):
         card.setProperty("class", "download")
         card.setProperty("downloadId", dl.id)
         card.setObjectName(f"download_{dl.id}")
-        if recent and dl.status == "complete":
-            # A finished card carries one button; the rest of what you might
-            # want to do with a file lives here rather than in four more.
+        if recent:
+            # A terminal card carries one button when an immediate action is
+            # useful; the rest of what you might want lives in its menu.
             card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             card.customContextMenuRequested.connect(
                 lambda point, item=dl, widget=card: self._download_card_menu(
@@ -4455,6 +4463,14 @@ class MainWindowCore(QMainWindow):
             filename = h.get("filename")
             if filename:
                 file_copy.addWidget(make_label(Path(filename).name, "fieldHint", word_wrap=True))
+            status = str(h.get("status") or "complete")
+            file_copy.addWidget(
+                make_state_label(human_status(status), download_status_tone(status))
+            )
+            if h.get("error"):
+                file_copy.addWidget(
+                    make_label(str(h["error"]), "errorCallout", word_wrap=True)
+                )
             card_l.addLayout(file_copy, 4)
             values = (
                 str(h.get("format", "")).upper() if h.get("format") else "\u2014",
@@ -4639,8 +4655,15 @@ class MainWindowCore(QMainWindow):
         self._set_quick_download_status("Link copied.", "success")
         return True
 
+    def _copy_download_error(self, error):
+        if not error:
+            return False
+        QApplication.clipboard().setText(str(error))
+        self._set_quick_download_status("Error copied.", "success")
+        return True
+
     def _download_card_menu(self, download, position_widget):
-        """Right-click actions for one finished download.
+        """Right-click actions for one terminal download.
 
         Everything here is already reachable some other way; the point is
         that it is reachable *from the thing it acts on* rather than from a
@@ -4656,10 +4679,17 @@ class MainWindowCore(QMainWindow):
         reveal.setEnabled(bool(filename))
         reveal.triggered.connect(lambda: self._show_download_location(filename))
         menu.addSeparator()
+        if self._is_retryable(download):
+            retry = menu.addAction(tr("Retry"))
+            retry.triggered.connect(lambda: self._retry_download(download))
         url = getattr(download, 'url', '') or ''
         copy_link = menu.addAction(tr("Copy link"))
         copy_link.setEnabled(bool(url))
         copy_link.triggered.connect(lambda: self._copy_download_url(url))
+        error = getattr(download, 'error', '') or ''
+        copy_error = menu.addAction(tr("Copy error"))
+        copy_error.setEnabled(bool(error))
+        copy_error.triggered.connect(lambda: self._copy_download_error(error))
         again = menu.addAction(tr("Download again"))
         again.setEnabled(bool(url))
         again.triggered.connect(lambda: self._redownload(download))

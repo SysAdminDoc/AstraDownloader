@@ -3087,27 +3087,35 @@ class DownloadManagerCore:
         if dl.status == "complete":
             self._sweep_download_intermediates(dl)
             self.total_completed += 1
-            duration = int(time.time() - dl.start_time)
-            recorded = self.history.add({
-                "id": dl.id, "url": dl.url, "title": dl.title,
-                "filename": dl.filename, "format": dl.format,
-                "quality": dl.quality, "audioOnly": dl.audio_only,
-                "section": dict(dl.section) if dl.section else None,
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "duration": duration,
-            })
-            with self._lock:
-                if recorded:
-                    self._history_error = ""
-                else:
-                    self._history_error = (
-                        "The last download finished but could not be added to "
-                        "History. Check free disk space and folder permissions."
-                    )
-            if not recorded:
-                self._dependencies['write_persistent_log'](
-                    f"Download {dl.id} completed but its history entry could not be saved."
+        # History is the durable record of every terminal outcome, not just a
+        # successful file write. The queue intentionally evicts old terminal
+        # objects, so omitting failures here made an overnight failure vanish
+        # with no way to explain or retry it later.
+        duration = int(time.time() - dl.start_time)
+        recorded = self.history.add({
+            "id": dl.id, "url": dl.url, "title": dl.title,
+            "filename": dl.filename, "format": dl.format,
+            "quality": dl.quality, "audioOnly": dl.audio_only,
+            "section": dict(dl.section) if dl.section else None,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "duration": duration,
+            "status": dl.status,
+            "errorCode": dl.error_code,
+            "error": dl.error,
+        })
+        with self._lock:
+            if recorded:
+                self._history_error = ""
+            else:
+                self._history_error = (
+                    "The last download finished but could not be added to "
+                    "History. Check free disk space and folder permissions."
                 )
+        if not recorded:
+            self._dependencies['write_persistent_log'](
+                f"Download {dl.id} reached {dl.status} but its history entry "
+                "could not be saved."
+            )
 
         self.progress_updated.emit()
         self.download_completed.emit(dl.id)
@@ -3825,9 +3833,10 @@ class DownloadManagerCore:
         """The durability problem the user most needs to know about, if any.
 
         Every persistence caller but one already reports its failure through a
-        return value the caller checks. The history write on completion cannot:
-        the download really did finish, so there is nothing to fail and no
-        return path to check it. This is where that failure becomes visible.
+        return value the caller checks. The history write after a terminal
+        outcome cannot: the download really did finish, so there is nothing to
+        fail and no return path to check it. This is where that failure becomes
+        visible.
         """
         with self._lock:
             return self._persistence_error or self._history_error or ''

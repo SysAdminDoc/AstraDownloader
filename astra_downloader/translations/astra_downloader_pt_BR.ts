@@ -703,6 +703,10 @@
       <translation>Copy link</translation>
     </message>
     <message>
+      <source>Copy error</source>
+      <translation>Copy error</translation>
+    </message>
+    <message>
       <source>Download again</source>
       <translation>Download again</translation>
     </message>
@@ -803,6 +807,10 @@
       <translation>Show</translation>
     </message>
     <message>
+      <source>Retry</source>
+      <translation>Retry</translation>
+    </message>
+    <message>
       <source>No stored sign-ins</source>
       <translation>No stored sign-ins</translation>
     </message>
@@ -821,10 +829,6 @@
     <message>
       <source>No preference</source>
       <translation>No preference</translation>
-    </message>
-    <message>
-      <source>Retry</source>
-      <translation>Retry</translation>
     </message>
     <message>
       <source>Nothing downloading yet</source>
