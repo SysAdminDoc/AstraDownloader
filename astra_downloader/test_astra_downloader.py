@@ -512,6 +512,39 @@ class SubscriptionTests(unittest.TestCase):
                 subs.RESERVE_RETRY_EXHAUSTED,
             )
 
+    def test_long_url_only_archive_keys_remain_distinct_under_the_key_bound(self):
+        prefix = "https://www.youtube.com/watch?v=" + ("a" * 390)
+        first = {"url": prefix + "1"}
+        second = {"url": prefix + "2"}
+
+        first_key = ad.subscription_archive_key(first)
+        second_key = ad.subscription_archive_key(second)
+
+        self.assertNotEqual(first_key, second_key)
+        self.assertLessEqual(len(first_key), 430)
+        self.assertLessEqual(len(second_key), 430)
+        self.assertTrue(first_key.startswith("url-sha256:"))
+
+    def test_loading_an_old_long_url_key_migrates_it_to_a_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first_url = "https://www.youtube.com/watch?v=" + ("b" * 410) + "1"
+            path = Path(tmp) / "legacy-archive.json"
+            path.write_text(json.dumps({
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION,
+                "subscriptions": [],
+                "archive": {
+                    "url:legacy-truncated-key": {
+                        "url": first_url,
+                        "status": "complete",
+                    },
+                },
+            }), encoding="utf-8")
+
+            store = self._store(path)
+            keys = set(store.archive_entries())
+
+        self.assertEqual(keys, {ad.subscription_archive_key({"url": first_url})})
+
     def test_manual_rescan_resets_the_retry_budget_and_names_gave_up_item(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self._store(Path(tmp) / "manager-retry.json")
@@ -1554,6 +1587,29 @@ class DiagnosticsBundleTests(unittest.TestCase):
 
 
 class UninstallCleanupTests(unittest.TestCase):
+    def test_uninstall_removes_the_integration_stamp(self):
+        deleted = []
+
+        def delete_key(_root, path):
+            deleted.append(path)
+
+        fake_winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER="HKCU",
+            DeleteKey=delete_key,
+        )
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.dict(sys.modules, {"winreg": fake_winreg}), \
+             mock.patch.object(ad, "write_persistent_log"), \
+             mock.patch.object(ad, "stop_running_companion_for_uninstall"), \
+             mock.patch.object(ad.subprocess, "run"), \
+             mock.patch.object(ad, "NATIVE_HOST_DIR", Path(tmp) / "native"), \
+             mock.patch.object(ad, "INSTALL_DIR", Path(tmp) / "AstraDownloader"):
+            with self.assertRaises(SystemExit) as ctx:
+                ad.run_uninstall()
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
+
     def test_uninstall_shutdown_targets_only_companion_process_tree(self):
         with mock.patch.object(ad, "send_instance_command", return_value=True) as send, \
              mock.patch.object(ad.time, "sleep") as sleep, \
@@ -5012,6 +5068,9 @@ class Sha256VerifyTests(unittest.TestCase):
     def test_parse_sha256_sums_accepts_single_line_sidecar(self):
         digest = "d" * 64
         self.assertEqual(ad._parse_sha256_sums(f"{digest}\n"), digest)
+        self.assertIsNone(
+            ad._parse_sha256_sums(f"{digest}\n", target_asset="other.exe")
+        )
 
     def test_ffmpeg_checksum_manifest_selects_the_named_archive(self):
         digest = "f" * 64
@@ -5064,6 +5123,21 @@ class Sha256VerifyTests(unittest.TestCase):
         )
         with mock.patch.object(ad.http_requests, 'get', return_value=response):
             self.assertIsNone(ad.fetch_expected_sha256("https://example.invalid/sums"))
+
+    def test_bare_sidecar_must_name_the_requested_asset(self):
+        response = self._SidecarResponse([b"f" * 64])
+        with mock.patch.object(ad.http_requests, 'get', return_value=response):
+            self.assertIsNone(ad.fetch_expected_sha256(
+                "https://example.invalid/other.exe.sha256",
+                target_asset="yt-dlp.exe",
+            ))
+
+        response = self._SidecarResponse([b"f" * 64])
+        with mock.patch.object(ad.http_requests, 'get', return_value=response):
+            self.assertEqual(ad.fetch_expected_sha256(
+                "https://example.invalid/yt-dlp.exe.sha256",
+                target_asset="yt-dlp.exe",
+            ), "f" * 64)
 
 
 class SetupChecksumTests(unittest.TestCase):

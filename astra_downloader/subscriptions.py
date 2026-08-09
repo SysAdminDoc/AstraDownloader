@@ -8,6 +8,7 @@ downloads never consult this store and remain re-downloadable.
 """
 
 import copy
+import hashlib
 import json
 import math
 import re
@@ -209,7 +210,15 @@ def subscription_archive_key(candidate):
     if video_id:
         return f"id:{video_id}"
     url = _default_clean_text(candidate.get("url"), "", 4096)
-    return f"url:{url}" if url else ""
+    if not url:
+        return ""
+    # Archive keys are bounded to 430 characters. Keep short URLs readable,
+    # but hash long URL-only candidates so distinct videos cannot collide
+    # after the key limit is applied.
+    if len(url) > 400:
+        digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+        return f"url-sha256:{digest}"
+    return f"url:{url}"
 
 
 class SubscriptionStore:
@@ -385,6 +394,10 @@ class SubscriptionStore:
                 "attempts": _safe_nonnegative_int(value.get("attempts")),
                 "nextRetryAt": _finite_timestamp(value.get("nextRetryAt"), None),
             }
+            # Migrate pre-fix URL keys through the bounded hash form while
+            # the full URL is still available in the archive value.
+            if key.startswith("url:") and entry["url"]:
+                key = subscription_archive_key({"url": entry["url"]})
             entries.append((key, entry))
         entries.sort(
             key=lambda item: (

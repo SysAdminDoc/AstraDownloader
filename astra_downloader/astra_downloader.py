@@ -983,7 +983,8 @@ def _parse_sha256_sums(body, target_asset=None):
       <hex> *<filename>
       <hex>
     Returns the hex digest for target_asset, or the single digest if the file
-    contains exactly one entry with no filename.
+    contains exactly one entry with no filename and no asset selector was
+    supplied.
     """
     if not body:
         return None
@@ -991,9 +992,11 @@ def _parse_sha256_sums(body, target_asset=None):
     if not body:
         return None
     # Single-line "<hex>" sidecar (some ffmpeg-builds assets ship this form).
+    # A bare digest cannot prove which asset it belongs to, so it is only
+    # safe when the caller has no asset selector to enforce.
     lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
     if len(lines) == 1 and re.fullmatch(r'[0-9A-Fa-f]{64}', lines[0]):
-        return lines[0].lower()
+        return None if target_asset else lines[0].lower()
     for line in lines:
         # Tolerate "<hex>  <name>" and "<hex> *<name>" variants.
         m = re.match(r'^([0-9A-Fa-f]{64})\s+\*?(.+)$', line)
@@ -1026,9 +1029,24 @@ def fetch_expected_sha256(sidecar_url, target_asset=None, timeout=15):
                 body.extend(chunk)
                 if len(body) > CHECKSUM_SIDECAR_MAX_BYTES:
                     return None
-            return _parse_sha256_sums(
-                body.decode('utf-8', errors='replace'), target_asset=target_asset,
-            )
+            text = body.decode('utf-8', errors='replace')
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            if (
+                target_asset
+                and len(lines) == 1
+                and re.fullmatch(r'[0-9A-Fa-f]{64}', lines[0])
+            ):
+                # A URL-specific .sha256/.sha256sum sidecar can identify its
+                # payload by filename; a generic manifest cannot.
+                sidecar_name = Path(urlparse(sidecar_url).path).name
+                for suffix in ('.sha256sum', '.sha256', '.sha256.txt'):
+                    if sidecar_name.endswith(suffix):
+                        sidecar_name = sidecar_name[:-len(suffix)]
+                        break
+                if sidecar_name != target_asset:
+                    return None
+                return lines[0].lower()
+            return _parse_sha256_sums(text, target_asset=target_asset)
     except Exception:
         return None
 
@@ -3629,6 +3647,7 @@ def run_uninstall():
             'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AstraDownloader',
             f'Software\\Google\\Chrome\\NativeMessagingHosts\\{NATIVE_HOST_NAME}',
             f'Software\\Mozilla\\NativeMessagingHosts\\{NATIVE_HOST_NAME}',
+            INTEGRATIONS_STAMP_KEY,
         ]:
             try:
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, path + '\\shell\\open\\command')
