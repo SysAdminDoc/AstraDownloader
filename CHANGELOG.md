@@ -35,6 +35,9 @@ repository's git log.
 - **Downloads follow the Windows Videos known folder.** Redirected Videos
   locations are used for new defaults, with `~/Videos` retained as the
   fail-safe fallback; existing saved paths remain untouched.
+- **Diagnostics survive restarts and can leave the app safely.** The persisted
+  log tail seeds the in-memory view, the diagnostics dialog can save its
+  redacted JSON payload, and the log header can reveal the server log file.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the

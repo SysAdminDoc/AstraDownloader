@@ -71,6 +71,10 @@
       <translation>Review diagnostics</translation>
     </message>
     <message>
+      <source>Reveal log file</source>
+      <translation>Reveal log file</translation>
+    </message>
+    <message>
       <source>Download</source>
       <translation>다운로드</translation>
     </message>
