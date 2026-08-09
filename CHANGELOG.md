@@ -61,6 +61,11 @@ repository's git log.
   form to matching controls and groups, Language and Import and export have
   dedicated sections, and one action restores editable settings to their
   shipped defaults while reporting what changed.
+- **Site sign-ins can use credentials when cookies cannot.** Username/password
+  sign-ins are stored in protected per-site files, never returned through the
+  API or diagnostics surfaces, and are used as a cookie fallback for yt-dlp;
+  the download page also exposes a one-link video password. Chromium browser
+  readers are marked as likely unreadable on Windows 127+ before import.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the

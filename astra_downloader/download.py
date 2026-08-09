@@ -57,9 +57,12 @@ __all__ = (
     "SiteLoginStore", "site_login_key", "registrable_domain",
     "cookie_domain_in_site", "parse_netscape_cookies",
     "build_browser_cookie_args", "describe_browser_cookie_failure",
+    "describe_browser_cookie_readiness", "build_site_login_credential_args",
     "SITE_LOGIN_BROWSERS", "MAX_SITE_LOGINS", "MAX_SITE_LOGIN_COOKIES",
     "MAX_SITE_LOGIN_TEXT_BYTES",
+    "MAX_SITE_LOGIN_USERNAME_BYTES", "MAX_SITE_LOGIN_PASSWORD_BYTES",
     "SITE_LOGIN_DIRNAME", "SITE_LOGIN_INDEX_NAME",
+    "SITE_LOGIN_CREDENTIAL_SUFFIX", "SITE_LOGIN_UNSUPPORTED_CREDENTIAL_SITES",
     "SITE_LOGIN_TEST_TIMEOUT_SECONDS",
     "default_download_path",
 )
@@ -320,6 +323,7 @@ def write_cookies_netscape(cookies, target_path, *, logger=None, domain_filter=N
     """
     if not isinstance(cookies, list) or not cookies:
         return None
+
     allow_domain = domain_filter or _is_allowed_cookie_domain
     target_path = Path(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -389,6 +393,47 @@ def write_cookies_netscape(cookies, target_path, *, logger=None, domain_filter=N
         return None
 
 
+def _write_protected_bytes(data, target_path, *, logger=None):
+    """Atomically replace an owner-only file without exposing its contents."""
+    target_path = Path(target_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target_path.with_name(f".{target_path.name}.{uuid.uuid4().hex}.tmp")
+    descriptor = None
+    try:
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        os.close(descriptor)
+        descriptor = None
+        _apply_cookie_jar_acl(temporary)
+        with open(temporary, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target_path)
+        return True
+    except Exception:
+        # Do not include the exception or path in the log: a mocked writer or
+        # OS error is allowed to contain a credential or a user name.
+        if logger:
+            logger("Site-login credential write failed.")
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                # reason: the descriptor is already unusable while unwinding a failed secret write
+                pass
+        try:
+            if temporary.exists():
+                temporary.unlink()
+        except OSError:
+            # reason: the temporary secret file may already have been removed by the failed operation
+            pass
+        return False
+
+
 # ── Site logins ───────────────────────────────────────────────────────────
 # Sites with sign-in (X, Instagram, Facebook, members-only Vimeo, adult and
 # paywalled sites, plus YouTube when no fresh extension cookies are available)
@@ -412,10 +457,17 @@ MAX_SITE_LOGINS = 50
 MAX_SITE_LOGIN_COOKIES = 400
 MAX_SITE_LOGIN_TEXT_BYTES = 1024 * 1024
 SITE_LOGIN_TEST_TIMEOUT_SECONDS = 30
+SITE_LOGIN_CREDENTIAL_SUFFIX = '.auth'
+MAX_SITE_LOGIN_USERNAME_BYTES = 512
+MAX_SITE_LOGIN_PASSWORD_BYTES = 4096
+SITE_LOGIN_UNSUPPORTED_CREDENTIAL_SITES = frozenset({'reddit.com', 'linkedin.com'})
 SITE_LOGIN_BROWSERS = (
     'brave', 'chrome', 'chromium', 'edge', 'firefox', 'opera', 'safari',
     'vivaldi', 'whale',
 )
+CHROMIUM_SITE_LOGIN_BROWSERS = frozenset({
+    'brave', 'chrome', 'chromium', 'edge', 'opera', 'vivaldi', 'whale',
+})
 # Two-label public suffixes common enough to matter when deciding what "the
 # same site" means. Not a full PSL — a wrong answer here only makes the store
 # key more or less specific, never more permissive than the host itself.
@@ -523,11 +575,11 @@ def parse_netscape_cookies(text, *, limit=MAX_SITE_LOGIN_COOKIES):
 
 
 class SiteLoginStore:
-    """Durable, per-site cookie jars for signed-in downloads.
+    """Durable, per-site cookies or credentials for signed-in downloads.
 
-    Cookie values never leave the jar files: `entries()` reports counts,
-    domains, and expiry only, which is what the GUI, the API, and the
-    diagnostics bundle are allowed to see.
+    Cookie and password values never leave their protected files:
+    `entries()` reports metadata only, which is what the GUI, the API, and
+    the diagnostics bundle are allowed to see.
     """
 
     def __init__(self, root, *, logger=None, clock=time.time,
@@ -539,9 +591,10 @@ class SiteLoginStore:
         self._reader = reader
         self._writer = writer
         self._lock = threading.RLock()
-        # Undo backups contain cookie values, so they are session-only and
-        # never survive a new store instance. A crash therefore cannot leave
-        # an unlisted live session in the protected directory indefinitely.
+        # Undo backups contain session or password values, so they are
+        # session-only and never survive a new store instance. A crash
+        # therefore cannot leave an unlisted live sign-in in the protected
+        # directory indefinitely.
         self._cleanup_undo_backups()
 
     # -- storage -----------------------------------------------------------
@@ -606,16 +659,26 @@ class SiteLoginStore:
     def _jar_path(self, key):
         return self.root / f"{key}.txt"
 
+    def _credential_path(self, key):
+        return self.root / f"{key}{SITE_LOGIN_CREDENTIAL_SUFFIX}"
+
     def _undo_path(self, token):
         if not _SITE_LOGIN_UNDO_TOKEN_RE.fullmatch(str(token or "")):
             return None
         return self.root / f".undo-{token}.txt"
 
+    def _credential_undo_path(self, token):
+        if not _SITE_LOGIN_UNDO_TOKEN_RE.fullmatch(str(token or "")):
+            return None
+        return self.root / f".undo-{token}{SITE_LOGIN_CREDENTIAL_SUFFIX}"
+
     def _cleanup_undo_backups(self):
         try:
             if not self.root.exists():
                 return
-            for path in self.root.glob(".undo-*.txt"):
+            for path in tuple(self.root.glob(".undo-*.txt")) + tuple(
+                self.root.glob(f".undo-*{SITE_LOGIN_CREDENTIAL_SUFFIX}")
+            ):
                 try:
                     path.unlink()
                 except OSError as error:
@@ -644,7 +707,7 @@ class SiteLoginStore:
 
     # -- reads -------------------------------------------------------------
     def entries(self):
-        """Return metadata for every stored login. Never returns cookie data."""
+        """Return metadata for every stored login. Never returns secrets."""
         with self._lock:
             index = self._load_index()
         result = []
@@ -655,6 +718,8 @@ class SiteLoginStore:
                 expiry = int(expiry)
             except (TypeError, ValueError):
                 expiry = 0
+            jar_stored = self._jar_path(key).exists()
+            credentialed = self._credential_path(key).exists()
             result.append({
                 'site': key,
                 'label': str(record.get('label') or key)[:120],
@@ -663,7 +728,8 @@ class SiteLoginStore:
                 'importedAt': int(record.get('importedAt') or 0),
                 'earliestExpiry': expiry,
                 'expired': bool(expiry and expiry <= now),
-                'stored': self._jar_path(key).exists(),
+                'credentialed': credentialed,
+                'stored': jar_stored or credentialed,
             })
         return result
 
@@ -677,9 +743,48 @@ class SiteLoginStore:
             return ''
         with self._lock:
             index = self._load_index()
-        if key in index and self._jar_path(key).exists():
+        if key in index and (
+            self._jar_path(key).exists() or self._credential_path(key).exists()
+        ):
             return key
         return ''
+
+    @staticmethod
+    def _valid_credential_value(value, max_bytes):
+        if not isinstance(value, str) or not value or '\x00' in value:
+            return False
+        try:
+            return len(value.encode('utf-8')) <= max_bytes
+        except UnicodeError:
+            return False
+
+    def credentials_for_url(self, url):
+        """Return one site's credentials for internal argv construction only."""
+        key = site_login_key(url)
+        if not key:
+            return None
+        with self._lock:
+            index = self._load_index()
+            path = self._credential_path(key)
+            if key not in index or not path.exists():
+                return None
+            try:
+                payload = json.loads(path.read_text(encoding='utf-8'))
+            except (OSError, ValueError, UnicodeError):
+                self._log(f"WARNING: stored site sign-in credentials for {key} are unreadable.")
+                return None
+        if not isinstance(payload, dict) or payload.get('schemaVersion') != 1:
+            self._log(f"WARNING: stored site sign-in credentials for {key} are invalid.")
+            return None
+        username = payload.get('username')
+        password = payload.get('password')
+        if not self._valid_credential_value(username, MAX_SITE_LOGIN_USERNAME_BYTES):
+            self._log(f"WARNING: stored site sign-in username for {key} is invalid.")
+            return None
+        if not self._valid_credential_value(password, MAX_SITE_LOGIN_PASSWORD_BYTES):
+            self._log(f"WARNING: stored site sign-in password for {key} is invalid.")
+            return None
+        return {'username': username, 'password': password}
 
     # -- writes ------------------------------------------------------------
     def save_cookies(self, site, cookies, *, source='import', label=None):
@@ -749,6 +854,76 @@ class SiteLoginStore:
             'skipped': max(0, len(cookies) - len(scoped)),
         }, None
 
+    def save_credentials(self, site, username, password, *, source='credentials', label=None):
+        """Persist one site's username/password without putting either in metadata."""
+        key = site_login_key(site)
+        if not key:
+            return None, 'Enter the site address you sign in to, such as vimeo.com.'
+        if key in SITE_LOGIN_UNSUPPORTED_CREDENTIAL_SITES:
+            return None, (
+                f'yt-dlp no longer supports username/password sign-in for {key}. '
+                'Use an exported cookies.txt file instead.'
+            )
+        if not self._valid_credential_value(username, MAX_SITE_LOGIN_USERNAME_BYTES):
+            return None, 'Enter a username up to 512 UTF-8 bytes.'
+        if not self._valid_credential_value(password, MAX_SITE_LOGIN_PASSWORD_BYTES):
+            return None, 'Enter a password up to 4096 UTF-8 bytes.'
+        payload = json.dumps(
+            {'schemaVersion': 1, 'username': username, 'password': password},
+            ensure_ascii=False,
+            separators=(',', ':'),
+        ).encode('utf-8')
+        with self._lock:
+            index = self._load_index()
+            if key not in index and len(index) >= MAX_SITE_LOGINS:
+                return None, (
+                    f'Site sign-in limit reached ({MAX_SITE_LOGINS}). '
+                    'Remove one before adding another.'
+                )
+            self._ensure_root()
+            credential_path = self._credential_path(key)
+            previous = None
+            if credential_path.exists():
+                try:
+                    previous = credential_path.read_bytes()
+                except OSError:
+                    return None, (
+                        'Astra Downloader could not read the existing sign-in safely. '
+                        'Check permissions, then try again.'
+                    )
+            if not _write_protected_bytes(
+                payload, credential_path, logger=self._logger
+            ):
+                return None, 'Astra Downloader could not store the sign-in safely.'
+            record = dict(index.get(key) or {})
+            record.update({
+                'label': str(label or record.get('label') or key)[:120],
+                'source': str(source)[:60],
+                'cookies': max(0, int(record.get('cookies') or 0)),
+                'importedAt': int(self._clock()),
+                'earliestExpiry': max(0, int(record.get('earliestExpiry') or 0)),
+                'authMethod': 'credentials',
+            })
+            index[key] = record
+            if not self._save_index(index):
+                if previous is None:
+                    try:
+                        credential_path.unlink(missing_ok=True)
+                    except OSError as error:
+                        self._log(
+                            f'WARNING: orphaned site-login credential cleanup failed: {error}'
+                        )
+                elif not _write_protected_bytes(
+                    previous, credential_path, logger=self._logger
+                ):
+                    self._log('WARNING: site-login credential rollback failed.')
+                return None, (
+                    'Astra Downloader stored the sign-in but could not record it, '
+                    'so it was rolled back. Check disk space and permissions, then retry.'
+                )
+        self._log(f'Stored username/password sign-in for {key}')
+        return {'site': key, 'credentialed': True}, None
+
     def import_netscape_text(self, site, text, *, source='cookies.txt', label=None):
         """Import a cookies.txt export, keeping only the target site's cookies."""
         if not isinstance(text, str) or not text.strip():
@@ -772,11 +947,15 @@ class SiteLoginStore:
             existed = key in index
             index.pop(key, None)
             self._save_index(index)
-            try:
-                self._jar_path(key).unlink(missing_ok=True)
-            except OSError as error:
-                self._log(f"WARNING: site-login jar delete failed: {error}")
-                return False
+            for path, label in (
+                (self._jar_path(key), 'jar'),
+                (self._credential_path(key), 'credential'),
+            ):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError as error:
+                    self._log(f"WARNING: site-login {label} delete failed: {error}")
+                    return False
         if existed:
             self._log(f"Removed the stored site sign-in for {key}")
         return existed
@@ -784,7 +963,7 @@ class SiteLoginStore:
     def remove_with_undo(self, site):
         """Remove one sign-in while keeping a protected, session-only undo.
 
-        Cookie bytes stay in the store's protected directory. The returned
+        Cookie and credential bytes stay in the store's protected directory. The returned
         token contains only the site name and non-secret index metadata, so a
         GUI undo action never has to hold or serialize cookie values.
         """
@@ -799,17 +978,24 @@ class SiteLoginStore:
             undo_record = self._undo_record(record)
             self._ensure_root()
             jar = self._jar_path(key)
+            credential_path = self._credential_path(key)
             token = uuid.uuid4().hex
             backup = self._undo_path(token)
+            credential_backup = self._credential_undo_path(token)
             has_jar = jar.exists()
+            has_credentials = credential_path.exists()
             try:
                 if has_jar:
                     jar.replace(backup)
+                if has_credentials:
+                    credential_path.replace(credential_backup)
                 updated = dict(index)
                 updated.pop(key, None)
                 if not self._save_index(updated):
                     if has_jar:
                         backup.replace(jar)
+                    if has_credentials:
+                        credential_backup.replace(credential_path)
                     return None, (
                         'Could not remove the sign-in safely. The stored session '
                         'was kept; check disk space and permissions, then retry.'
@@ -822,6 +1008,13 @@ class SiteLoginStore:
                         self._log(
                             f"WARNING: site-login undo rollback failed: {rollback_error}"
                         )
+                if has_credentials and credential_backup.exists() and not credential_path.exists():
+                    try:
+                        credential_backup.replace(credential_path)
+                    except OSError as rollback_error:
+                        self._log(
+                            f"WARNING: site-login credential undo rollback failed: {rollback_error}"
+                        )
                 self._log(f"WARNING: site-login removal failed: {error}")
                 return None, 'Could not remove the stored sign-in safely.'
         self._log(f"Removed the stored site sign-in for {key}")
@@ -829,6 +1022,7 @@ class SiteLoginStore:
             'site': key,
             'token': token,
             'hasJar': has_jar,
+            'hasCredentials': has_credentials,
             'record': undo_record,
         }, None
 
@@ -839,27 +1033,41 @@ class SiteLoginStore:
         key = site_login_key(undo.get('site'))
         token = str(undo.get('token') or '')
         backup = self._undo_path(token)
+        credential_backup = self._credential_undo_path(token)
         record = undo.get('record')
-        if not key or backup is None or not isinstance(record, dict):
+        if (
+            not key or backup is None or credential_backup is None
+            or not isinstance(record, dict)
+        ):
             return False, 'That sign-in undo snapshot is invalid.'
         has_jar = bool(undo.get('hasJar'))
+        has_credentials = bool(undo.get('hasCredentials'))
         with self._lock:
             index = self._load_index()
             if key in index:
                 return False, 'That site already has a stored sign-in.'
             jar = self._jar_path(key)
+            credential_path = self._credential_path(key)
             if not has_jar and jar.exists():
                 return False, 'A file already exists for that site; the undo was not applied.'
+            if not has_credentials and credential_path.exists():
+                return False, 'A file already exists for that site; the undo was not applied.'
             if has_jar and not backup.exists():
+                return False, 'The sign-in undo snapshot is no longer on disk.'
+            if has_credentials and not credential_backup.exists():
                 return False, 'The sign-in undo snapshot is no longer on disk.'
             try:
                 if has_jar:
                     backup.replace(jar)
+                if has_credentials:
+                    credential_backup.replace(credential_path)
                 updated = dict(index)
                 updated[key] = self._undo_record(record)
                 if not self._save_index(updated):
                     if has_jar:
                         jar.replace(backup)
+                    if has_credentials:
+                        credential_path.replace(credential_backup)
                     return False, (
                         'Could not restore the sign-in. The undo snapshot is still '
                         'available; check disk space and permissions, then retry.'
@@ -872,6 +1080,13 @@ class SiteLoginStore:
                         self._log(
                             f"WARNING: site-login restore rollback failed: {rollback_error}"
                         )
+                if has_credentials and credential_path.exists() and not credential_backup.exists():
+                    try:
+                        credential_path.replace(credential_backup)
+                    except OSError as rollback_error:
+                        self._log(
+                            f"WARNING: site-login credential restore rollback failed: {rollback_error}"
+                        )
                 self._log(f"WARNING: site-login restore failed: {error}")
                 return False, 'Could not restore the stored sign-in safely.'
         self._log(f"Restored the stored site sign-in for {key}")
@@ -882,10 +1097,12 @@ class SiteLoginStore:
         if not isinstance(undo, dict):
             return False
         backup = self._undo_path(undo.get('token'))
-        if backup is None:
+        credential_backup = self._credential_undo_path(undo.get('token'))
+        if backup is None or credential_backup is None:
             return False
         try:
             backup.unlink(missing_ok=True)
+            credential_backup.unlink(missing_ok=True)
             return True
         except OSError as error:
             self._log(f"WARNING: site-login undo cleanup failed: {error}")
@@ -917,6 +1134,8 @@ class SiteLoginStore:
         return self._export_jar_for_key(key, target_path)
 
     def _export_jar_for_key(self, key, target_path):
+        if not self._jar_path(key).exists():
+            return None
         try:
             text = self._jar_path(key).read_text(encoding='utf-8')
         except OSError as error:
@@ -958,6 +1177,29 @@ def build_browser_cookie_args(browser, profile=None):
             return []
         target = f"{name}:{profile}"
     return ['--cookies-from-browser', target]
+
+
+def describe_browser_cookie_readiness(browser):
+    """Return a preflight warning for browsers yt-dlp often cannot decrypt."""
+    name = str(browser or '').strip().lower()
+    if name in CHROMIUM_SITE_LOGIN_BROWSERS:
+        return 'likely unreadable on Windows 127+; export cookies.txt instead'
+    return ''
+
+
+def build_site_login_credential_args(credentials):
+    """Build yt-dlp login flags from an internal, already protected record."""
+    if not isinstance(credentials, dict):
+        return []
+    username = credentials.get('username')
+    password = credentials.get('password')
+    if not SiteLoginStore._valid_credential_value(
+        username, MAX_SITE_LOGIN_USERNAME_BYTES
+    ) or not SiteLoginStore._valid_credential_value(
+        password, MAX_SITE_LOGIN_PASSWORD_BYTES
+    ):
+        return []
+    return ['--username', username, '--password', password]
 
 
 def describe_browser_cookie_failure(output):
@@ -1600,6 +1842,22 @@ def summarize_ytdlp_playlist(info, limit=PLAYLIST_PREVIEW_LIMIT):
     }
 
 
+def _redact_download_secrets(value, download):
+    """Remove auth values before error text can reach history or diagnostics."""
+    secrets = []
+    credentials = getattr(download, '_credentials', None)
+    if isinstance(credentials, dict):
+        secrets.extend((credentials.get('username'), credentials.get('password')))
+    secrets.append(getattr(download, '_video_password', ''))
+    if isinstance(value, list):
+        return [_redact_download_secrets(item, download) for item in value]
+    text = str(value or '')
+    for secret in secrets:
+        if isinstance(secret, str) and secret:
+            text = text.replace(secret, '[redacted]')
+    return text
+
+
 def _is_benign_failure_noise(line):
     """True for yt-dlp output lines that must never be surfaced as the failure
     reason. These are informational/warning/progress lines that routinely
@@ -1795,6 +2053,10 @@ class Download:
         self.cookies_scope = ""
         self.requires_auth = bool(requires_auth)
         self._cookies = None
+        # Credentials and one-off video passwords are deliberately ephemeral.
+        # The durable queue serializes only request metadata, never secrets.
+        self._credentials = None
+        self._video_password = ""
         # yt-dlp's --force-overwrites includes --no-continue, so it must only be
         # sent on a run that is *meant* to start over. A retry, a resume, or a
         # download recovered after a restart is exactly the case where a `.part`
@@ -1873,6 +2135,7 @@ AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'title', 'referer', 'section', 'playlist_items', 'subtitles_only',
     'subscription_id', 'archive_key', 'requires_auth', 'status',
     'error', 'error_code', 'error_advice', 'error_action',
+    '_credentials', '_video_password',
 )
 
 
@@ -2277,6 +2540,8 @@ class DownloadManagerCore:
                     # block, so release the reserved slot here.
                     self._running_ids.discard(dl.id)
                     dl._cookies = None
+                    dl._credentials = None
+                    dl._video_password = ""
                     continue
                 cookies = dl._cookies
                 dl._cookies = None
@@ -2294,6 +2559,13 @@ class DownloadManagerCore:
                     dl.cookies_file = exported
                     dl.cookies_scope = scope
                     site_login_used = True
+                elif not dl._credentials:
+                    # A stored username/password is the second identity
+                    # source. Cookies win when both exist because yt-dlp can
+                    # refresh a session jar, while credentials remain an
+                    # explicit fallback for browsers it cannot read.
+                    dl._credentials = self.site_logins.credentials_for_url(dl.url)
+                    site_login_used = bool(dl._credentials)
             if cookies:
                 jar_path = self._dependencies['INSTALL_DIR']() / f".cookies.{dl.id}.txt"
                 dl.cookies_file = write_cookies_netscape(
@@ -2310,6 +2582,8 @@ class DownloadManagerCore:
                         self._running_ids.discard(dl.id)
                         jar = dl.cookies_file
                         dl.cookies_file = None
+                        dl._credentials = None
+                        dl._video_password = ""
                         if jar:
                             try:
                                 Path(jar).unlink(missing_ok=True)
@@ -2353,6 +2627,8 @@ class DownloadManagerCore:
                             # reason: the worker failed before cleanup and the jar may already be gone
                             pass
                         dl.cookies_file = None
+                    dl._credentials = None
+                    dl._video_password = ""
                     self._persist_locked()
                 self._dependencies['write_persistent_log'](f"Download worker {dl.id} failed to start: {exc}")
                 self.progress_updated.emit()
@@ -2371,10 +2647,17 @@ class DownloadManagerCore:
                 dl.status = 'failed'
                 dl.error = 'Unexpected download worker failure. Check Astra Downloader logs.'
                 dl.mark_terminal()
-            self._dependencies['write_persistent_log'](f"Download worker {dl.id} escaped unexpectedly: {exc}")
+            self._dependencies['write_persistent_log'](
+                f"Download worker {dl.id} escaped unexpectedly: "
+                f"{_redact_download_secrets(exc, dl)}"
+            )
         finally:
             with self._lock:
                 self._running_ids.discard(dl.id)
+                # Never keep a password in the live queue after the process
+                # that needed it has finished.
+                dl._credentials = None
+                dl._video_password = ""
                 if dl.status in DOWNLOAD_RUNNING_STATES:
                     dl.status = 'failed'
                     dl.error = 'Download worker stopped before reporting a result.'
@@ -2592,7 +2875,7 @@ class DownloadManagerCore:
     def start_download(self, url, audio_only=False, fmt=None, quality=None,
                        output_dir=None, title=None, referer=None, cookies=None,
                        section=None, playlist_items=None, subscription_id=None,
-                       archive_key=None, subtitles_only=False):
+                       archive_key=None, subtitles_only=False, video_password=None):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
@@ -2619,6 +2902,16 @@ class DownloadManagerCore:
             return None, "Playlist item selection requires a playlist URL."
         if section and playlist_request:
             return None, "Clip ranges are available for single-video downloads only."
+        if video_password is None:
+            video_password = ""
+        elif not isinstance(video_password, str):
+            return None, "Video password must be text."
+        elif video_password and not SiteLoginStore._valid_credential_value(
+            video_password, MAX_SITE_LOGIN_PASSWORD_BYTES
+        ):
+            return None, "Video password must be between 1 and 4096 UTF-8 bytes."
+        if video_password and playlist_request:
+            return None, "Video passwords are available for single-link downloads only."
 
         # No update trigger here: firing before the download was enqueued let
         # the updater pass its active_count()==0 idle gate and then race the
@@ -2703,6 +2996,8 @@ class DownloadManagerCore:
                 dl.archive_key = archive_key
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
+                dl._credentials = None
+                dl._video_password = video_password
                 dl.status = 'pending'
                 dl.error = ''
                 dl.error_code = ''
@@ -2730,6 +3025,7 @@ class DownloadManagerCore:
                     subtitles_only=subtitles_only,
                 )
                 dl._cookies = list(cookies) if cookies else None
+                dl._video_password = video_password
                 self.downloads[dl_id] = dl
             if not self._persist_locked():
                 if not auth_recovery:
@@ -3188,6 +3484,12 @@ class DownloadManagerCore:
         # another site's cookies sends nothing.
         if dl.cookies_file and self._cookie_jar_matches_target(dl):
             args += ['--cookies', dl.cookies_file]
+        else:
+            args += build_site_login_credential_args(
+                getattr(dl, '_credentials', None)
+            )
+        if getattr(dl, '_video_password', '') and not is_playlist:
+            args += ['--video-password', dl._video_password]
         if is_playlist:
             args.append('--yes-playlist')
             if dl.playlist_items:
@@ -3310,6 +3612,8 @@ class DownloadManagerCore:
             watchdog_thread.start()
 
             last_lines, last_error = self._consume_ytdlp_output(dl, proc, activity)
+            last_lines = _redact_download_secrets(last_lines, dl)
+            last_error = _redact_download_secrets(last_error, dl)
 
             proc.wait()
 
@@ -3464,6 +3768,8 @@ class DownloadManagerCore:
                         watchdog_thread.start()
 
                         last_lines, last_error = self._consume_ytdlp_output(dl, proc, activity)
+                        last_lines = _redact_download_secrets(last_lines, dl)
+                        last_error = _redact_download_secrets(last_error, dl)
 
                         proc.wait()
                         if dl.status == 'cancelled':
@@ -3529,7 +3835,10 @@ class DownloadManagerCore:
             if dl.status != "cancelled":
                 dl.status = "failed"
                 dl.error = "Unexpected download error. Check Astra Downloader logs for details."
-                self._dependencies['write_persistent_log'](f"Download {dl.id} failed unexpectedly: {e}")
+                self._dependencies['write_persistent_log'](
+                    f"Download {dl.id} failed unexpectedly: "
+                    f"{_redact_download_secrets(e, dl)}"
+                )
         finally:
             # Signal the watchdog to stop; it's a daemon thread that wakes from
             # its wait() the moment the event is set and exits on its own. We do
@@ -4064,7 +4373,7 @@ class DownloadManagerCore:
             self._unlink_quietly(staging)
 
     def test_site_login(self, site, timeout=SITE_LOGIN_TEST_TIMEOUT_SECONDS):
-        """Verify one stored site jar with a bounded metadata-only probe."""
+        """Verify one stored cookie or credential sign-in with a bounded probe."""
         key = site_login_key(site)
         if not key:
             return None, 'Enter a valid site address before testing its sign-in.'
@@ -4082,17 +4391,26 @@ class DownloadManagerCore:
                 )
             except Exception as exc:  # noqa: BLE001
                 return None, f'Could not prepare the sign-in test: {exc}'
+            credentials = None
             if not jar_path or stored_key != key:
+                credentials = self.site_logins.credentials_for_url(f'https://{key}/')
+            if (not jar_path or stored_key != key) and not credentials:
                 return None, (
                     f'No usable stored sign-in was found for {key}. '
                     'Import the cookies again, then test it.'
                 )
+            probe = Download('__site-login-test__', f'https://{key}/')
+            probe._credentials = credentials
+            auth_args = (
+                ['--cookies', str(jar_path)] if jar_path and stored_key == key
+                else build_site_login_credential_args(credentials)
+            )
             args = [
                 str(self._dependencies['YTDLP_PATH']()), '--ignore-config',
                 '--no-colors', '--no-warnings', '--skip-download', '--simulate',
                 '--dump-single-json', '--no-playlist', '--socket-timeout', '10',
                 '--retries', '1', '--fragment-retries', '1',
-                '--extractor-retries', '1', '--cookies', str(jar_path),
+                '--extractor-retries', '1', *auth_args,
                 f'https://{key}/',
             ]
             try:
@@ -4125,6 +4443,7 @@ class DownloadManagerCore:
                     if line.strip()
                 ]
                 detail = lines[-1] if lines else 'yt-dlp rejected the stored session.'
+                detail = _redact_download_secrets(detail, probe)
                 return None, f'Sign-in test failed for {key}: {detail[:200]}'
             return {
                 'site': key,
@@ -4177,6 +4496,8 @@ class DownloadManagerCore:
             args += ['--cookies', cookie_path]
         else:
             cookie_path = None
+            probe._credentials = self.site_logins.credentials_for_url(url)
+            args += build_site_login_credential_args(probe._credentials)
 
         configured_target = str(
             self.config.get('ImpersonateTarget', '') or ''

@@ -168,13 +168,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: a filter box narrows to matching controls and their group; every control has a per-field revert, or the page has a restore-defaults action that reports what changed; Language and Export/Import move to groups that name them.
   Complexity: M
 
-- [ ] P2 — Sign in with a username and password where cookies cannot reach
-  Why: The Sign-ins page is cookies-only, and five of the seven browsers it offers are the ones that can no longer be read on Windows — so for a password-protected Vimeo link, or a site with no working cookie export, there is no path at all, even though yt-dlp has one.
-  Evidence: none of `--username`, `--password`, `--video-password`, `--twofactor`, `--ap-mso` or `--client-certificate` appears anywhere in `astra_downloader/` (measured 2026-08-06 against the 276 long options the provisioned yt-dlp 2026.08.04 advertises). `SITE_LOGIN_BROWSERS` offers `brave, chrome, chromium, edge, firefox, opera, safari` (`download.py:391-392`) while `describe_browser_cookie_failure` (`:789-796`) already knows Chrome/Edge 127+ App-Bound Encryption makes five of those fail — but says so only after the attempt. Note two sites to exclude: yt-dlp removed Reddit and LinkedIn login support in 2026.07 as broken.
-  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`, `astra_downloader/gui.py`
-  Acceptance: a stored site sign-in can hold credentials as an alternative to a cookie jar, kept out of the log, the diagnostics payload, the API and the settings bundle exactly as cookie values are; `--video-password` is reachable for a single link; the browser list marks the Chromium entries as likely to fail before the user picks one.
-  Complexity: M
-
 - [ ] P2 — Download intermediates somewhere other than the destination folder
   Why: `.part` and `.f###` files are written into the user's Videos folder for the life of every download, where they are visible, get indexed, and get picked up by folder-syncing tools.
   Evidence: `--paths` never appears in `astra_downloader/`; `-o` is built as an absolute path (`download.py:2593`, `:2602`). Implementation gotcha for whoever takes this: yt-dlp's help states `--paths` "is ignored if `--output` is an absolute path", so this needs `-o` made relative and `--paths home:<dir> temp:<dir>` passed together — adding `--paths temp:` alongside the current absolute `-o` is a silent no-op. The v2.1.0 sweep (`_sweep_download_intermediates`) must keep running, because a failed run's `.part` is what `resume_partial` continues from.

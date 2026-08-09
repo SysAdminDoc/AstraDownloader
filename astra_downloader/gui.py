@@ -1021,6 +1021,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'get_recent_log_entries',
     'get_ytdlp_version',
     'SITE_LOGIN_BROWSERS',
+    'describe_browser_cookie_readiness',
     'is_playlist_url',
     'is_youtube_url',
     'probed_video_heights',
@@ -1879,6 +1880,24 @@ class MainWindowCore(QMainWindow):
         url_row.addWidget(self.btn_quick_download)
         quick_layout.addLayout(url_row)
 
+        password_row = QHBoxLayout()
+        self.quick_download_video_password = QLineEdit()
+        self.quick_download_video_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.quick_download_video_password.setAccessibleName(
+            tr("One-link video password")
+        )
+        self.quick_download_video_password.setPlaceholderText(
+            tr("Video password — one link only (optional)")
+        )
+        self.quick_download_video_password.setClearButtonEnabled(True)
+        password_row.addWidget(self.quick_download_video_password, 1)
+        password_row.addWidget(make_label(
+            tr("For a single protected link. Stored site credentials live under Sign-ins."),
+            "fieldHint",
+            word_wrap=True,
+        ))
+        quick_layout.addLayout(password_row)
+
         options_row = QHBoxLayout()
         options_row.setSpacing(8)
         self.quick_download_type = QComboBox()
@@ -2164,10 +2183,18 @@ class MainWindowCore(QMainWindow):
         urls = self.quick_download_url.text().split()
         start = self.quick_download_start.text().strip()
         end = self.quick_download_end.text().strip()
+        password_field = getattr(self, "quick_download_video_password", None)
+        video_password = password_field.text() if password_field is not None else ""
         section = None
         if not urls:
             self._set_quick_download_status(
                 "Paste a video link first.", "error"
+            )
+            return
+        if video_password and len(urls) != 1:
+            self._set_quick_download_status(
+                tr("Video passwords are available for a single link only."),
+                "error",
             )
             return
         if start or end:
@@ -2239,6 +2266,7 @@ class MainWindowCore(QMainWindow):
                 quality=self.quick_download_quality.currentData() or "best",
                 section=section,
                 output_dir=self._quick_download_dir or None,
+                video_password=video_password if len(urls) == 1 else None,
             )
             if error:
                 failures.append((url, error))
@@ -2263,6 +2291,8 @@ class MainWindowCore(QMainWindow):
             self.quick_download_url.clear()
             self.quick_download_start.clear()
             self.quick_download_end.clear()
+            if password_field is not None:
+                password_field.clear()
             # The override was for this download; the default takes over again.
             self._set_quick_download_dir("")
             self._append_log(
@@ -2738,8 +2768,8 @@ class MainWindowCore(QMainWindow):
         header.addLayout(self._make_page_header(
             "Sign-ins",
             tr("Store a signed-in session so private or members-only videos "
-               "download. Cookies stay on this PC and are only ever sent to "
-               "the site they came from."),
+               "download. Cookies or stored credentials stay on this PC and "
+               "are only ever sent to the site they belong to."),
         ), 1)
         self.btn_undo_site_login = self._make_tool_button("Undo remove", "ghost")
         self.btn_undo_site_login.setToolTip(
@@ -2760,13 +2790,38 @@ class MainWindowCore(QMainWindow):
         site_row.addWidget(self.site_login_url, 1)
         add_layout.addLayout(site_row)
 
+        credentials_row = QHBoxLayout()
+        credentials_row.setSpacing(8)
+        self.site_login_username = QLineEdit()
+        self.site_login_username.setAccessibleName(tr("Site sign-in username"))
+        self.site_login_username.setPlaceholderText(tr("Username or email"))
+        credentials_row.addWidget(self.site_login_username, 1)
+        self.site_login_password = QLineEdit()
+        self.site_login_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.site_login_password.setAccessibleName(tr("Site sign-in password"))
+        self.site_login_password.setPlaceholderText(tr("Password"))
+        self.site_login_password.setClearButtonEnabled(True)
+        credentials_row.addWidget(self.site_login_password, 1)
+        self.btn_site_login_credentials = self._make_tool_button(
+            "Store username/password", "primary"
+        )
+        self.btn_site_login_credentials.clicked.connect(
+            self._store_site_login_credentials
+        )
+        credentials_row.addWidget(self.btn_site_login_credentials)
+        add_layout.addLayout(credentials_row)
+
         source_row = QHBoxLayout()
         source_row.setSpacing(8)
         source_row.addWidget(make_label(tr("Read from"), "fieldHint"))
         self.site_login_browser = QComboBox()
         self.site_login_browser.setAccessibleName(tr("Browser to read cookies from"))
         for browser in self._value('SITE_LOGIN_BROWSERS'):
-            self.site_login_browser.addItem(browser.title(), browser)
+            label = browser.title()
+            warning = self._dependencies['describe_browser_cookie_readiness'](browser)
+            if warning:
+                label += f" — {tr('likely unreadable on Windows 127+') }"
+            self.site_login_browser.addItem(label, browser)
         # Firefox is the one browser whose cookie store can still be read from
         # outside on Windows, so it is the default rather than whichever name
         # sorts first.
@@ -2789,10 +2844,11 @@ class MainWindowCore(QMainWindow):
         add_layout.addLayout(source_row)
 
         add_layout.addWidget(make_label(
-            tr("Chrome, Edge, and Brave 127+ encrypt their cookie store, so "
-               "reading them from outside the browser usually fails — export a "
-               "cookies.txt file from the browser and import that instead. "
-               "Firefox can normally be read directly."),
+            tr("Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, "
+               "and Chromium 127+ encrypt their cookie store, so reading them "
+               "from outside the browser usually fails — export a cookies.txt "
+               "file or use username/password instead. Firefox can normally be "
+               "read directly."),
             "toolbarMeta",
             word_wrap=True,
         ))
@@ -2854,7 +2910,7 @@ class MainWindowCore(QMainWindow):
             self.site_login_url.setText(url)
             self.site_login_url.setFocus()
         self._show_site_login_status(
-            tr("Import this site's cookies to unblock the download waiting on it."),
+            tr("Import this site's cookies or store its username/password to unblock the download waiting on it."),
             "neutral",
         )
 
@@ -2910,7 +2966,13 @@ class MainWindowCore(QMainWindow):
             copy_layout = QVBoxLayout()
             copy_layout.setSpacing(3)
             copy_layout.addWidget(make_label(entry.get("site", ""), "cardTitle"))
-            if entry.get("expired"):
+            credentialed = bool(entry.get("credentialed"))
+            count = int(entry.get("cookies", 0) or 0)
+            if credentialed:
+                state = tr("Username/password — stored securely")
+                if entry.get("expired") and count:
+                    state += f" · {tr('cookie session expired')}"
+            elif entry.get("expired"):
                 state = tr("Expired — sign in again to refresh it")
             elif not entry.get("stored"):
                 state = tr("Missing on disk — import it again")
@@ -2927,9 +2989,16 @@ class MainWindowCore(QMainWindow):
             test_state = self._site_login_test_states.get(entry.get("site"))
             if test_state:
                 state += f" · {test_state.get('message', '')}"
-            count = int(entry.get("cookies", 0) or 0)
+            if credentialed and count:
+                auth_label = tr("cookies + username/password")
+            elif credentialed:
+                auth_label = tr("username/password")
+            else:
+                auth_label = (
+                    tr("cookie") if count == 1 else tr("cookies")
+                )
             copy_layout.addWidget(make_label(
-                f"{count} {tr('cookie') if count == 1 else tr('cookies')} · "
+                f"{count} {auth_label} · "
                 f"{tr('from')} {entry.get('source', 'import')} · {state}",
                 "toolbarMeta",
                 word_wrap=True,
@@ -2985,6 +3054,36 @@ class MainWindowCore(QMainWindow):
         self._discard_site_login_undo()
         self._site_login_test_states.pop(site, None)
         self.site_login_url.clear()
+        self._refresh_site_logins(force=True)
+        return True
+
+    def _store_site_login_credentials(self):
+        store = self._site_login_store()
+        if store is None:
+            self._show_site_login_status(
+                tr("Site sign-ins are unavailable in this session."), "error"
+            )
+            return False
+        result, error = store.save_credentials(
+            self.site_login_url.text(),
+            self.site_login_username.text(),
+            self.site_login_password.text(),
+            source="credentials",
+        )
+        if error:
+            self._show_site_login_status(error, "error")
+            return False
+        site = (result or {}).get("site", "")
+        self._show_site_login_status(
+            f"{tr('Signed in to')} {site} — {tr('username/password stored securely.')}",
+            "success",
+        )
+        self._append_log(f"Stored a username/password sign-in for {site}.")
+        self._discard_site_login_undo()
+        self._site_login_test_states.pop(site, None)
+        self.site_login_url.clear()
+        self.site_login_username.clear()
+        self.site_login_password.clear()
         self._refresh_site_logins(force=True)
         return True
 

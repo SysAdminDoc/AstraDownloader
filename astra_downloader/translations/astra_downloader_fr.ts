@@ -151,6 +151,10 @@
       <translation>Subscriptions are ready when the local companion is running.</translation>
     </message>
     <message>
+      <source>Store username/password</source>
+      <translation>Store username/password</translation>
+    </message>
+    <message>
       <source>Read from browser</source>
       <translation>Read from browser</translation>
     </message>
@@ -415,6 +419,14 @@
       <translation>Paste a video link, or several at once</translation>
     </message>
     <message>
+      <source>One-link video password</source>
+      <translation>One-link video password</translation>
+    </message>
+    <message>
+      <source>Video password — one link only (optional)</source>
+      <translation>Video password — one link only (optional)</translation>
+    </message>
+    <message>
       <source>Download type</source>
       <translation>Download type</translation>
     </message>
@@ -631,6 +643,22 @@
       <translation>Site address you signed in to — x.com, instagram.com, vimeo.com</translation>
     </message>
     <message>
+      <source>Site sign-in username</source>
+      <translation>Site sign-in username</translation>
+    </message>
+    <message>
+      <source>Username or email</source>
+      <translation>Username or email</translation>
+    </message>
+    <message>
+      <source>Site sign-in password</source>
+      <translation>Site sign-in password</translation>
+    </message>
+    <message>
+      <source>Password</source>
+      <translation>Password</translation>
+    </message>
+    <message>
       <source>Browser to read cookies from</source>
       <translation>Browser to read cookies from</translation>
     </message>
@@ -659,8 +687,8 @@
       <translation>Stored sign-in status</translation>
     </message>
     <message>
-      <source>Import this site's cookies to unblock the download waiting on it.</source>
-      <translation>Import this site's cookies to unblock the download waiting on it.</translation>
+      <source>Import this site's cookies or store its username/password to unblock the download waiting on it.</source>
+      <translation>Import this site's cookies or store its username/password to unblock the download waiting on it.</translation>
     </message>
     <message>
       <source>Test</source>
@@ -1251,6 +1279,14 @@
       <translation>No proof-of-origin provider is running. Downloads fall back to the token-exempt tv and android_vr clients.</translation>
     </message>
     <message>
+      <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
+      <translation>For a single protected link. Stored site credentials live under Sign-ins.</translation>
+    </message>
+    <message>
+      <source>Video passwords are available for a single link only.</source>
+      <translation>Video passwords are available for a single link only.</translation>
+    </message>
+    <message>
       <source>Subscriptions unavailable</source>
       <translation>Subscriptions unavailable</translation>
     </message>
@@ -1267,20 +1303,24 @@
       <translation>Add a YouTube channel or playlist above. New uploads will be queued on its interval.</translation>
     </message>
     <message>
-      <source>Store a signed-in session so private or members-only videos download. Cookies stay on this PC and are only ever sent to the site they came from.</source>
-      <translation>Store a signed-in session so private or members-only videos download. Cookies stay on this PC and are only ever sent to the site they came from.</translation>
+      <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
+      <translation>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</translation>
     </message>
     <message>
       <source>Read from</source>
       <translation>Read from</translation>
     </message>
     <message>
-      <source>Chrome, Edge, and Brave 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file from the browser and import that instead. Firefox can normally be read directly.</source>
-      <translation>Chrome, Edge, and Brave 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file from the browser and import that instead. Firefox can normally be read directly.</translation>
+      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
+      <translation>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</translation>
     </message>
     <message>
-      <source>Expired — sign in again to refresh it</source>
-      <translation>Expired — sign in again to refresh it</translation>
+      <source>Username/password — stored securely</source>
+      <translation>Username/password — stored securely</translation>
+    </message>
+    <message>
+      <source>cookies + username/password</source>
+      <translation>cookies + username/password</translation>
     </message>
     <message>
       <source>Run a bounded metadata-only sign-in test.</source>
@@ -1507,12 +1547,20 @@
       <translation>Try a different search or choose All sign-ins.</translation>
     </message>
     <message>
-      <source>Missing on disk — import it again</source>
-      <translation>Missing on disk — import it again</translation>
+      <source>Expired — sign in again to refresh it</source>
+      <translation>Expired — sign in again to refresh it</translation>
+    </message>
+    <message>
+      <source>username/password</source>
+      <translation>username/password</translation>
     </message>
     <message>
       <source>cookies for other sites were discarded.</source>
       <translation>cookies for other sites were discarded.</translation>
+    </message>
+    <message>
+      <source>username/password stored securely.</source>
+      <translation>username/password stored securely.</translation>
     </message>
     <message>
       <source>Could not restore the stored sign-in.</source>
@@ -1647,8 +1695,20 @@
       <translation>Every {minutes} min · scanning now…</translation>
     </message>
     <message>
-      <source>Session cookies — valid until the site signs you out</source>
-      <translation>Session cookies — valid until the site signs you out</translation>
+      <source>likely unreadable on Windows 127+</source>
+      <translation>likely unreadable on Windows 127+</translation>
+    </message>
+    <message>
+      <source>Missing on disk — import it again</source>
+      <translation>Missing on disk — import it again</translation>
+    </message>
+    <message>
+      <source>cookie</source>
+      <translation>cookie</translation>
+    </message>
+    <message>
+      <source>cookies</source>
+      <translation>cookies</translation>
     </message>
     <message>
       <source>Test failed</source>
@@ -1695,6 +1755,14 @@
       <translation>Finishing setup...</translation>
     </message>
     <message>
+      <source>cookie session expired</source>
+      <translation>cookie session expired</translation>
+    </message>
+    <message>
+      <source>Session cookies — valid until the site signs you out</source>
+      <translation>Session cookies — valid until the site signs you out</translation>
+    </message>
+    <message>
       <source>from</source>
       <translation>from</translation>
     </message>
@@ -1717,14 +1785,6 @@
     <message>
       <source>First cookie expires</source>
       <translation>First cookie expires</translation>
-    </message>
-    <message>
-      <source>cookie</source>
-      <translation>cookie</translation>
-    </message>
-    <message>
-      <source>cookies</source>
-      <translation>cookies</translation>
     </message>
     <message>
       <source>YouTube requires a PO token for this video. Start the PO-token provider, then retry the download.</source>

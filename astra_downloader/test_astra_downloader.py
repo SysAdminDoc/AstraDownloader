@@ -4118,10 +4118,12 @@ class ApiSecurityTests(unittest.TestCase):
             "cookies": [],
             "section": {"start": "1:02.5", "end": "1:05"},
             "playlistItems": ["5", 1, 3, 3],
+            "videoPassword": "one-link-secret",
         }
         validated, err, code = ad.validate_download_request_body(body)
         self.assertEqual(validated["section"], {"start": 62.5, "end": 65.0})
         self.assertEqual(validated["playlistItems"], [1, 3, 5])
+        self.assertEqual(validated["videoPassword"], "one-link-secret")
         self.assertIsNone(err)
         self.assertIsNone(code)
 
@@ -4184,6 +4186,16 @@ class ApiSecurityTests(unittest.TestCase):
                 self.assertIsNone(validated)
                 self.assertTrue(err)
                 self.assertEqual(code, expected_code)
+
+    def test_download_request_body_rejects_an_invalid_video_password(self):
+        for value in (123, "x\x00y", "x" * 4097):
+            with self.subTest(value=repr(value)):
+                _validated, err, code = ad.validate_download_request_body({
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "videoPassword": value,
+                })
+                self.assertEqual(code, "invalid-video-password")
+                self.assertTrue(err)
 
     def test_download_endpoint_rejects_non_string_format_and_quality_with_cors(self):
         token = "j" * 32
@@ -12207,6 +12219,15 @@ class SiteLoginPolicyTests(unittest.TestCase):
         )
         self.assertEqual(ad.describe_browser_cookie_failure("Extracted 12 cookies"), "")
 
+    def test_chromium_browser_readiness_is_warned_before_import(self):
+        for browser in ("brave", "chrome", "chromium", "edge", "opera", "vivaldi", "whale"):
+            with self.subTest(browser=browser):
+                self.assertIn(
+                    "likely unreadable",
+                    ad.describe_browser_cookie_readiness(browser),
+                )
+        self.assertEqual(ad.describe_browser_cookie_readiness("firefox"), "")
+
 
 class SiteLoginStoreTests(unittest.TestCase):
     """The store keeps one site's session and discards everything else."""
@@ -12249,6 +12270,60 @@ class SiteLoginStoreTests(unittest.TestCase):
             self.assertEqual(entries[0]["cookies"], 2)
             self.assertTrue(entries[0]["stored"])
             self.assertFalse(entries[0]["expired"])
+
+    def test_credentials_are_stored_as_protected_metadata_free_secrets(self):
+        username = "member@example.com"
+        password = "PASSWORD-ONLY-FOR-TEST"
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            result, error = store.save_credentials("vimeo.com", username, password)
+            self.assertIsNone(error)
+            self.assertEqual(result, {"site": "vimeo.com", "credentialed": True})
+            entries = store.entries()
+            serialized = json.dumps(entries)
+            self.assertNotIn(username, serialized)
+            self.assertNotIn(password, serialized)
+            self.assertTrue(entries[0]["credentialed"])
+            self.assertTrue(entries[0]["stored"])
+            self.assertEqual(
+                store.credentials_for_url("https://vimeo.com/video"),
+                {"username": username, "password": password},
+            )
+            auth_path = Path(tmp) / ad.SITE_LOGIN_DIRNAME / "vimeo.com.auth"
+            self.assertTrue(auth_path.exists())
+
+            reopened = self._store(tmp)
+            self.assertEqual(
+                reopened.credentials_for_url("https://www.vimeo.com/video"),
+                {"username": username, "password": password},
+            )
+
+    def test_credential_undo_restores_the_protected_file_without_secrets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            store.save_credentials("vimeo.com", "member", "secret-password")
+            undo, error = store.remove_with_undo("vimeo.com")
+            self.assertIsNone(error)
+            self.assertTrue(undo["hasCredentials"])
+            self.assertNotIn("secret-password", json.dumps(undo))
+            self.assertFalse(
+                (Path(tmp) / ad.SITE_LOGIN_DIRNAME / "vimeo.com.auth").exists()
+            )
+            restored, error = store.restore_removed(undo)
+            self.assertTrue(restored)
+            self.assertIsNone(error)
+            self.assertEqual(
+                store.credentials_for_url("https://vimeo.com/video")["password"],
+                "secret-password",
+            )
+
+    def test_reddit_and_linkedin_credentials_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            for site in ("reddit.com", "linkedin.com"):
+                result, error = store.save_credentials(site, "user", "password")
+                self.assertIsNone(result)
+                self.assertIn("cookies.txt", error)
 
     def test_import_rejects_cookies_that_do_not_belong_to_the_site(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -12379,7 +12454,8 @@ class SiteLoginDownloadTests(unittest.TestCase):
             self._waited = True
             return ('', '')
 
-    def _run(self, url, *, seed_site=None, request_cookies=None):
+    def _run(self, url, *, seed_site=None, seed_credentials=None,
+             request_cookies=None, video_password=None):
         captured = []
         # The cookie jar's owner-only ACL is applied by shelling out to
         # icacls through this very Popen, so a fake that swallows every
@@ -12403,13 +12479,21 @@ class SiteLoginDownloadTests(unittest.TestCase):
                     seed_site,
                     f".{seed_site}\tTRUE\t/\tTRUE\t2000000000\tauth\tSITE-SECRET",
                 )
+            if seed_credentials:
+                manager.site_logins.save_credentials(
+                    seed_credentials[0], seed_credentials[1], seed_credentials[2]
+                )
             # Drive the production path: start_download schedules the worker,
             # which is where the jar is chosen and written. Faking the process
             # first keeps a real yt-dlp out of the unit suite.
             with mock.patch.object(ad.subprocess, 'Popen', popen), \
                  mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
                  mock.patch.object(ad, 'write_persistent_log', return_value=None):
-                dl_id, error = manager.start_download(url=url, cookies=request_cookies)
+                dl_id, error = manager.start_download(
+                    url=url,
+                    cookies=request_cookies,
+                    video_password=video_password,
+                )
                 self.assertIsNone(error, error)
                 download = manager.downloads[dl_id]
                 deadline = time.time() + 10
@@ -12435,6 +12519,38 @@ class SiteLoginDownloadTests(unittest.TestCase):
         )
         self.assertNotIn('--cookies', argv)
         self.assertEqual(download.cookies_scope, '')
+
+    def test_stored_credentials_are_attached_without_being_kept_in_the_download(self):
+        argv, download, _body = self._run(
+            "https://vimeo.com/123",
+            seed_credentials=("vimeo.com", "member@example.com", "PASSWORD-SECRET"),
+        )
+        self.assertEqual(
+            argv[argv.index("--username") + 1], "member@example.com"
+        )
+        self.assertEqual(argv[argv.index("--password") + 1], "PASSWORD-SECRET")
+        self.assertIsNone(download._credentials)
+        self.assertNotIn("PASSWORD-SECRET", json.dumps(download.to_dict()))
+
+    def test_video_password_reaches_one_link_and_is_not_serialized(self):
+        argv, download, _body = self._run(
+            "https://vimeo.com/123", video_password="VIDEO-SECRET"
+        )
+        self.assertEqual(argv[argv.index("--video-password") + 1], "VIDEO-SECRET")
+        self.assertEqual(download._video_password, "")
+        self.assertNotIn("VIDEO-SECRET", json.dumps(download.to_dict()))
+
+    def test_video_password_is_rejected_for_a_playlist(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir}), FakeHistory()
+            )
+            dl_id, error = manager.start_download(
+                "https://www.youtube.com/playlist?list=fixture",
+                video_password="VIDEO-SECRET",
+            )
+        self.assertIsNone(dl_id)
+        self.assertIn("single-link", error)
 
     def test_no_stored_sign_in_downloads_signed_out_instead_of_failing(self):
         argv, download, _body = self._run("https://vimeo.com/123")
@@ -12660,6 +12776,32 @@ class SiteLoginApiTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.get_json()["cookies"], 1)
             self.assertEqual(resp.get_json()["skipped"], 1, "the YouTube cookie is dropped")
+
+    def test_credentials_can_be_written_but_never_read_back_from_the_api(self):
+        token = "z" * 32
+        username = "member@example.com"
+        password = "API-PASSWORD-SECRET"
+        client, manager = self._client(token)
+        with tempfile.TemporaryDirectory() as tmp:
+            manager.site_logins = ad.SiteLoginStore(tmp)
+            created = client.post(
+                "/site-logins",
+                json={
+                    "site": "vimeo.com",
+                    "username": username,
+                    "password": password,
+                },
+                headers={"X-Auth-Token": token},
+            )
+            self.assertEqual(created.status_code, 200)
+            created_text = created.get_data(as_text=True)
+            self.assertNotIn(username, created_text)
+            self.assertNotIn(password, created_text)
+            listing = client.get("/site-logins", headers={"X-Auth-Token": token})
+            listing_text = listing.get_data(as_text=True)
+            self.assertNotIn(username, listing_text)
+            self.assertNotIn(password, listing_text)
+            self.assertTrue(listing.get_json()["sites"][0]["credentialed"])
 
     def test_private_network_sites_are_refused(self):
         token = "z" * 32
@@ -13389,6 +13531,37 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertEqual(window.cfg_proxy.text(), "")
         self.assertEqual(window.cfg_language.currentData(), "system")
         self.assertIn("Restored defaults", window.settings_status.text())
+
+    def test_sign_in_browser_list_marks_chromium_entries_before_selection(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        QApplication.processEvents()
+        chrome_index = window.site_login_browser.findData("chrome")
+        firefox_index = window.site_login_browser.findData("firefox")
+        self.assertIn("likely unreadable", window.site_login_browser.itemText(chrome_index))
+        self.assertNotIn("likely unreadable", window.site_login_browser.itemText(firefox_index))
+
+    def test_sign_in_page_can_store_credentials_without_rendering_them(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        with tempfile.TemporaryDirectory() as tmp:
+            window.dl_manager.site_logins = ad.SiteLoginStore(tmp)
+            window.site_login_url.setText("vimeo.com")
+            window.site_login_username.setText("member@example.com")
+            window.site_login_password.setText("GUI-PASSWORD-SECRET")
+            window.btn_site_login_credentials.click()
+            QApplication.processEvents()
+            self.assertEqual(
+                window.dl_manager.site_logins.credentials_for_url(
+                    "https://vimeo.com/video"
+                )["password"],
+                "GUI-PASSWORD-SECRET",
+            )
+            self.assertNotIn("GUI-PASSWORD-SECRET", window.site_login_status.text())
 
 
 class RevealInExplorerTests(unittest.TestCase):

@@ -555,6 +555,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             cookies=cookies,
             section=body.get('section'),
             playlist_items=body.get('playlistItems'),
+            video_password=body.get('videoPassword'),
         )
         if err:
             if 'queue is full' in err.lower():
@@ -676,7 +677,30 @@ def create_api(config, dl_manager, history, *, dependencies):
 
         raw_cookies = body.get('cookies')
         cookies_text = body.get('cookiesText')
-        if isinstance(raw_cookies, list):
+        username = body.get('username')
+        password = body.get('password')
+        has_credentials = username is not None or password is not None
+        has_cookies = (
+            isinstance(raw_cookies, list)
+            or isinstance(cookies_text, str)
+            or isinstance(body.get('browser'), str)
+        )
+        if has_credentials and has_cookies:
+            return cors_response({
+                "error": "Provide either username/password or cookies, not both.",
+                "code": "ambiguous-site-login",
+            }, 400)
+        if has_credentials:
+            if not isinstance(username, str) or not isinstance(password, str):
+                return cors_response({
+                    "error": "Username and password are both required.",
+                    "code": "missing-credentials",
+                }, 400)
+            result, error = store.save_credentials(
+                body['site'], username, password,
+                source=str(body.get('source') or 'credentials')[:60],
+            )
+        elif isinstance(raw_cookies, list):
             result, error = store.save_cookies(
                 body['site'], raw_cookies[:MAX_SITE_LOGIN_COOKIES],
                 source=str(body.get('source') or 'extension')[:60],
@@ -692,7 +716,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             )
         else:
             return cors_response({
-                "error": "Provide cookies, cookiesText, or a browser to read them from.",
+                "error": "Provide username/password, cookies, cookiesText, or a browser to read them from.",
                 "code": "missing-cookies",
             }, 400)
         if error:
