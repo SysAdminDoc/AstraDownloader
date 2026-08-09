@@ -183,6 +183,10 @@
       <translation>Neu erzeugen</translation>
     </message>
     <message>
+      <source>Site profiles</source>
+      <translation>Site-Profile</translation>
+    </message>
+    <message>
       <source>Storage</source>
       <translation>Speicherort</translation>
     </message>
@@ -427,6 +431,14 @@
       <translation>Videopasswort — nur ein Link (optional)</translation>
     </message>
     <message>
+      <source>Profile</source>
+      <translation>Profil</translation>
+    </message>
+    <message>
+      <source>Site profile</source>
+      <translation>Site-Profil</translation>
+    </message>
+    <message>
       <source>Download type</source>
       <translation>Downloadtyp</translation>
     </message>
@@ -475,6 +487,10 @@
       <translation>Ausschnitte gelten nur für einen einzelnen Link.</translation>
     </message>
     <message>
+      <source>Site profile summary</source>
+      <translation>Zusammenfassung des Site-Profils</translation>
+    </message>
+    <message>
       <source>Subtitle request summary</source>
       <translation>Zusammenfassung der Untertitelanforderung</translation>
     </message>
@@ -505,6 +521,18 @@
     <message>
       <source>Pause starting pending downloads. Downloads already running will continue.</source>
       <translation>Starten ausstehender Downloads pausieren. Bereits laufende Downloads werden fortgesetzt.</translation>
+    </message>
+    <message>
+      <source>Automatic site profile</source>
+      <translation>Automatisches Site-Profil</translation>
+    </message>
+    <message>
+      <source>No profile (one-off)</source>
+      <translation>Kein Profil (einmalig)</translation>
+    </message>
+    <message>
+      <source>No site profile for this download.</source>
+      <translation>Kein Site-Profil für diesen Download.</translation>
     </message>
     <message>
       <source>History</source>
@@ -793,6 +821,18 @@
     <message>
       <source>Optional HTTP(S) or SOCKS proxy used only for region checks.</source>
       <translation>Optionaler HTTP(S)- oder SOCKS-Proxy nur für Regionsprüfungen.</translation>
+    </message>
+    <message>
+      <source>Named site profiles</source>
+      <translation>Benannte Site-Profile</translation>
+    </message>
+    <message>
+      <source>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.</source>
+      <translation>Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Format, Qualität, Proxy, Impersonation und Anfragepausen; speichern Sie hier keine Cookies oder Passwörter.</translation>
+    </message>
+    <message>
+      <source>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</source>
+      <translation>Beispiel: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</translation>
     </message>
     <message>
       <source>Video download folder</source>
@@ -1335,6 +1375,10 @@
       <translation>Für einen einzelnen geschützten Link. Gespeicherte Zugangsdaten finden Sie unter Anmeldungen.</translation>
     </message>
     <message>
+      <source>Automatic matching is on; no profile matches this link.</source>
+      <translation>Die automatische Zuordnung ist aktiv; kein Profil passt zu diesem Link.</translation>
+    </message>
+    <message>
       <source>Video passwords are available for a single link only.</source>
       <translation>Videopasswörter sind nur für einen einzelnen Link verfügbar.</translation>
     </message>
@@ -1729,6 +1773,10 @@
     <message>
       <source>Open</source>
       <translation>Öffnen</translation>
+    </message>
+    <message>
+      <source>Using site profile: {name}.</source>
+      <translation>Site-Profil wird verwendet: {name}.</translation>
     </message>
     <message>
       <source>This download goes to {path}. Click to use the default folder again.</source>

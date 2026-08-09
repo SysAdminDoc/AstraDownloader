@@ -1046,6 +1046,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_source_address',
     'normalize_xff',
     'normalize_rate_limit',
+    'select_site_profile',
+    'validate_site_profiles',
     'normalize_sponsorblock_categories',
     'normalize_sublangs',
     'normalize_subtitle_mode',
@@ -1903,6 +1905,15 @@ class MainWindowCore(QMainWindow):
 
         options_row = QHBoxLayout()
         options_row.setSpacing(8)
+        options_row.addWidget(make_label("Profile", "fieldHint"))
+        self.quick_download_profile = QComboBox()
+        self.quick_download_profile.setAccessibleName(tr("Site profile"))
+        self.quick_download_profile.setMinimumWidth(170)
+        self.quick_download_profile.setToolTip(tr("Automatic site profile"))
+        self.quick_download_profile.currentIndexChanged.connect(
+            self._quick_download_profile_changed
+        )
+        options_row.addWidget(self.quick_download_profile)
         self.quick_download_type = QComboBox()
         self.quick_download_type.setAccessibleName(tr("Download type"))
         self.quick_download_type.addItem(tr("Video"), "video")
@@ -1954,6 +1965,11 @@ class MainWindowCore(QMainWindow):
             word_wrap=True,
         )
         quick_layout.addWidget(self.quick_download_clip_hint)
+        self.quick_download_profile_hint = make_label(
+            "", "fieldHint", word_wrap=True
+        )
+        self.quick_download_profile_hint.setAccessibleName(tr("Site profile summary"))
+        quick_layout.addWidget(self.quick_download_profile_hint)
         self.quick_download_subs_hint = make_label("", "fieldHint", word_wrap=True)
         self.quick_download_subs_hint.setAccessibleName(tr("Subtitle request summary"))
         self.quick_download_subs_hint.hide()
@@ -1966,6 +1982,7 @@ class MainWindowCore(QMainWindow):
         quick_layout.addWidget(self.quick_download_status)
         layout.addWidget(quick_card)
         self._sync_quick_download_options()
+        self._rebuild_quick_site_profiles()
 
         # Tool setup progress lives with the paste box, not on the server
         # page: it reports on yt-dlp/FFmpeg, which is what makes a download
@@ -2148,6 +2165,87 @@ class MainWindowCore(QMainWindow):
             "Change this under Settings, Post-processing."
         )
 
+    def _site_profiles(self):
+        value = self.config.get("SiteProfiles", [])
+        if not isinstance(value, (list, tuple)):
+            return []
+        return [profile for profile in value if isinstance(profile, dict)]
+
+    def _rebuild_quick_site_profiles(self):
+        combo = getattr(self, "quick_download_profile", None)
+        if combo is None:
+            return
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(tr("Automatic site profile"), None)
+        combo.addItem(tr("No profile (one-off)"), "")
+        for profile in self._site_profiles():
+            name = str(profile.get("Name") or "").strip()
+            if name:
+                combo.addItem(name, name)
+        restored = combo.findData(current)
+        combo.setCurrentIndex(restored if restored >= 0 else 0)
+        combo.blockSignals(False)
+        self._sync_quick_download_profile(apply=True)
+
+    def _quick_download_profile_changed(self, *_args):
+        self._sync_quick_download_profile(apply=True)
+
+    def _sync_quick_download_profile(self, *, apply=False):
+        combo = getattr(self, "quick_download_profile", None)
+        if combo is None:
+            return None
+        selection = combo.currentData()
+        raw = getattr(self, "quick_download_url", None)
+        parts = raw.text().strip().split() if raw is not None else []
+        raw = parts[0] if parts else ""
+        normalize_url = self._dependencies.get("normalize_url")
+        url = raw
+        if callable(normalize_url):
+            url, _error = normalize_url(raw)
+        profile = self._dependencies["select_site_profile"](
+            url or "", self._site_profiles(), selection
+        )
+        if selection == "":
+            summary = tr("No site profile for this download.")
+        elif profile:
+            summary = tr("Using site profile: {name}.").format(
+                name=profile.get("Name") or ""
+            )
+        else:
+            summary = tr("Automatic matching is on; no profile matches this link.")
+        if hasattr(self, "quick_download_profile_hint"):
+            self.quick_download_profile_hint.setText(summary)
+        self._active_quick_site_profile = profile
+        if apply and profile:
+            self._apply_quick_site_profile(profile)
+        return profile
+
+    def _apply_quick_site_profile(self, profile):
+        """Apply a profile's request preferences to the paste controls."""
+        kind = str(profile.get("DownloadType") or "").strip().lower()
+        if kind:
+            index = self.quick_download_type.findData(kind)
+            if index >= 0:
+                self.quick_download_type.blockSignals(True)
+                self.quick_download_type.setCurrentIndex(index)
+                self.quick_download_type.blockSignals(False)
+        self._sync_quick_download_options()
+        kind = self.quick_download_type.currentData()
+        preferred_format = profile.get(
+            "AudioFormat" if kind == "audio" else "VideoFormat"
+        )
+        if kind != "subtitles" and preferred_format:
+            index = self.quick_download_format.findData(preferred_format)
+            if index >= 0:
+                self.quick_download_format.setCurrentIndex(index)
+        preferred_quality = profile.get("Quality")
+        if kind == "video" and preferred_quality:
+            index = self.quick_download_quality.findData(preferred_quality)
+            if index >= 0:
+                self.quick_download_quality.setCurrentIndex(index)
+
     def _sync_quick_download_options(self, *_args):
         if not hasattr(self, "quick_download_format"):
             return
@@ -2258,6 +2356,10 @@ class MainWindowCore(QMainWindow):
 
         queued = []
         failures = []
+        profile_widget = getattr(self, "quick_download_profile", None)
+        profile_name = (
+            profile_widget.currentData() if profile_widget is not None else None
+        )
         for url in urls:
             dl_id, error = self.dl_manager.start_download(
                 url=url,
@@ -2270,6 +2372,7 @@ class MainWindowCore(QMainWindow):
                 section=section,
                 output_dir=self._quick_download_dir or None,
                 video_password=video_password if len(urls) == 1 else None,
+                profile_name=profile_name,
             )
             if error:
                 failures.append((url, error))
@@ -2298,6 +2401,10 @@ class MainWindowCore(QMainWindow):
                 password_field.clear()
             # The override was for this download; the default takes over again.
             self._set_quick_download_dir("")
+            if profile_widget is not None:
+                automatic = profile_widget.findData(None)
+                if automatic >= 0:
+                    profile_widget.setCurrentIndex(automatic)
             self._append_log(
                 f"Queued {len(queued)} download"
                 f"{'' if len(queued) == 1 else 's'} from the quick download box."
@@ -3560,6 +3667,33 @@ class MainWindowCore(QMainWindow):
         geo_proxy_row.addWidget(self.cfg_geo_verification_proxy)
         conn_l.addLayout(geo_proxy_row)
         layout.addWidget(conn_card)
+
+        # Site profiles. This is intentionally a bounded JSON editor rather
+        # than a secret-bearing account form: names and defaults are portable,
+        # while cookies and credentials stay in the per-site Sign-ins store.
+        profiles_card, profiles_l = self._make_settings_group("Site profiles")
+        profiles_l.addWidget(make_label("Named site profiles", "fieldLabel"))
+        profiles_l.addWidget(make_label(
+            "One JSON object per profile. Match a domain automatically, or "
+            "choose a profile for one download in the paste box. Supported "
+            "defaults include format, quality, proxy, impersonation and "
+            "request pacing; do not put cookies or passwords here.",
+            "fieldHint", word_wrap=True,
+        ))
+        self.cfg_site_profiles = QTextEdit()
+        self.cfg_site_profiles.setAccessibleName(tr("Named site profiles"))
+        self.cfg_site_profiles.setAcceptRichText(False)
+        self.cfg_site_profiles.setMinimumHeight(170)
+        self.cfg_site_profiles.setPlainText(json.dumps(
+            self.config.get("SiteProfiles", []), indent=2, ensure_ascii=False
+        ))
+        profiles_l.addWidget(self.cfg_site_profiles)
+        profiles_l.addWidget(make_label(
+            'Example: [{"Name":"YouTube archive","Domain":"youtube.com",'
+            '"VideoFormat":"mp4","Quality":"1080"}]',
+            "fieldHint", word_wrap=True,
+        ))
+        layout.addWidget(profiles_card)
 
         # Storage
         paths_card, paths_l = self._make_settings_group("Storage")
@@ -5304,6 +5438,7 @@ class MainWindowCore(QMainWindow):
     # import. This is also the one place that knows the full list, so a new
     # setting missing from it shows up as a field the import cannot refresh.
     _SETTINGS_FORM_FIELDS = (
+        ("cfg_site_profiles", "SiteProfiles", "text"),
         ("cfg_dl_path", "DownloadPath", "text"),
         ("cfg_audio_path", "AudioDownloadPath", "text"),
         ("cfg_outtmpl", "OutputTemplate", "text"),
@@ -5365,7 +5500,14 @@ class MainWindowCore(QMainWindow):
             widget.blockSignals(True)
             try:
                 if kind == "text":
-                    widget.setText(str(value or ""))
+                    if hasattr(widget, "setPlainText"):
+                        widget.setPlainText(json.dumps(
+                            value if isinstance(value, list) else [],
+                            indent=2,
+                            ensure_ascii=False,
+                        ))
+                    else:
+                        widget.setText(str(value or ""))
                 elif kind == "check":
                     widget.setChecked(bool(value))
                 elif kind == "number":
@@ -5391,6 +5533,7 @@ class MainWindowCore(QMainWindow):
             box.setChecked(not selected or name in selected)
             box.blockSignals(False)
         self._sync_sublang_checkboxes(self.cfg_sublangs.text())
+        self._rebuild_quick_site_profiles()
         # Signals stay blocked throughout, so refreshing the form does not
         # mark it dirty — the import's own status line is left standing.
         return refreshed
@@ -6214,6 +6357,7 @@ class MainWindowCore(QMainWindow):
         self._run_setup(force_ffmpeg=True)
 
     def _save_settings(self):
+        site_profiles_field = getattr(self, "cfg_site_profiles", None)
         validated_fields = (
             self.cfg_token, self.cfg_dl_path, self.cfg_audio_path,
             self.cfg_sublangs, self.cfg_ratelimit, self.cfg_proxy,
@@ -6221,6 +6365,8 @@ class MainWindowCore(QMainWindow):
             self.cfg_geo_verification_proxy,
             self.cfg_outtmpl,
         )
+        if site_profiles_field is not None:
+            validated_fields += (site_profiles_field,)
         for field in validated_fields:
             self._set_input_error(field, False)
             field.setAccessibleDescription("")
@@ -6252,6 +6398,15 @@ class MainWindowCore(QMainWindow):
         xff = self._dependencies['normalize_xff'](xff_raw)
         geo_proxy_raw = self.cfg_geo_verification_proxy.text().strip()
         geo_proxy = self._dependencies['normalize_proxy'](geo_proxy_raw)
+        site_profiles_raw = (
+            site_profiles_field.toPlainText().strip()
+            if site_profiles_field is not None else ""
+        )
+        validate_profiles = self._dependencies.get('validate_site_profiles')
+        site_profiles, site_profiles_error = (
+            validate_profiles(site_profiles_raw)
+            if callable(validate_profiles) else ([], None)
+        )
         has_error = False
         first_error = None
 
@@ -6293,6 +6448,8 @@ class MainWindowCore(QMainWindow):
                 self.cfg_geo_verification_proxy,
                 "Enter an http, https, or socks proxy URL, or leave this blank.",
             )
+        if site_profiles_error and site_profiles_field is not None:
+            mark_error(site_profiles_field, site_profiles_error)
         if not new_token:
             mark_error(self.cfg_token, "The private API token cannot be empty.")
         outtmpl_raw = self.cfg_outtmpl.text().strip()
@@ -6324,6 +6481,10 @@ class MainWindowCore(QMainWindow):
         self.cfg_source_address.setText(source_address)
         self.cfg_xff.setText(xff)
         self.cfg_geo_verification_proxy.setText(geo_proxy)
+        if site_profiles_field is not None:
+            site_profiles_field.setPlainText(json.dumps(
+                site_profiles or [], indent=2, ensure_ascii=False
+            ))
         self.cfg_outtmpl.setText(outtmpl)
         saved = self.config.update({
             "ServerPort": new_port,
@@ -6376,6 +6537,7 @@ class MainWindowCore(QMainWindow):
             "SourceAddress": source_address,
             "Xff": xff,
             "GeoVerificationProxy": geo_proxy,
+            "SiteProfiles": site_profiles or [],
             "JavaScriptRuntime": self.cfg_js_runtime.currentData(),
             "YtDlpUpdateChannel": self.cfg_ytdlp_channel.currentData(),
             "Language": (
@@ -6442,6 +6604,7 @@ class MainWindowCore(QMainWindow):
 
     def _quick_download_url_edited(self, *_args):
         """Clear clipboard-specific guidance once the user edits a staged URL."""
+        self._sync_quick_download_profile(apply=True)
         self._schedule_format_probe()
         if not self._clipboard_staged_url:
             return

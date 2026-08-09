@@ -167,6 +167,60 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(invalid["Xff"], "")
         self.assertEqual(invalid["GeoVerificationProxy"], "")
 
+    def test_site_profiles_are_bounded_normalized_and_secret_free(self):
+        profiles, error = ad.validate_site_profiles([
+            {
+                "Name": "YouTube archive",
+                "Domain": "https://www.youtube.com/",
+                "VideoFormat": "mp4",
+                "Quality": "1080",
+                "Proxy": "https://proxy.example:8443",
+                "SleepIntervalSeconds": 4,
+                "MaxSleepIntervalSeconds": 2,
+            },
+        ])
+        self.assertIsNone(error)
+        self.assertEqual(profiles[0]["Domain"], "youtube.com")
+        self.assertEqual(profiles[0]["MaxSleepIntervalSeconds"], 4)
+        self.assertNotIn("cookies", profiles[0])
+        self.assertNotIn("password", profiles[0])
+        self.assertEqual(ad.sanitize_config({"SiteProfiles": profiles})["SiteProfiles"], profiles)
+
+        for value in (
+            [{"Name": "same", "Domain": "youtube.com"},
+             {"Name": "SAME", "Domain": "vimeo.com"}],
+            [{"Name": "bad", "Domain": "youtube.com/watch"}],
+            "not-json",
+        ):
+            with self.subTest(value=value):
+                normalized, error = ad.validate_site_profiles(value)
+                self.assertIsNone(normalized)
+                self.assertTrue(error)
+
+    def test_site_profiles_match_subdomains_and_allow_explicit_one_off_choice(self):
+        profiles = [
+            {"Name": "YouTube", "Domain": "youtube.com", "Quality": "1080"},
+            {"Name": "Studio", "Domain": "studio.youtube.com", "Quality": "720"},
+        ]
+        self.assertEqual(
+            ad.select_site_profile(
+                "https://media.studio.youtube.com/watch?v=1", profiles
+            )["Name"],
+            "Studio",
+        )
+        self.assertIsNone(
+            ad.select_site_profile("https://notyoutube.com/watch?v=1", profiles)
+        )
+        self.assertEqual(
+            ad.select_site_profile(
+                "https://vimeo.com/1", profiles, "YouTube"
+            )["Quality"],
+            "1080",
+        )
+        self.assertIsNone(
+            ad.select_site_profile("https://youtube.com/watch?v=1", profiles, "")
+        )
+
     def test_output_template_bounds_split_long_text_and_preserve_literals(self):
         import config as config_module
 
@@ -3370,6 +3424,31 @@ class FatalErrorReportingTests(unittest.TestCase):
 
 
 class DownloadManagerTests(unittest.TestCase):
+    def test_start_download_applies_profile_format_quality_and_persists_choice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({
+                "DownloadPath": tmp,
+                "SiteProfiles": [{
+                    "Name": "Archive",
+                    "Domain": "youtube.com",
+                    "VideoFormat": "mkv",
+                    "Quality": "1080",
+                }],
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager.pause_intake()
+            dl_id, error = manager.start_download(
+                "https://www.youtube.com/watch?v=profile",
+                profile_name="Archive",
+            )
+            self.assertIsNone(error)
+            download = manager.downloads[dl_id]
+            self.assertEqual(download.format, "mkv")
+            self.assertEqual(download.quality, "1080")
+            self.assertEqual(download.profile_name, "Archive")
+            payload = manager.queue_payload()
+            self.assertEqual(payload["downloads"][0]["profileName"], "Archive")
+
     def test_fourth_download_is_retained_pending_while_three_run(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
         release = threading.Event()
@@ -11200,7 +11279,8 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             self._waited = True
             return ('', '')
 
-    def _argv_for(self, url, *, config_overrides=None, with_cookies=True):
+    def _argv_for(self, url, *, config_overrides=None, with_cookies=True,
+                  profile_name=None):
         attempts = []
 
         def popen(args, **_kwargs):
@@ -11217,7 +11297,9 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             settings.update(config_overrides or {})
             config = FakeConfig(settings)
             manager = ad.DownloadManager(config, FakeHistory())
-            download = ad.Download("dl_argv", url, output_dir=tmpdir)
+            download = ad.Download(
+                "dl_argv", url, output_dir=tmpdir, profile_name=profile_name
+            )
             download.status = "queued"
             if with_cookies:
                 jar = Path(tmpdir) / "cookies.txt"
@@ -11264,6 +11346,30 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             argv[argv.index('--geo-verification-proxy') + 1],
             'https://proxy.example:8443',
         )
+
+    def test_matching_profile_overlays_download_network_and_pacing_args(self):
+        argv = self._argv_for(
+            "https://www.youtube.com/watch?v=profile",
+            config_overrides={
+                "RateLimit": "1M",
+                "SiteProfiles": [{
+                    "Name": "Archive",
+                    "Domain": "youtube.com",
+                    "Proxy": "https://profile-proxy.example:8443",
+                    "RateLimit": "500K",
+                    "ForceIPVersion": "ipv4",
+                    "SleepIntervalSeconds": 3,
+                    "MaxSleepIntervalSeconds": 5,
+                }],
+            },
+            profile_name="Archive",
+            with_cookies=False,
+        )
+        self.assertEqual(argv[argv.index('--proxy') + 1], 'https://profile-proxy.example:8443')
+        self.assertEqual(argv[argv.index('--limit-rate') + 1], '500K')
+        self.assertIn('--force-ipv4', argv)
+        self.assertEqual(argv[argv.index('--sleep-interval') + 1], '3')
+        self.assertEqual(argv[argv.index('--max-sleep-interval') + 1], '5')
 
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",

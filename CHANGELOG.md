@@ -73,6 +73,9 @@ repository's git log.
 - **Network-path workarounds are opt-in.** Settings can force an IP family, bind
   a source address, supply a geo X-Forwarded-For value, or use a verification-
   only proxy; 403 and geo-restriction failures now name the matching remedy.
+- **Site profiles are URL-aware.** Named domain profiles can set output format,
+  quality, impersonation, proxy and request pacing defaults; matching happens
+  when a link is pasted, with an explicit one-off profile or no-profile choice.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the

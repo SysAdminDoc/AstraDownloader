@@ -44,6 +44,8 @@ __all__ = (
     "allowed_output_roots", "clean_text", "clean_path_text", "coerce_bool",
     "clamp_int", "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
+    "normalize_site_profile_domain", "normalize_site_profiles",
+    "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
     "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
@@ -65,6 +67,8 @@ _OWNED_EXPORTS = {
     "clean_text", "clean_path_text", "coerce_bool", "clamp_int",
     "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
+    "normalize_site_profile_domain", "normalize_site_profiles",
+    "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
     "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
@@ -279,6 +283,9 @@ DEFAULT_CONFIG = {
     "SourceAddress": "",
     "Xff": "",
     "GeoVerificationProxy": "",
+    # Named per-domain defaults. Secrets deliberately do not belong here:
+    # cookies and credentials remain in SiteLoginStore, scoped by site.
+    "SiteProfiles": [],
     "Language": "system",
     "StartMinimized": False,
     "CloseToTray": True,
@@ -426,6 +433,190 @@ def normalize_xff(value):
         return str(ipaddress.ip_network(cleaned, strict=False))
     except ValueError:
         return ""
+
+
+SITE_PROFILE_OVERRIDE_KEYS = (
+    "ImpersonateTarget", "Proxy", "RateLimit", "ThrottledRate",
+    "ForceIPVersion", "SourceAddress", "Xff", "GeoVerificationProxy",
+    "SocketTimeoutSeconds", "ExtractorRetries", "SleepIntervalSeconds",
+    "MaxSleepIntervalSeconds", "PacingJitterPercent", "SleepRequestsSeconds",
+)
+_SITE_PROFILE_MAX = 32
+_SITE_PROFILE_NAME_MAX = 80
+_SITE_PROFILE_DOMAIN_MAX = 253
+_SITE_PROFILE_DOWNLOAD_TYPES = frozenset({"", "video", "audio", "subtitles"})
+_SITE_PROFILE_VIDEO_FORMATS = frozenset({"", "mp4", "mkv", "webm"})
+_SITE_PROFILE_AUDIO_FORMATS = frozenset({"", "mp3", "m4a", "opus", "flac", "wav"})
+_SITE_PROFILE_QUALITY = frozenset({"", "best", "2160", "1440", "1080", "720", "480"})
+
+
+def normalize_site_profile_domain(value):
+    """Return a safe hostname root for a named site profile.
+
+    Profiles only select settings for a URL that is already accepted by the
+    public-media policy. Keeping the field to a hostname root prevents a
+    profile from smuggling a path or credentials into matching logic and
+    makes subdomain matching deterministic.
+    """
+    raw = clean_text(value, "", _SITE_PROFILE_DOMAIN_MAX)
+    if not raw:
+        return ""
+    try:
+        if "://" in raw:
+            parsed = urlparse(raw)
+            if parsed.scheme.lower() not in {"http", "https"}:
+                return ""
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                return ""
+            if parsed.path not in {"", "/"}:
+                return ""
+            host = parsed.hostname or ""
+        else:
+            if any(character in raw for character in "/?#@"):
+                return ""
+            host = raw
+        host = host.strip().strip(".").lower()
+    except (TypeError, ValueError):
+        return ""
+    if host.startswith("www."):
+        host = host[4:]
+    if not host or len(host) > _SITE_PROFILE_DOMAIN_MAX:
+        return ""
+    labels = host.split(".")
+    if len(labels) < 2 or any(
+        not label or len(label) > 63
+        or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+        for label in labels
+    ):
+        return ""
+    if len(labels[-1]) < 2:
+        return ""
+    return host
+
+
+def _site_profile_value(item, key, default=None):
+    wanted = key.casefold()
+    for candidate, value in item.items():
+        if str(candidate).casefold() == wanted:
+            return value
+    return default
+
+
+def _site_profile_choice(item, key, allowed, index):
+    raw = _site_profile_value(item, key, "")
+    cleaned = clean_text(raw, "", 32).lower()
+    if cleaned not in allowed and cleaned:
+        return None, f"Site profile {index} has an invalid {key}."
+    return cleaned, None
+
+
+def _site_profile_int(item, key, maximum, index):
+    raw = _site_profile_value(item, key, 0)
+    if raw in (None, ""):
+        return 0, None
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None, f"Site profile {index} has an invalid {key}."
+    return max(0, min(maximum, parsed)), None
+
+
+def validate_site_profiles(value):
+    """Validate and normalize the editable named-profile document.
+
+    The GUI uses the error text to keep malformed JSON or a bad profile from
+    being silently discarded. The config loader calls ``normalize_site_profiles``
+    below, which fails closed for hand-edited or legacy state files.
+    """
+    if value in (None, ""):
+        raw_profiles = []
+    elif isinstance(value, str):
+        text = value.strip()
+        if len(text.encode("utf-8", errors="replace")) > 64 * 1024:
+            return None, "Site profiles are too large. Keep them under 64 KB."
+        try:
+            raw_profiles = json.loads(text) if text else []
+        except (TypeError, ValueError):
+            return None, "Site profiles must be valid JSON."
+    else:
+        raw_profiles = value
+    if not isinstance(raw_profiles, list):
+        return None, "Site profiles must be a JSON array."
+    if len(raw_profiles) > _SITE_PROFILE_MAX:
+        return None, f"Use at most {_SITE_PROFILE_MAX} site profiles."
+
+    profiles = []
+    names = set()
+    for index, item in enumerate(raw_profiles, 1):
+        if not isinstance(item, dict):
+            return None, f"Site profile {index} must be a JSON object."
+        name = clean_text(_site_profile_value(item, "Name"), "", _SITE_PROFILE_NAME_MAX)
+        domain = normalize_site_profile_domain(_site_profile_value(item, "Domain"))
+        if not name:
+            return None, f"Site profile {index} needs a name."
+        if not domain:
+            return None, f"Site profile {index} needs a valid domain such as youtube.com."
+        if name.casefold() in names:
+            return None, f"Site profile names must be unique: {name}."
+        names.add(name.casefold())
+        entry = {"Name": name, "Domain": domain}
+
+        for key, allowed in (
+            ("DownloadType", _SITE_PROFILE_DOWNLOAD_TYPES),
+            ("VideoFormat", _SITE_PROFILE_VIDEO_FORMATS),
+            ("AudioFormat", _SITE_PROFILE_AUDIO_FORMATS),
+            ("Quality", _SITE_PROFILE_QUALITY),
+        ):
+            normalized, error = _site_profile_choice(item, key, allowed, index)
+            if error:
+                return None, error
+            if normalized:
+                entry[key] = normalized
+
+        for key, normalizer in (
+            ("ImpersonateTarget", normalize_impersonate_target),
+            ("Proxy", normalize_proxy),
+            ("RateLimit", normalize_rate_limit),
+            ("ThrottledRate", normalize_rate_limit),
+            ("ForceIPVersion", normalize_force_ip_version),
+            ("SourceAddress", normalize_source_address),
+            ("Xff", normalize_xff),
+            ("GeoVerificationProxy", normalize_proxy),
+        ):
+            raw = _site_profile_value(item, key, "")
+            normalized = normalizer(raw)
+            if clean_text(raw, "", 512) and not normalized:
+                return None, f"Site profile {index} has an invalid {key}."
+            if normalized:
+                entry[key] = normalized
+
+        for key, maximum in (
+            ("SocketTimeoutSeconds", 300),
+            ("ExtractorRetries", 20),
+            ("SleepIntervalSeconds", 600),
+            ("MaxSleepIntervalSeconds", 600),
+            ("PacingJitterPercent", 100),
+            ("SleepRequestsSeconds", 60),
+        ):
+            normalized, error = _site_profile_int(item, key, maximum, index)
+            if error:
+                return None, error
+            if normalized:
+                entry[key] = normalized
+        if (
+            entry.get("MaxSleepIntervalSeconds", 0)
+            and entry.get("MaxSleepIntervalSeconds", 0)
+            < entry.get("SleepIntervalSeconds", 0)
+        ):
+            entry["MaxSleepIntervalSeconds"] = entry["SleepIntervalSeconds"]
+        profiles.append(entry)
+    return profiles, None
+
+
+def normalize_site_profiles(value):
+    """Fail closed when loading named profiles from local or imported state."""
+    profiles, _error = validate_site_profiles(value)
+    return profiles if profiles is not None else []
 
 
 def normalize_sublangs(value):
@@ -1186,6 +1377,7 @@ def sanitize_config(raw):
     data["SourceAddress"] = normalize_source_address(data.get("SourceAddress"))
     data["Xff"] = normalize_xff(data.get("Xff"))
     data["GeoVerificationProxy"] = normalize_proxy(data.get("GeoVerificationProxy"))
+    data["SiteProfiles"] = normalize_site_profiles(data.get("SiteProfiles"))
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
     allowed_languages = {
         "system", "ar", "de", "en", "es", "fr", "it", "ja", "ko",

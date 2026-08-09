@@ -28,9 +28,9 @@ except ImportError:  # Flat source-path compatibility.
     from _compat import make_legacy_resolver
 
 try:
-    from .config import default_download_path
+    from .config import default_download_path, SITE_PROFILE_OVERRIDE_KEYS
 except ImportError:  # Flat source-path compatibility.
-    from config import default_download_path
+    from config import default_download_path, SITE_PROFILE_OVERRIDE_KEYS
 
 
 __all__ = (
@@ -57,6 +57,7 @@ __all__ = (
     "DownloadQueueStore", "DOWNLOAD_QUEUE_SCHEMA_VERSION",
     "PLAYLIST_PREVIEW_LIMIT",
     "SiteLoginStore", "site_login_key", "registrable_domain",
+    "select_site_profile",
     "cookie_domain_in_site", "parse_netscape_cookies",
     "build_browser_cookie_args", "describe_browser_cookie_failure",
     "describe_browser_cookie_readiness", "build_site_login_credential_args",
@@ -527,6 +528,63 @@ def site_login_key(value):
     key = registrable_domain(raw)
     key = _SITE_KEY_RE.sub('', key)
     return key.strip('.')[:120]
+
+
+def select_site_profile(url, profiles, profile_name=None):
+    """Return the named profile for a URL, or the longest matching domain.
+
+    ``None`` means automatic matching, while an empty string is the explicit
+    one-off choice to disable profiles for this download. A named selection is
+    allowed to cross its stored domain so a user can deliberately reuse a
+    profile once; it remains a settings profile, never a credential store.
+    """
+    records = profiles if isinstance(profiles, (list, tuple)) else ()
+    if profile_name == "":
+        return None
+    if profile_name is not None:
+        wanted = str(profile_name).strip().casefold()
+        if not wanted:
+            return None
+        return next(
+            (
+                dict(profile) for profile in records
+                if isinstance(profile, dict)
+                and str(profile.get("Name") or "").strip().casefold() == wanted
+            ),
+            None,
+        )
+    try:
+        host = (urlparse(str(url or "")).hostname or "").strip().rstrip(".").lower()
+    except ValueError:
+        host = ""
+    if not host:
+        return None
+    matches = [
+        profile for profile in records
+        if isinstance(profile, dict)
+        and (
+            host == str(profile.get("Domain") or "").strip().lower()
+            or host.endswith("." + str(profile.get("Domain") or "").strip().lower())
+        )
+    ]
+    if not matches:
+        return None
+    return dict(max(matches, key=lambda profile: len(str(profile.get("Domain") or ""))))
+
+
+class _ProfileConfigOverlay:
+    """A read-only config view with non-empty profile overrides applied."""
+
+    def __init__(self, base, profile):
+        self._base = base
+        self._profile = profile if isinstance(profile, dict) else {}
+
+    def get(self, key, default=None):
+        if key in SITE_PROFILE_OVERRIDE_KEYS:
+            value = self._profile.get(key)
+            if value not in (None, "", 0):
+                return value
+        return self._base.get(key, default)
 
 
 def cookie_domain_in_site(cookie_domain, site_key):
@@ -2103,7 +2161,7 @@ class Download:
                  output_dir=None, title=None, referer=None, cookies_file=None,
                  requires_auth=False, created_at=None, queue_order=0, section=None,
                  playlist_items=None, subscription_id=None, archive_key=None,
-                 subtitles_only=False, clock=None):
+                 subtitles_only=False, clock=None, profile_name=None):
         self._clock = clock or time.time
         self.id = dl_id
         self.url = url
@@ -2122,6 +2180,9 @@ class Download:
         # fields empty, so the regular re-download behavior is unchanged.
         self.subscription_id = subscription_id
         self.archive_key = archive_key
+        # None = automatic URL matching; an empty string is the explicit
+        # one-off choice to bypass profiles for this queued item.
+        self.profile_name = profile_name
         self.cookies_file = cookies_file
         # Which site the jar at `cookies_file` was built for: 'youtube' for the
         # extension's bridge, or a stored site-login key. A jar is only ever
@@ -2183,6 +2244,8 @@ class Download:
             payload["subscriptionId"] = self.subscription_id
         if self.subtitles_only:
             payload["subtitlesOnly"] = True
+        if self.profile_name is not None:
+            payload["profileName"] = self.profile_name
         return payload
 
 
@@ -2212,7 +2275,7 @@ AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'title', 'referer', 'section', 'playlist_items', 'subtitles_only',
     'subscription_id', 'archive_key', 'requires_auth', 'status',
     'error', 'error_code', 'error_advice', 'error_action',
-    '_credentials', '_video_password',
+    '_credentials', '_video_password', 'profile_name',
 )
 
 
@@ -2271,6 +2334,8 @@ class DownloadQueueStore:
             **({'archiveKey': download.archive_key}
                if download.archive_key else {}),
             **({'subtitlesOnly': True} if download.subtitles_only else {}),
+            **({'profileName': getattr(download, 'profile_name', None)}
+               if getattr(download, 'profile_name', None) is not None else {}),
             'createdAt': float(download.start_time),
             'order': int(download.queue_order),
         } for download in unfinished]
@@ -2407,6 +2472,16 @@ class DownloadManagerCore:
         self._dependencies['cleanup_stale_cookie_jars']()
         self._restore_pending_queue()
 
+    def _effective_config_for_url(self, url, profile_name=None):
+        """Return global settings overlaid with the URL's site profile."""
+        profile = select_site_profile(
+            url, self.config.get('SiteProfiles', []), profile_name
+        )
+        return (
+            _ProfileConfigOverlay(self.config, profile)
+            if profile else self.config
+        )
+
     def _restore_pending_queue(self):
         """Restore unfinished work without starting it or restoring secrets.
 
@@ -2493,6 +2568,20 @@ class DownloadManagerCore:
             referer, _ = self._dependencies['normalize_url'](item.get('referer')) if item.get('referer') else (None, None)
             subscription_id = self._dependencies['clean_text'](item.get('subscriptionId'), '', 120) or None
             archive_key = self._dependencies['clean_text'](item.get('archiveKey'), '', 430) or None
+            raw_profile_name = item.get('profileName')
+            if raw_profile_name is None:
+                profile_name = None
+            else:
+                profile_name = self._dependencies['clean_text'](
+                    raw_profile_name, '', 80
+                )
+                if profile_name and not select_site_profile(
+                    url, self.config.get('SiteProfiles', []), profile_name
+                ):
+                    # A profile deleted since the queue was written falls
+                    # back to the current automatic match rather than
+                    # stranding the recovered download.
+                    profile_name = None
             dl_id = self._dependencies['clean_text'](item.get('id'), '', 120)
             if not dl_id or dl_id in seen_ids:
                 self._next_id += 1
@@ -2525,6 +2614,7 @@ class DownloadManagerCore:
                 subtitles_only=self._dependencies['coerce_bool'](
                     item.get('subtitlesOnly'), False
                 ),
+                profile_name=profile_name,
             )
             dl.status = 'needs-auth' if requires_auth else 'paused'
             dl.error = (
@@ -2952,7 +3042,8 @@ class DownloadManagerCore:
     def start_download(self, url, audio_only=False, fmt=None, quality=None,
                        output_dir=None, title=None, referer=None, cookies=None,
                        section=None, playlist_items=None, subscription_id=None,
-                       archive_key=None, subtitles_only=False, video_password=None):
+                       archive_key=None, subtitles_only=False, video_password=None,
+                       profile_name=None):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
@@ -2965,6 +3056,15 @@ class DownloadManagerCore:
                 'That address is on a private, loopback, or link-local network. '
                 'Astra Downloader only downloads from public sites.'
             )
+        if profile_name is not None:
+            profile_name = self._dependencies['clean_text'](profile_name, '', 80)
+            if profile_name and not select_site_profile(
+                url, self.config.get('SiteProfiles', []), profile_name
+            ):
+                return None, f"Unknown site profile: {profile_name}."
+        selected_profile = select_site_profile(
+            url, self.config.get('SiteProfiles', []), profile_name
+        )
         audio_only = self._dependencies['coerce_bool'](audio_only, False)
         section, section_error = self._dependencies['normalize_download_section'](section)
         if section_error:
@@ -3008,6 +3108,13 @@ class DownloadManagerCore:
                 )
 
         # Sanitize format/quality
+        if selected_profile:
+            if fmt is None:
+                fmt = selected_profile.get(
+                    'AudioFormat' if audio_only else 'VideoFormat'
+                ) or None
+            if quality is None:
+                quality = selected_profile.get('Quality') or None
         if audio_only:
             fmt = fmt if isinstance(fmt, str) and fmt in self.ALLOWED_AUDIO_FMT else 'mp3'
         else:
@@ -3071,6 +3178,7 @@ class DownloadManagerCore:
                 dl.subtitles_only = subtitles_only
                 dl.subscription_id = subscription_id
                 dl.archive_key = archive_key
+                dl.profile_name = profile_name
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
                 dl._credentials = None
@@ -3100,6 +3208,7 @@ class DownloadManagerCore:
                     subscription_id=subscription_id,
                     archive_key=archive_key,
                     subtitles_only=subtitles_only,
+                    profile_name=profile_name,
                 )
                 dl._cookies = list(cookies) if cookies else None
                 dl._video_password = video_password
@@ -3449,13 +3558,16 @@ class DownloadManagerCore:
         ytdlp = str(self._dependencies['YTDLP_PATH']())
         ffmpeg_dir = str(self._dependencies['FFMPEG_PATH']().parent)
         is_playlist = is_playlist_url(dl.url)
+        effective_config = self._effective_config_for_url(
+            dl.url, getattr(dl, 'profile_name', None)
+        )
 
         # Output template. A user-configured template (already validated by
         # config.normalize_output_template — allowlisted fields, no traversal,
         # keeps %(ext)s) is always relative to the download root and, when set,
         # governs both single and playlist layout. It must stay relative: yt-dlp
         # ignores --paths when -o receives an absolute template.
-        custom_tpl = str(self.config.get("OutputTemplate", "") or "")
+        custom_tpl = str(effective_config.get("OutputTemplate", "") or "")
         if custom_tpl:
             out_tpl = custom_tpl
         elif is_playlist:
@@ -3473,7 +3585,7 @@ class DownloadManagerCore:
         # yt-dlp downloads to temp: first and moves only the finished output
         # under home:. KeepIntermediateFiles is deliberately also the
         # diagnosis switch: it puts temp: beside the output and skips cleanup.
-        keep_intermediates = bool(self.config.get("KeepIntermediateFiles", False))
+        keep_intermediates = bool(effective_config.get("KeepIntermediateFiles", False))
         intermediate_dir = (
             Path(dl.output_dir)
             if keep_intermediates else self._download_intermediate_dir(dl)
@@ -3496,34 +3608,34 @@ class DownloadManagerCore:
                 'download:MDLP_JSON %(progress)j',
                 '--print', 'after_move:MDLP_FILEPATH %(filepath)j']
 
-        frags = self._dependencies['clamp_int'](self.config.get("ConcurrentFragments", 4), 4, 1, 32)
+        frags = self._dependencies['clamp_int'](effective_config.get("ConcurrentFragments", 4), 4, 1, 32)
         args += ['--concurrent-fragments', str(frags)]
-        retries = self._dependencies['clamp_int'](self.config.get("DownloadRetries", 10), 10, 0, 50)
+        retries = self._dependencies['clamp_int'](effective_config.get("DownloadRetries", 10), 10, 0, 50)
         args += ['--retries', str(retries), '--fragment-retries', str(retries)]
         subtitles_only = bool(getattr(dl, 'subtitles_only', False))
         # Every embed writes into the media container, and a subtitles-only
         # run never produces one. Passing them would ask ffmpeg to postprocess
         # a file that was deliberately not downloaded.
         if not subtitles_only:
-            if self.config.get("EmbedMetadata"):
+            if effective_config.get("EmbedMetadata"):
                 args.append('--embed-metadata')
-            if self.config.get("EmbedThumbnail"):
+            if effective_config.get("EmbedThumbnail"):
                 args.append('--embed-thumbnail')
-            if self.config.get("EmbedChapters"):
+            if effective_config.get("EmbedChapters"):
                 args.append('--embed-chapters')
-        args += build_subtitle_args(self.config, subtitles_only=subtitles_only)
+        args += build_subtitle_args(effective_config, subtitles_only=subtitles_only)
         if subtitles_only:
             args.append('--skip-download')
         # SponsorBlock has YouTube-only segment data; passing it for any other
         # site only produces a warning line that later competes with the real
         # failure reason in the output tail.
-        if self.config.get("SponsorBlock") and self._dependencies['is_youtube_url'](dl.url):
-            action = 'mark' if self.config.get("SponsorBlockAction") == 'mark' else 'remove'
+        if effective_config.get("SponsorBlock") and self._dependencies['is_youtube_url'](dl.url):
+            action = 'mark' if effective_config.get("SponsorBlockAction") == 'mark' else 'remove'
             # Empty means every category, which is what this used to send
             # unconditionally — asking it to skip sponsors also stripped
             # intros, outros and self-promo.
             categories = self._dependencies['normalize_sponsorblock_categories'](
-                self.config.get("SponsorBlockCategories", "")
+                effective_config.get("SponsorBlockCategories", "")
             )
             args += [f'--sponsorblock-{action}', categories or 'all']
         # v1.3.0: --force-overwrites lets the user re-download the same URL
@@ -3538,33 +3650,33 @@ class DownloadManagerCore:
         # re-fetching everything already on disk.
         if not getattr(dl, 'resume_partial', False):
             args.append('--force-overwrites')
-        rate = str(self.config.get("RateLimit", "")).strip().upper()
+        rate = str(effective_config.get("RateLimit", "")).strip().upper()
         if rate and re.match(r'^\d+[KMG]?$', rate):
             args += ['--limit-rate', rate]
         # A CDN that throttles to a trickle otherwise runs until the stall
         # watchdog kills it; yt-dlp can notice and re-extract instead.
-        throttled = str(self.config.get("ThrottledRate", "")).strip().upper()
+        throttled = str(effective_config.get("ThrottledRate", "")).strip().upper()
         if throttled and re.match(r'^\d+[KMG]?$', throttled):
             args += ['--throttled-rate', throttled]
-        socket_timeout = int(self.config.get("SocketTimeoutSeconds", 0) or 0)
+        socket_timeout = int(effective_config.get("SocketTimeoutSeconds", 0) or 0)
         if socket_timeout > 0:
             args += ['--socket-timeout', str(socket_timeout)]
         # Distinct from --retries, which covers the transfer: this covers the
         # extractor giving up before a transfer ever starts.
-        extractor_retries = int(self.config.get("ExtractorRetries", 0) or 0)
+        extractor_retries = int(effective_config.get("ExtractorRetries", 0) or 0)
         if extractor_retries > 0:
             args += ['--extractor-retries', str(extractor_retries)]
         # Costs a request per candidate format, so it is opt-in. A format that
         # fails verification classifies through the existing taxonomy.
-        if self.config.get("VerifyFormats"):
+        if effective_config.get("VerifyFormats"):
             args.append('--check-formats')
         # Pacing. --limit-rate caps bandwidth, which does nothing about a
         # per-request rate limit; spacing the requests is the actual lever.
-        sleep_interval = int(self.config.get("SleepIntervalSeconds", 0) or 0)
-        max_sleep = int(self.config.get("MaxSleepIntervalSeconds", 0) or 0)
+        sleep_interval = int(effective_config.get("SleepIntervalSeconds", 0) or 0)
+        max_sleep = int(effective_config.get("MaxSleepIntervalSeconds", 0) or 0)
         try:
             pacing_jitter = max(0, min(100, int(
-                self.config.get("PacingJitterPercent", 0) or 0
+                effective_config.get("PacingJitterPercent", 0) or 0
             )))
         except (TypeError, ValueError, OverflowError):
             pacing_jitter = 0
@@ -3576,18 +3688,18 @@ class DownloadManagerCore:
             effective_max_sleep = max(max_sleep, jitter_max)
             if effective_max_sleep >= sleep_interval:
                 args += ['--max-sleep-interval', str(effective_max_sleep)]
-        sleep_requests = int(self.config.get("SleepRequestsSeconds", 0) or 0)
+        sleep_requests = int(effective_config.get("SleepRequestsSeconds", 0) or 0)
         if sleep_requests > 0:
             if pacing_jitter:
                 sleep_requests = max(
                     1, round(sleep_requests * self._pacing_jitter_multiplier())
                 )
             args += ['--sleep-requests', str(sleep_requests)]
-        proxy = self.config.get("Proxy", "")
+        proxy = effective_config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
-        args += build_network_workaround_args(self.config)
-        max_filesize = int(self.config.get("MaxFileSizeMB", 0) or 0)
+        args += build_network_workaround_args(effective_config)
+        max_filesize = int(effective_config.get("MaxFileSizeMB", 0) or 0)
         if max_filesize > 0:
             args += ['--max-filesize', f'{max_filesize}M']
         if dl.referer:
@@ -3612,7 +3724,7 @@ class DownloadManagerCore:
                 args += ['--playlist-items', ','.join(str(item) for item in dl.playlist_items)]
             # Bounds belong to the run that walks a playlist; a single video
             # is never filtered by them.
-            args += build_playlist_bound_args(self.config)
+            args += build_playlist_bound_args(effective_config)
         elif not self._dependencies['is_youtube_url'](dl.url):
             # Single-item intent on a non-YouTube URL. Without this, pasting a
             # channel/profile/subreddit link makes yt-dlp walk the whole
@@ -3627,7 +3739,7 @@ class DownloadManagerCore:
                      '--audio-format', dl.format, '--audio-quality', '0']
         else:
             args += build_video_format_args(dl.format, dl.quality)
-        args += build_format_sort_args(self.config)
+        args += build_format_sort_args(effective_config)
 
         # v1.4.0 (N1): YouTube extractor-args — PO Token routing when the
         # bgutil-ytdlp-pot-provider HTTP server is reachable. No-op on
@@ -3644,17 +3756,17 @@ class DownloadManagerCore:
             po_token_provider=po_provider,
         )
         runtime = self._dependencies['probe_javascript_runtime'](
-            configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
+            configured_runtime=effective_config.get('JavaScriptRuntime', 'auto')
         )
         args += self._dependencies['build_javascript_runtime_args'](runtime)
         configured_target = str(
-            self.config.get('ImpersonateTarget', '') or ''
+            effective_config.get('ImpersonateTarget', '') or ''
         ).strip()
         available_targets = (
             self._dependencies['probe_impersonate_targets']()
             if configured_target else []
         )
-        args += build_impersonate_args(self.config, available_targets)
+        args += build_impersonate_args(effective_config, available_targets)
 
         args.append(dl.url)
 
@@ -4593,10 +4705,11 @@ class DownloadManagerCore:
         path's cookie-scope predicate rather than duplicating its rules.
         """
         args = []
-        proxy = self.config.get("Proxy", "")
+        effective_config = self._effective_config_for_url(url)
+        proxy = effective_config.get("Proxy", "")
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
-        args += build_network_workaround_args(self.config)
+        args += build_network_workaround_args(effective_config)
 
         probe = Download("__probe__", url)
         jar_path = Path(self._dependencies['INSTALL_DIR']()) / (
@@ -4622,13 +4735,13 @@ class DownloadManagerCore:
             args += build_site_login_credential_args(probe._credentials)
 
         configured_target = str(
-            self.config.get('ImpersonateTarget', '') or ''
+            effective_config.get('ImpersonateTarget', '') or ''
         ).strip()
         available_targets = (
             self._dependencies['probe_impersonate_targets']()
             if configured_target else []
         )
-        args += build_impersonate_args(self.config, available_targets)
+        args += build_impersonate_args(effective_config, available_targets)
 
         def cleanup():
             if cookie_path:

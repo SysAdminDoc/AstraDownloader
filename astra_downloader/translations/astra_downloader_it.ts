@@ -183,6 +183,10 @@
       <translation>Regenerate</translation>
     </message>
     <message>
+      <source>Site profiles</source>
+      <translation>Site profiles</translation>
+    </message>
+    <message>
       <source>Storage</source>
       <translation>Storage</translation>
     </message>
@@ -427,6 +431,14 @@
       <translation>Video password — one link only (optional)</translation>
     </message>
     <message>
+      <source>Profile</source>
+      <translation>Profile</translation>
+    </message>
+    <message>
+      <source>Site profile</source>
+      <translation>Site profile</translation>
+    </message>
+    <message>
       <source>Download type</source>
       <translation>Download type</translation>
     </message>
@@ -475,6 +487,10 @@
       <translation>Clip ranges apply to a single link.</translation>
     </message>
     <message>
+      <source>Site profile summary</source>
+      <translation>Site profile summary</translation>
+    </message>
+    <message>
       <source>Subtitle request summary</source>
       <translation>Subtitle request summary</translation>
     </message>
@@ -505,6 +521,18 @@
     <message>
       <source>Pause starting pending downloads. Downloads already running will continue.</source>
       <translation>Pause starting pending downloads. Downloads already running will continue.</translation>
+    </message>
+    <message>
+      <source>Automatic site profile</source>
+      <translation>Automatic site profile</translation>
+    </message>
+    <message>
+      <source>No profile (one-off)</source>
+      <translation>No profile (one-off)</translation>
+    </message>
+    <message>
+      <source>No site profile for this download.</source>
+      <translation>No site profile for this download.</translation>
     </message>
     <message>
       <source>History</source>
@@ -793,6 +821,18 @@
     <message>
       <source>Optional HTTP(S) or SOCKS proxy used only for region checks.</source>
       <translation>Optional HTTP(S) or SOCKS proxy used only for region checks.</translation>
+    </message>
+    <message>
+      <source>Named site profiles</source>
+      <translation>Named site profiles</translation>
+    </message>
+    <message>
+      <source>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.</source>
+      <translation>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.</translation>
+    </message>
+    <message>
+      <source>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</source>
+      <translation>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</translation>
     </message>
     <message>
       <source>Video download folder</source>
@@ -1335,6 +1375,10 @@
       <translation>For a single protected link. Stored site credentials live under Sign-ins.</translation>
     </message>
     <message>
+      <source>Automatic matching is on; no profile matches this link.</source>
+      <translation>Automatic matching is on; no profile matches this link.</translation>
+    </message>
+    <message>
       <source>Video passwords are available for a single link only.</source>
       <translation>Video passwords are available for a single link only.</translation>
     </message>
@@ -1729,6 +1773,10 @@
     <message>
       <source>Open</source>
       <translation>Open</translation>
+    </message>
+    <message>
+      <source>Using site profile: {name}.</source>
+      <translation>Using site profile: {name}.</translation>
     </message>
     <message>
       <source>This download goes to {path}. Click to use the default folder again.</source>
