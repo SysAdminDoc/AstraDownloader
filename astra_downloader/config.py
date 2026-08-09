@@ -270,6 +270,12 @@ DEFAULT_CONFIG = {
     "StartMinimized": False,
     "CloseToTray": True,
     "NotifyOnComplete": True,
+    # Window state is local to this machine. It is deliberately excluded from
+    # settings bundles below: a geometry valid on one monitor layout should
+    # never strand the window off-screen on another machine.
+    "WindowGeometry": "",
+    "WindowMaximized": False,
+    "LastPage": "Download",
     # Privacy-sensitive clipboard monitoring is opt-in. Matching links are
     # staged in the GUI and never enqueued without an explicit user action.
     "ClipboardLinkGrabber": False,
@@ -891,6 +897,9 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "LegacyHealthTokenOrigins",
     "NativeChromeExtensionIds",
     "NativeFirefoxExtensionIds",
+    "WindowGeometry",
+    "WindowMaximized",
+    "LastPage",
 })
 
 # Subscription fields that describe one machine's scan history rather than
@@ -1045,9 +1054,16 @@ def sanitize_config(raw):
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
         "KeepIntermediateFiles", "VerifyFormats",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
-        "NotifyOnComplete", "ClipboardLinkGrabber", "LegacyHealthTokenEcho",
+        "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",
+        "LegacyHealthTokenEcho",
     ):
         data[key] = coerce_bool(data.get(key), DEFAULT_CONFIG[key])
+    data["WindowGeometry"] = clean_text(data.get("WindowGeometry"), "", 8192)
+    page = clean_text(data.get("LastPage"), "Download", 80)
+    data["LastPage"] = page if page in {
+        "Download", "History", "Sign-ins", "Subscriptions",
+        "Browser extension", "Settings",
+    } else "Download"
     data["SubLangs"] = normalize_sublangs(data.get("SubLangs"))
     data["SubtitleMode"] = normalize_subtitle_mode(data.get("SubtitleMode"))
     data["SubtitleFormat"] = normalize_subtitle_format(data.get("SubtitleFormat"))

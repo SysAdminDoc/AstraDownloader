@@ -433,6 +433,33 @@ class SubscriptionStore:
             item = self._find_locked(str(sub_id))
             return _copy(item) if item else None
 
+    def restore_subscription(self, raw):
+        """Restore one previously removed subscription record.
+
+        The GUI keeps only this JSON-shaped record for its one-step undo. It
+        is validated through the same boundary as a file load before it is
+        put back, and a failed write restores the store's prior in-memory
+        state.
+        """
+        now = _finite_timestamp(self._clock(), time.time()) or time.time()
+        record = self._sanitize_subscription(raw, now)
+        if not record:
+            return False, "That subscription could not be restored."
+        with self._lock:
+            before = _copy(self._data)
+            if len(self._data["subscriptions"]) >= self.max_records:
+                return False, f"Subscription limit reached ({self.max_records})."
+            if self._find_locked(record["id"]):
+                return False, "That subscription is already present."
+            if any(item["url"] == record["url"]
+                   for item in self._data["subscriptions"]):
+                return False, "That subscription is already configured."
+            self._data["subscriptions"].append(record)
+            if not self._save_locked():
+                self._data = before
+                return False, "Could not save subscriptions. Check disk space and permissions."
+            return _copy(record), None
+
     def add_subscription(self, url, *, interval_minutes=60, enabled=True, title="", now=None):
         url, error = self._normalize_url(url)
         if error or not url or not self._is_youtube_url(url):
@@ -828,6 +855,12 @@ class SubscriptionManager:
             enabled=enabled,
             title=title,
         )
+
+    def get_subscription(self, sub_id):
+        return self.store.get_subscription(str(sub_id))
+
+    def restore_subscription(self, record):
+        return self.store.restore_subscription(record)
 
     def update_subscription(self, sub_id, **fields):
         allowed = {"url", "interval_minutes", "enabled", "title"}

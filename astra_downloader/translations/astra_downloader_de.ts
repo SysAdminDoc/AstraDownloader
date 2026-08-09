@@ -131,6 +131,10 @@
       <translation>Weiter</translation>
     </message>
     <message>
+      <source>Undo remove</source>
+      <translation>Entfernen rückgängig</translation>
+    </message>
+    <message>
       <source>New subscription</source>
       <translation>Neues Abonnement</translation>
     </message>
@@ -269,6 +273,10 @@
     <message>
       <source>Import settings</source>
       <translation>Einstellungen importieren</translation>
+    </message>
+    <message>
+      <source>Undo import</source>
+      <translation>Import rückgängig</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -555,6 +563,10 @@
       <translation>YouTube-Kanäle oder Playlists nach Zeitplan beobachten und nur neue Uploads einreihen.</translation>
     </message>
     <message>
+      <source>Restore the subscription removed in this session.</source>
+      <translation>In dieser Sitzung entferntes Abonnement wiederherstellen.</translation>
+    </message>
+    <message>
       <source>Subscription channel or playlist URL</source>
       <translation>URL des Abonnementkanals oder der Playlist</translation>
     </message>
@@ -585,6 +597,10 @@
     <message>
       <source>Sign-ins</source>
       <translation>Anmeldungen</translation>
+    </message>
+    <message>
+      <source>Restore the sign-in removed in this session.</source>
+      <translation>In dieser Sitzung entfernte Anmeldung wiederherstellen.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -639,8 +655,16 @@
       <translation>Cookies werden aus dem Browser gelesen…</translation>
     </message>
     <message>
+      <source>The sign-in was restored.</source>
+      <translation>Die Anmeldung wurde wiederhergestellt.</translation>
+    </message>
+    <message>
       <source>Testing the stored sign-in…</source>
       <translation>Gespeicherte Anmeldung wird getestet…</translation>
+    </message>
+    <message>
+      <source>The subscription was restored.</source>
+      <translation>Das Abonnement wurde wiederhergestellt.</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -1043,6 +1067,10 @@
       <translation>Ein von „Einstellungen exportieren“ geschriebenes Bundle lesen und anwenden.</translation>
     </message>
     <message>
+      <source>Restore settings and subscriptions changed by the last import.</source>
+      <translation>Durch den letzten Import geänderte Einstellungen und Abonnements wiederherstellen.</translation>
+    </message>
+    <message>
       <source>Settings status</source>
       <translation>Einstellungsstatus</translation>
     </message>
@@ -1057,6 +1085,10 @@
     <message>
       <source>Could not save the imported settings. Check disk space and permissions, then retry.</source>
       <translation>Importierte Einstellungen konnten nicht gespeichert werden. Prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.</source>
+      <translation>Die importierten Einstellungen konnten nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist weiterhin verfügbar; prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.</translation>
     </message>
     <message>
       <source>Loading history…</source>
@@ -1235,12 +1267,24 @@
       <translation>Website-Anmeldungen sind in dieser Sitzung nicht verfügbar.</translation>
     </message>
     <message>
+      <source>No sign-in removal is available to undo.</source>
+      <translation>Keine entfernte Anmeldung zum Wiederherstellen verfügbar.</translation>
+    </message>
+    <message>
       <source>Test passed</source>
       <translation>Test bestanden</translation>
     </message>
     <message>
       <source>Subscription scan started. This row will update when it finishes.</source>
       <translation>Abonnement-Scan gestartet. Diese Zeile wird aktualisiert, sobald er abgeschlossen ist.</translation>
+    </message>
+    <message>
+      <source>Subscription removed. Downloaded files were not deleted.</source>
+      <translation>Abonnement entfernt. Heruntergeladene Dateien wurden nicht gelöscht.</translation>
+    </message>
+    <message>
+      <source>No subscription removal is available to undo.</source>
+      <translation>Kein entferntes Abonnement zum Wiederherstellen verfügbar.</translation>
     </message>
     <message>
       <source>Server status indicator: Starting</source>
@@ -1289,6 +1333,18 @@
     <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
       <translation>Ausstehende Downloads explizit fortsetzen. Elemente, die eine Anmeldung benötigen, bleiben pausiert.</translation>
+    </message>
+    <message>
+      <source>No settings import is available to undo.</source>
+      <translation>Kein Einstellungen-Import zum Rückgängigmachen verfügbar.</translation>
+    </message>
+    <message>
+      <source>Settings were restored, but some imported subscriptions remain.</source>
+      <translation>Einstellungen wurden wiederhergestellt, aber einige importierte Abonnements sind noch vorhanden.</translation>
+    </message>
+    <message>
+      <source>Settings import undone.</source>
+      <translation>Einstellungen-Import rückgängig gemacht.</translation>
     </message>
     <message>
       <source>History unavailable</source>
@@ -1415,8 +1471,16 @@
       <translation>Cookies anderer Websites wurden verworfen.</translation>
     </message>
     <message>
+      <source>Could not restore the stored sign-in.</source>
+      <translation>Die gespeicherte Anmeldung konnte nicht wiederhergestellt werden.</translation>
+    </message>
+    <message>
       <source>Stored sign-in test passed.</source>
       <translation>Test der gespeicherten Anmeldung bestanden.</translation>
+    </message>
+    <message>
+      <source>Could not restore the subscription.</source>
+      <translation>Das Abonnement konnte nicht wiederhergestellt werden.</translation>
     </message>
     <message>
       <source>No preference</source>
@@ -1535,10 +1599,6 @@
       <translation>Sitzungscookies — gültig, bis die Website Sie abmeldet</translation>
     </message>
     <message>
-      <source>Removed the stored sign-in for</source>
-      <translation>Gespeicherte Anmeldung entfernt für</translation>
-    </message>
-    <message>
       <source>Test failed</source>
       <translation>Test fehlgeschlagen</translation>
     </message>
@@ -1567,6 +1627,10 @@
       <translation>Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.</translation>
     </message>
     <message>
+      <source>Closing now will cancel {count} active downloads.</source>
+      <translation>Beim Schließen werden {count} aktive Downloads abgebrochen.</translation>
+    </message>
+    <message>
       <source>Registering shortcuts and protocols...</source>
       <translation>Verknüpfungen und Protokolle werden registriert…</translation>
     </message>
@@ -1577,6 +1641,10 @@
     <message>
       <source>from</source>
       <translation>von</translation>
+    </message>
+    <message>
+      <source>Removed the stored sign-in for</source>
+      <translation>Gespeicherte Anmeldung entfernt für</translation>
     </message>
     <message>
       <source>This host is paused — retry in {duration}.</source>

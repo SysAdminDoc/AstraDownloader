@@ -583,6 +583,27 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(restored.archive_summary()["complete"], 1)
             self.assertEqual(restored.archive_entries()[key]["status"], "complete")
 
+    def test_removed_subscription_can_be_restored_without_resetting_its_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "undo.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel",
+                interval_minutes=30,
+                enabled=False,
+                title="Astra channel",
+            )
+            self.assertIsNone(error)
+            removed, error = store.remove_subscription(record["id"])
+            self.assertTrue(removed)
+            self.assertIsNone(error)
+
+            restored, error = store.restore_subscription(record)
+            self.assertIsNone(error)
+            self.assertEqual(restored["id"], record["id"])
+            self.assertEqual(restored["url"], record["url"])
+            self.assertFalse(restored["enabled"])
+            self.assertEqual(store.get_subscription(record["id"])["title"], "Astra channel")
+
     def test_failed_archive_claims_back_off_and_stop_after_three_attempts(self):
         subs = subscriptions_module()
         with tempfile.TemporaryDirectory() as tmp:
@@ -1207,6 +1228,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_extractor_retries = NumberField(0)
         window.cfg_sleep_interval = NumberField(0)
         window.cfg_sleep_max = NumberField(0)
+        window.cfg_pacing_jitter = NumberField(0)
         window.cfg_sleep_requests = NumberField(0)
         window.cfg_maxsize = NumberField(0)
         window.cfg_autoupdate = CheckField()
@@ -10676,8 +10698,9 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         self.assertEqual(download.progress, 0)
         self.assertEqual(manager.total_completed, 0,
                          "a skip is not a completed download")
-        self.assertEqual(history.entries, [],
-                         "nothing was written, so nothing enters history")
+        self.assertEqual(len(history.entries), 1,
+                         "every terminal outcome is retained in history")
+        self.assertEqual(history.entries[0]["status"], "skipped")
         self.assertIn("skipped", ad.DOWNLOAD_TERMINAL_STATES,
                       "a skip must be terminal or the queue slot never frees")
 
@@ -12257,6 +12280,39 @@ class SiteLoginStoreTests(unittest.TestCase):
             )
             self.assertIsNone(error, "a freed slot can be reused")
 
+    def test_remove_with_undo_restores_the_protected_jar_without_exposing_cookies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            store.import_netscape_text("x.com", self.MIXED_EXPORT)
+            undo, error = store.remove_with_undo("x.com")
+            self.assertIsNone(error)
+            self.assertEqual(undo["site"], "x.com")
+            self.assertNotIn("X-SECRET", json.dumps(undo))
+            self.assertEqual(store.entries(), [])
+            self.assertFalse(
+                (Path(tmp) / ad.SITE_LOGIN_DIRNAME / "x.com.txt").exists()
+            )
+
+            restored, error = store.restore_removed(undo)
+            self.assertTrue(restored)
+            self.assertIsNone(error)
+            self.assertIn("X-SECRET", (
+                Path(tmp) / ad.SITE_LOGIN_DIRNAME / "x.com.txt"
+            ).read_text(encoding="utf-8"))
+            self.assertEqual(store.entries()[0]["site"], "x.com")
+
+    def test_new_store_cleans_an_orphaned_site_login_undo_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            store.import_netscape_text("x.com", self.MIXED_EXPORT)
+            undo, error = store.remove_with_undo("x.com")
+            self.assertIsNone(error)
+            backup = Path(tmp) / ad.SITE_LOGIN_DIRNAME / f".undo-{undo['token']}.txt"
+            self.assertTrue(backup.exists())
+            reopened = self._store(tmp)
+            self.assertFalse(backup.exists())
+            self.assertEqual(reopened.entries(), [])
+
     def test_export_skips_expired_cookies_and_unknown_sites(self):
         with tempfile.TemporaryDirectory() as tmp:
             # Clock is past the cookie's expiry.
@@ -13096,6 +13152,21 @@ class SettingsBundleTests(unittest.TestCase):
         changes = ad.describe_bundle_changes(ad.sanitize_config({}), imported)
         self.assertIn("NativeChromeExtensionIds", changes["excludedSettings"])
         self.assertIn("NativeFirefoxExtensionIds", changes["excludedSettings"])
+
+    def test_window_state_is_local_and_invalid_pages_fall_back_to_download(self):
+        config = ad.sanitize_config({
+            "WindowGeometry": "A" * 9000,
+            "WindowMaximized": "yes",
+            "LastPage": "Not a page",
+        })
+        self.assertEqual(len(config["WindowGeometry"]), 8192)
+        self.assertTrue(config["WindowMaximized"])
+        self.assertEqual(config["LastPage"], "Download")
+        bundle = ad.build_settings_bundle(config)
+        for key in ("WindowGeometry", "WindowMaximized", "LastPage"):
+            with self.subTest(key=key):
+                self.assertNotIn(key, bundle["settings"])
+                self.assertIn(key, bundle["excludedSettings"])
 
     # -- The round trip ---------------------------------------------------
 
@@ -14657,6 +14728,25 @@ class DownloadPageFeedbackTests(unittest.TestCase):
 class WindowTeardownTests(unittest.TestCase):
     """Nothing the window scheduled outlives it."""
 
+    def test_close_reports_the_work_cancelled_before_calling_cancel_all(self):
+        source = inspect.getsource(gui_module_for_tests().MainWindowCore.closeEvent)
+        self.assertIn("_downloads_that_will_be_cancelled", source)
+        self.assertIn("Closing now will cancel {count} active downloads.", source)
+        self.assertLess(source.index("showMessage"), source.index("cancel_all"))
+
+    def test_window_state_is_saved_on_navigation_and_close(self):
+        gui = gui_module_for_tests()
+        navigation = inspect.getsource(gui.MainWindowCore._nav_click)
+        close = inspect.getsource(gui.MainWindowCore.closeEvent)
+        restore = inspect.getsource(gui.MainWindowCore._restore_window_state)
+        persist = inspect.getsource(gui.MainWindowCore._persist_window_state)
+        self.assertIn("_persist_window_state()", navigation)
+        self.assertIn("self._persist_window_state()", close)
+        self.assertIn("restoreGeometry", restore)
+        self.assertIn('self.config.get("LastPage", "Download")', restore)
+        self.assertIn("saveGeometry", persist)
+        self.assertIn('"WindowMaximized"', persist)
+
     def test_close_stops_every_timer_it_owns(self):
         import inspect
         source = inspect.getsource(gui_module_for_tests().MainWindowCore.closeEvent)
@@ -15132,12 +15222,14 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
             "Download must be the first rail entry - the paste box is the "
             "product, not a page you navigate to",
         )
-        # The nav loop also contains a _nav_click lambda, so match the
-        # landing call by its literal argument rather than by position.
+        # Window state restoration owns the landing-page choice now, rather
+        # than hard-coding Download on every launch.
         self.assertIn(
-            'self._nav_click("Download")', source,
-            "the window must open on Download",
+            "self._restore_window_state(start_minimized)", source,
+            "the window must restore its last page before falling back to Download",
         )
+        restore_source = inspect.getsource(gui_module.MainWindowCore._restore_window_state)
+        self.assertIn('self.config.get("LastPage", "Download")', restore_source)
 
     def test_server_page_is_named_for_the_extension_it_serves(self):
         import gui as gui_module
