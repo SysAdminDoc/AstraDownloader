@@ -42,7 +42,9 @@ __all__ = (
     "MEDIA_URL_BLOCK_MESSAGES", "MEDIA_HOST_HINTS",
     "validate_download_request_body",
     "allowed_output_roots", "clean_text", "clean_path_text", "coerce_bool",
-    "clamp_int", "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
+    "clamp_int", "normalize_rate_limit", "normalize_proxy",
+    "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
+    "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
@@ -61,7 +63,9 @@ __all__ = (
 
 _OWNED_EXPORTS = {
     "clean_text", "clean_path_text", "coerce_bool", "clamp_int",
-    "normalize_rate_limit", "normalize_proxy", "normalize_sublangs",
+    "normalize_rate_limit", "normalize_proxy",
+    "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
+    "normalize_sublangs",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
@@ -268,6 +272,13 @@ DEFAULT_CONFIG = {
     "YtDlpUpdateChannel": "nightly",
     "RateLimit": "",
     "Proxy": "",
+    # Network-path workarounds are opt-in. A whole-session proxy remains the
+    # broad control; these target dual-stack routing and geo verification only
+    # when a site or network actually needs them.
+    "ForceIPVersion": "",
+    "SourceAddress": "",
+    "Xff": "",
+    "GeoVerificationProxy": "",
     "Language": "system",
     "StartMinimized": False,
     "CloseToTray": True,
@@ -377,9 +388,44 @@ def normalize_proxy(value):
     cleaned = clean_text(value, "", 512)
     if not cleaned:
         return ""
-    parsed = urlparse(cleaned)
+    try:
+        parsed = urlparse(cleaned)
+    except ValueError:
+        return ""
     schemes = {"http", "https", "socks", "socks4", "socks4a", "socks5", "socks5h"}
     return cleaned if parsed.scheme.lower() in schemes and parsed.netloc else ""
+
+
+def normalize_force_ip_version(value):
+    cleaned = clean_text(value, "", 8).lower()
+    return cleaned if cleaned in {"", "ipv4", "ipv6"} else ""
+
+
+def normalize_source_address(value):
+    """Accept one literal local address for yt-dlp's source bind option."""
+    cleaned = clean_text(value, "", 64)
+    if not cleaned:
+        return ""
+    try:
+        return str(ipaddress.ip_address(cleaned))
+    except ValueError:
+        return ""
+
+
+def normalize_xff(value):
+    """Accept yt-dlp's safe X-Forwarded-For geo selector vocabulary."""
+    cleaned = clean_text(value, "", 64)
+    if not cleaned:
+        return ""
+    lowered = cleaned.lower()
+    if lowered in {"default", "never"}:
+        return lowered
+    if re.fullmatch(r"[a-zA-Z]{2}", cleaned):
+        return cleaned.upper()
+    try:
+        return str(ipaddress.ip_network(cleaned, strict=False))
+    except ValueError:
+        return ""
 
 
 def normalize_sublangs(value):
@@ -1136,6 +1182,10 @@ def sanitize_config(raw):
     )
     data["ImpersonateTarget"] = normalize_impersonate_target(data.get("ImpersonateTarget"))
     data["Proxy"] = normalize_proxy(data.get("Proxy"))
+    data["ForceIPVersion"] = normalize_force_ip_version(data.get("ForceIPVersion"))
+    data["SourceAddress"] = normalize_source_address(data.get("SourceAddress"))
+    data["Xff"] = normalize_xff(data.get("Xff"))
+    data["GeoVerificationProxy"] = normalize_proxy(data.get("GeoVerificationProxy"))
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
     allowed_languages = {
         "system", "ar", "de", "en", "es", "fr", "it", "ja", "ko",

@@ -751,6 +751,50 @@
       <translation>Privates Token anzeigen</translation>
     </message>
     <message>
+      <source>Force IP version</source>
+      <translation>IP-Version erzwingen</translation>
+    </message>
+    <message>
+      <source>Use IPv4 or IPv6 for every request. Off uses the system route.</source>
+      <translation>IPv4 oder IPv6 für jede Anfrage verwenden. Aus nutzt die Systemroute.</translation>
+    </message>
+    <message>
+      <source>Off</source>
+      <translation>Aus</translation>
+    </message>
+    <message>
+      <source>IPv4</source>
+      <translation>IPv4</translation>
+    </message>
+    <message>
+      <source>IPv6</source>
+      <translation>IPv6</translation>
+    </message>
+    <message>
+      <source>Source address</source>
+      <translation>Quelladresse</translation>
+    </message>
+    <message>
+      <source>Bind requests to a local IPv4 or IPv6 address. Blank uses the system route.</source>
+      <translation>Anfragen an eine lokale IPv4- oder IPv6-Adresse binden. Leer nutzt die Systemroute.</translation>
+    </message>
+    <message>
+      <source>Geo X-Forwarded-For</source>
+      <translation>Geo-X-Forwarded-For</translation>
+    </message>
+    <message>
+      <source>Country code (US) or CIDR block for geo verification. Blank leaves it off.</source>
+      <translation>Ländercode (US) oder CIDR-Block für die Geoprüfung. Leer lässt die Option aus.</translation>
+    </message>
+    <message>
+      <source>Geo verification proxy</source>
+      <translation>Proxy für Geoprüfung</translation>
+    </message>
+    <message>
+      <source>Optional HTTP(S) or SOCKS proxy used only for region checks.</source>
+      <translation>Optionaler HTTP(S)- oder SOCKS-Proxy nur für Regionsprüfungen.</translation>
+    </message>
+    <message>
       <source>Video download folder</source>
       <translation>Ordner für Videodownloads</translation>
     </message>
@@ -969,10 +1013,6 @@
     <message>
       <source>Pacing jitter percentage</source>
       <translation>Pacing-Jitter in Prozent</translation>
-    </message>
-    <message>
-      <source>Off</source>
-      <translation>Aus</translation>
     </message>
     <message>
       <source>Pause between requests</source>
@@ -1209,6 +1249,18 @@
     <message>
       <source>Enter an http, https, or socks proxy URL.</source>
       <translation>Geben Sie eine HTTP-, HTTPS- oder SOCKS-Proxy-URL ein.</translation>
+    </message>
+    <message>
+      <source>Enter a local IPv4 or IPv6 address, or leave this blank.</source>
+      <translation>Geben Sie eine lokale IPv4- oder IPv6-Adresse ein oder lassen Sie das Feld leer.</translation>
+    </message>
+    <message>
+      <source>Enter a two-letter country code or CIDR block, or leave this blank.</source>
+      <translation>Geben Sie einen zweistelligen Ländercode oder CIDR-Block ein oder lassen Sie das Feld leer.</translation>
+    </message>
+    <message>
+      <source>Enter an http, https, or socks proxy URL, or leave this blank.</source>
+      <translation>Geben Sie eine http-, https- oder socks-Proxy-URL ein oder lassen Sie das Feld leer.</translation>
     </message>
     <message>
       <source>The private API token cannot be empty.</source>
@@ -1939,12 +1991,24 @@
       <translation>Die Website hat die Anfrage abgelehnt (HTTP 403).</translation>
     </message>
     <message>
-      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps.</source>
-      <translation>Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls.</translation>
+      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</source>
+      <translation>Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls. Wenn eine Dual-Stack-Route den 403 verursacht, versuchen Sie `--force-ipv4` in den Einstellungen.</translation>
     </message>
     <message>
       <source>impersonate-and-retry</source>
       <translation>impersonate-and-retry</translation>
+    </message>
+    <message>
+      <source>The site says this media is unavailable in your region.</source>
+      <translation>Die Website meldet, dass dieses Medium in Ihrer Region nicht verfügbar ist.</translation>
+    </message>
+    <message>
+      <source>Set `--xff` to a two-letter country code or CIDR block in Settings for geo verification. If that path is still blocked, add a `--geo-verification-proxy` there, then retry.</source>
+      <translation>Setzen Sie `--xff` in den Einstellungen auf einen zweistelligen Ländercode oder CIDR-Block für die Geoprüfung. Wenn dieser Weg weiterhin blockiert ist, fügen Sie dort einen `--geo-verification-proxy` hinzu und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>configure-geo-and-retry</source>
+      <translation>configure-geo-and-retry</translation>
     </message>
     <message>
       <source>The site refused further requests for now (HTTP 429).</source>

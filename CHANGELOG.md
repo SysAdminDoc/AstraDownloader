@@ -70,6 +70,9 @@ repository's git log.
   and merge files in a stable per-download folder, cleans it after success, and
   reuses it after a restart so failed downloads can resume. The existing
   "Keep intermediate files" setting stages them beside the output for diagnosis.
+- **Network-path workarounds are opt-in.** Settings can force an IP family, bind
+  a source address, supply a geo X-Forwarded-For value, or use a verification-
+  only proxy; 403 and geo-restriction failures now name the matching remedy.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the
