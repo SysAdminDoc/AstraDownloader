@@ -152,6 +152,14 @@ class NormalizationTests(unittest.TestCase):
             self.assertTrue(archive_cfg[key], key)
         self.assertEqual(archive_cfg["WaitForVideoSeconds"], 3600)
 
+    def test_first_run_marker_defaults_for_existing_installs_and_is_boolean(self):
+        self.assertTrue(ad.DEFAULT_CONFIG["FirstRunComplete"])
+        self.assertTrue(ad.sanitize_config({})["FirstRunComplete"])
+        self.assertFalse(
+            ad.sanitize_config({"FirstRunComplete": "no"})["FirstRunComplete"]
+        )
+        self.assertIn("FirstRunComplete", ad.BUNDLE_EXCLUDED_SETTINGS)
+
     def test_network_workaround_settings_are_opt_in_and_shape_checked(self):
         defaults = ad.sanitize_config({})
         self.assertEqual(defaults["ForceIPVersion"], "")
@@ -1491,6 +1499,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertNotIn("import QPainter", renderer_source)
         self.assertIn('ASTRA_COMPANION_RENDER_SCENARIO', renderer_source)
         self.assertIn('"dashboard-error-degraded"', renderer_source)
+        self.assertIn('"downloads-first-run"', renderer_source)
         self.assertIn('"downloads-recovery-terminal"', renderer_source)
         self.assertIn('"history-cleared-undo"', renderer_source)
         self.assertIn('"settings-save-failed"', renderer_source)
@@ -16845,6 +16854,79 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         )
         restore_source = inspect.getsource(gui_module.MainWindowCore._restore_window_state)
         self.assertIn('self.config.get("LastPage", "Download")', restore_source)
+
+    def test_first_run_confirms_destination_before_queueing_and_reaches_pairing(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+
+        class MutableConfig(FakeConfig):
+            def update(self, mapping):
+                self.data.update(mapping)
+                return True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = MutableConfig({
+                "DownloadPath": str(Path(tmpdir) / "Videos"),
+                "FirstRunComplete": False,
+                "LastPage": "Settings",
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(
+                    config, manager, FakeHistory(), first_run=True
+                )
+            try:
+                self.assertEqual(window.tabs.currentIndex(), 0)
+                self.assertFalse(window.first_run_panel.isHidden())
+                self.assertFalse(window.first_run_confirm.isHidden())
+
+                window.quick_download_url.setText("https://example.com/video")
+                window._start_quick_download()
+                self.assertIn(
+                    "Confirm your download folder",
+                    window.quick_download_status.text(),
+                )
+                self.assertFalse(config.get("FirstRunComplete"))
+
+                confirmed = Path(tmpdir) / "Confirmed videos"
+                window.first_run_destination.setText(str(confirmed))
+                self.assertTrue(window._confirm_first_run_destination())
+                self.assertTrue(config.get("FirstRunComplete"))
+                self.assertTrue(window.first_run_destination.isReadOnly())
+                self.assertTrue(window.first_run_confirm.isHidden())
+
+                window._start_server = lambda: None
+                window._open_first_run_pairing()
+                self.assertEqual(
+                    window.tabs.currentIndex(),
+                    window._page_names.index("Browser extension"),
+                )
+            finally:
+                _retire_test_window(window)
+
+    def test_first_run_launches_setup_from_the_visible_download_page(self):
+        import inspect
+
+        main_source = inspect.getsource(ad.main)
+        self.assertIn('first_launch = not CONFIG_PATH.exists()', main_source)
+        self.assertIn('config.update({"FirstRunComplete": False})', main_source)
+        self.assertIn('first_run=first_run', main_source)
+        self.assertIn('elif needs_setup or first_run:', main_source)
+        self.assertIn('window.show()', main_source)
+        self.assertIn('if needs_setup:', main_source)
+        self.assertIn('window._run_setup()', main_source)
+
+        gui = gui_module_for_tests()
+        core_source = inspect.getsource(gui.MainWindowCore.__init__)
+        restore_source = inspect.getsource(gui.MainWindowCore._restore_window_state)
+        download_source = inspect.getsource(gui.MainWindowCore._build_download)
+        self.assertIn('first_run=False', core_source)
+        self.assertIn('page = "Download" if self._first_run', restore_source)
+        self.assertIn('self.setup_progress', download_source)
+        self.assertIn('self.first_run_panel', download_source)
 
     def test_server_page_is_named_for_the_extension_it_serves(self):
         import gui as gui_module

@@ -79,6 +79,18 @@
       <translation>Protokolldatei anzeigen</translation>
     </message>
     <message>
+      <source>Browse</source>
+      <translation>Durchsuchen</translation>
+    </message>
+    <message>
+      <source>Confirm folder</source>
+      <translation>Ordner bestätigen</translation>
+    </message>
+    <message>
+      <source>Open extension pairing</source>
+      <translation>Erweiterungskopplung öffnen</translation>
+    </message>
+    <message>
       <source>Download</source>
       <translation>Herunterladen</translation>
     </message>
@@ -189,10 +201,6 @@
     <message>
       <source>Storage</source>
       <translation>Speicherort</translation>
-    </message>
-    <message>
-      <source>Browse</source>
-      <translation>Durchsuchen</translation>
     </message>
     <message>
       <source>Post-processing</source>
@@ -417,6 +425,34 @@
     <message>
       <source>Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
       <translation>Fügen Sie einen Link von fast jeder Website ein — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.</translation>
+    </message>
+    <message>
+      <source>Welcome to Astra Downloader</source>
+      <translation>Willkommen bei Astra Downloader</translation>
+    </message>
+    <message>
+      <source>Confirm where finished videos should go. You can change this later in Settings.</source>
+      <translation>Bestätigen Sie, wohin fertige Videos gespeichert werden. Sie können dies später in den Einstellungen ändern.</translation>
+    </message>
+    <message>
+      <source>Video download folder</source>
+      <translation>Ordner für Videodownloads</translation>
+    </message>
+    <message>
+      <source>This choice is saved once for this install.</source>
+      <translation>Diese Auswahl wird für diese Installation einmalig gespeichert.</translation>
+    </message>
+    <message>
+      <source>First-run download folder</source>
+      <translation>Downloadordner beim ersten Start</translation>
+    </message>
+    <message>
+      <source>First-run setup status</source>
+      <translation>Einrichtungsstatus beim ersten Start</translation>
+    </message>
+    <message>
+      <source>When setup finishes, pair Astra Deck from the local extension page.</source>
+      <translation>Wenn die Einrichtung abgeschlossen ist, koppeln Sie Astra Deck über die lokale Erweiterungsseite.</translation>
     </message>
     <message>
       <source>Video URL</source>
@@ -837,10 +873,6 @@
     <message>
       <source>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</source>
       <translation>Beispiel: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</translation>
-    </message>
-    <message>
-      <source>Video download folder</source>
-      <translation>Ordner für Videodownloads</translation>
     </message>
     <message>
       <source>Default destination for video downloads.</source>

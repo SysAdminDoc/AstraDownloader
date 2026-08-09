@@ -83,6 +83,9 @@ repository's git log.
   3.12.10 machine, a 50-candidate scan against 20,000 archive entries fell
   from a 20.66 s median before the change to 3.20 s after it (103 JSON writes
   in each run).
+- **First launch is guided from the Download page.** Missing managed tools
+  provision there, the video destination is confirmed once, and the welcome
+  panel links directly to browser-extension pairing.
 - **Site profiles are URL-aware.** Named domain profiles can set output format,
   quality, impersonation, proxy and request pacing defaults; matching happens
   when a link is pasted, with an explicit one-off profile or no-profile choice.

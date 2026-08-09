@@ -79,6 +79,18 @@
       <translation>Reveal log file</translation>
     </message>
     <message>
+      <source>Browse</source>
+      <translation>Browse</translation>
+    </message>
+    <message>
+      <source>Confirm folder</source>
+      <translation>Confirm folder</translation>
+    </message>
+    <message>
+      <source>Open extension pairing</source>
+      <translation>Open extension pairing</translation>
+    </message>
+    <message>
       <source>Download</source>
       <translation>Baixar</translation>
     </message>
@@ -189,10 +201,6 @@
     <message>
       <source>Storage</source>
       <translation>Storage</translation>
-    </message>
-    <message>
-      <source>Browse</source>
-      <translation>Browse</translation>
     </message>
     <message>
       <source>Post-processing</source>
@@ -417,6 +425,34 @@
     <message>
       <source>Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
       <translation>Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</translation>
+    </message>
+    <message>
+      <source>Welcome to Astra Downloader</source>
+      <translation>Welcome to Astra Downloader</translation>
+    </message>
+    <message>
+      <source>Confirm where finished videos should go. You can change this later in Settings.</source>
+      <translation>Confirm where finished videos should go. You can change this later in Settings.</translation>
+    </message>
+    <message>
+      <source>Video download folder</source>
+      <translation>Video download folder</translation>
+    </message>
+    <message>
+      <source>This choice is saved once for this install.</source>
+      <translation>This choice is saved once for this install.</translation>
+    </message>
+    <message>
+      <source>First-run download folder</source>
+      <translation>First-run download folder</translation>
+    </message>
+    <message>
+      <source>First-run setup status</source>
+      <translation>First-run setup status</translation>
+    </message>
+    <message>
+      <source>When setup finishes, pair Astra Deck from the local extension page.</source>
+      <translation>When setup finishes, pair Astra Deck from the local extension page.</translation>
     </message>
     <message>
       <source>Video URL</source>
@@ -837,10 +873,6 @@
     <message>
       <source>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</source>
       <translation>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</translation>
-    </message>
-    <message>
-      <source>Video download folder</source>
-      <translation>Video download folder</translation>
     </message>
     <message>
       <source>Default destination for video downloads.</source>

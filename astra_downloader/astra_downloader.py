@@ -4002,12 +4002,14 @@ class ReadinessProbe(_OwnedReadinessProbe):
 # MAIN WINDOW
 # ══════════════════════════════════════════════════════════════
 class MainWindow(MainWindowCore):
-    def __init__(self, config, dl_manager, history, start_minimized=False, subscriptions=None):
+    def __init__(self, config, dl_manager, history, start_minimized=False,
+                 subscriptions=None, first_run=False):
         super().__init__(
             config,
             dl_manager,
             history,
             start_minimized=start_minimized,
+            first_run=first_run,
             dependencies={
                 'APP_NAME': lambda: APP_NAME,
                 'APP_VERSION': lambda: APP_VERSION,
@@ -4642,8 +4644,18 @@ def main():
     if ICON_PATH.exists():
         app.setWindowIcon(QIcon(str(ICON_PATH)))
 
-    # Init
+    # Init. Capture whether this is a genuinely new state directory before
+    # ConfigStore creates the initial JSON file. The first-run destination
+    # checkpoint remains durable if the user closes the app before confirming.
+    first_launch = not CONFIG_PATH.exists()
     config = Config()
+    if first_launch and not config.update({"FirstRunComplete": False}):
+        write_persistent_log(
+            "Could not persist the first-run marker; onboarding will remain visible this session."
+        )
+    first_run = first_launch or not bool(
+        config.get("FirstRunComplete", True)
+    )
     # Retain the translator for the QApplication lifetime. Qt removes a
     # translator when its QObject wrapper is garbage-collected.
     app._astra_translator = install_companion_translator(
@@ -4678,6 +4690,7 @@ def main():
         history,
         start_minimized=start_min,
         subscriptions=subscriptions,
+        first_run=first_run,
     )
     # An exception escaping a slot used to abort the process with nothing
     # written anywhere. Route it to the crash log and to the window's log
@@ -4701,9 +4714,12 @@ def main():
                        and managed_binary_usable(FFMPEG_PATH))
     if visual_smoke:
         window.show()
-    elif needs_setup:
+    elif needs_setup or first_run:
         window.show()
-        window._run_setup()
+        if needs_setup:
+            window._run_setup()
+        else:
+            window._start_server()
     else:
         if not start_min:
             window.show()

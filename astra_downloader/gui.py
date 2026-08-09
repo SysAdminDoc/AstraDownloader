@@ -1111,7 +1111,8 @@ class MainWindowCore(QMainWindow):
     site_login_test_finished = pyqtSignal(dict)
     format_probe_finished = pyqtSignal(dict)
 
-    def __init__(self, config, dl_manager, history, start_minimized=False, *, dependencies):
+    def __init__(self, config, dl_manager, history, start_minimized=False,
+                 first_run=False, *, dependencies):
         missing = sorted(set(_REQUIRED_MAIN_WINDOW_DEPENDENCIES) - set(dependencies))
         if missing:
             raise ValueError("Missing main window dependencies: " + ", ".join(missing))
@@ -1124,6 +1125,10 @@ class MainWindowCore(QMainWindow):
         self._page_anim = None
         self._setup_running = False
         self._model_setup_attempted = False
+        self._first_run = bool(first_run)
+        self._first_run_destination_confirmed = bool(
+            self._first_run and self.config.get("FirstRunComplete", False)
+        )
         self._tray_hint_shown = False
         # Download ids already accounted for by the completion notifier, so a
         # finished download notifies at most once and never re-fires each tick.
@@ -1382,7 +1387,7 @@ class MainWindowCore(QMainWindow):
                     pass
             if self.config.get("WindowMaximized", False):
                 self.showMaximized()
-            page = self.config.get("LastPage", "Download")
+            page = "Download" if self._first_run else self.config.get("LastPage", "Download")
             if page not in self._page_names:
                 page = "Download"
             self._nav_click(page)
@@ -1933,6 +1938,76 @@ class MainWindowCore(QMainWindow):
             "Vimeo, Instagram, Twitch and hundreds more.",
         ))
 
+        # A fresh install needs one decision before the first download. Keep
+        # it beside the paste box so setup, destination and extension pairing
+        # are all discoverable from the product's landing page.
+        self.first_run_panel = make_card("firstRun")
+        first_run_layout = QVBoxLayout(self.first_run_panel)
+        first_run_layout.setContentsMargins(16, 13, 16, 13)
+        first_run_layout.setSpacing(8)
+        first_run_layout.addWidget(make_label(
+            "Welcome to Astra Downloader", "panelTitle"
+        ))
+        first_run_layout.addWidget(make_label(
+            "Confirm where finished videos should go. You can change this later "
+            "in Settings.",
+            "fieldHint",
+            word_wrap=True,
+        ))
+        first_run_layout.addWidget(make_label(
+            "This choice is saved once for this install.",
+            "fieldHint",
+            word_wrap=True,
+        ))
+        destination_row = QHBoxLayout()
+        destination_row.setSpacing(8)
+        destination_copy = QVBoxLayout()
+        destination_copy.setSpacing(2)
+        destination_copy.addWidget(make_label(
+            "Video download folder", "fieldLabel"
+        ))
+        destination_row.addLayout(destination_copy, 1)
+        self.first_run_destination = QLineEdit(
+            self.config.get("DownloadPath", self._value("DEFAULT_CONFIG")["DownloadPath"])
+        )
+        self.first_run_destination.setAccessibleName(tr("First-run download folder"))
+        destination_row.addWidget(self.first_run_destination, 2)
+        self.first_run_browse = self._make_tool_button("Browse")
+        self.first_run_browse.clicked.connect(
+            lambda: self._browse(self.first_run_destination)
+        )
+        destination_row.addWidget(self.first_run_browse)
+        self.first_run_confirm = self._make_tool_button(
+            "Confirm folder", "primary"
+        )
+        self.first_run_confirm.clicked.connect(self._confirm_first_run_destination)
+        destination_row.addWidget(self.first_run_confirm)
+        first_run_layout.addLayout(destination_row)
+        self.first_run_status = make_label("", "fieldHint", word_wrap=True)
+        self.first_run_status.setAccessibleName(tr("First-run setup status"))
+        first_run_layout.addWidget(self.first_run_status)
+        first_run_layout.addWidget(make_divider())
+        pairing_row = QHBoxLayout()
+        pairing_copy = QVBoxLayout()
+        pairing_copy.setSpacing(2)
+        pairing_copy.addWidget(make_label(
+            "Browser extension", "fieldLabel"
+        ))
+        pairing_copy.addWidget(make_label(
+            "When setup finishes, pair Astra Deck from the local extension page.",
+            "fieldHint",
+            word_wrap=True,
+        ))
+        pairing_row.addLayout(pairing_copy, 1)
+        self.first_run_pair = self._make_tool_button(
+            "Open extension pairing", "ghost"
+        )
+        self.first_run_pair.clicked.connect(self._open_first_run_pairing)
+        pairing_row.addWidget(self.first_run_pair)
+        first_run_layout.addLayout(pairing_row)
+        layout.addWidget(self.first_run_panel)
+        self._apply_first_run_panel_state()
+
         quick_card = make_card()
         quick_layout = QVBoxLayout(quick_card)
         quick_layout.setContentsMargins(16, 14, 16, 14)
@@ -2346,6 +2421,16 @@ class MainWindowCore(QMainWindow):
             self.quick_download_subs_hint.setVisible(subtitles_only)
 
     def _start_quick_download(self):
+        if (
+            getattr(self, "_first_run", False)
+            and not getattr(self, "_first_run_destination_confirmed", False)
+        ):
+            self._set_quick_download_status(
+                "Confirm your download folder before adding a download.",
+                "warning",
+            )
+            self.first_run_destination.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
         # A URL can never contain whitespace (normalize_url rejects it), so
         # splitting on whitespace safely turns a multi-link paste — the common
         # case when the companion is used standalone — into a batch enqueue.
@@ -4732,6 +4817,79 @@ class MainWindowCore(QMainWindow):
         """Put the caret in the paste box, wherever the user is."""
         self._nav_click("Download")
         self.quick_download_url.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _apply_first_run_panel_state(self):
+        panel = getattr(self, "first_run_panel", None)
+        if panel is None:
+            return
+        active = bool(self._first_run)
+        panel.setVisible(active)
+        if not active:
+            return
+        confirmed = bool(self._first_run_destination_confirmed)
+        self.first_run_destination.setReadOnly(confirmed)
+        self.first_run_browse.setEnabled(not confirmed)
+        self.first_run_confirm.setVisible(not confirmed)
+        if confirmed:
+            path = self.config.get("DownloadPath", self.first_run_destination.text())
+            self.first_run_status.setText(
+                f"Destination confirmed: {path}. Setup can continue in the background."
+            )
+            self.first_run_status.setProperty("state", "success")
+        else:
+            self.first_run_status.setText(
+                "Confirm a folder before your first download."
+            )
+            self.first_run_status.setProperty("state", "warning")
+        repolish(self.first_run_status)
+
+    def _confirm_first_run_destination(self):
+        if not self._first_run:
+            return False
+        normalize = self._dependencies.get("normalize_output_dir")
+        if not callable(normalize):
+            self.first_run_status.setText(
+                "The download folder validator is unavailable. Check the log and retry."
+            )
+            self.first_run_status.setProperty("state", "error")
+            repolish(self.first_run_status)
+            return False
+        normalized, error = normalize(
+            self.first_run_destination.text().strip(),
+            self._value("DEFAULT_CONFIG")["DownloadPath"],
+        )
+        if error:
+            self.first_run_status.setText(error)
+            self.first_run_status.setProperty("state", "error")
+            repolish(self.first_run_status)
+            self.first_run_destination.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        update = getattr(self.config, "update", None)
+        if not callable(update) or not update({
+            "DownloadPath": normalized,
+            "FirstRunComplete": True,
+        }):
+            self.first_run_status.setText(
+                "Could not save the download folder. Check disk permissions and retry."
+            )
+            self.first_run_status.setProperty("state", "error")
+            repolish(self.first_run_status)
+            return False
+        self.first_run_destination.setText(normalized)
+        self._first_run_destination_confirmed = True
+        self._append_log(f"First-run download folder confirmed: {normalized}")
+        self._apply_first_run_panel_state()
+        return True
+
+    def _open_first_run_pairing(self):
+        self._nav_click("Browser extension")
+        if self._setup_running:
+            self._append_log(
+                "Browser extension pairing is ready after first-run setup finishes."
+            )
+            return
+        if not self.server_running and not self._server_starting:
+            self._start_server()
 
     def _animate_page(self):
         widget = self.tabs.currentWidget()

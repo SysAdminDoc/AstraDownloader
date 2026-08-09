@@ -210,6 +210,10 @@ CATALOGS = {
             "yt-dlp soll Zeichen und Namen ersetzen, die Windows nicht speichern kann.",
         "Browse":
             "Durchsuchen",
+        "Confirm folder":
+            "Ordner bestätigen",
+        "Open extension pairing":
+            "Erweiterungskopplung öffnen",
         "Post-processing":
             "Nachbearbeitung",
         "Write info JSON sidecar":
@@ -302,6 +306,18 @@ CATALOGS = {
             "Video herunterladen",
         "Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.":
             "Fügen Sie einen Link von fast jeder Website ein — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.",
+        "Welcome to Astra Downloader":
+            "Willkommen bei Astra Downloader",
+        "Confirm where finished videos should go. You can change this later in Settings.":
+            "Bestätigen Sie, wohin fertige Videos gespeichert werden. Sie können dies später in den Einstellungen ändern.",
+        "This choice is saved once for this install.":
+            "Diese Auswahl wird für diese Installation einmalig gespeichert.",
+        "First-run download folder":
+            "Downloadordner beim ersten Start",
+        "First-run setup status":
+            "Einrichtungsstatus beim ersten Start",
+        "When setup finishes, pair Astra Deck from the local extension page.":
+            "Wenn die Einrichtung abgeschlossen ist, koppeln Sie Astra Deck über die lokale Erweiterungsseite.",
         "Paste a video link, or several at once":
             "Videolink einfügen, auch mehrere auf einmal",
         "Video":
