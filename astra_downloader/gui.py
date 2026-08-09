@@ -306,7 +306,7 @@ def download_status_tone(status):
         return "danger"
     if status == "skipped":
         return "warning"
-    if status in ("merging", "extracting", "trimming", "queued", "pending", "paused", "needs-auth"):
+    if status in ("merging", "extracting", "trimming", "transcribing", "queued", "pending", "paused", "needs-auth"):
         return "warning"
     if status == "downloading":
         return "info"
@@ -393,6 +393,7 @@ def human_status(status):
         "merging": "Merging",
         "extracting": "Extracting",
         "trimming": "Trimming",
+        "transcribing": "Generating subtitles",
         "complete": "Complete",
         "failed": "Failed",
         "cancelled": "Cancelled",
@@ -473,7 +474,7 @@ class ReadinessProbe(QObject):
 
     def __init__(self, configured_runtime='auto', *, runtime_probe,
                  provider_probe, ytdlp_version, ffmpeg_version, logger,
-                 impersonate_targets=None):
+                 impersonate_targets=None, whisper_model_state=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -482,6 +483,7 @@ class ReadinessProbe(QObject):
         self._ffmpeg_version = ffmpeg_version
         self._logger = logger
         self._impersonate_targets = impersonate_targets
+        self._whisper_model_state = whisper_model_state
 
     def run(self):
         try:
@@ -490,6 +492,10 @@ class ReadinessProbe(QObject):
             targets = (
                 self._impersonate_targets() if self._impersonate_targets else []
             )
+            whisper_model = (
+                self._whisper_model_state()
+                if self._whisper_model_state else None
+            )
             payload = {
                 "ytDlp": self._ytdlp_version() or "",
                 "ffmpeg": self._ffmpeg_version() or "",
@@ -497,6 +503,7 @@ class ReadinessProbe(QObject):
                 "deno": runtime or {},
                 "provider": provider or {},
                 "impersonateTargets": targets or [],
+                "whisperModel": whisper_model,
             }
         except Exception as error:
             self._logger(f"Readiness probe failed: {error}")
@@ -609,6 +616,8 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'ICON_URL',
     'INSTALL_DIR',
     'is_portable_mode',
+    'WHISPER_MODEL_MIN_BYTES',
+    'WHISPER_MODEL_PATH',
     'YTDLP_PATH',
     'YTDLP_SHA256_ASSET',
     'YTDLP_SHA256_URL',
@@ -624,6 +633,7 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'probe_javascript_runtime',
     'provision_deno',
     'provision_quickjs',
+    'provision_whisper_model',
     'register_desktop_shortcut',
     'register_protocol_handlers',
     'register_startup_task',
@@ -894,6 +904,24 @@ class SetupWorkerCore(QThread):
                 self._provision_javascript_runtime()
             self.progress.emit(60)
 
+            # Local transcription is opt-in because the multilingual model is
+            # a separate download and CPU transcription can be expensive. Its
+            # pinned fetch is still part of setup once the user enables the
+            # setting, so a media job never reaches a half-provisioned model.
+            if bool(self.config.get('GenerateSubtitles', False)):
+                self.log.emit('Preparing local subtitle transcription model...')
+                model = self._dependencies['provision_whisper_model'](
+                    progress_cb=self._ranged_progress_cb(60, 68),
+                )
+                if model:
+                    self.log.emit(f'  Whisper model ready: {model}')
+                else:
+                    self.log.emit(
+                        '  Whisper model is unavailable; local subtitle generation '
+                        'will remain unavailable until setup succeeds.'
+                    )
+            self.progress.emit(70)
+
             # Icon
             if not self._value('ICON_PATH').exists():
                 self.log.emit("Downloading icon...")
@@ -1016,6 +1044,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'SERVER_PORT',
     'SetupWorker',
     'YTDLP_PATH',
+    'WHISPER_MODEL_MIN_BYTES',
+    'WHISPER_MODEL_PATH',
     '_build_wsgi_server',
     '_ffmpeg_version_probe',
     '_run_ytdlp_self_update',
@@ -1093,6 +1123,7 @@ class MainWindowCore(QMainWindow):
         self._force_exit = False
         self._page_anim = None
         self._setup_running = False
+        self._model_setup_attempted = False
         self._tray_hint_shown = False
         # Download ids already accounted for by the completion notifier, so a
         # finished download notifies at most once and never re-fires each tick.
@@ -1674,10 +1705,18 @@ class MainWindowCore(QMainWindow):
             combo.blockSignals(False)
 
     def _apply_readiness(self, payload):
+        subtitles_enabled = bool(
+            getattr(self, 'config', {}).get("GenerateSubtitles", False)
+        )
         if payload.get("error"):
             self._apply_impersonate_targets([])
             for key in ("ytDlp", "ffmpeg", "deno", "provider"):
                 self._set_readiness(key, "Unavailable", "danger")
+            self._set_readiness(
+                "whisper",
+                "Unavailable" if subtitles_enabled else "Optional",
+                "danger" if subtitles_enabled else "neutral",
+            )
             return
 
         yt_dlp = payload.get("ytDlp")
@@ -1687,6 +1726,26 @@ class MainWindowCore(QMainWindow):
         self._apply_impersonate_targets(payload.get("impersonateTargets"))
         self._set_tool_readiness("ytDlp", yt_dlp, self._value('YTDLP_PATH'))
         self._set_tool_readiness("ffmpeg", ffmpeg, self._value('FFMPEG_PATH'))
+
+        if subtitles_enabled:
+            whisper_state = payload.get("whisperModel")
+            if whisper_state == "ok":
+                self._set_readiness(
+                    "whisper", "Ready", "success",
+                    "Local transcription is enabled and the pinned Whisper model is ready.",
+                )
+            elif whisper_state == "damaged":
+                self._set_readiness(
+                    "whisper", "Repair needed", "warning",
+                    "The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.",
+                )
+            else:
+                self._set_readiness(
+                    "whisper", "Missing", "danger",
+                    "Run setup to provision the local Whisper model before downloading.",
+                )
+        else:
+            self._set_readiness("whisper", "Optional", "neutral")
 
         try:
             sabr = self._dependencies['evaluate_sabr_support'](yt_dlp or "")
@@ -2029,6 +2088,7 @@ class MainWindowCore(QMainWindow):
             ("deno", "JavaScript runtime", "Checking"),
             ("sabr", "SABR", "Limited"),
             ("provider", "PO provider", "Fallback"),
+            ("whisper", "Transcription model", "Optional"),
         ]
         for start in range(0, len(readiness_rows), 3):
             line = QHBoxLayout()
@@ -3776,6 +3836,24 @@ class MainWindowCore(QMainWindow):
             "download type fetches them without the video."
         ))
         self.cfg_subs.setChecked(self.config.get("EmbedSubs", False))
+        self.cfg_generate_subtitles = QCheckBox(
+            tr("Generate local subtitles when no track exists")
+        )
+        self.cfg_generate_subtitles.setToolTip(tr(
+            "After a video download, use the locally provisioned Whisper model "
+            "to write an SRT sidecar only when yt-dlp found no subtitle track."
+        ))
+        self.cfg_generate_subtitles.setChecked(
+            self.config.get("GenerateSubtitles", False)
+        )
+        self.generate_subtitles_hint = make_label(
+            tr(
+                "Uses the bundled multilingual Whisper model and the first "
+                "language in Subtitle languages. Setup downloads the model "
+                "when this option is enabled."
+            ),
+            "fieldHint", word_wrap=True,
+        )
         self.cfg_keep_intermediates = QCheckBox(tr("Keep intermediate files"))
         self.cfg_keep_intermediates.setToolTip(tr(
             "Put .part, .f### and .ytdl files beside the output and keep them "
@@ -3815,8 +3893,9 @@ class MainWindowCore(QMainWindow):
         # track, format and language controls belong directly under the
         # checkbox that turns them on, not separated from it.
         for w in [self.cfg_metadata, self.cfg_thumbnail, self.cfg_chapters,
-                  self.cfg_subs]:
+                  self.cfg_subs, self.cfg_generate_subtitles]:
             pp_l.addWidget(w)
+        pp_l.addWidget(self.generate_subtitles_hint)
         # Which of the two catalogues to ask for. Measured against the
         # installed yt-dlp: sending both flags never yields two files for one
         # language — the creator's track wins — so "both" is a preference,
@@ -4531,6 +4610,7 @@ class MainWindowCore(QMainWindow):
             self.cfg_thumbnail.toggled,
             self.cfg_chapters.toggled,
             self.cfg_subs.toggled,
+            self.cfg_generate_subtitles.toggled,
             self.cfg_sublangs.textChanged,
             self.cfg_subtitle_mode.currentIndexChanged,
             self.cfg_subtitle_format.currentIndexChanged,
@@ -4685,9 +4765,21 @@ class MainWindowCore(QMainWindow):
         if self._setup_running:
             self._append_log("Setup is already running. The server will start when it finishes.")
             return
-        if not (self._dependencies['managed_binary_usable'](self._value('YTDLP_PATH'))
-                and self._dependencies['managed_binary_usable'](self._value('FFMPEG_PATH'))):
+        tools_ready = (
+            self._dependencies['managed_binary_usable'](self._value('YTDLP_PATH'))
+            and self._dependencies['managed_binary_usable'](self._value('FFMPEG_PATH'))
+        )
+        model_missing = (
+            self.config.get('GenerateSubtitles', False)
+            and not self._dependencies['managed_binary_usable'](
+                self._value('WHISPER_MODEL_PATH'),
+                self._value('WHISPER_MODEL_MIN_BYTES'),
+            )
+        )
+        if not tools_ready or (model_missing and not self._model_setup_attempted):
             self._append_log("Required download tools are missing or unusable. Starting setup...")
+            if model_missing:
+                self._model_setup_attempted = True
             self._run_setup()
             return
 
@@ -5527,6 +5619,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_thumbnail", "EmbedThumbnail", "check"),
         ("cfg_chapters", "EmbedChapters", "check"),
         ("cfg_subs", "EmbedSubs", "check"),
+        ("cfg_generate_subtitles", "GenerateSubtitles", "check"),
         ("cfg_keep_intermediates", "KeepIntermediateFiles", "check"),
         ("cfg_write_info", "WriteInfoJson", "check"),
         ("cfg_write_description", "WriteDescription", "check"),
@@ -6647,6 +6740,9 @@ class MainWindowCore(QMainWindow):
             "EmbedThumbnail": self.cfg_thumbnail.isChecked(),
             "EmbedChapters": self.cfg_chapters.isChecked(),
             "EmbedSubs": self.cfg_subs.isChecked(),
+            "GenerateSubtitles": checked_setting(
+                "cfg_generate_subtitles", "GenerateSubtitles"
+            ),
             "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
             "WriteInfoJson": checked_setting("cfg_write_info", "WriteInfoJson"),
             "WriteDescription": checked_setting(
@@ -6729,6 +6825,20 @@ class MainWindowCore(QMainWindow):
 
         self._dependencies['reset_deno_runtime_cache']()
         self._start_readiness_probe()
+
+        if self.config.get("GenerateSubtitles", False):
+            model_usable = self._dependencies.get('managed_binary_usable')
+            model_ready = True
+            if callable(model_usable):
+                model_ready = model_usable(
+                    self._value('WHISPER_MODEL_PATH'),
+                    self._value('WHISPER_MODEL_MIN_BYTES'),
+                )
+            if not model_ready and not self._setup_running:
+                self._append_log(
+                    "Local subtitle generation is enabled; starting model setup."
+                )
+                self._run_setup()
 
         self._sync_connection_ui()
         language_changed = (
@@ -7371,6 +7481,13 @@ class MainWindowCore(QMainWindow):
     def _run_setup(self, force_ffmpeg=False):
         if self._setup_running:
             return
+        if self.config.get('GenerateSubtitles', False):
+            model_usable = self._dependencies.get('managed_binary_usable')
+            if callable(model_usable) and not model_usable(
+                self._value('WHISPER_MODEL_PATH'),
+                self._value('WHISPER_MODEL_MIN_BYTES'),
+            ):
+                self._model_setup_attempted = True
         self._setup_running = True
         self._append_log("Refreshing ffmpeg..." if force_ffmpeg else "Running first-time setup...")
         self.setup_status.setText(tr("Installing required download tools..."))
@@ -7395,8 +7512,10 @@ class MainWindowCore(QMainWindow):
         self.setup_progress.setValue(value)
         if value < 30:
             self.setup_status.setText(tr("Installing yt-dlp..."))
-        elif value < 70:
+        elif value < 60:
             self.setup_status.setText(tr("Installing ffmpeg..."))
+        elif value < 70:
+            self.setup_status.setText(tr("Preparing transcription model..."))
         elif value < 95:
             self.setup_status.setText(tr("Registering shortcuts and protocols..."))
         else:
@@ -7421,6 +7540,7 @@ class MainWindowCore(QMainWindow):
         # v1.2.0: refresh the Tools panel version readout now that the
         # binaries are (re)installed.
         self._refresh_tools_status()
+        self._start_readiness_probe()
         if not self.server_running and not ffmpeg_refresh:
             self._start_server()
         QTimer.singleShot(1400, self.setup_status.hide)

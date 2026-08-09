@@ -73,6 +73,9 @@ repository's git log.
 - **Network-path workarounds are opt-in.** Settings can force an IP family, bind
   a source address, supply a geo X-Forwarded-For value, or use a verification-
   only proxy; 403 and geo-restriction failures now name the matching remedy.
+- **Local subtitles fill the missing-track gap.** An opt-in, checksum-pinned
+  multilingual Whisper model is provisioned during setup, and successful video
+  downloads with no subtitle track can now produce a cancellable SRT sidecar.
 - **Site profiles are URL-aware.** Named domain profiles can set output format,
   quality, impersonation, proxy and request pacing defaults; matching happens
   when a link is pasted, with an explicit one-off profile or no-profile choice.

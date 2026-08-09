@@ -120,6 +120,9 @@ try:
         build_impersonate_args,
         build_network_workaround_args,
         build_subtitle_args,
+        build_local_subtitle_args, local_subtitle_output_path,
+        local_subtitle_sidecar_exists, should_generate_local_subtitles,
+        subtitle_language_for_transcription, escape_ffmpeg_filter_value,
         SUBTITLE_WRITE_FLAGS, SUBTITLE_CONVERT_FORMATS, SUBTITLE_WRITTEN_RE,
         FORMAT_SORT_VIDEO_FIELDS, FORMAT_SORT_AUDIO_FIELDS,
         build_subprocess_env as _owned_build_subprocess_env,
@@ -240,6 +243,9 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_impersonate_args,
         build_network_workaround_args,
         build_subtitle_args,
+        build_local_subtitle_args, local_subtitle_output_path,
+        local_subtitle_sidecar_exists, should_generate_local_subtitles,
+        subtitle_language_for_transcription, escape_ffmpeg_filter_value,
         SUBTITLE_WRITE_FLAGS, SUBTITLE_CONVERT_FORMATS, SUBTITLE_WRITTEN_RE,
         FORMAT_SORT_VIDEO_FIELDS, FORMAT_SORT_AUDIO_FIELDS,
         build_subprocess_env as _owned_build_subprocess_env,
@@ -353,6 +359,20 @@ LOG_PATH = INSTALL_DIR / 'server.log'
 CRASH_LOG_PATH = INSTALL_DIR / 'crash.log'
 YTDLP_PATH = INSTALL_DIR / 'yt-dlp.exe'
 FFMPEG_PATH = INSTALL_DIR / 'ffmpeg.exe'
+WHISPER_MODEL_NAME = 'ggml-tiny-q5_1.bin'
+WHISPER_MODEL_PATH = INSTALL_DIR / WHISPER_MODEL_NAME
+# The multilingual tiny quantized model keeps the opt-in feature practical
+# on CPU-only machines while covering languages beyond English. The size floor
+# is intentionally much higher than the helper-executable floor: a truncated
+# model can look present and fail only after a user waits for transcription.
+WHISPER_MODEL_MIN_BYTES = 16 * 1024 * 1024
+WHISPER_MODEL_URL = (
+    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/'
+    f'{WHISPER_MODEL_NAME}?download=true'
+)
+WHISPER_MODEL_SHA256 = (
+    '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'
+)
 ICON_PATH = INSTALL_DIR / 'AstraDownloader.ico'
 # Scheduled subscriptions keep their archive in the schema-checked
 # subscriptions.json document. Normal downloads still always re-run.
@@ -1432,6 +1452,57 @@ def provision_quickjs():
         return None
     reset_deno_runtime_cache()
     return str(QUICKJS_PATH)
+
+
+def provision_whisper_model(progress_cb=None):
+    """Fetch and verify the pinned local Whisper model when requested."""
+    state = managed_binary_state(WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES)
+    if state == 'ok':
+        try:
+            verify_file_sha256(WHISPER_MODEL_PATH, WHISPER_MODEL_SHA256)
+            return str(WHISPER_MODEL_PATH)
+        except RuntimeError as error:
+            write_persistent_log(f'Whisper model checksum failed; refreshing: {error}')
+            try:
+                WHISPER_MODEL_PATH.unlink(missing_ok=True)
+            except OSError:
+                # reason: a quarantined or locked model will be replaced if
+                # the next fetch can acquire the destination
+                pass
+
+    space_failure = check_download_disk_space(
+        INSTALL_DIR, WHISPER_MODEL_MIN_BYTES,
+    )
+    if space_failure:
+        write_persistent_log(
+            'Whisper model provisioning skipped: '
+            f"{space_failure.get('error', 'insufficient disk space')}"
+        )
+        return None
+    try:
+        download_file_atomic(
+            WHISPER_MODEL_URL,
+            WHISPER_MODEL_PATH,
+            timeout=120,
+            chunk_size=65536,
+            progress_cb=progress_cb,
+            max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
+        )
+        verify_file_sha256(WHISPER_MODEL_PATH, WHISPER_MODEL_SHA256)
+        if managed_binary_state(
+            WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES
+        ) != 'ok':
+            raise RuntimeError('Downloaded Whisper model was smaller than expected.')
+        return str(WHISPER_MODEL_PATH)
+    except Exception as error:
+        try:
+            WHISPER_MODEL_PATH.unlink(missing_ok=True)
+        except OSError:
+            # reason: an unverified model must not remain trusted after a
+            # failed fetch, even if antivirus or another process has it open
+            pass
+        write_persistent_log(f'Whisper model provisioning failed: {error}')
+        return None
 
 
 def _probe_quickjs_binary_version(path):
@@ -3527,6 +3598,8 @@ class DownloadManager(DownloadManagerCore):
                 'CREATE_NO_WINDOW': CREATE_NO_WINDOW,
                 'FFMPEG_PATH': lambda: FFMPEG_PATH,
                 'INSTALL_DIR': lambda: INSTALL_DIR,
+                'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
+                'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 '_build_subprocess_env': lambda *args, **kwargs: _build_subprocess_env(*args, **kwargs),
                 'allowed_output_roots': lambda *args, **kwargs: allowed_output_roots(*args, **kwargs),
@@ -3541,6 +3614,7 @@ class DownloadManager(DownloadManagerCore):
                 'is_supported_media_url': lambda *args, **kwargs: is_supported_media_url(*args, **kwargs),
                 'is_youtube_url': lambda *args, **kwargs: is_youtube_url(*args, **kwargs),
                 'load_json_file': lambda *args, **kwargs: load_json_file(*args, **kwargs),
+                'managed_binary_state': lambda *args, **kwargs: managed_binary_state(*args, **kwargs),
                 # v1.5.4: let the download path drive the throttled, race-safe
                 # yt-dlp auto-update so a long-running companion keeps yt-dlp
                 # current between restarts — the download path, not just server
@@ -3681,6 +3755,8 @@ class SetupWorker(SetupWorkerCore):
                 'ICON_URL': lambda: ICON_URL,
                 'INSTALL_DIR': lambda: INSTALL_DIR,
                 'is_portable_mode': lambda: is_portable_mode(),
+                'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
+                'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 'YTDLP_SHA256_ASSET': lambda: YTDLP_SHA256_ASSET,
                 'YTDLP_SHA256_URL': lambda: YTDLP_SHA256_URL,
@@ -3696,6 +3772,7 @@ class SetupWorker(SetupWorkerCore):
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
                 'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
+                'provision_whisper_model': lambda *args, **kwargs: provision_whisper_model(*args, **kwargs),
                 'build_reveal_command': lambda *args, **kwargs: build_reveal_command(*args, **kwargs),
                 'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
                 'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
@@ -3730,6 +3807,7 @@ def remove_portable_state():
         for path in (
             CONFIG_PATH, HISTORY_PATH, DOWNLOAD_QUEUE_PATH, SUBSCRIPTIONS_PATH,
             LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH, ICON_PATH,
+            WHISPER_MODEL_PATH,
             DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
             _ytdlp_update_state_path(), _companion_update_state_path(),
             INSTALL_DIR / YTDLP_ROLLBACK_FILENAME,
@@ -3899,7 +3977,8 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
     return True
 
 class ReadinessProbe(_OwnedReadinessProbe):
-    def __init__(self, configured_runtime='auto', *, impersonate_targets=None):
+    def __init__(self, configured_runtime='auto', *, impersonate_targets=None,
+                 whisper_model_state=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -3910,6 +3989,12 @@ class ReadinessProbe(_OwnedReadinessProbe):
             impersonate_targets=(
                 impersonate_targets
                 or (lambda: probe_impersonate_targets())
+            ),
+            whisper_model_state=(
+                whisper_model_state
+                or (lambda: managed_binary_state(
+                    WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES
+                ))
             ),
         )
 
@@ -3951,6 +4036,8 @@ class MainWindow(MainWindowCore):
                 'SERVER_PORT': lambda: SERVER_PORT,
                 'SetupWorker': lambda *args, **kwargs: SetupWorker(*args, **kwargs),
                 'YTDLP_PATH': lambda: YTDLP_PATH,
+                'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
+                'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
                 '_build_wsgi_server': lambda *args, **kwargs: _build_wsgi_server(*args, **kwargs),
                 '_ffmpeg_version_probe': lambda: _ffmpeg_version_probe,
                 '_run_ytdlp_self_update': lambda *args, **kwargs: _run_ytdlp_self_update(*args, **kwargs),

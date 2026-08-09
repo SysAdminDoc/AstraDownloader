@@ -15370,6 +15370,192 @@ class SubtitlesOnlyJobTests(unittest.TestCase):
         self.assertNotIn("subtitlesOnly", download.to_dict())
 
 
+class LocalSubtitleGenerationTests(unittest.TestCase):
+    """Opt-in local Whisper transcription is safe, visible, and cancellable."""
+
+    def _download(self, media, **overrides):
+        data = {"GenerateSubtitles": True, "SubLangs": "en,es"}
+        data.update(overrides)
+        config = ad.sanitize_config(data)
+        download = ad.Download(
+            "dl_local_subtitles", "https://example.com/video",
+            output_dir=str(Path(media).parent),
+        )
+        download.filename = str(media)
+        return config, download
+
+    def test_local_generation_is_off_by_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "clip.mp4"
+            media.write_bytes(b"media")
+            config, download = self._download(media, GenerateSubtitles=False)
+            self.assertFalse(ad.should_generate_local_subtitles(config, download))
+
+    def test_existing_sidecar_and_embedded_track_suppress_generation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "clip.mp4"
+            media.write_bytes(b"media")
+            config, download = self._download(media)
+            self.assertTrue(ad.should_generate_local_subtitles(config, download))
+
+            (Path(tmpdir) / "clip.en.vtt").write_text("WEBVTT\n", encoding="utf-8")
+            self.assertFalse(ad.should_generate_local_subtitles(config, download))
+
+            (Path(tmpdir) / "clip.en.vtt").unlink()
+            download.subtitle_written = True
+            self.assertFalse(ad.should_generate_local_subtitles(config, download))
+
+    def test_audio_and_subtitle_only_jobs_never_start_whisper(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "clip.mp4"
+            media.write_bytes(b"media")
+            config, download = self._download(media)
+            download.audio_only = True
+            self.assertFalse(ad.should_generate_local_subtitles(config, download))
+            download.audio_only = False
+            download.subtitles_only = True
+            self.assertFalse(ad.should_generate_local_subtitles(config, download))
+
+    def test_filter_paths_escape_drive_letters_and_filter_punctuation(self):
+        args = ad.build_local_subtitle_args(
+            r"C:\Tools\ffmpeg.exe",
+            r"C:\Videos\A:B,clip.mp4",
+            r"C:\Users\A:B\whisper model.bin",
+            r"C:\Videos\A:B,clip.srt",
+            language="en",
+        )
+        graph = args[args.index("-af") + 1]
+        self.assertIn(r"model=C\:/Users/A\:B/whisper model.bin", graph)
+        self.assertIn(r"destination=C\:/Videos/A\:B\,clip.srt", graph)
+        self.assertIn("format=srt", graph)
+        self.assertEqual(
+            args[-6:],
+            ["-progress", "pipe:1", "-nostats", "-f", "null", "-"],
+        )
+
+    def test_first_selected_language_is_used_for_transcription(self):
+        self.assertEqual(
+            ad.subtitle_language_for_transcription({"SubLangs": "zh-Hans, en"}),
+            "zh",
+        )
+        self.assertEqual(
+            ad.subtitle_language_for_transcription({"SubLangs": ""}),
+            "auto",
+        )
+
+    class _TranscriptProcess:
+        def __init__(self, args, **_kwargs):
+            self.args = list(args)
+            self.returncode = 0
+            graph = self.args[self.args.index("-af") + 1]
+            destination = graph.split(":destination=", 1)[1].split(
+                ":format=", 1
+            )[0]
+            for character in (":", ",", "[", "]", ";", "'"):
+                destination = destination.replace("\\" + character, character)
+            destination_path = Path(destination)
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            destination_path.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\nhello\n",
+                encoding="utf-8",
+            )
+            self.stdout = io.StringIO("out_time_ms=100\nprogress=end\n")
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    def test_success_commits_an_srt_only_after_ffmpeg_finishes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            config, download = self._download(media)
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
+                    mock.patch.object(ad, "spawn_media_process", self._TranscriptProcess):
+                self.assertTrue(manager._run_local_subtitles(download, config))
+            output = root / "clip.srt"
+            self.assertTrue(output.is_file())
+            self.assertIn("hello", output.read_text(encoding="utf-8"))
+            self.assertEqual(download.status, "complete")
+            self.assertEqual(download.progress, 100.0)
+
+    def test_cancelling_the_stage_does_not_leave_a_partial_srt(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            config, download = self._download(media)
+
+            class CancelProcess(self._TranscriptProcess):
+                def __init__(inner_self, args, **_kwargs):
+                    super().__init__(args)
+                    download.status = "cancelled"
+                    inner_self.returncode = -15
+
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
+                    mock.patch.object(ad, "spawn_media_process", CancelProcess):
+                self.assertFalse(manager._run_local_subtitles(download, config))
+            self.assertEqual(download.status, "cancelled")
+            self.assertFalse((root / "clip.srt").exists())
+
+
+class WhisperModelProvisioningTests(unittest.TestCase):
+    """The model path is atomic and never trusted without its pinned digest."""
+
+    def test_a_checksum_failure_removes_the_downloaded_model(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            model = root / "ggml-tiny-q5_1.bin"
+
+            def fake_download(_url, path, **_kwargs):
+                Path(path).write_bytes(b"bad model")
+
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "verify_file_sha256", side_effect=RuntimeError("bad digest")), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                self.assertIsNone(ad.provision_whisper_model())
+            self.assertFalse(model.exists())
+
+    def test_a_download_is_verified_before_it_is_reported_ready(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            model = root / "ggml-tiny-q5_1.bin"
+            calls = []
+
+            def fake_download(url, path, **kwargs):
+                calls.append((url, kwargs))
+                Path(path).write_bytes(b"verified model")
+
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "verify_file_sha256", return_value=True), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                result = ad.provision_whisper_model()
+            self.assertEqual(result, str(model))
+            self.assertEqual(calls[0][0], ad.WHISPER_MODEL_URL)
+            self.assertEqual(calls[0][1]["max_bytes"], ad.HELPER_DOWNLOAD_MAX_BYTES)
+
+
 class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
     """The flags this app compiles do what it claims, on the installed yt-dlp.
 
