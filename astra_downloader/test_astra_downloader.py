@@ -189,6 +189,53 @@ class NormalizationTests(unittest.TestCase):
                 self.assertTrue(err)
 
 
+class CompanionListFilterTests(unittest.TestCase):
+    def setUp(self):
+        import gui
+
+        self.gui = gui
+
+    def test_subscription_filters_cover_search_and_attention_state(self):
+        records = [
+            {"title": "Astra", "url": "https://youtube.com/@astra", "enabled": True},
+            {"title": "Paused", "url": "https://youtube.com/@paused", "enabled": False},
+            {"title": "Broken", "url": "https://youtube.com/@broken", "enabled": True, "lastError": "403"},
+        ]
+
+        self.assertEqual(
+            [item["title"] for item in self.gui.filter_subscription_records(records, "astra")],
+            ["Astra"],
+        )
+        self.assertEqual(
+            [item["title"] for item in self.gui.filter_subscription_records(records, status="disabled")],
+            ["Paused"],
+        )
+        self.assertEqual(
+            [item["title"] for item in self.gui.filter_subscription_records(records, status="needs-attention")],
+            ["Broken"],
+        )
+
+    def test_site_login_filters_distinguish_expired_and_missing_jars(self):
+        entries = [
+            {"site": "x.com", "source": "firefox", "stored": True, "expired": False},
+            {"site": "vimeo.com", "source": "cookies.txt", "stored": True, "expired": True},
+            {"site": "instagram.com", "source": "firefox", "stored": False, "expired": False},
+        ]
+
+        self.assertEqual(
+            [item["site"] for item in self.gui.filter_site_login_entries(entries, status="stored")],
+            ["x.com"],
+        )
+        self.assertEqual(
+            [item["site"] for item in self.gui.filter_site_login_entries(entries, status="expired")],
+            ["vimeo.com"],
+        )
+        self.assertEqual(
+            [item["site"] for item in self.gui.filter_site_login_entries(entries, "instagram")],
+            ["instagram.com"],
+        )
+
+
 class PersistenceTests(unittest.TestCase):
     def test_owned_config_store_uses_injected_persistence_and_rolls_back(self):
         import importlib

@@ -363,6 +363,18 @@
       <translation>YouTube-Kanäle oder Playlists nach Zeitplan beobachten und nur neue Uploads einreihen.</translation>
     </message>
     <message>
+      <source>Search subscriptions</source>
+      <translation>Search subscriptions</translation>
+    </message>
+    <message>
+      <source>Search title, URL, or error</source>
+      <translation>Search title, URL, or error</translation>
+    </message>
+    <message>
+      <source>Subscription status</source>
+      <translation>Subscription status</translation>
+    </message>
+    <message>
       <source>Scan now</source>
       <translation>Jetzt prüfen</translation>
     </message>
@@ -385,6 +397,18 @@
     <message>
       <source>Profile (optional)</source>
       <translation>Profil (optional)</translation>
+    </message>
+    <message>
+      <source>Search stored sign-ins</source>
+      <translation>Search stored sign-ins</translation>
+    </message>
+    <message>
+      <source>Search site or source</source>
+      <translation>Search site or source</translation>
+    </message>
+    <message>
+      <source>Stored sign-in status</source>
+      <translation>Stored sign-in status</translation>
     </message>
     <message>
       <source>Import this site's cookies to unblock the download waiting on it.</source>
@@ -819,12 +843,28 @@
       <translation>Wiederholen</translation>
     </message>
     <message>
+      <source>No subscriptions match these filters</source>
+      <translation>No subscriptions match these filters</translation>
+    </message>
+    <message>
+      <source>Try a different search or choose All subscriptions.</source>
+      <translation>Try a different search or choose All subscriptions.</translation>
+    </message>
+    <message>
       <source>No stored sign-ins</source>
       <translation>Keine gespeicherten Anmeldungen</translation>
     </message>
     <message>
       <source>Add one above for any site that only serves video to signed-in viewers. YouTube downloads use the browser extension instead and need nothing here.</source>
       <translation>Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. YouTube-Downloads verwenden stattdessen die Browsererweiterung und benötigen hier nichts.</translation>
+    </message>
+    <message>
+      <source>No sign-ins match these filters</source>
+      <translation>No sign-ins match these filters</translation>
+    </message>
+    <message>
+      <source>Try a different search or choose All sign-ins.</source>
+      <translation>Try a different search or choose All sign-ins.</translation>
     </message>
     <message>
       <source>Missing on disk — import it again</source>
@@ -861,6 +901,10 @@
     <message>
       <source>Open</source>
       <translation>Öffnen</translation>
+    </message>
+    <message>
+      <source>{shown} of {total} shown</source>
+      <translation>{shown} of {total} shown</translation>
     </message>
     <message>
       <source>Session cookies — valid until the site signs you out</source>

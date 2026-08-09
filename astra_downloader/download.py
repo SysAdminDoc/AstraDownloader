@@ -24,6 +24,11 @@ try:
 except ImportError:  # Flat source-path compatibility.
     from _compat import make_legacy_resolver
 
+try:
+    from .config import default_download_path
+except ImportError:  # Flat source-path compatibility.
+    from config import default_download_path
+
 
 __all__ = (
     "Download", "DownloadManager", "DownloadManagerCore", "build_video_format_args",

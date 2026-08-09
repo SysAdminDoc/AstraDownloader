@@ -643,7 +643,9 @@ def main():
                 if not bundle_path.exists():
                     raise RuntimeError("The bundle was not written")
                 payload = json.loads(bundle_path.read_text(encoding="utf-8"))
-                if "ServerToken" in json.dumps(payload):
+                settings_json = json.dumps(payload.get("settings", {}))
+                token = str(config.get("ServerToken") or "")
+                if "ServerToken" in settings_json or (token and token in json.dumps(payload)):
                     raise RuntimeError("The bundle leaked the API token")
                 # Move the settings away from what the bundle holds.
                 window.cfg_sublangs.setText("en")

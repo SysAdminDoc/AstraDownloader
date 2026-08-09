@@ -224,13 +224,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: a download whose probed size exceeds free space on the destination volume is refused with a classified failure naming the shortfall; the dependency bootstrap checks space before fetching ffmpeg.
   Complexity: S
 
-- [ ] P2 — Search and filter the Subscriptions and Sign-ins lists
-  Why: History has search, status, format, date range, sort and pagination; the other two lists render every record in insertion order, up to 100 subscriptions and 50 sign-ins.
-  Evidence: `_refresh_subscriptions` (`gui.py:2194-2272`) and `_refresh_site_logins` (`:2364-2426`) build rows straight from the store with no filter widget on either page — even though `_refresh_site_logins` already computes `expired`/`stored` per row (`:2397-2400`), which is the filter a user actually wants.
-  Touches: `astra_downloader/gui.py`
-  Acceptance: both pages carry a search box and the filters their data already supports — expired sign-ins, disabled or failing subscriptions — debounced the way History's is.
-  Complexity: S
-
 - [ ] P2 — Say when something is being fetched
   Why: Three surfaces do visible work with no indication that work is happening, one of them on the GUI thread.
   Evidence: `_start_server` (`gui.py:3511-3618`) walks the whole `PORT_FALLBACKS` list binding sockets (`:3532-3546`) and constructs the WSGI server (`:3584`) synchronously on the GUI thread, and `_update_server_ui` (`:3638`) is binary Running/Stopped with no "Starting". `_refresh_history` (`:4405-4476`) calls `history_mgr.load()` on the GUI thread then rebuilds up to 50 cards with no loading state — and no error branch, so an unreadable `history.json` renders the "No downloads yet" empty state, which reads as "you have downloaded nothing". `_scan_subscription` (`:2576-2585`) posts "queued" and returns; the row shows only `nextScanAt`. The format probe (`:5112-5146`) runs on a thread after a 700 ms debounce and silently rewrites the picker on return.
