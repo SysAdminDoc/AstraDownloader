@@ -6,6 +6,7 @@ frameworks, which lets config tooling and tests run without PyQt or Flask.
 """
 
 import os
+import ctypes
 import ipaddress
 import json
 import math
@@ -30,6 +31,7 @@ __all__ = (
     "APP_NAME", "APP_VERSION", "SERVICE_ID", "SERVICE_API_VERSION",
     "SERVER_PORT", "PORT_FALLBACKS", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "DEFAULT_CONFIG", "INSTALL_DIR", "CONFIG_PATH", "HISTORY_PATH",
+    "default_download_path",
     "CORS_MAX_AGE_SECONDS", "RATE_LIMIT_DOWNLOAD_MAX",
     "RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", "MAX_REQUEST_BYTES",
     "MAX_RESPONSE_BYTES", "HELPER_DOWNLOAD_MAX_BYTES", "sanitize_config",
@@ -74,6 +76,7 @@ _OWNED_EXPORTS = {
     "validate_download_request_body",
     "normalize_output_dir", "allowed_output_roots",
     "DEFAULT_CONFIG", "sanitize_config",
+    "default_download_path",
     "ConfigStore", "HistoryStore", "atomic_write_json", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries",
     "quarantined_state_files", "restore_quarantined_file",
@@ -125,8 +128,59 @@ FORMAT_SORT_AUDIO_CODECS = frozenset({"auto", "aac", "opus"})
 FORMAT_SORT_FRAME_RATES = (0, 30, 60)
 
 
+def _known_folder_path_windows():
+    """Return the user's Windows Videos folder, or ``None`` on failure."""
+    if os.name != "nt":
+        return None
+    try:
+        from ctypes import wintypes
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", wintypes.DWORD),
+                ("Data2", wintypes.WORD),
+                ("Data3", wintypes.WORD),
+                ("Data4", wintypes.BYTE * 8),
+            ]
+
+        folder_id = GUID(
+            0x18989B1D,
+            0x99B5,
+            0x455B,
+            (wintypes.BYTE * 8)(0x84, 0x1C, 0xAB, 0x7C, 0x74, 0xE4, 0xDD, 0xFC),
+        )
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        shell32.SHGetKnownFolderPath.argtypes = [
+            ctypes.POINTER(GUID),
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_wchar_p),
+        ]
+        shell32.SHGetKnownFolderPath.restype = ctypes.c_long
+        ole32 = ctypes.WinDLL("ole32", use_last_error=True)
+        ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+        ole32.CoTaskMemFree.restype = None
+        path_ptr = ctypes.c_wchar_p()
+        result = shell32.SHGetKnownFolderPath(
+            ctypes.byref(folder_id), 0, None, ctypes.byref(path_ptr)
+        )
+        try:
+            if result != 0 or not path_ptr.value:
+                return None
+            return Path(path_ptr.value)
+        finally:
+            ole32.CoTaskMemFree(ctypes.cast(path_ptr, ctypes.c_void_p))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
+def default_download_path():
+    """Return the user's Videos folder without rewriting saved settings."""
+    return str(_known_folder_path_windows() or (Path.home() / "Videos"))
+
+
 DEFAULT_CONFIG = {
-    "DownloadPath": str(Path.home() / "Videos"),
+    "DownloadPath": default_download_path(),
     "AudioDownloadPath": "",
     "ServerPort": SERVER_PORT,
     "ServerToken": "",
@@ -782,7 +836,7 @@ def normalize_output_dir(value, default_dir=None, allowed_roots=None):
         if too_long:
             return None, "Default output folder path is too long."
     if not raw:
-        raw = str(Path.home() / "Videos")
+        raw = default_download_path()
     try:
         path = Path(raw).expanduser()
         if not path.is_absolute():

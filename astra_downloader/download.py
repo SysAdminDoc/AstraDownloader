@@ -50,6 +50,7 @@ __all__ = (
     "SITE_LOGIN_BROWSERS", "MAX_SITE_LOGINS", "MAX_SITE_LOGIN_COOKIES",
     "MAX_SITE_LOGIN_TEXT_BYTES",
     "SITE_LOGIN_DIRNAME", "SITE_LOGIN_INDEX_NAME",
+    "default_download_path",
 )
 
 MAX_CONCURRENT = 3
@@ -2175,7 +2176,7 @@ class DownloadManagerCore:
             if audio_only and self.config.get("AudioDownloadPath"):
                 output_dir = self.config.get("AudioDownloadPath")
             else:
-                output_dir = self.config.get("DownloadPath", str(Path.home() / "Videos"))
+                output_dir = self.config.get("DownloadPath", default_download_path())
         # Only enforce confinement when the client supplied the path. The
         # fallback defaults above are always inside the allowlist by
         # construction, and enforcing for them would create a chicken-and-egg
@@ -2183,7 +2184,7 @@ class DownloadManagerCore:
         roots = self._dependencies['allowed_output_roots'](self.config) if client_supplied_output else None
         output_dir, err = self._dependencies['normalize_output_dir'](
             output_dir,
-            self.config.get("DownloadPath", str(Path.home() / "Videos")),
+            self.config.get("DownloadPath", default_download_path()),
             allowed_roots=roots,
         )
         if err:

@@ -32,6 +32,9 @@ repository's git log.
   the requested asset, long URL-only subscription keys use a bounded digest,
   and uninstall clears the integration stamp so a same-version reinstall
   restores its registrations.
+- **Downloads follow the Windows Videos known folder.** Redirected Videos
+  locations are used for new defaults, with `~/Videos` retained as the
+  fail-safe fallback; existing saved paths remain untouched.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the

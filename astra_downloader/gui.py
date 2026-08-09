@@ -43,6 +43,7 @@ __all__ = (
     "SetupWorkerCore",
     "MainWindowCore",
     "GUI_ACCESSIBILITY_COLORS", "system_reduced_motion_enabled",
+    "default_download_path",
 )
 
 GUI_ACCESSIBILITY_COLORS = {
@@ -500,7 +501,7 @@ class FolderPickerService(QObject):
                 )
                 if is_cancelled:
                     return
-            initial = request.get('initial') or str(Path.home() / "Videos")
+            initial = request.get('initial') or default_download_path()
             dialog_class = self._dialog_types()
             dialog = self._dialog_factory(None, "Choose download folder", initial)
             dialog.setFileMode(dialog_class.FileMode.Directory)
@@ -2728,7 +2729,9 @@ class MainWindowCore(QMainWindow):
         row.setSpacing(8)
         self.cfg_dl_path = QLineEdit(self.config.get("DownloadPath", ""))
         self.cfg_dl_path.setAccessibleName("Video download folder")
-        self.cfg_dl_path.setPlaceholderText(str(Path.home() / "Videos" / "YouTube"))
+        self.cfg_dl_path.setPlaceholderText(
+            str(Path(default_download_path()) / "YouTube")
+        )
         row.addWidget(self.cfg_dl_path, 1)
         btn = self._make_tool_button("Browse")
         btn.clicked.connect(lambda: self._browse(self.cfg_dl_path))

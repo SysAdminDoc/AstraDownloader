@@ -135,6 +135,27 @@ class NormalizationTests(unittest.TestCase):
         node_cfg = ad.sanitize_config({"JavaScriptRuntime": "NODE"})
         self.assertEqual(node_cfg["JavaScriptRuntime"], "node")
 
+    def test_default_download_path_prefers_the_windows_known_folder(self):
+        import config as config_module
+
+        known = Path(tempfile.gettempdir()) / "Redirected Videos"
+        with mock.patch.object(config_module, "_known_folder_path_windows", return_value=known):
+            self.assertEqual(config_module.default_download_path(), str(known))
+            self.assertEqual(
+                ad.sanitize_config({"DownloadPath": str(known)})["DownloadPath"],
+                str(known),
+                "an existing configured path must not be rewritten",
+            )
+
+    def test_default_download_path_falls_back_to_profile_videos(self):
+        import config as config_module
+
+        with mock.patch.object(config_module, "_known_folder_path_windows", return_value=None):
+            self.assertEqual(
+                config_module.default_download_path(),
+                str(Path.home() / "Videos"),
+            )
+
     def test_output_directory_must_be_absolute(self):
         path, err = ad.normalize_output_dir("relative-folder")
         self.assertIsNone(path)
