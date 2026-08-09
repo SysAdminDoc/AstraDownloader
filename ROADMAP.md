@@ -187,12 +187,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: an archive entry counts attempts and applies increasing backoff; after a bounded number it stops re-enqueueing and the subscription row names the item that gave up and why; a manual rescan clears the count.
   Complexity: M
 
-- [ ] P1 — Make the ffmpeg version floor apply to the build the bootstrap installs
-  Why: The exact `8.1.2` floor was added as a security control and cannot fire against any install this app produces — the bootstrap fetches a master snapshot, and snapshot builds are deliberately exempt. `SECURITY.md` invites reports about a known-vulnerable pin while the check is structurally unable to detect one.
-  Evidence: `FFMPEG_URL` is `.../yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip` (`astra_downloader.py:312`), which always reports `N-<build>-g<commit>-<date>`. `parse_ffmpeg_major` matches `n?(\d+)\.` (`health.py:307-317`) and returns `None` for that shape by design (`health.py:560-562`), so `check()` short-circuits to `majorVersion: None, current: None` before `_FFMPEG_MIN_VERSION` (`astra_downloader.py:1460`) is consulted. Measured on this machine 2026-08-06: the provisioned binary reports `N-123918-gf7ca6f7481-20260411`, and `ffmpeg -decoders | grep magicyuv` returns the decoder — the detection command from CVE-2026-8461, one of the CVEs FFmpeg 8.1.2 fixes.
-  Touches: `astra_downloader/health.py`, `astra_downloader/astra_downloader.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: a snapshot build is compared on the build date embedded in its version string against a dated floor, so a provisioned ffmpeg older than that floor is reported stale and re-fetched; the readiness row states which of the two comparisons it made.
-  Complexity: S
 
 - [ ] P1 — Make the native-messaging allowlist revocable, and keep it out of settings bundles
   Why: Clearing the configured extension IDs revokes nothing, and the same setting rides in an exported bundle — so an imported bundle can name an attacker's extension ID and hand it the ServerToken, which is full control of the local download API.

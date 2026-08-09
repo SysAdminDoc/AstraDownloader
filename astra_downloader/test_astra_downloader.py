@@ -4411,14 +4411,41 @@ else:
         # silently routed them to the never-flagged snapshot path).
         self.assertFalse(probe_for("n8.0.1-9-g1234567")["current"])
         self.assertTrue(probe_for("n8.1.2")["current"])
-        # Master/snapshot builds carry no numeric version and must not be
-        # flagged as below-floor — they are always newer than any tagged floor.
+        # Master/snapshot builds carry no numeric version and remain unknown
+        # when no dated snapshot floor is configured.
         snapshot = probe_for("N-119847-g1a2b3c4d-win64-gpl")
         self.assertIsNone(snapshot["current"])
         self.assertIsNone(snapshot["majorVersion"])
 
+    def test_ffmpeg_snapshot_build_date_is_parsed_and_compared(self):
+        import health
+
+        self.assertEqual(
+            health.parse_ffmpeg_snapshot_date(
+                'N-123918-gf7ca6f7481-20260411'
+            ),
+            '2026-04-11',
+        )
+        self.assertIsNone(health.parse_ffmpeg_snapshot_date('N-123918-gabc'))
+
+        def probe_for(version):
+            return health.FfmpegCapabilitiesProbe(
+                version_getter=lambda: version,
+                clock=lambda: 100.0,
+                minimum_snapshot_date='2026-06-17',
+            ).check()
+
+        old = probe_for('N-123918-gabc-20260411')
+        self.assertFalse(old['current'])
+        self.assertEqual(old['comparison'], 'snapshot-date')
+        self.assertIn('2026-04-11', old['message'])
+        fresh = probe_for('N-124000-gabc-20260618')
+        self.assertTrue(fresh['current'])
+        self.assertEqual(fresh['buildDate'], '2026-06-18')
+
     def test_ffmpeg_probe_is_configured_with_the_security_floor(self):
         self.assertEqual(ad._FFMPEG_MIN_VERSION, "8.1.2")
+        self.assertEqual(ad._FFMPEG_MIN_SNAPSHOT_DATE, "2026-06-17")
         self.assertGreaterEqual(ad._FFMPEG_MIN_MAJOR, 8)
 
     def test_routes_module_owns_injected_wsgi_backend_selection_and_teardown(self):
@@ -5958,8 +5985,8 @@ class FfmpegCapabilitiesTests(unittest.TestCase):
 
     def test_check_ffmpeg_capabilities_treats_unparseable_as_unknown(self):
         # Monkeypatch get_ffmpeg_version to a snapshot-style string. The
-        # audit must not return current=false in that case — snapshot
-        # builds are intentionally non-numeric and we shouldn't alarm.
+        # audit must not return current=false in that case — an undated
+        # snapshot is intentionally non-numeric and we shouldn't guess.
         original = ad.get_ffmpeg_version
         ad.get_ffmpeg_version = lambda *a, **k: 'N-118574-gabc1234'
         try:
@@ -5968,8 +5995,20 @@ class FfmpegCapabilitiesTests(unittest.TestCase):
             ad.get_ffmpeg_version = original
         self.assertIsNone(result['majorVersion'])
         self.assertIsNone(result['current'])
-        self.assertIn('not detected', result['message'].lower() + ' ' +
-                      'or snapshot' if 'snapshot' not in result['message'].lower() else result['message'])
+        self.assertIn('not detected', result['message'].lower())
+
+    def test_check_ffmpeg_capabilities_compares_snapshot_build_date(self):
+        original = ad.get_ffmpeg_version
+        ad.get_ffmpeg_version = lambda *a, **k: 'N-123918-gabc-20260411'
+        try:
+            result = ad.check_ffmpeg_capabilities(force=True)
+        finally:
+            ad.get_ffmpeg_version = original
+        self.assertIsNone(result['majorVersion'])
+        self.assertEqual(result['buildDate'], '2026-04-11')
+        self.assertEqual(result['comparison'], 'snapshot-date')
+        self.assertFalse(result['current'])
+        self.assertIn('re-download', result['message'])
 
     def test_check_ffmpeg_capabilities_marks_current_when_at_or_above_floor(self):
         original = ad.get_ffmpeg_version
@@ -10840,6 +10879,29 @@ class QuarantinedBinaryTests(unittest.TestCase):
             self.assertEqual(worker._report_managed_binary(missing, "yt-dlp"),
                              "missing")
         self.assertEqual(logged, [])
+
+    def test_setup_refetches_a_stale_ffmpeg_snapshot(self):
+        logged = []
+        persisted = []
+        worker = types.SimpleNamespace(
+            force_ffmpeg=False,
+            log=types.SimpleNamespace(emit=logged.append),
+            _dependencies={
+                'check_ffmpeg_capabilities': lambda **_kwargs: {
+                    'current': False,
+                    'comparison': 'snapshot-date',
+                    'message': 'old snapshot',
+                },
+                'write_persistent_log': persisted.append,
+            },
+        )
+        core = gui_module_for_tests().SetupWorkerCore
+        worker._ffmpeg_needs_refresh = types.MethodType(
+            core._ffmpeg_needs_refresh, worker
+        )
+        self.assertTrue(worker._ffmpeg_needs_refresh('ok'))
+        self.assertTrue(any('security floor' in message for message in logged))
+        self.assertEqual(len(persisted), 1)
 
     def test_setup_refetches_rather_than_reporting_already_installed(self):
         # The gate itself, read from source: an existence check here is what

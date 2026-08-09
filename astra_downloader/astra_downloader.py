@@ -134,7 +134,7 @@ try:
         MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
         managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
-        parse_ffmpeg_major, parse_ffmpeg_version_output,
+        parse_ffmpeg_major, parse_ffmpeg_snapshot_date, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
         parse_ytdlp_version_output,
         probe_javascript_execution as _owned_probe_javascript_execution,
@@ -241,7 +241,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
         managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
-        parse_ffmpeg_major, parse_ffmpeg_version_output,
+        parse_ffmpeg_major, parse_ffmpeg_snapshot_date, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
         parse_ytdlp_version_output,
         probe_javascript_execution as _owned_probe_javascript_execution,
@@ -1455,14 +1455,19 @@ _FFMPEG_MIN_MAJOR = 8  # ffmpeg 8.x is current as of 2026.
 # Exact security floor. FFmpeg 8.1.2 fixes the MagicYUV decoder RCE
 # (CVE-2026-8461, CVSS 8.8); 8.0/8.0.1 carry the RV60 OOB-read cluster. A
 # stale ffmpeg on PATH that reports a tagged version below this is flagged on
-# /health. The bundled master build reports no numeric version and is never
-# flagged (it is always newer than the floor).
+# /health. Master snapshots use their embedded build date against the dated
+# security floor below.
 _FFMPEG_MIN_VERSION = "8.1.2"
+# Master snapshots have no semver, so compare their embedded build date to
+# the release date of the exact security floor. A snapshot from before this
+# date is re-fetched through the same verified bootstrap as a stale release.
+_FFMPEG_MIN_SNAPSHOT_DATE = "2026-06-17"
 _ffmpeg_capabilities_probe = FfmpegCapabilitiesProbe(
     version_getter=lambda: get_ffmpeg_version(),
     clock=lambda: time.time(),
     minimum_major=_FFMPEG_MIN_MAJOR,
     minimum_version=_FFMPEG_MIN_VERSION,
+    minimum_snapshot_date=_FFMPEG_MIN_SNAPSHOT_DATE,
     ttl_seconds=3600,
 )
 
@@ -3449,6 +3454,7 @@ class SetupWorker(SetupWorkerCore):
                 'FFMPEG_SHA256_ASSET': lambda: FFMPEG_SHA256_ASSET,
                 'FFMPEG_SHA256_URL': lambda: FFMPEG_SHA256_URL,
                 'FFMPEG_URL': lambda: FFMPEG_URL,
+                'check_ffmpeg_capabilities': lambda *args, **kwargs: check_ffmpeg_capabilities(*args, **kwargs),
                 'HELPER_DOWNLOAD_MAX_BYTES': lambda: HELPER_DOWNLOAD_MAX_BYTES,
                 'MANAGED_BINARY_ANTIVIRUS_ADVICE': lambda: MANAGED_BINARY_ANTIVIRUS_ADVICE,
                 'managed_binary_state': lambda *args, **kwargs: managed_binary_state(*args, **kwargs),

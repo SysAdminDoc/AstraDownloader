@@ -4,6 +4,7 @@ import re
 import subprocess
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -24,6 +25,7 @@ __all__ = (
     "reset_deno_runtime_cache", "provision_deno", "_parse_ytdlp_release_date",
     "ytdlp_needs_external_runtime", "YTDLP_EXTERNAL_RUNTIME_CUTOFF",
     "DENO_MIN_VERSION", "NODE_MIN_VERSION", "parse_ffmpeg_major",
+    "parse_ffmpeg_snapshot_date",
     "check_ffmpeg_capabilities", "reset_ffmpeg_capabilities_cache",
     "build_youtube_extractor_args", "is_youtube_url", "should_check_ytdlp_update",
     "maybe_auto_update_ytdlp", "_run_ytdlp_self_update",
@@ -323,6 +325,23 @@ def parse_ffmpeg_major(version_string):
     return int(match.group(1)) if match else None
 
 
+def parse_ffmpeg_snapshot_date(version_string):
+    """Return the ISO build date embedded in an FFmpeg master snapshot.
+
+    The BtbN master archive reports versions such as
+    N-123918-gf7ca6f7481-20260411. The date is the only comparable freshness
+    signal for that build family; malformed or undated snapshots remain
+    unknown rather than being guessed current or stale.
+    """
+    match = re.search(r'(?<!\d)(20\d{6})(?!\d)', str(version_string or ''))
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), '%Y%m%d').date().isoformat()
+    except ValueError:
+        return None
+
+
 def parse_javascript_runtime_version(runtime, output):
     if not output:
         return None
@@ -558,15 +577,19 @@ class FfmpegCapabilitiesProbe:
     """Cached ffmpeg support-floor assessment over an injected version source."""
 
     def __init__(self, *, version_getter, clock=time.time, minimum_major=7,
-                 minimum_version=None, ttl_seconds=3600):
+                 minimum_version=None, minimum_snapshot_date=None,
+                 ttl_seconds=3600):
         self._version_getter = version_getter
         self._clock = clock
         self._minimum_major = max(0, int(minimum_major))
         # Optional exact semver floor (e.g. "8.1.2"). Only applied when the
         # reported version parses to a numeric release; master/snapshot builds
-        # ("N-119847-g…") report no numeric major and are never flagged, since
-        # they are always newer than any tagged floor.
+        # ("N-119847-g…") use the embedded build date when a dated floor is
+        # configured.
         self._minimum_version = str(minimum_version).strip() if minimum_version else None
+        self._minimum_snapshot_date = (
+            str(minimum_snapshot_date).strip() if minimum_snapshot_date else None
+        )
         self._ttl_seconds = max(0, float(ttl_seconds))
         self._value = None
         self._checked_at = 0.0
@@ -589,11 +612,35 @@ class FfmpegCapabilitiesProbe:
             now = self._clock()
             major = parse_ffmpeg_major(raw)
             if major is None:
-                result = {
-                    'majorVersion': None,
-                    'current': None,
-                    'message': 'ffmpeg version not detected (first-run bootstrap or snapshot build)',
-                }
+                snapshot_date = parse_ffmpeg_snapshot_date(raw)
+                if self._minimum_snapshot_date and snapshot_date:
+                    current = snapshot_date >= self._minimum_snapshot_date
+                    if current:
+                        message = (
+                            f'ffmpeg snapshot build date {snapshot_date} meets the '
+                            f'{self._minimum_snapshot_date}+ dated floor'
+                        )
+                    else:
+                        message = (
+                            f'ffmpeg snapshot build date {snapshot_date} is below the '
+                            f'{self._minimum_snapshot_date} dated floor '
+                            '(known-vulnerable); re-download via the bundled bootstrap'
+                        )
+                    result = {
+                        'majorVersion': None,
+                        'buildDate': snapshot_date,
+                        'comparison': 'snapshot-date',
+                        'current': current,
+                        'message': message,
+                    }
+                else:
+                    result = {
+                        'majorVersion': None,
+                        'buildDate': snapshot_date,
+                        'comparison': 'unknown',
+                        'current': None,
+                        'message': 'ffmpeg version not detected (first-run bootstrap or undated snapshot build)',
+                    }
             elif self._minimum_version:
                 # A numeric major means a tagged release, so compare the full
                 # reported version against the exact floor. _compare_semver
@@ -608,6 +655,8 @@ class FfmpegCapabilitiesProbe:
                     )
                 result = {
                     'majorVersion': major,
+                    'buildDate': None,
+                    'comparison': 'release-version',
                     'current': current,
                     'message': message,
                 }
@@ -622,6 +671,8 @@ class FfmpegCapabilitiesProbe:
                     )
                 result = {
                     'majorVersion': major,
+                    'buildDate': None,
+                    'comparison': 'release-major',
                     'current': current,
                     'message': message,
                 }
@@ -642,6 +693,7 @@ _OWNED_EXPORTS = {
     "evaluate_sabr_support", "SABR_NATIVE_MIN_VERSION",
     "ytdlp_needs_external_runtime", "build_javascript_runtime_args",
     "build_youtube_extractor_args", "parse_ffmpeg_major",
+    "parse_ffmpeg_snapshot_date",
     "_run_captured", "ExecutableVersionProbe", "parse_ytdlp_version_output",
     "parse_impersonate_targets", "ImpersonateTargetsProbe",
     "IMPERSONATE_TARGET_RE",

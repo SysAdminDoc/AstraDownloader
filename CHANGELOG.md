@@ -125,6 +125,12 @@ repository's git log.
 - **The no-provider YouTube fallback now starts with `visionos`.** The client
   chain is pinned to the 2026-08-08 measurement while keeping the fallback
   explicit for the next yt-dlp extractor drift check.
+- **The ffmpeg security floor now covers provisioned snapshots.** Undated
+  snapshots remain unknown, while a dated master build is compared against
+  the 2026-06-17 floor and an older build is re-fetched through verified setup.
+- **The no-provider YouTube fallback now starts with `visionos`.** The client
+  chain is pinned to the 2026-08-08 measurement while keeping the fallback
+  explicit for the next yt-dlp extractor drift check.
 
 ## [2.4.0] - 2026-08-06
 

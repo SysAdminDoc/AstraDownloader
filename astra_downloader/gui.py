@@ -532,6 +532,7 @@ class FolderPickerService(QObject):
 _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'MANAGED_BINARY_ANTIVIRUS_ADVICE',
     'managed_binary_state',
+    'check_ffmpeg_capabilities',
     'DEFAULT_CONFIG',
     'FFMPEG_PATH',
     'FFMPEG_SHA256_ASSET',
@@ -621,6 +622,25 @@ class SetupWorkerCore(QThread):
             self.log.emit(message)
             self._dependencies['write_persistent_log'](message)
         return state
+
+    def _ffmpeg_needs_refresh(self, state):
+        """Return whether ffmpeg is absent, stale, damaged, or forced."""
+        if self.force_ffmpeg or state != 'ok':
+            return True
+        try:
+            capabilities = self._dependencies['check_ffmpeg_capabilities'](force=True)
+        except Exception as exc:  # noqa: BLE001 - health is advisory during setup
+            self.log.emit(f"ffmpeg freshness check skipped: {exc}")
+            return False
+        if capabilities.get('current') is False:
+            message = (
+                "Installed ffmpeg is below the verified security floor; "
+                "downloading a fresh copy."
+            )
+            self.log.emit(message)
+            self._dependencies['write_persistent_log'](message)
+            return True
+        return False
 
     def _verify_required_checksum(self, path, sidecar_url, asset_name=None, label=""):
         """Fetch the SHA-256 sidecar and verify before trusting a helper exe."""
@@ -722,7 +742,7 @@ class SetupWorkerCore(QThread):
             # ffmpeg (35-58% — the heaviest step, now byte-level progress)
             ffmpeg_state = self._report_managed_binary(
                 self._value('FFMPEG_PATH'), "ffmpeg")
-            if self.force_ffmpeg or ffmpeg_state != 'ok':
+            if self._ffmpeg_needs_refresh(ffmpeg_state):
                 self.log.emit("Downloading ffmpeg (this may take a moment)...")
                 self.progress.emit(35)
                 tmp_zip = self._value('INSTALL_DIR') / f".ffmpeg.{uuid.uuid4().hex}.zip"
