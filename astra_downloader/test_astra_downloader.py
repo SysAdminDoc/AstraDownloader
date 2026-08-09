@@ -167,6 +167,24 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(invalid["Xff"], "")
         self.assertEqual(invalid["GeoVerificationProxy"], "")
 
+    def test_output_template_bounds_split_long_text_and_preserve_literals(self):
+        import config as config_module
+
+        template = "%%(title)s/%(uploader)s/%(title)s.%(ext)s"
+        bounded = config_module.bound_output_template_fields(template)
+
+        self.assertEqual(
+            bounded,
+            "%%(title)s/%(uploader).100B/%(title).100B.%(ext)s",
+        )
+        self.assertEqual(config_module.bound_output_template_fields(bounded), bounded)
+        self.assertIn(
+            "%(title).100s",
+            config_module.bound_output_template_fields(
+                "%(title).999s/%(uploader)s.%(ext)s"
+            ),
+        )
+
     def test_default_download_path_prefers_the_windows_known_folder(self):
         import config as config_module
 
@@ -635,6 +653,33 @@ class SubscriptionTests(unittest.TestCase):
                 [item["id"] for item in store.due_subscriptions(now=1300)],
                 [record["id"]],
             )
+
+    def test_due_subscriptions_filters_disabled_and_future_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "due-filter.json")
+            due, error = store.add_subscription(
+                "https://www.youtube.com/@due-channel", interval_minutes=1,
+                now=1000,
+            )
+            self.assertIsNone(error)
+            future, error = store.add_subscription(
+                "https://www.youtube.com/@future-channel", interval_minutes=10,
+                now=1000,
+            )
+            self.assertIsNone(error)
+            disabled, error = store.add_subscription(
+                "https://www.youtube.com/@disabled-channel", interval_minutes=1,
+                now=1000,
+            )
+            self.assertIsNone(error)
+            self.assertIsNotNone(store.update_subscription(
+                disabled["id"], enabled=False, now=1000
+            )[0])
+            store.begin_scan(future["id"], now=1000)
+
+            due_ids = [item["id"] for item in store.due_subscriptions(now=1000)]
+
+            self.assertEqual(due_ids, [due["id"]])
 
     def test_reconcile_reopens_an_interrupted_archive_claim_for_retry(self):
         subs = subscriptions_module()
@@ -1146,6 +1191,40 @@ class CompanionGuiPolicyTests(unittest.TestCase):
                 self.assertEqual(gui_module.sanitize_csv_cell(value), "'" + value)
         self.assertEqual(gui_module.sanitize_csv_cell("safe title"), "safe title")
         self.assertEqual(gui_module.sanitize_csv_cell(42), 42)
+
+    def test_export_history_writes_filtered_rows_and_escapes_formula_cells(self):
+        events = []
+        window = types.SimpleNamespace(
+            config=FakeConfig({"DownloadPath": tempfile.gettempdir()}),
+            _history_query=lambda **_kwargs: {
+                "history": [{
+                    "title": "=HYPERLINK(\"https://evil.example\")",
+                    "filename": "clip.mp4",
+                    "format": "mp4",
+                    "quality": "1080p",
+                    "status": "complete",
+                    "duration": 12,
+                    "date": "2026-08-09",
+                    "url": "https://example.com/video",
+                }],
+            },
+            _show_history_status=lambda message, tone: events.append((message, tone)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "history.csv"
+            with mock.patch.object(
+                ad.QFileDialog,
+                "getSaveFileName",
+                return_value=(str(target), "CSV files (*.csv)"),
+            ):
+                ad.MainWindow._export_history(window)
+
+            body = target.read_text(encoding="utf-8-sig")
+
+        self.assertIn("'=HYPERLINK", body)
+        self.assertIn("clip.mp4", body)
+        self.assertEqual(events[-1][1], "success")
+        self.assertIn("Exported 1", events[-1][0])
 
     def test_companion_qt_catalogues_cover_every_supported_locale_and_load_german(self):
         """Every advertised locale ships a compiled catalogue, and nothing ships
@@ -1889,6 +1968,26 @@ class InstanceCommandTests(unittest.TestCase):
 
 
 class DiagnosticsBundleTests(unittest.TestCase):
+    def test_redact_diagnostic_text_removes_private_paths_urls_and_secrets(self):
+        secret = "secret-token-1234567890"
+        raw = (
+            f"GET https://example.com/watch?v=private123 "
+            f"Authorization: Bearer {secret} "
+            f"at C:\\Users\\private\\Videos\\clip.mp4"
+        )
+
+        redacted = ad.redact_diagnostic_text(
+            raw,
+            secrets=(secret,),
+        )
+
+        self.assertNotIn("https://example.com", redacted)
+        self.assertNotIn("private123", redacted)
+        self.assertNotIn(secret, redacted)
+        self.assertNotIn("C:\\Users\\private", redacted)
+        self.assertIn("[redacted URL]", redacted)
+        self.assertIn("[redacted path]", redacted)
+
     def test_seed_log_ring_rehydrates_the_persisted_tail(self):
         from collections import deque
 
@@ -2004,6 +2103,54 @@ class DiagnosticsBundleTests(unittest.TestCase):
 
 
 class UninstallCleanupTests(unittest.TestCase):
+    def test_uninstall_removes_app_owned_artifacts_but_keeps_downloads(self):
+        deleted = []
+
+        def delete_key(_root, path):
+            deleted.append(path)
+
+        fake_winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER="HKCU",
+            DeleteKey=delete_key,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            install = root / "AstraDownloader"
+            native = root / "native-host"
+            desktop = root / "Desktop"
+            start_menu = root / "Start Menu"
+            downloads = root / "Videos"
+            install.mkdir()
+            native.mkdir()
+            desktop.mkdir()
+            start_menu.mkdir()
+            downloads.mkdir()
+            (install / "config.json").write_text("state", encoding="utf-8")
+            (native / "host.json").write_text("manifest", encoding="utf-8")
+            (desktop / ad.SHORTCUT_NAME).write_text("shortcut", encoding="utf-8")
+            (start_menu / ad.SHORTCUT_NAME).write_text("shortcut", encoding="utf-8")
+            downloaded = downloads / "keep-me.mp4"
+            downloaded.write_bytes(b"downloaded")
+
+            with mock.patch.dict(sys.modules, {"winreg": fake_winreg}), \
+                 mock.patch.object(ad, "write_persistent_log"), \
+                 mock.patch.object(ad, "stop_running_companion_for_uninstall"), \
+                 mock.patch.object(ad.subprocess, "run"), \
+                 mock.patch.object(ad, "NATIVE_HOST_DIR", native), \
+                 mock.patch.object(ad, "INSTALL_DIR", install), \
+                 mock.patch.object(ad, "start_menu_programs_dir", return_value=start_menu), \
+                 mock.patch.object(ad.Path, "home", return_value=root):
+                with self.assertRaises(SystemExit) as ctx:
+                    ad.run_uninstall()
+
+            self.assertEqual(ctx.exception.code, 0)
+            self.assertFalse(install.exists())
+            self.assertFalse(native.exists())
+            self.assertFalse((desktop / ad.SHORTCUT_NAME).exists())
+            self.assertFalse((start_menu / ad.SHORTCUT_NAME).exists())
+            self.assertTrue(downloaded.exists(), "uninstall must not remove downloads")
+            self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
+
     def test_uninstall_removes_the_integration_stamp(self):
         deleted = []
 
@@ -3063,6 +3210,49 @@ class DownloadCardFocusTests(unittest.TestCase):
 
 
 class SiteLoginImportBoundTests(unittest.TestCase):
+    def test_cookie_file_import_reads_bounded_text_and_applies_store_result(self):
+        class TextField:
+            def __init__(self, value):
+                self.value = value
+
+            def text(self):
+                return self.value
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_path = Path(tmp) / "cookies.txt"
+            cookie_text = (
+                "# Netscape HTTP Cookie File\n"
+                ".example.com\tTRUE\t/\tTRUE\t2000000000\tsid\tsecret\n"
+            )
+            cookie_path.write_text(cookie_text, encoding="utf-8")
+            imported = {"site": "example.com", "cookies": 1}
+            store = mock.Mock()
+            store.import_netscape_text.return_value = (imported, None)
+            applied = []
+            window = types.SimpleNamespace(
+                _site_login_store=lambda: store,
+                _value=lambda name: ad.MAX_SITE_LOGIN_TEXT_BYTES
+                if name == "MAX_SITE_LOGIN_TEXT_BYTES" else None,
+                site_login_url=TextField("https://example.com/video"),
+                _apply_site_login_result=lambda result, error: applied.append(
+                    (result, error)
+                ),
+                _show_site_login_status=lambda *_args: self.fail(
+                    "a valid cookie file should not show an error"
+                ),
+            )
+            with mock.patch.object(
+                ad.QFileDialog,
+                "getOpenFileName",
+                return_value=(str(cookie_path), "Cookie files (*.txt)"),
+            ):
+                ad.MainWindow._import_site_login_from_file(window)
+
+        store.import_netscape_text.assert_called_once_with(
+            "https://example.com/video", cookie_text, source="cookies.txt"
+        )
+        self.assertEqual(applied, [(imported, None)])
+
     def test_an_oversized_cookie_file_is_rejected_before_it_is_read(self):
         # The 1 MB cap lives downstream of the read, and the read is on the
         # GUI thread — a huge pick froze the window before the cap applied.
@@ -7575,6 +7765,168 @@ class EndToEndDownloadTests(unittest.TestCase):
         self.assertEqual(terminated, retry_processes,
                          "a retry spawned after cancellation must be terminated immediately")
         self.assertEqual(download.status, 'cancelled')
+
+    def test_stall_watchdog_terminates_a_hung_download_and_classifies_it(self):
+        import importlib
+
+        download_module = importlib.import_module("download")
+        terminated = []
+        stopped = threading.Event()
+
+        class FakeProc:
+            def __init__(self):
+                self.returncode = None
+                self.stdout = self.BlockingStdout(self, stopped)
+
+            class BlockingStdout:
+                def __init__(self, proc, stop_event):
+                    self.proc = proc
+                    self.stop_event = stop_event
+
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    if not self.stop_event.wait(1):
+                        # A missing watchdog must not make this test hang
+                        # forever; it will still fail the outcome assertions.
+                        self.proc.returncode = 1
+                    raise StopIteration
+
+                def close(self):
+                    return None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self):
+                return self.returncode or 1
+
+        process = FakeProc()
+
+        def terminate(proc):
+            terminated.append(proc)
+            stopped.set()
+            proc.returncode = 1
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                FakeHistory(),
+            )
+            manager._dependencies["spawn_ytdlp"] = lambda *_args, **_kwargs: process
+            manager._dependencies["terminate_process_tree"] = terminate
+            manager._dependencies["probe_po_token_provider"] = lambda: None
+            manager._dependencies["probe_javascript_runtime"] = lambda **_kwargs: {}
+            manager._dependencies["build_javascript_runtime_args"] = lambda *_args, **_kwargs: []
+            manager._dependencies["build_youtube_extractor_args"] = lambda *_args, **_kwargs: []
+            download = ad.Download(
+                "dl_stall_watchdog",
+                "https://example.com/video",
+                output_dir=tmpdir,
+            )
+            download.status = "queued"
+            with mock.patch.object(download_module, "DOWNLOAD_STALL_TIMEOUT_SECONDS", 0), \
+                 mock.patch.object(download_module, "DOWNLOAD_WATCHDOG_POLL_SECONDS", 0.01):
+                manager._run_download(download)
+
+        self.assertEqual(terminated, [process])
+        self.assertEqual(download.status, "failed")
+        self.assertIn("Download stalled", download.error)
+        self.assertEqual(download.error_code, "network-unreachable")
+
+    def test_retry_watchdog_terminates_the_retried_hung_download(self):
+        import importlib
+
+        download_module = importlib.import_module("download")
+        terminated = []
+        stopped = threading.Event()
+
+        class CompletedProc:
+            def __init__(self):
+                self.returncode = 1
+                self.stdout = iter(["ERROR: This live event has ended.\n"])
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self):
+                return self.returncode
+
+            def terminate(self):
+                return None
+
+            def kill(self):
+                return None
+
+            def close_stdout(self):
+                return None
+
+        class HangingProc:
+            def __init__(self):
+                self.returncode = None
+                self.stdout = self.BlockingStdout(self, stopped)
+
+            class BlockingStdout:
+                def __init__(self, proc, stop_event):
+                    self.proc = proc
+                    self.stop_event = stop_event
+
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    if not self.stop_event.wait(1):
+                        self.proc.returncode = 1
+                    raise StopIteration
+
+                def close(self):
+                    return None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self):
+                return self.returncode or 1
+
+        first = CompletedProc()
+        retry = HangingProc()
+        processes = iter((first, retry))
+
+        def spawn(*_args, **_kwargs):
+            return next(processes)
+
+        def terminate(proc):
+            terminated.append(proc)
+            stopped.set()
+            proc.returncode = 1
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager._dependencies["spawn_ytdlp"] = spawn
+            manager._dependencies["terminate_process_tree"] = terminate
+            manager._dependencies["probe_po_token_provider"] = lambda: None
+            manager._dependencies["probe_javascript_runtime"] = lambda **_kwargs: {}
+            manager._dependencies["build_javascript_runtime_args"] = lambda *_args, **_kwargs: []
+            manager._dependencies["build_youtube_extractor_args"] = lambda *_args, **_kwargs: []
+            cookie_jar = Path(tmpdir) / "cookies.txt"
+            cookie_jar.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+            download = ad.Download(
+                "dl_retry_watchdog",
+                "https://www.youtube.com/watch?v=retry-watchdog",
+                output_dir=tmpdir,
+            )
+            download.status = "queued"
+            download.cookies_file = str(cookie_jar)
+            with mock.patch.object(download_module, "DOWNLOAD_STALL_TIMEOUT_SECONDS", 0), \
+                 mock.patch.object(download_module, "DOWNLOAD_WATCHDOG_POLL_SECONDS", 0.01):
+                manager._run_download(download)
+
+        self.assertEqual(terminated, [retry])
+        self.assertEqual(download.status, "failed")
+        self.assertIn("Download stalled", download.error)
+        self.assertEqual(download.error_code, "network-unreachable")
 
     def test_shared_output_parser_never_resurrects_a_cancelled_download(self):
         # The retry's cloned loop lacked the original's cancelled guard, so a
@@ -15393,6 +15745,124 @@ class DownloadPageFeedbackTests(unittest.TestCase):
 
 class WindowTeardownTests(unittest.TestCase):
     """Nothing the window scheduled outlives it."""
+
+    def test_force_close_persists_state_cancels_work_and_accepts_event(self):
+        class Event:
+            def __init__(self):
+                self.accepted = False
+                self.ignored = False
+
+            def accept(self):
+                self.accepted = True
+
+            def ignore(self):
+                self.ignored = True
+
+        class Timer:
+            def __init__(self):
+                self.stopped = False
+
+            def stop(self):
+                self.stopped = True
+
+        class Tray:
+            def __init__(self):
+                self.hidden = False
+                self.messages = []
+
+            def isVisible(self):
+                return True
+
+            def showMessage(self, *args):
+                self.messages.append(args)
+
+            def hide(self):
+                self.hidden = True
+
+        logs = []
+        cancelled = []
+        timers = [Timer() for _ in range(6)]
+        window = types.SimpleNamespace(
+            _force_exit=True,
+            config=FakeConfig({"CloseToTray": False}),
+            server_running=False,
+            _server_starting=False,
+            tray=Tray(),
+            dl_manager=types.SimpleNamespace(
+                cancel_all=lambda: cancelled.append(True),
+            ),
+            _persist_window_state=lambda: logs.append("persisted"),
+            _stop_instance_command_listener=lambda: logs.append("listener stopped"),
+            _subscription_manager=lambda: None,
+            _downloads_that_will_be_cancelled=lambda: 3,
+            _append_log=logs.append,
+            _value=lambda name: "Astra Downloader" if name == "APP_NAME" else None,
+            tools_status_timer=timers[0],
+            update_timer=timers[1],
+            cleanup_timer=timers[2],
+            _format_probe_timer=timers[3],
+            _ui_refresh_timer=timers[4],
+            _history_filter_timer=timers[5],
+        )
+        event = Event()
+
+        ad.MainWindow.closeEvent(window, event)
+
+        self.assertTrue(event.accepted)
+        self.assertFalse(event.ignored)
+        self.assertEqual(cancelled, [True])
+        self.assertEqual(logs[:2], ["persisted", "listener stopped"])
+        self.assertTrue(any("cancel 3 active downloads" in text for text in logs))
+        self.assertEqual(len(window.tray.messages), 1)
+        self.assertTrue(window.tray.hidden)
+        self.assertTrue(all(timer.stopped for timer in timers))
+
+    def test_close_to_tray_hides_without_cancelling_work(self):
+        class Event:
+            def __init__(self):
+                self.accepted = False
+                self.ignored = False
+
+            def accept(self):
+                self.accepted = True
+
+            def ignore(self):
+                self.ignored = True
+
+        class Tray:
+            def __init__(self):
+                self.messages = []
+
+            def isVisible(self):
+                return True
+
+            def showMessage(self, *args):
+                self.messages.append(args)
+
+        hidden = []
+        cancelled = []
+        window = types.SimpleNamespace(
+            _force_exit=False,
+            config=FakeConfig({"CloseToTray": True}),
+            tray=Tray(),
+            _tray_hint_shown=False,
+            _persist_window_state=lambda: None,
+            hide=lambda: hidden.append(True),
+            _value=lambda name: "Astra Downloader" if name == "APP_NAME" else None,
+            dl_manager=types.SimpleNamespace(
+                cancel_all=lambda: cancelled.append(True),
+            ),
+        )
+        event = Event()
+
+        ad.MainWindow.closeEvent(window, event)
+
+        self.assertTrue(event.ignored)
+        self.assertFalse(event.accepted)
+        self.assertEqual(hidden, [True])
+        self.assertEqual(cancelled, [])
+        self.assertEqual(len(window.tray.messages), 1)
+        self.assertTrue(window._tray_hint_shown)
 
     def test_close_reports_the_work_cancelled_before_calling_cancel_all(self):
         source = inspect.getsource(gui_module_for_tests().MainWindowCore.closeEvent)
