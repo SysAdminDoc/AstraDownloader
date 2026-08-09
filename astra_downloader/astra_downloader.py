@@ -1487,6 +1487,7 @@ def reset_ffmpeg_capabilities_cache():
 # same-day fix — while still bounding GitHub release checks to at most twice a
 # day per user.
 _YTDLP_UPDATE_INTERVAL_HOURS = 12
+_YTDLP_UPDATE_FAILURE_BACKOFF_HOURS = 1
 _YTDLP_UPDATE_LOCK = threading.Lock()
 _COMPANION_UPDATE_LOCK = threading.Lock()
 
@@ -1576,25 +1577,44 @@ def _parse_iso_like(value):
 
 
 def should_check_ytdlp_update(config, interval_hours=_YTDLP_UPDATE_INTERVAL_HOURS):
-    last = config.get("LastYtDlpUpdateCheck", "") if config else ""
-    parsed = _parse_iso_like(last)
-    if parsed is None:
+    if not config:
         return True
-    return (datetime.now() - parsed).total_seconds() > interval_hours * 3600
+    now = datetime.now()
+    failure = _parse_iso_like(config.get("LastYtDlpUpdateFailure", ""))
+    if failure is not None:
+        failure_age = (now - failure).total_seconds()
+        if failure_age <= _YTDLP_UPDATE_FAILURE_BACKOFF_HOURS * 3600:
+            return False
+    success = _parse_iso_like(config.get("LastYtDlpUpdateCheck", ""))
+    if success is None:
+        return True
+    return (now - success).total_seconds() > interval_hours * 3600
 
 
-def mark_ytdlp_update_check(config):
+def mark_ytdlp_update_attempt(config, *, succeeded):
+    """Persist a short failure backoff or the normal successful throttle."""
     if not config:
         return
     try:
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fields = {
+            "LastYtDlpUpdateAttempt": stamp,
+            "LastYtDlpUpdateFailure": "" if succeeded else stamp,
+        }
+        if succeeded:
+            fields["LastYtDlpUpdateCheck"] = stamp
         if isinstance(config, dict):
-            config["LastYtDlpUpdateCheck"] = stamp
+            config.update(fields)
         else:
-            config.set("LastYtDlpUpdateCheck", stamp)
+            for key, value in fields.items():
+                config.set(key, value)
             config.save()
     except Exception as e:
         write_persistent_log(f"Could not persist yt-dlp update timestamp: {e}")
+
+
+def mark_ytdlp_update_check(config):
+    mark_ytdlp_update_attempt(config, succeeded=True)
 
 
 def _run_ytdlp_self_update(config, source_tag):
@@ -1628,6 +1648,7 @@ def _run_ytdlp_self_update(config, source_tag):
         'rolled_back': False,
         'source': source_tag,
     }
+    update_succeeded = False
     try:
         if not version_before:
             return {
@@ -1705,6 +1726,7 @@ def _run_ytdlp_self_update(config, source_tag):
 
         if staged_version == version_before:
             mark_ytdlp_update_check(config)
+            update_succeeded = True
             rollback_version = _probe_ytdlp_binary(backup_path) if backup_path.exists() else ''
             _write_update_state(
                 _ytdlp_update_state_path(), status='current',
@@ -1759,6 +1781,7 @@ def _run_ytdlp_self_update(config, source_tag):
             }
 
         mark_ytdlp_update_check(config)
+        update_succeeded = True
         _ytdlp_version_probe.prime(active_version)
         _write_update_state(
             _ytdlp_update_state_path(), status='active',
@@ -1806,6 +1829,8 @@ def _run_ytdlp_self_update(config, source_tag):
             'error_code': error_code,
         }
     finally:
+        if not update_succeeded:
+            mark_ytdlp_update_attempt(config, succeeded=False)
         try:
             stage_path.unlink(missing_ok=True)
         except Exception:

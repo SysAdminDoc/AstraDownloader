@@ -217,6 +217,8 @@ DEFAULT_CONFIG = {
     # staged in the GUI and never enqueued without an explicit user action.
     "ClipboardLinkGrabber": False,
     "LastYtDlpUpdateCheck": "",
+    "LastYtDlpUpdateAttempt": "",
+    "LastYtDlpUpdateFailure": "",
     "ExtraOutputRoots": [],
     "LastFfmpegCheck": "",
     "MaxFileSizeMB": 0,
@@ -1040,6 +1042,8 @@ def sanitize_config(raw):
     }
     data["Language"] = language if language in allowed_languages else "system"
     data["LastYtDlpUpdateCheck"] = clean_text(data.get("LastYtDlpUpdateCheck"), "", 40)
+    data["LastYtDlpUpdateAttempt"] = clean_text(data.get("LastYtDlpUpdateAttempt"), "", 40)
+    data["LastYtDlpUpdateFailure"] = clean_text(data.get("LastYtDlpUpdateFailure"), "", 40)
     data["LastFfmpegCheck"] = clean_text(data.get("LastFfmpegCheck"), "", 40)
     data["MaxFileSizeMB"] = clamp_int(data.get("MaxFileSizeMB"), 0, 0, 102400)
     data["OutputTemplate"] = normalize_output_template(data.get("OutputTemplate"))
