@@ -119,6 +119,9 @@ repository's git log.
 - **A forked launch cannot silently downgrade the managed app.** Frozen
   executable relocation now uses byte-verified atomic copying, preserves a
   newer installed binary, and leaves the previous target intact on failure.
+- **Release builds now emit `AstraDownloader.exe.sha256`.** The staging lane
+  validates the source sidecar against the opened EXE and rechecks the staged
+  pair, with no hand-maintained checksum or nonexistent release command.
 
 ## [2.4.0] - 2026-08-06
 

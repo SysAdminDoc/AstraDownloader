@@ -13,8 +13,10 @@ const REPO_ROOT = path.join(__dirname, '..');
 const BUILD_DIR = path.join(REPO_ROOT, 'build');
 const DEFAULT_SOURCE = path.join(REPO_ROOT, 'AstraDownloader.exe');
 const DEFAULT_METADATA_SOURCE = path.join(REPO_ROOT, 'astra_downloader', 'build', COMPANION_BUILD_METADATA_NAME);
+const DEFAULT_SIDECAR_SOURCE = `${DEFAULT_SOURCE}.sha256`;
 const DEST = path.join(BUILD_DIR, 'AstraDownloader.exe');
 const METADATA_DEST = path.join(BUILD_DIR, COMPANION_BUILD_METADATA_NAME);
+const SIDECAR_DEST = path.join(BUILD_DIR, 'AstraDownloader.exe.sha256');
 const MIN_BYTES = 1024;
 
 function openCompanionExe(filePath) {
@@ -66,7 +68,7 @@ function assertBuildDirExists() {
         stat = fs.statSync(BUILD_DIR);
     } catch (err) {
         if (err && err.code === 'ENOENT') {
-            throw new Error('build/ does not exist. Run `npm run build:userscript` before staging the companion EXE.');
+            throw new Error('build/ does not exist. Run `py -3.12 astra_downloader/build.py` before staging the companion EXE.');
         }
         throw err;
     }
@@ -105,16 +107,53 @@ function readValidatedMetadata(metadataPath, companionExe) {
     return metadata;
 }
 
-function stageCompanionRelease(sourcePath = DEFAULT_SOURCE, metadataPath = DEFAULT_METADATA_SOURCE) {
+function readValidatedSidecar(sidecarPath, companionExe) {
+    let contents;
+    try {
+        contents = fs.readFileSync(sidecarPath, 'utf8').trim();
+    } catch (err) {
+        if (err && err.code === 'ENOENT') {
+            throw new Error(`missing companion SHA-256 sidecar: ${sidecarPath}; rebuild with astra_downloader/build.py`);
+        }
+        throw new Error(`could not read companion SHA-256 sidecar: ${err.message}`);
+    }
+    const match = contents.match(/^([0-9a-f]{64})\s+\*?(.+)$/i);
+    const expected = sha256(companionExe);
+    if (!match || match[1].toLowerCase() !== expected
+        || path.basename(match[2].trim()) !== 'AstraDownloader.exe') {
+        throw new Error('companion SHA-256 sidecar does not match the staged AstraDownloader.exe');
+    }
+    return expected;
+}
+
+function writeValidatedSidecar(sidecarPath, companionExe) {
+    const digest = sha256(companionExe);
+    fs.writeFileSync(sidecarPath, `${digest}  AstraDownloader.exe\n`, 'utf8');
+    return readValidatedSidecar(sidecarPath, companionExe);
+}
+
+function stageCompanionRelease(
+    sourcePath = DEFAULT_SOURCE,
+    metadataPath = DEFAULT_METADATA_SOURCE,
+    sidecarPath = `${sourcePath}.sha256`,
+) {
     const resolvedSource = path.resolve(sourcePath);
+    const resolvedSidecar = path.resolve(sidecarPath || DEFAULT_SIDECAR_SOURCE);
     assertBuildDirExists();
     const companionExe = readValidatedCompanionExe(resolvedSource);
     const metadata = readValidatedMetadata(path.resolve(metadataPath), companionExe);
+    const companionDigest = readValidatedSidecar(resolvedSidecar, companionExe);
     fs.writeFileSync(DEST, companionExe);
     fs.writeFileSync(METADATA_DEST, JSON.stringify(metadata, null, 2) + '\n', 'utf8');
+    writeValidatedSidecar(SIDECAR_DEST, companionExe);
+    const stagedExe = fs.readFileSync(DEST);
+    const stagedDigest = readValidatedSidecar(SIDECAR_DEST, stagedExe);
+    if (stagedDigest !== companionDigest || stagedDigest !== sha256(stagedExe)) {
+        throw new Error('staged companion EXE and SHA-256 sidecar do not match');
+    }
     console.log(`Staged companion EXE: build/AstraDownloader.exe (${companionExe.length} bytes)`);
     console.log(`Staged companion inventory input: build/${COMPANION_BUILD_METADATA_NAME}`);
-    console.log('Run `npm run release:manifest -- --require-companion` to emit the SHA-256 sidecar and include both assets.');
+    console.log('Staged companion SHA-256 sidecar: build/AstraDownloader.exe.sha256');
 }
 
 if (require.main === module) {
@@ -128,5 +167,6 @@ if (require.main === module) {
 
 module.exports = {
     readValidatedMetadata,
+    readValidatedSidecar,
     stageCompanionRelease
 };

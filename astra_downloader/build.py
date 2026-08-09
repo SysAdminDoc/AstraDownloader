@@ -31,6 +31,7 @@ ROOT = HERE.parent
 SCRIPT = HERE / "astra_downloader.py"
 ICON = ROOT / "AstraDownloader.ico"
 OUT_EXE = ROOT / "AstraDownloader.exe"
+OUT_SHA256 = ROOT / "AstraDownloader.exe.sha256"
 TRANSLATIONS_DIR = HERE / "translations"
 TRANSLATION_BUILD_SCRIPT = ROOT / "scripts" / "build-companion-translations.py"
 
@@ -179,6 +180,21 @@ def sha256_file(path):
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def write_sha256_sidecar(exe_path, sidecar_path=None):
+    """Write the standard checksum manifest beside the exact EXE bytes."""
+    exe_path = Path(exe_path)
+    sidecar_path = Path(
+        sidecar_path or exe_path.with_name(exe_path.name + ".sha256")
+    )
+    digest = sha256_file(exe_path)
+    sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+    sidecar_path.write_text(
+        f"{digest}  {exe_path.name}\n",
+        encoding="ascii",
+    )
+    return digest
 
 
 def iter_toc_strings(value):
@@ -426,8 +442,10 @@ def build():
     OUT_EXE.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built, OUT_EXE)
     write_build_metadata(OUT_EXE)
+    write_sha256_sidecar(OUT_EXE, OUT_SHA256)
     size_mb = OUT_EXE.stat().st_size / (1024 * 1024)
     print(f"OK: {OUT_EXE} ({size_mb:.1f} MB)")
+    print(f"SHA-256 sidecar: {OUT_SHA256}")
     print(f"License inventory input: {BUILD_METADATA}")
 
 
