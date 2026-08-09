@@ -34,3 +34,20 @@ having.
 see because they are set at runtime through `setText()` rather than built
 through `tr()` — the History column headers render as "Duration", "Format"
 and "Quality" in every locale. That is a code change, not a translation.
+
+## Submit the portable manifest to the official winget repository — needs a release
+
+**State:** the application now has a self-contained `--portable` mode, a
+GUI-free `--install` path, and a schema-valid manifest under
+`packaging/winget/manifests`. The manifest points at the release artifact and
+its checksum, and `winget validate` passes locally.
+
+**What is blocked:** this repository has no published GitHub Release artifact
+for the manifest's version, and official winget publication requires a release
+URL with matching bytes plus a submission to `microsoft/winget-pkgs`. Creating
+that release and submitting the manifest is external release coordination, not
+a code change.
+
+**To unblock:** publish the versioned `AstraDownloader.exe` and sidecar from a
+release, update the manifest checksum if the release bytes differ, then submit
+the manifest directory to the official winget-pkgs repository.

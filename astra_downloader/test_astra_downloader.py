@@ -2405,6 +2405,74 @@ class InstalledExecutableTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b"managed-still-good")
 
 
+class PortableModeTests(unittest.TestCase):
+    def test_portable_mode_requested_by_flag_or_environment(self):
+        self.assertTrue(ad.portable_mode_requested(["--portable"]))
+        self.assertFalse(ad.portable_mode_requested(["--background"]))
+        with mock.patch.dict(os.environ, {"ASTRA_PORTABLE": "yes"}, clear=False):
+            self.assertTrue(ad.portable_mode_requested([]))
+
+    def test_portable_state_root_is_the_executable_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "AstraDownloader.exe"
+            with mock.patch.object(ad.sys, "frozen", True, create=True), \
+                 mock.patch.object(ad.sys, "executable", str(executable)):
+                self.assertEqual(ad.runtime_state_dir(True), executable.parent.resolve())
+
+    def test_portable_install_target_and_copy_stay_with_the_running_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "AstraDownloader.exe"
+            executable.write_bytes(b"portable")
+            with mock.patch.object(ad, "PORTABLE_MODE", True), \
+                 mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "atomic_copy_verified") as copy:
+                self.assertEqual(ad.install_target_exe(), executable)
+                self.assertEqual(ad.ensure_installed_executable(), executable)
+            copy.assert_not_called()
+
+    def test_portable_integrations_are_a_noop(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", True), \
+             mock.patch.object(ad, "launch_command_parts", return_value=("portable", [])) as launch, \
+             mock.patch.object(ad, "register_desktop_shortcut") as desktop, \
+             mock.patch.object(ad, "register_start_menu_shortcut") as start_menu, \
+             mock.patch.object(ad, "register_startup_task") as startup, \
+             mock.patch.object(ad, "register_protocol_handlers") as protocol:
+            self.assertEqual(ad.ensure_system_integrations(), ("portable", []))
+        launch.assert_called_once_with(prefer_installed=False)
+        desktop.assert_not_called()
+        start_menu.assert_not_called()
+        startup.assert_not_called()
+        protocol.assert_not_called()
+
+    def test_silent_install_requires_a_packaged_nonportable_copy(self):
+        with mock.patch.object(ad, "write_persistent_log") as log:
+            self.assertEqual(ad.companion_install_exit_code(["--install"]), 2)
+        log.assert_called_once()
+
+    def test_silent_install_rejects_portable_combination(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", True), \
+             mock.patch.object(ad, "write_persistent_log") as log:
+            self.assertEqual(
+                ad.companion_install_exit_code(["--install", "--portable"]),
+                2,
+            )
+        log.assert_called_once()
+
+    def test_silent_install_registers_integrations_after_copying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "AstraDownloader.exe"
+            target.write_bytes(b"installed")
+            with mock.patch.object(ad, "PORTABLE_MODE", False), \
+                 mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                 mock.patch.object(ad, "install_target_exe", return_value=target), \
+                 mock.patch.object(ad, "ensure_installed_executable", return_value=target), \
+                 mock.patch.object(ad, "ensure_system_integrations") as integrations, \
+                 mock.patch.object(ad.sys, "stdout", io.StringIO()):
+                self.assertEqual(ad.companion_install_exit_code(["--install"]), 0)
+        integrations.assert_called_once_with(prefer_installed=True, force=True)
+
+
 class QuarantinedStateFileTests(unittest.TestCase):
     """A corrupt state file is set aside silently. Something has to say so."""
 

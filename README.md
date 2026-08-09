@@ -80,6 +80,28 @@ Download `AstraDownloader.exe` from the
 and run it. It installs to `%LOCALAPPDATA%\AstraDownloader`, registers its
 Start Menu and desktop entries, and starts.
 
+For a scripted install that should return without opening the window, run the
+packaged executable with `--install`. It copies itself to the managed install
+directory and registers the same per-user integrations:
+
+```powershell
+.\AstraDownloader.exe --install
+```
+
+For a portable copy, place the executable in a writable folder and launch it
+with `--portable`:
+
+```powershell
+.\AstraDownloader.exe --portable
+```
+
+Portable mode keeps configuration, queue/history, sign-ins, logs, and the
+managed yt-dlp/ffmpeg/runtime files beside the executable. It does not create
+Start Menu, desktop, protocol, logon-task, or browser native-messaging
+registrations. The checked-in portable manifest under
+`packaging/winget/manifests` is validated by Windows Package Manager before
+release submission.
+
 The build is unsigned, so SmartScreen will warn on first run — choose **More
 info → Run anyway**. That is permanent policy, not an oversight: verify the
 download against the SHA-256 published beside it instead of relying on a

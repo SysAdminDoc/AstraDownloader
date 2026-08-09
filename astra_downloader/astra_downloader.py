@@ -301,6 +301,29 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
 APP_VERSION = "2.5.0"
+
+
+def portable_mode_requested(argv=None):
+    """Return whether this launch must keep application state beside itself."""
+    args = sys.argv[1:] if argv is None else list(argv)
+    if any(str(arg).strip().lower() == "--portable" for arg in args):
+        return True
+    return str(os.environ.get("ASTRA_PORTABLE", "")).strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def runtime_state_dir(portable=None):
+    """Choose the state root without letting a portable launch touch AppData."""
+    if portable is None:
+        portable = PORTABLE_MODE
+    if portable:
+        executable = sys.executable if getattr(sys, "frozen", False) else __file__
+        return Path(executable).resolve().parent
+    return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "AstraDownloader"
+
+
+PORTABLE_MODE = portable_mode_requested()
 SERVICE_ID = "astra-downloader"
 # SERVICE_API_VERSION is the wire-schema version. 1.2.0 adds /health fields
 # (ytDlpVersion, ffmpegVersion, rateLimit); 1.4.0 adds /health.poTokenProvider
@@ -321,7 +344,7 @@ DIAGNOSTIC_TEXT_LIMIT = 600
 # constantly (resetting the timer), so only a genuinely wedged process — zero
 # output for this long — is killed. Deliberately generous so a slow ffmpeg merge
 # of a large file (which can be silent for minutes) is never false-killed.
-INSTALL_DIR = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'AstraDownloader'
+INSTALL_DIR = runtime_state_dir()
 CONFIG_PATH = INSTALL_DIR / 'config.json'
 HISTORY_PATH = INSTALL_DIR / 'history.json'
 DOWNLOAD_QUEUE_PATH = INSTALL_DIR / 'download-queue.json'
@@ -2735,6 +2758,11 @@ def is_frozen_app():
     return bool(getattr(sys, "frozen", False))
 
 
+def is_portable_mode():
+    """Return whether this process must avoid per-user installation state."""
+    return bool(PORTABLE_MODE)
+
+
 def current_executable_path():
     if is_frozen_app():
         return Path(sys.executable).resolve()
@@ -2742,6 +2770,8 @@ def current_executable_path():
 
 
 def install_target_exe():
+    if is_portable_mode():
+        return current_executable_path()
     return INSTALL_DIR / "AstraDownloader.exe"
 
 
@@ -2776,7 +2806,7 @@ def ensure_installed_executable(*, allow_downgrade=False):
     binary and use the byte-verified copy primitive for replacement.
     """
     current = current_executable_path()
-    if not is_frozen_app():
+    if not is_frozen_app() or is_portable_mode():
         return current
 
     target = install_target_exe()
@@ -3164,6 +3194,11 @@ def ensure_system_integrations(prefer_installed=True, force=False):
     Previously fired a PowerShell process + 3 winreg writes + schtasks on
     every launch, even when nothing had changed.
     """
+    if is_portable_mode():
+        # Portable copies are intentionally self-contained. Registering a
+        # shortcut, protocol handler, scheduled task, or native host would
+        # make an otherwise movable folder depend on this machine.
+        return launch_command_parts(prefer_installed=False)
     target, base_args = launch_command_parts(prefer_installed=prefer_installed)
     if not force and _get_integrations_stamp() == APP_VERSION:
         register_native_messaging_hosts(target, base_args, Config())
@@ -3682,10 +3717,63 @@ class SetupWorker(SetupWorkerCore):
 # ══════════════════════════════════════════════════════════════
 # UNINSTALL
 # ══════════════════════════════════════════════════════════════
+def remove_portable_state():
+    """Remove app-owned portable state while preserving the executable/media."""
+    root = Path(INSTALL_DIR)
+    try:
+        current = current_executable_path().resolve()
+    except (OSError, RuntimeError):
+        current = None
+    known_paths = {
+        Path(path).resolve()
+        for path in (
+            CONFIG_PATH, HISTORY_PATH, DOWNLOAD_QUEUE_PATH, SUBSCRIPTIONS_PATH,
+            LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH, ICON_PATH,
+            DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
+            _ytdlp_update_state_path(), _companion_update_state_path(),
+            INSTALL_DIR / YTDLP_ROLLBACK_FILENAME,
+            INSTALL_DIR / COMPANION_ROLLBACK_FILENAME,
+        )
+    }
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return
+    for child in children:
+        try:
+            resolved = child.resolve()
+        except (OSError, RuntimeError):
+            continue
+        if current is not None and resolved == current:
+            continue
+        if resolved not in known_paths and not (
+            child.name.startswith(".AstraDownloader.")
+            or child.name.startswith(".yt-dlp.update.")
+        ):
+            continue
+        try:
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=False)
+            else:
+                child.unlink(missing_ok=True)
+        except OSError as error:
+            write_persistent_log(f"Could not remove portable state {child}: {error}")
+
+
 def run_uninstall():
     write_persistent_log("Uninstall requested; removing Astra Downloader components.")
 
     stop_running_companion_for_uninstall()
+
+    if is_portable_mode():
+        remove_portable_state()
+        message = (
+            "Portable Astra Downloader state was removed. The executable and "
+            "downloaded videos were not removed."
+        )
+        write_persistent_log(message)
+        print(message)
+        sys.exit(0)
 
     # Remove scheduled task
     subprocess.run(['schtasks', '/Delete', '/TN', 'AstraDownloader', '/F'],
@@ -4362,6 +4450,40 @@ def companion_probe_exit_code(argv):
     return 0 if hmac.compare_digest(expected, APP_VERSION) else 3
 
 
+def companion_install_exit_code(argv=None):
+    """Install a frozen copy and integrations without opening the GUI."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "--install" not in args:
+        return None
+    if "--portable" in args or is_portable_mode():
+        write_persistent_log("The --install and --portable modes cannot be combined.")
+        return 2
+    if not is_frozen_app():
+        write_persistent_log("The silent install path requires the packaged executable.")
+        return 2
+    target = install_target_exe().resolve()
+    installed = ensure_installed_executable()
+    try:
+        installed_path = Path(installed).resolve()
+    except (OSError, TypeError, ValueError):
+        installed_path = Path(installed)
+    if installed_path != target or not target.is_file():
+        write_persistent_log(
+            f"Silent install did not produce the managed executable at {target}."
+        )
+        return 1
+    try:
+        ensure_system_integrations(prefer_installed=True, force=True)
+    except Exception as error:  # noqa: BLE001 - a CLI path must return a code
+        write_persistent_log(f"Silent install integration setup failed: {error}")
+        return 1
+    output = getattr(sys, "stdout", None)
+    if output is not None:
+        output.write(f"{APP_NAME} installed to {target}\n")
+        output.flush()
+    return 0
+
+
 def main():
     probe_exit = companion_probe_exit_code(sys.argv[1:])
     if probe_exit is not None:
@@ -4372,6 +4494,10 @@ def main():
                 output.flush()
             return
         raise SystemExit(probe_exit)
+
+    install_exit = companion_install_exit_code(sys.argv[1:])
+    if install_exit is not None:
+        raise SystemExit(install_exit)
 
     # Native-messaging host mode: the browser launches us with the extension
     # origin as an argv. Serve the token bootstrap over the private stdio pipe
@@ -4395,7 +4521,7 @@ def main():
     _reconcile_stale_companion_activation()
     log_update_recovery_status()
 
-    if is_frozen_app() and not visual_smoke:
+    if is_frozen_app() and not visual_smoke and not is_portable_mode():
         ensure_system_integrations(prefer_installed=True)
 
     # A second launch delegates to the healthy process and exits. Never kill a
