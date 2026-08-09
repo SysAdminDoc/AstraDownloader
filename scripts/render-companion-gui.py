@@ -20,6 +20,7 @@ CAPTURE_NAMES = (
     "dashboard-online",
     "dashboard-error-degraded",
     "dashboard-german",
+    "downloads-first-run",
     "downloads-arabic-rtl",
     "downloads-active-pending",
     "downloads-clipboard-staged",
@@ -154,6 +155,7 @@ def main():
                 "StartMinimized": False,
                 "DownloadPath": str(Path(temp_dir) / "Videos"),
                 "AudioDownloadPath": str(Path(temp_dir) / "Music"),
+                "FirstRunComplete": scenario != "downloads-first-run",
             })
             history = app_module.History()
             manager = app_module.DownloadManager(config, history)
@@ -163,7 +165,13 @@ def main():
         def make_window(*, large_font=False, minimum_size=False):
             app.setFont(QFont("Segoe UI", 12 if large_font else 9))
             config, history, manager, subscriptions = make_context()
-            window = app_module.MainWindow(config, manager, history, subscriptions=subscriptions)
+            window = app_module.MainWindow(
+                config,
+                manager,
+                history,
+                subscriptions=subscriptions,
+                first_run=scenario == "downloads-first-run",
+            )
             window._animate_page = lambda: None
             window.update_timer.stop()
             window.cleanup_timer.stop()
@@ -494,6 +502,9 @@ def main():
                     "failures": 1,
                 }
                 manager._running_ids.clear()
+            elif scenario == "downloads-first-run":
+                manager.downloads = {}
+                manager._running_ids.clear()
             elif scenario == "reflow-900x620-hidpi-large-font":
                 manager.downloads = {
                     dl_id: manager.downloads[dl_id]
@@ -502,7 +513,25 @@ def main():
             window._downloads_signature = None
             window._update_ui()
             select_page(window, "Download")
-            if scenario == "downloads-clipboard-staged":
+            if scenario == "downloads-first-run":
+                if window.first_run_panel.isHidden():
+                    raise RuntimeError("First-run panel is not visible on Download")
+                if not window.first_run_confirm.isVisible():
+                    raise RuntimeError("First-run destination confirmation is unavailable")
+                assert_visible_text(window, {
+                    "Welcome to Astra Downloader",
+                    "Video download folder",
+                    "Confirm a folder before your first download.",
+                })
+                if window.first_run_pair.text() != "Open extension pairing":
+                    raise RuntimeError("First-run pairing action is not visible")
+                window._start_server = lambda: None
+                window._open_first_run_pairing()
+                if window.tabs.currentIndex() != window._page_names.index(
+                        "Browser extension"):
+                    raise RuntimeError("First-run pairing did not open the extension page")
+                select_page(window, "Download")
+            elif scenario == "downloads-clipboard-staged":
                 window.config.set("ClipboardLinkGrabber", True)
                 window.tray.hide()
                 window._handle_clipboard_change(

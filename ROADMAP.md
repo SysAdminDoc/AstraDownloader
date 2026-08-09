@@ -113,12 +113,3 @@ Notes on existing items above — read these before starting them:
 ### P1
 
 ### P2
-
-### P3
-
-- [ ] P3 — A first run that sets itself up before the user needs it
-  Why: Dependency provisioning is reactive, so a fresh install shows a Download page whose readiness rows say Missing and whose paste box will fail — and the only thing that triggers setup is visiting the Browser extension page and pressing Start server, which is the page the product deliberately de-emphasises.
-  Evidence: no `FirstRun`/`onboarding`/`welcome` key or symbol exists in the app modules. `_run_setup` (`gui.py:5533`) is reached only from `_start_server` when `managed_binary_usable` fails (`:3517-3521`) or from `_reinstall_ffmpeg` (`:4849`). `ensure_system_integrations` (`astra_downloader.py:4155`) runs only when frozen and is silent. The tray explainer fires on first close (`gui.py:5488-5495`), long after the icon appears. Broken dependency bootstrapping is the single most recurring complaint across the whole field — Parabolic has open "yt-dlp is not found after preview update" (#1884) and "Deno update error" (#1895) issues while its main branch has been quiet since 2026-06-29 — so doing this well is a competitive position, not only a polish item.
-  Touches: `astra_downloader/gui.py`, `astra_downloader/astra_downloader.py`
-  Acceptance: a first launch with missing managed binaries starts provisioning from the Download page and shows progress there; the download destination is confirmed once; the extension pairing step is reachable from the first run rather than only from the Browser extension page.
-  Complexity: M

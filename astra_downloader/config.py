@@ -310,6 +310,10 @@ DEFAULT_CONFIG = {
     "WindowGeometry": "",
     "WindowMaximized": False,
     "LastPage": "Download",
+    # New installs confirm the destination once from the Download page. The
+    # launcher flips this to false only when it creates the first config, so
+    # older installs that predate the marker are not shown onboarding again.
+    "FirstRunComplete": True,
     # Privacy-sensitive clipboard monitoring is opt-in. Matching links are
     # staged in the GUI and never enqueued without an explicit user action.
     "ClipboardLinkGrabber": False,
@@ -1256,6 +1260,7 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "WindowGeometry",
     "WindowMaximized",
     "LastPage",
+    "FirstRunComplete",
 })
 
 # Subscription fields that describe one machine's scan history rather than
@@ -1415,7 +1420,7 @@ def sanitize_config(raw):
         "KeepIntermediateFiles", "VerifyFormats",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",
-        "LegacyHealthTokenEcho",
+        "FirstRunComplete", "LegacyHealthTokenEcho",
     ):
         data[key] = coerce_bool(data.get(key), DEFAULT_CONFIG[key])
     data["WindowGeometry"] = clean_text(data.get("WindowGeometry"), "", 8192)
