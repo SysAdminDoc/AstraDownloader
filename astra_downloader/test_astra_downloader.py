@@ -14,6 +14,7 @@ import time
 import types
 import unittest
 import zipfile
+from datetime import datetime, timedelta
 from unittest import mock
 from pathlib import Path
 
@@ -669,6 +670,53 @@ class SubscriptionTests(unittest.TestCase):
             self.assertIsNone(record["nextScanAt"])
             self.assertEqual(record["lastQueued"], 0)
             self.assertEqual(record["lastSkipped"], 0)
+
+    def test_subscription_load_clamps_a_future_scan_to_one_interval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "future.json"
+            path.write_text(json.dumps({
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION,
+                "subscriptions": [{
+                    "id": "sub_future",
+                    "url": "https://www.youtube.com/@astra-channel",
+                    "intervalMinutes": 15,
+                    "enabled": True,
+                    "nextScanAt": 9999999999,
+                }],
+                "archive": {},
+            }), encoding="utf-8")
+            store = self._store(path, clock=lambda: 1000.0)
+            self.assertEqual(store.list_subscriptions()[0]["nextScanAt"], 1900.0)
+
+    def test_subscription_load_trimming_keeps_live_archive_claims(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "archive-bound.json"
+            entries = {
+                "failed": {
+                    "status": "failed", "updatedAt": 5000,
+                    "url": "https://www.youtube.com/watch?v=failed",
+                },
+                "complete": {
+                    "status": "complete", "updatedAt": 6000,
+                    "url": "https://www.youtube.com/watch?v=complete",
+                },
+                "queued": {
+                    "status": "queued", "updatedAt": 1000,
+                    "url": "https://www.youtube.com/watch?v=queued",
+                },
+            }
+            path.write_text(json.dumps({
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION,
+                "subscriptions": [],
+                "archive": entries,
+            }), encoding="utf-8")
+            store = ad.SubscriptionStore(
+                path=path,
+                reader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                max_archive_entries=2,
+            )
+            self.assertEqual(set(store.archive_entries()), {"queued", "complete"})
 
     def test_subscription_routes_cover_crud_and_auth_boundary(self):
         token = "s" * 32
@@ -9313,6 +9361,40 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         self.assertEqual(public['rollbackVersion'], ad.APP_VERSION)
         self.assertNotIn('active_sha256', public)
         self.assertNotIn('source_path', public)
+
+    def test_stale_companion_activation_marker_is_reconciled_at_startup(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ad, 'INSTALL_DIR', Path(tmp)), \
+             mock.patch.object(ad, 'write_persistent_log') as log:
+            stale = datetime.now() - timedelta(
+                seconds=ad.COMPANION_UPDATE_TIMEOUT_SECONDS + 1
+            )
+            state_path = ad._companion_update_state_path()
+            state_path.write_text(json.dumps({
+                'status': 'activation-pending',
+                'active_version': ad.APP_VERSION,
+                'rollback_version': '2.4.0',
+                'updated_at': stale.strftime('%Y-%m-%d %H:%M:%S'),
+            }), encoding='utf-8')
+            state = ad._reconcile_stale_companion_activation()
+            public = ad.read_update_recovery_status()['companion']
+
+        self.assertEqual(state['status'], 'activation-failed')
+        self.assertEqual(state['error_code'], 'activation-timeout')
+        self.assertEqual(public['status'], 'activation-failed')
+        self.assertEqual(public['errorCode'], 'activation-timeout')
+        log.assert_called_once()
+
+    def test_fresh_companion_activation_marker_remains_pending(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ad, 'INSTALL_DIR', Path(tmp)):
+            ad._write_update_state(
+                ad._companion_update_state_path(),
+                status='activation-pending',
+                active_version=ad.APP_VERSION,
+                rollback_version='2.4.0',
+            )
+            state = ad._reconcile_stale_companion_activation()
+
+        self.assertEqual(state['status'], 'activation-pending')
 
     # ── Audit fix: version-skew reinstall-loop guard ──
     # main's APP_VERSION can be bumped before the release asset exists; in
