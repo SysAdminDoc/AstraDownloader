@@ -3607,6 +3607,8 @@ class DownloadManagerCore:
                 '--progress-template',
                 'download:MDLP_JSON %(progress)j',
                 '--print', 'after_move:MDLP_FILEPATH %(filepath)j']
+        if effective_config.get("WindowsFilenames", True):
+            args.append('--windows-filenames')
 
         frags = self._dependencies['clamp_int'](effective_config.get("ConcurrentFragments", 4), 4, 1, 32)
         args += ['--concurrent-fragments', str(frags)]

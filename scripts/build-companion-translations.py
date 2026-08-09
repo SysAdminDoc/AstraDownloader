@@ -202,6 +202,12 @@ CATALOGS = {
             "Neu erzeugen",
         "Storage":
             "Speicherort",
+        "Filename template preview":
+            "Vorschau der Dateinamensvorlage",
+        "Use Windows-safe filenames":
+            "Windows-sichere Dateinamen verwenden",
+        "Ask yt-dlp to replace characters and names that Windows cannot store.":
+            "yt-dlp soll Zeichen und Namen ersetzen, die Windows nicht speichern kann.",
         "Browse":
             "Durchsuchen",
         "Post-processing":
@@ -226,6 +232,18 @@ CATALOGS = {
             "Optionale Begleitdateien, Kapitelaufteilung und Live-Ereignissteuerung. Die bestehenden Einbettungsoptionen bleiben unverändert.",
         "0 disables waiting; use this when a scheduled live event has not started.":
             "0 deaktiviert das Warten; verwenden Sie dies, wenn ein geplanter Livestream noch nicht begonnen hat.",
+        "Preview unavailable until the template is valid.":
+            "Die Vorschau ist verfügbar, sobald die Vorlage gültig ist.",
+        "The template preview uses a reserved Windows name.":
+            "Die Vorlagenvorschau verwendet einen reservierten Windows-Namen.",
+        "The rendered template path is too long for Windows.":
+            "Der gerenderte Vorlagenpfad ist für Windows zu lang.",
+        "Reserved Windows name in preview: {name}.":
+            "Reservierter Windows-Name in der Vorschau: {name}.",
+        "Rendered path is {length} characters; Windows maximum is {maximum}.":
+            "Der gerenderte Pfad hat {length} Zeichen; das Windows-Maximum ist {maximum}.",
+        "Preview: {path} ({length} characters).":
+            "Vorschau: {path} ({length} Zeichen).",
         "Format preferences":
             "Formatwünsche",
         "Preferred video codec":

@@ -859,6 +859,18 @@
       <translation>Optionale yt-dlp-Ausgabevorlage, relativ zum Ordner oben (z. B. %(uploader)s/%(title)s.%(ext)s). %(ext)s muss erhalten bleiben. Titel- und Kanalfelder werden beim Speichern in der Länge begrenzt, damit lange Titel die maximale Pfadlänge nicht überschreiten. Leer verwendet den Standard.</translation>
     </message>
     <message>
+      <source>Filename template preview</source>
+      <translation>Vorschau der Dateinamensvorlage</translation>
+    </message>
+    <message>
+      <source>Use Windows-safe filenames</source>
+      <translation>Windows-sichere Dateinamen verwenden</translation>
+    </message>
+    <message>
+      <source>Ask yt-dlp to replace characters and names that Windows cannot store.</source>
+      <translation>yt-dlp soll Zeichen und Namen ersetzen, die Windows nicht speichern kann.</translation>
+    </message>
+    <message>
       <source>Embed metadata</source>
       <translation>Metadaten einbetten</translation>
     </message>
@@ -1603,6 +1615,18 @@
       <translation>Wiederholen</translation>
     </message>
     <message>
+      <source>Preview unavailable until the template is valid.</source>
+      <translation>Die Vorschau ist verfügbar, sobald die Vorlage gültig ist.</translation>
+    </message>
+    <message>
+      <source>The template preview uses a reserved Windows name.</source>
+      <translation>Die Vorlagenvorschau verwendet einen reservierten Windows-Namen.</translation>
+    </message>
+    <message>
+      <source>The rendered template path is too long for Windows.</source>
+      <translation>Der gerenderte Vorlagenpfad ist für Windows zu lang.</translation>
+    </message>
+    <message>
       <source>Settings saved. Restart Astra Downloader to apply the language.</source>
       <translation>Einstellungen gespeichert. Starten Sie Astra Downloader neu, um die Sprache anzuwenden.</translation>
     </message>
@@ -1881,6 +1905,18 @@
     <message>
       <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
       <translation>Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.</translation>
+    </message>
+    <message>
+      <source>Reserved Windows name in preview: {name}.</source>
+      <translation>Reservierter Windows-Name in der Vorschau: {name}.</translation>
+    </message>
+    <message>
+      <source>Rendered path is {length} characters; Windows maximum is {maximum}.</source>
+      <translation>Der gerenderte Pfad hat {length} Zeichen; das Windows-Maximum ist {maximum}.</translation>
+    </message>
+    <message>
+      <source>Preview: {path} ({length} characters).</source>
+      <translation>Vorschau: {path} ({length} Zeichen).</translation>
     </message>
     <message>
       <source>Closing now will cancel {count} active downloads.</source>

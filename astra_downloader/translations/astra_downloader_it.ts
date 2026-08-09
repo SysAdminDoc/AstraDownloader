@@ -859,6 +859,18 @@
       <translation>Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. Title and channel fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.</translation>
     </message>
     <message>
+      <source>Filename template preview</source>
+      <translation>Filename template preview</translation>
+    </message>
+    <message>
+      <source>Use Windows-safe filenames</source>
+      <translation>Use Windows-safe filenames</translation>
+    </message>
+    <message>
+      <source>Ask yt-dlp to replace characters and names that Windows cannot store.</source>
+      <translation>Ask yt-dlp to replace characters and names that Windows cannot store.</translation>
+    </message>
+    <message>
       <source>Embed metadata</source>
       <translation>Embed metadata</translation>
     </message>
@@ -1603,6 +1615,18 @@
       <translation>Retry</translation>
     </message>
     <message>
+      <source>Preview unavailable until the template is valid.</source>
+      <translation>Preview unavailable until the template is valid.</translation>
+    </message>
+    <message>
+      <source>The template preview uses a reserved Windows name.</source>
+      <translation>The template preview uses a reserved Windows name.</translation>
+    </message>
+    <message>
+      <source>The rendered template path is too long for Windows.</source>
+      <translation>The rendered template path is too long for Windows.</translation>
+    </message>
+    <message>
       <source>Settings saved. Restart Astra Downloader to apply the language.</source>
       <translation>Settings saved. Restart Astra Downloader to apply the language.</translation>
     </message>
@@ -1881,6 +1905,18 @@
     <message>
       <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
       <translation>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</translation>
+    </message>
+    <message>
+      <source>Reserved Windows name in preview: {name}.</source>
+      <translation>Reserved Windows name in preview: {name}.</translation>
+    </message>
+    <message>
+      <source>Rendered path is {length} characters; Windows maximum is {maximum}.</source>
+      <translation>Rendered path is {length} characters; Windows maximum is {maximum}.</translation>
+    </message>
+    <message>
+      <source>Preview: {path} ({length} characters).</source>
+      <translation>Preview: {path} ({length} characters).</translation>
     </message>
     <message>
       <source>Closing now will cancel {count} active downloads.</source>

@@ -79,6 +79,9 @@ repository's git log.
 - **Archive output is opt-in.** Settings can write info JSON, descriptions and
   thumbnails beside media, split chapters into files, start live streams from
   the beginning, or wait a bounded interval for a scheduled live event.
+- **Filename templates explain their risks.** Settings renders an example,
+  rejects reserved Windows names and overlong rendered paths, and enables
+  yt-dlp's Windows filename sanitization.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the

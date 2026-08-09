@@ -253,6 +253,31 @@ class NormalizationTests(unittest.TestCase):
             ),
         )
 
+    def test_output_template_preview_flags_reserved_names_and_long_paths(self):
+        import config as config_module
+
+        normal = config_module.output_template_preview(
+            "%(uploader)s/%(title)s.%(ext)s", r"C:\Videos"
+        )
+        self.assertTrue(normal["valid"])
+        self.assertEqual(normal["relative"], "Astra channel\\Example video.mp4")
+        self.assertFalse(normal["reserved"])
+        self.assertFalse(normal["too_long"])
+
+        reserved = config_module.output_template_preview(
+            "CON.%(ext)s", r"C:\Videos"
+        )
+        self.assertEqual(reserved["reserved"], ("CON",))
+
+        long_path = config_module.output_template_preview(
+            "folder/" + ("x" * 250) + ".%(ext)s", r"C:\Videos"
+        )
+        self.assertTrue(long_path["too_long"])
+        invalid = config_module.output_template_preview(
+            "%(title)s", r"C:\Videos"
+        )
+        self.assertFalse(invalid["valid"])
+
     def test_default_download_path_prefers_the_windows_known_folder(self):
         import config as config_module
 
@@ -11407,6 +11432,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             "--split-chapters", "--live-from-start",
         ):
             self.assertIn(flag, argv)
+        self.assertIn("--windows-filenames", argv)
         self.assertEqual(argv[argv.index("--wait-for-video") + 1], "45")
 
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
