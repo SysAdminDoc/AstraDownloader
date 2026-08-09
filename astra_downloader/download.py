@@ -3742,7 +3742,9 @@ class DownloadManagerCore:
                         "Download stalled (no progress for "
                         f"{DOWNLOAD_STALL_TIMEOUT_SECONDS // 60} minutes) and was stopped."
                     )
-                    apply_download_failure_classification(dl, 'network-unreachable')
+                    apply_download_failure_classification(
+                        dl, 'network-unreachable', error=dl.error
+                    )
                 elif proc.returncode == 0:
                     # yt-dlp exits 0 when it deliberately downloads nothing —
                     # most often because --max-filesize rejected every format
@@ -3896,7 +3898,9 @@ class DownloadManagerCore:
                                 "Download stalled (no progress for "
                                 f"{DOWNLOAD_STALL_TIMEOUT_SECONDS // 60} minutes) and was stopped."
                             )
-                            apply_download_failure_classification(dl, 'network-unreachable')
+                            apply_download_failure_classification(
+                                dl, 'network-unreachable', error=dl.error
+                            )
                         elif proc.returncode == 0:
                             dl.status = "complete"
                             dl.progress = 100

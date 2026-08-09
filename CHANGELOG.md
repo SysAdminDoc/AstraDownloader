@@ -77,6 +77,8 @@ repository's git log.
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the
   remaining wait directly on the download card.
+- **Stall failures keep their cause.** A wedged download or cookie-less retry
+  now preserves the specific stall message alongside its network recovery code.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
