@@ -2965,36 +2965,72 @@ def register_native_host_registry_value(key_path, manifest_path):
         winreg.CloseKey(key)
 
 
+def unregister_native_host_registry_value(key_path):
+    """Remove a native-host registry pointer when its allowlist is cleared."""
+    import winreg
+    try:
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        write_persistent_log(
+            f"Native messaging host registry cleanup failed for {key_path}: {error}"
+        )
+
+
+def _revoke_native_messaging_host(manifest_path, registry_key):
+    try:
+        Path(manifest_path).unlink(missing_ok=True)
+    except OSError as error:
+        write_persistent_log(
+            f"Native messaging manifest cleanup failed for {manifest_path}: {error}"
+        )
+    unregister_native_host_registry_value(registry_key)
+
+
 def register_native_messaging_hosts(target, base_args, config):
     if sys.platform != 'win32':
         return
+    chrome_ids = parse_native_extension_ids(config.get("NativeChromeExtensionIds", ""))
+    firefox_ids = parse_native_extension_ids(config.get("NativeFirefoxExtensionIds", ""))
+    chrome_manifest = NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.chrome.json"
+    firefox_manifest = NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.firefox.json"
+    chrome_registry_key = (
+        f"Software\\Google\\Chrome\\NativeMessagingHosts\\{NATIVE_HOST_NAME}"
+    )
+    firefox_registry_key = (
+        f"Software\\Mozilla\\NativeMessagingHosts\\{NATIVE_HOST_NAME}"
+    )
     if base_args:
         write_persistent_log("Native messaging host registration skipped: source runs need an executable wrapper.")
+        if not chrome_ids:
+            _revoke_native_messaging_host(chrome_manifest, chrome_registry_key)
+        if not firefox_ids:
+            _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
         return
-    chrome_ids = parse_native_extension_ids(config.get("NativeChromeExtensionIds", ""))
-    firefox_ids = parse_native_extension_ids(
-        config.get("NativeFirefoxExtensionIds", ""),
-        DEFAULT_FIREFOX_EXTENSION_IDS,
-    )
     if not chrome_ids and not firefox_ids:
-        write_persistent_log("Native messaging host registration skipped: no extension IDs configured.")
+        _revoke_native_messaging_host(chrome_manifest, chrome_registry_key)
+        _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
+        write_persistent_log("Native messaging host registration disabled: no extension IDs configured.")
         return
     try:
         NATIVE_HOST_DIR.mkdir(parents=True, exist_ok=True)
         if chrome_ids:
-            chrome_manifest = NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.chrome.json"
             atomic_write_json(chrome_manifest, build_native_host_manifest(target, chrome_ids, browser="chrome"))
             register_native_host_registry_value(
-                f"Software\\Google\\Chrome\\NativeMessagingHosts\\{NATIVE_HOST_NAME}",
+                chrome_registry_key,
                 chrome_manifest,
             )
+        else:
+            _revoke_native_messaging_host(chrome_manifest, chrome_registry_key)
         if firefox_ids:
-            firefox_manifest = NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.firefox.json"
             atomic_write_json(firefox_manifest, build_native_host_manifest(target, firefox_ids, browser="firefox"))
             register_native_host_registry_value(
-                f"Software\\Mozilla\\NativeMessagingHosts\\{NATIVE_HOST_NAME}",
+                firefox_registry_key,
                 firefox_manifest,
             )
+        else:
+            _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
     except Exception as e:
         write_persistent_log(f"Native messaging host registration failed: {e}")
 

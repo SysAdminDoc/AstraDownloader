@@ -9574,6 +9574,34 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
             self.assertIn(f"Software\\Google\\Chrome\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}", registry_keys)
             self.assertIn(f"Software\\Mozilla\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}", registry_keys)
 
+    def test_register_native_messaging_hosts_revokes_cleared_allowlists(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(ad, "NATIVE_HOST_DIR", Path(tmp)), \
+             mock.patch.object(ad.sys, "platform", "win32"), \
+             mock.patch.object(ad, "unregister_native_host_registry_value") as revoke:
+            chrome_manifest = Path(tmp) / f"{ad.NATIVE_HOST_NAME}.chrome.json"
+            firefox_manifest = Path(tmp) / f"{ad.NATIVE_HOST_NAME}.firefox.json"
+            chrome_manifest.write_text("stale", encoding="utf-8")
+            firefox_manifest.write_text("stale", encoding="utf-8")
+            config = FakeConfig({
+                "NativeChromeExtensionIds": "",
+                "NativeFirefoxExtensionIds": "",
+            })
+
+            ad.register_native_messaging_hosts("C:/AstraDownloader.exe", [], config)
+
+            self.assertFalse(chrome_manifest.exists())
+            self.assertFalse(firefox_manifest.exists())
+            revoked = [call.args[0] for call in revoke.call_args_list]
+            self.assertIn(
+                f"Software\\Google\\Chrome\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}",
+                revoked,
+            )
+            self.assertIn(
+                f"Software\\Mozilla\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}",
+                revoked,
+            )
+
 
 class DownloadWorkerRaceGuardTests(unittest.TestCase):
     """Race guards between cancel()/worker teardown and (re)scheduling.
@@ -12240,6 +12268,19 @@ class SettingsBundleTests(unittest.TestCase):
         for key in ("LegacyHealthTokenEcho", "LegacyHealthTokenOrigins"):
             with self.subTest(key=key):
                 self.assertNotIn(key, settings)
+
+    def test_native_extension_allowlists_are_excluded_and_reported(self):
+        bundle = self._bundle()
+        settings = bundle["settings"]
+        self.assertNotIn("NativeChromeExtensionIds", settings)
+        self.assertNotIn("NativeFirefoxExtensionIds", settings)
+        self.assertIn("NativeChromeExtensionIds", bundle["excludedSettings"])
+        self.assertIn("NativeFirefoxExtensionIds", bundle["excludedSettings"])
+        imported, error = ad.read_settings_bundle(bundle)
+        self.assertIsNone(error)
+        changes = ad.describe_bundle_changes(ad.sanitize_config({}), imported)
+        self.assertIn("NativeChromeExtensionIds", changes["excludedSettings"])
+        self.assertIn("NativeFirefoxExtensionIds", changes["excludedSettings"])
 
     # -- The round trip ---------------------------------------------------
 

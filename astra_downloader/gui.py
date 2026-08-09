@@ -4379,6 +4379,11 @@ class MainWindowCore(QMainWindow):
                 "sign-ins still needed for "
                 + ", ".join(changes["siteLoginSites"][:5])
             )
+        excluded = changes.get("excludedSettings") or []
+        if excluded:
+            parts.append(
+                "not carried: " + ", ".join(excluded)
+            )
         self._show_settings_status(". ".join(parts) + ".", "success")
         self._append_log(
             f"Imported settings bundle from {path}: "
