@@ -29,6 +29,11 @@ try:
 except ImportError:  # Flat source-path compatibility.
     from _compat import make_legacy_resolver
 
+try:
+    from .config import default_download_path
+except ImportError:  # Flat source-path compatibility.
+    from config import default_download_path
+
 
 __all__ = (
     "MainWindow", "SetupWorker", "FolderPickerService", "repolish",
@@ -44,6 +49,7 @@ __all__ = (
     "MainWindowCore",
     "GUI_ACCESSIBILITY_COLORS", "system_reduced_motion_enabled",
     "default_download_path",
+    "filter_subscription_records", "filter_site_login_entries",
 )
 
 GUI_ACCESSIBILITY_COLORS = {
@@ -323,6 +329,57 @@ def describe_rejected_links(failures):
         f"{len(failures)} {noun} rejected for {len(reasons)} different "
         f"reasons. First: {reasons[0]}"
     )
+
+
+def filter_subscription_records(records, query="", status="all"):
+    """Filter subscription rows without touching the durable manager state."""
+    query = str(query or "").strip().casefold()
+    status = str(status or "all").casefold()
+    visible = []
+    for record in records if isinstance(records, list) else []:
+        if not isinstance(record, dict):
+            continue
+        haystack = " ".join(
+            str(record.get(field) or "")
+            for field in ("title", "url", "lastError")
+        ).casefold()
+        if query and query not in haystack:
+            continue
+        enabled = bool(record.get("enabled", True))
+        has_error = bool(str(record.get("lastError") or "").strip())
+        if status == "active" and not enabled:
+            continue
+        if status == "disabled" and enabled:
+            continue
+        if status == "needs-attention" and not has_error:
+            continue
+        visible.append(record)
+    return visible
+
+
+def filter_site_login_entries(entries, query="", status="all"):
+    """Filter stored sign-ins by site and whether their jar is usable."""
+    query = str(query or "").strip().casefold()
+    status = str(status or "all").casefold()
+    visible = []
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        haystack = " ".join(
+            str(entry.get(field) or "") for field in ("site", "source")
+        ).casefold()
+        if query and query not in haystack:
+            continue
+        expired = bool(entry.get("expired"))
+        stored = bool(entry.get("stored"))
+        if status == "stored" and (expired or not stored):
+            continue
+        if status == "expired" and not expired:
+            continue
+        if status == "missing" and stored:
+            continue
+        visible.append(entry)
+    return visible
 
 
 def human_status(status):
@@ -2248,6 +2305,39 @@ class MainWindowCore(QMainWindow):
         add_layout.addWidget(self.subscription_status)
         layout.addWidget(add_card)
 
+        subscription_filters = QHBoxLayout()
+        subscription_filters.setSpacing(8)
+        self.subscription_search = QLineEdit()
+        self.subscription_search.setAccessibleName(tr("Search subscriptions"))
+        self.subscription_search.setPlaceholderText(tr("Search title, URL, or error"))
+        self.subscription_search.setClearButtonEnabled(True)
+        subscription_filters.addWidget(self.subscription_search, 2)
+        self.subscription_status_filter = QComboBox()
+        self.subscription_status_filter.setAccessibleName(tr("Subscription status"))
+        for label, value in (
+            ("All subscriptions", "all"),
+            ("Active", "active"),
+            ("Disabled", "disabled"),
+            ("Needs attention", "needs-attention"),
+        ):
+            self.subscription_status_filter.addItem(tr(label), value)
+        subscription_filters.addWidget(self.subscription_status_filter)
+        self.subscription_filter_meta = make_label("", "toolbarMeta")
+        subscription_filters.addWidget(self.subscription_filter_meta)
+        layout.addLayout(subscription_filters)
+        self._subscription_filter_timer = QTimer(self)
+        self._subscription_filter_timer.setSingleShot(True)
+        self._subscription_filter_timer.setInterval(250)
+        self._subscription_filter_timer.timeout.connect(
+            lambda: self._refresh_subscriptions(force=True)
+        )
+        self.subscription_search.textChanged.connect(
+            self._subscription_filters_changed
+        )
+        self.subscription_status_filter.currentIndexChanged.connect(
+            self._subscription_filters_changed
+        )
+
         self.subscription_scroll = QScrollArea()
         self.subscription_scroll.setWidgetResizable(True)
         content = QWidget()
@@ -2285,6 +2375,18 @@ class MainWindowCore(QMainWindow):
             self.subscription_container.addStretch()
             return
         archive = payload.get("archive", {}) if isinstance(payload, dict) else {}
+        visible_records = filter_subscription_records(
+            records,
+            self.subscription_search.text() if hasattr(self, "subscription_search") else "",
+            self.subscription_status_filter.currentData()
+            if hasattr(self, "subscription_status_filter") else "all",
+        )
+        if hasattr(self, "subscription_filter_meta"):
+            self.subscription_filter_meta.setText(
+                tr("{shown} of {total} shown").format(
+                    shown=len(visible_records), total=len(records)
+                )
+            )
         self.subscription_status.setText(
             f"{len(records)} configured · {archive.get('complete', 0)} archived · "
             f"{archive.get('queued', 0)} queued"
@@ -2296,7 +2398,14 @@ class MainWindowCore(QMainWindow):
             ))
             self.subscription_container.addStretch()
             return
-        for record in records:
+        if not visible_records:
+            self.subscription_container.addWidget(make_empty_state(
+                tr("No subscriptions match these filters"),
+                tr("Try a different search or choose All subscriptions."),
+            ))
+            self.subscription_container.addStretch()
+            return
+        for record in visible_records:
             row = QFrame()
             row.setProperty("class", "card")
             row_layout = QHBoxLayout(row)
@@ -2338,6 +2447,10 @@ class MainWindowCore(QMainWindow):
             row_layout.addWidget(remove, 0, Qt.AlignmentFlag.AlignTop)
             self.subscription_container.addWidget(row)
         self.subscription_container.addStretch()
+
+    def _subscription_filters_changed(self):
+        if hasattr(self, "_subscription_filter_timer"):
+            self._subscription_filter_timer.start()
 
     # ── Site sign-ins ────────────────────────────────────────────────────
     def _build_site_logins(self):
@@ -2404,6 +2517,37 @@ class MainWindowCore(QMainWindow):
         add_layout.addWidget(self.site_login_status)
         layout.addWidget(add_card)
 
+        site_login_filters = QHBoxLayout()
+        site_login_filters.setSpacing(8)
+        self.site_login_search = QLineEdit()
+        self.site_login_search.setAccessibleName(tr("Search stored sign-ins"))
+        self.site_login_search.setPlaceholderText(tr("Search site or source"))
+        self.site_login_search.setClearButtonEnabled(True)
+        site_login_filters.addWidget(self.site_login_search, 2)
+        self.site_login_status_filter = QComboBox()
+        self.site_login_status_filter.setAccessibleName(tr("Stored sign-in status"))
+        for label, value in (
+            ("All sign-ins", "all"),
+            ("Stored and valid", "stored"),
+            ("Expired", "expired"),
+            ("Missing on disk", "missing"),
+        ):
+            self.site_login_status_filter.addItem(tr(label), value)
+        site_login_filters.addWidget(self.site_login_status_filter)
+        self.site_login_filter_meta = make_label("", "toolbarMeta")
+        site_login_filters.addWidget(self.site_login_filter_meta)
+        layout.addLayout(site_login_filters)
+        self._site_login_filter_timer = QTimer(self)
+        self._site_login_filter_timer.setSingleShot(True)
+        self._site_login_filter_timer.setInterval(250)
+        self._site_login_filter_timer.timeout.connect(
+            lambda: self._refresh_site_logins(force=True)
+        )
+        self.site_login_search.textChanged.connect(self._site_login_filters_changed)
+        self.site_login_status_filter.currentIndexChanged.connect(
+            self._site_login_filters_changed
+        )
+
         self.site_login_scroll = QScrollArea()
         self.site_login_scroll.setWidgetResizable(True)
         content = QWidget()
@@ -2444,6 +2588,18 @@ class MainWindowCore(QMainWindow):
             return
         self._site_logins_signature = signature
         self._clear_layout(self.site_login_container)
+        visible_entries = filter_site_login_entries(
+            entries,
+            self.site_login_search.text() if hasattr(self, "site_login_search") else "",
+            self.site_login_status_filter.currentData()
+            if hasattr(self, "site_login_status_filter") else "all",
+        )
+        if hasattr(self, "site_login_filter_meta"):
+            self.site_login_filter_meta.setText(
+                tr("{shown} of {total} shown").format(
+                    shown=len(visible_entries), total=len(entries)
+                )
+            )
         if not entries:
             self.site_login_container.addWidget(make_empty_state(
                 tr("No stored sign-ins"),
@@ -2453,7 +2609,14 @@ class MainWindowCore(QMainWindow):
             ))
             self.site_login_container.addStretch()
             return
-        for entry in entries:
+        if not visible_entries:
+            self.site_login_container.addWidget(make_empty_state(
+                tr("No sign-ins match these filters"),
+                tr("Try a different search or choose All sign-ins."),
+            ))
+            self.site_login_container.addStretch()
+            return
+        for entry in visible_entries:
             row = QFrame()
             row.setProperty("class", "card")
             row_layout = QHBoxLayout(row)
@@ -2492,6 +2655,10 @@ class MainWindowCore(QMainWindow):
             row_layout.addWidget(remove, 0, Qt.AlignmentFlag.AlignTop)
             self.site_login_container.addWidget(row)
         self.site_login_container.addStretch()
+
+    def _site_login_filters_changed(self):
+        if hasattr(self, "_site_login_filter_timer"):
+            self._site_login_filter_timer.start()
 
     def _show_history_status(self, message, state="neutral"):
         """Report a History action on the History page, and in the log."""
