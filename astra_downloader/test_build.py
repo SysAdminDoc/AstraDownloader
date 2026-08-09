@@ -2,6 +2,7 @@ import importlib.util
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -25,6 +26,8 @@ class ReleaseConstraintsTests(unittest.TestCase):
         source = MODULE_PATH.read_text(encoding='utf-8')
         for module_name in ('_compat', 'config', 'download', 'health', 'routes', 'gui'):
             self.assertIn(f'"--hidden-import", "{module_name}"', source)
+        self.assertIn('--onefile', build.pyinstaller_args('onefile'))
+        self.assertIn('--onedir', build.pyinstaller_args('onedir'))
 
     def test_reviewed_constraints_are_exact_and_cover_release_roots(self):
         constraints = build.parse_release_constraints()
@@ -53,6 +56,32 @@ class ReleaseConstraintsTests(unittest.TestCase):
             self.assertEqual(
                 sidecar.read_text(encoding='ascii'),
                 f'{digest}  AstraDownloader.exe\n',
+            )
+
+    def test_onedir_archive_has_a_stable_root_and_checksum(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'AstraDownloader'
+            (source / 'translations').mkdir(parents=True)
+            (source / 'AstraDownloader.exe').write_bytes(b'MZ' + b'app')
+            (source / 'translations' / 'astra_downloader_en.qm').write_bytes(b'qm')
+            archive = root / 'AstraDownloader-onedir.zip'
+
+            self.assertEqual(build.write_onedir_archive(source, archive), archive)
+            with zipfile.ZipFile(archive) as handle:
+                self.assertEqual(
+                    handle.namelist(),
+                    [
+                        'AstraDownloader/AstraDownloader.exe',
+                        'AstraDownloader/translations/astra_downloader_en.qm',
+                    ],
+                )
+                self.assertEqual(handle.read('AstraDownloader/AstraDownloader.exe'), b'MZ' + b'app')
+            digest = build.write_sha256_sidecar(archive)
+            self.assertEqual(digest, build.sha256_file(archive))
+            self.assertEqual(
+                archive.with_name(archive.name + '.sha256').read_text(encoding='ascii'),
+                f'{digest}  {archive.name}\n',
             )
 
     def _verify_fixture(self, app_requires=('dep>=2',), app_version='1.0'):

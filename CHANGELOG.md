@@ -76,6 +76,8 @@ repository's git log.
 - **Local subtitles fill the missing-track gap.** An opt-in, checksum-pinned
   multilingual Whisper model is provisioned during setup, and successful video
   downloads with no subtitle track can now produce a cancellable SRT sidecar.
+- **The release build has an antivirus fallback.** It now emits a normal
+  one-folder zip with its own SHA-256 sidecar alongside the one-file executable.
 - **Site profiles are URL-aware.** Named domain profiles can set output format,
   quality, impersonation, proxy and request pacing defaults; matching happens
   when a link is pasted, with an explicit one-off profile or no-profile choice.

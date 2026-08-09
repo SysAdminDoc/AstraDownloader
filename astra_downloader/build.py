@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Build AstraDownloader.exe using PyInstaller.
-Outputs to ../AstraDownloader.exe alongside the logo/icon.
+Build the one-file and one-folder Astra Downloader distributions.
+Outputs both artifacts and their checksum sidecars beside the logo/icon.
 """
 import ast
 import hashlib
@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 try:
@@ -32,6 +33,8 @@ SCRIPT = HERE / "astra_downloader.py"
 ICON = ROOT / "AstraDownloader.ico"
 OUT_EXE = ROOT / "AstraDownloader.exe"
 OUT_SHA256 = ROOT / "AstraDownloader.exe.sha256"
+OUT_ONEDIR_ZIP = ROOT / "AstraDownloader-onedir.zip"
+OUT_ONEDIR_SHA256 = ROOT / "AstraDownloader-onedir.zip.sha256"
 TRANSLATIONS_DIR = HERE / "translations"
 TRANSLATION_BUILD_SCRIPT = ROOT / "scripts" / "build-companion-translations.py"
 
@@ -195,6 +198,42 @@ def write_sha256_sidecar(exe_path, sidecar_path=None):
         encoding="ascii",
     )
     return digest
+
+
+def write_onedir_archive(source_dir, archive_path):
+    """Pack a PyInstaller one-folder directory under a stable top-level name."""
+    source_dir = Path(source_dir)
+    archive_path = Path(archive_path)
+    if not source_dir.is_dir():
+        raise SystemExit(f"Missing one-folder build directory: {source_dir}")
+
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = archive_path.with_name(archive_path.name + ".tmp")
+    if temporary_path.exists():
+        temporary_path.unlink()
+    try:
+        with zipfile.ZipFile(
+            temporary_path,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=9,
+        ) as archive:
+            files = sorted(
+                (path for path in source_dir.rglob("*") if path.is_file()),
+                key=lambda path: path.relative_to(source_dir).as_posix().lower(),
+            )
+            for path in files:
+                relative = Path(source_dir.name) / path.relative_to(source_dir)
+                info = zipfile.ZipInfo(relative.as_posix())
+                info.date_time = (1980, 1, 1, 0, 0, 0)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                archive.writestr(info, path.read_bytes())
+        os.replace(temporary_path, archive_path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return archive_path
 
 
 def iter_toc_strings(value):
@@ -389,16 +428,14 @@ def prepare_translations():
         )
 
 
-def build():
-    preflight()
-    prepare_translations()
-    clean()
-    SPEC_DIR.mkdir(parents=True, exist_ok=True)
-    args = [
+def pyinstaller_args(mode):
+    if mode not in ("onefile", "onedir"):
+        raise ValueError(f"Unsupported PyInstaller mode: {mode}")
+    return [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
         "--clean",
-        "--onefile",
+        f"--{mode}",
         "--windowed",
         "--name", "AstraDownloader",
         "--icon", str(ICON),
@@ -432,20 +469,39 @@ def build():
         "--exclude-module", "pydoc",
         str(SCRIPT),
     ]
-    print("Building AstraDownloader.exe...")
-    subprocess.check_call(args, cwd=str(HERE))
 
+
+def run_pyinstaller(mode):
+    print(f"Building AstraDownloader ({mode})...")
+    subprocess.check_call(pyinstaller_args(mode), cwd=str(HERE))
+
+
+def build():
+    preflight()
+    prepare_translations()
+    clean()
+    SPEC_DIR.mkdir(parents=True, exist_ok=True)
+
+    run_pyinstaller("onefile")
     built = DIST_DIR / "AstraDownloader.exe"
     if not built.exists():
         raise SystemExit(f"Build failed: {built} not found")
 
     OUT_EXE.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built, OUT_EXE)
+
+    run_pyinstaller("onedir")
+    built_onedir = DIST_DIR / "AstraDownloader"
+    write_onedir_archive(built_onedir, OUT_ONEDIR_ZIP)
+
     write_build_metadata(OUT_EXE)
     write_sha256_sidecar(OUT_EXE, OUT_SHA256)
+    write_sha256_sidecar(OUT_ONEDIR_ZIP, OUT_ONEDIR_SHA256)
     size_mb = OUT_EXE.stat().st_size / (1024 * 1024)
     print(f"OK: {OUT_EXE} ({size_mb:.1f} MB)")
     print(f"SHA-256 sidecar: {OUT_SHA256}")
+    print(f"OK: {OUT_ONEDIR_ZIP} ({OUT_ONEDIR_ZIP.stat().st_size / (1024 * 1024):.1f} MB)")
+    print(f"SHA-256 sidecar: {OUT_ONEDIR_SHA256}")
     print(f"License inventory input: {BUILD_METADATA}")
 
 

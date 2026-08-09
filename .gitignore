@@ -11,6 +11,8 @@ dist/
 # the GitHub Release.
 AstraDownloader.exe
 AstraDownloader.exe.sha256
+AstraDownloader-onedir.zip
+AstraDownloader-onedir.zip.sha256
 
 # Python build artifacts
 astra_downloader/build/
