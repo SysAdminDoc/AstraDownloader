@@ -210,13 +210,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: a filter box narrows to matching controls and their group; every control has a per-field revert, or the page has a restore-defaults action that reports what changed; Language and Export/Import move to groups that name them.
   Complexity: M
 
-- [ ] P2 — Resolve the download folder from the Windows known folder
-  Why: `~/Videos` is assumed rather than resolved, so a user who has moved or redirected their Videos folder gets a stray directory beside their profile instead of their real one.
-  Evidence: `str(Path.home() / "Videos")` is hardcoded at `config.py:129` and `:783`, `download.py:2177` and `:2185`, `gui.py:497` and `:2669`. No `SHGetKnownFolderPath`, `FOLDERID_Videos` or `KnownFolder` call appears anywhere in the repo.
-  Touches: `astra_downloader/config.py`, `astra_downloader/astra_downloader.py`
-  Acceptance: the default resolves `FOLDERID_Videos` and falls back to `~/Videos` only when the call fails; an existing configured path is never rewritten.
-  Complexity: S
-
 - [ ] P2 — Sign in with a username and password where cookies cannot reach
   Why: The Sign-ins page is cookies-only, and five of the seven browsers it offers are the ones that can no longer be read on Windows — so for a password-protected Vimeo link, or a site with no working cookie export, there is no path at all, even though yt-dlp has one.
   Evidence: none of `--username`, `--password`, `--video-password`, `--twofactor`, `--ap-mso` or `--client-certificate` appears anywhere in `astra_downloader/` (measured 2026-08-06 against the 276 long options the provisioned yt-dlp 2026.08.04 advertises). `SITE_LOGIN_BROWSERS` offers `brave, chrome, chromium, edge, firefox, opera, safari` (`download.py:391-392`) while `describe_browser_cookie_failure` (`:789-796`) already knows Chrome/Edge 127+ App-Bound Encryption makes five of those fail — but says so only after the attempt. Note two sites to exclude: yt-dlp removed Reddit and LinkedIn login support in 2026.07 as broken.
