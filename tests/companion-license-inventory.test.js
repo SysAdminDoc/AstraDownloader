@@ -130,6 +130,14 @@ test('companion SBOM inventory carries the reviewed Python resolution graph', ()
     assert.deepEqual(pyqt.dependsOn, ['pkg:pypi/pyqt6-qt6@6.11.1']);
 });
 
+test('companion SBOM inventory fails when the staged executable is missing', () => {
+    const { root, buildDir } = writeEmptyBuildTree();
+    assert.throws(
+        () => buildCompanionInventory(root, buildDir),
+        /missing staged companion artifact/
+    );
+});
+
 test('companion SBOM inventory links exact embedded versions to the staged artifact and names unresolved obligations', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-companion-license-'));
     const buildDir = path.join(root, 'build');

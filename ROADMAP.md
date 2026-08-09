@@ -30,13 +30,6 @@ Notes on the items above, from the same pass:
 
 ### P2
 
-- [ ] P2 — Translate the strings the extractor cannot see
-  Why: `Duration`, `Format` and `Quality` are the History list's column headers and render in English in every locale, because they are written with `setText()` at runtime rather than built through `tr()`. The same shape hides an unknown number of other strings: readiness values ("Checking", "Fallback"), and the composed status lines ("0 of 0 filtered · 0 retained", "Every 60 min · next scan ...").
-  Evidence: measured 2026-08-06 by rendering the German locale and dumping every visible QLabel per page — the three column headers came back English against a 219/219 German catalogue. `scripts/extract_companion_strings.py` reads the syntax tree, so a literal that never appears as an argument to a translating call is invisible to it by construction.
-  Touches: `astra_downloader/gui.py`, `scripts/extract_companion_strings.py`
-  Acceptance: the runtime-assigned labels are built through `tr()` so the extractor finds them; the composed status lines take their word order from a translated template rather than concatenation; the German scenario asserts one of them.
-  Complexity: M
-
 - [ ] P3 — Give `subscriptions.py` a real test surface
   Why: The scheduling core is 872 lines behind a single test class, and it is the one subsystem that runs unattended — a defect there is discovered by a user whose channel silently stopped downloading.
   Evidence: measured 2026-08-06 — 25 methods are never named anywhere in `test_astra_downloader.py`, including `due_subscriptions`, `begin_scan`, `finish_scan`, `_trim_archive_locked`, `release_archive` and `handle_download_completed`, which is the entire scan lifecycle. `routes.py` shows a similar count but is a false alarm: its handlers are exercised through the Flask test client by URL rather than by name.

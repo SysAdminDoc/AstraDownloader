@@ -25,6 +25,9 @@ repository's git log.
 - **Subscription and update state recover safely.** Future scan times are
   clamped, load-time archive trimming keeps live claims, and an abandoned
   companion activation is marked failed after its timeout so it can be retried.
+- **Translation catalogues track every companion UI string.** The checked-in
+  source catalogues now cover all 221 extracted strings across all 11 locales,
+  and the translation gate fails when generated keys drift from the GUI.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the

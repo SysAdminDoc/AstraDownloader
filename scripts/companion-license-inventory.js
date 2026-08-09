@@ -266,7 +266,9 @@ function resolvedPythonComponent(record, resolution, artifact) {
 
 function buildCompanionInventory(repoRoot, buildDir) {
     const exePath = path.join(buildDir, COMPANION_EXE_NAME);
-    if (!fs.existsSync(exePath)) return { components: [], dependencies: [] };
+    if (!fs.existsSync(exePath)) {
+        throw new Error(`missing staged companion artifact: ${exePath}`);
+    }
 
     const metadataPath = path.join(buildDir, COMPANION_BUILD_METADATA_NAME);
     if (!fs.existsSync(metadataPath)) {

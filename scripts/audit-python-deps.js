@@ -133,7 +133,20 @@ function isActionableSeverity(severity) {
 }
 
 function normalizeAudit(raw, options = {}) {
+    const auditErrors = [];
+    if (!raw || typeof raw !== 'object') {
+        auditErrors.push('pip-audit returned a non-object report');
+    }
+    if (!Array.isArray(raw && raw.dependencies)) {
+        auditErrors.push('pip-audit report has no dependencies array');
+    }
     const dependencies = Array.isArray(raw && raw.dependencies) ? raw.dependencies : [];
+    if (!dependencies.length) {
+        auditErrors.push('pip-audit reported zero dependencies');
+    }
+    if (Number.isInteger(options.exitCode) && options.exitCode !== 0) {
+        auditErrors.push(`pip-audit exited with status ${options.exitCode}`);
+    }
     const normalizedDependencies = dependencies.map((dependency) => {
         const vulns = Array.isArray(dependency.vulns) ? dependency.vulns : [];
         const uniqueVulnerabilities = new Map();
@@ -185,7 +198,7 @@ function normalizeAudit(raw, options = {}) {
         schemaVersion: 1,
         product: 'Astra Downloader',
         generatedAt: (options.now || new Date()).toISOString(),
-        status: actionableFindings.length ? 'fail' : 'pass',
+        status: actionableFindings.length || auditErrors.length ? 'fail' : 'pass',
         requirements: repoRelative(options.requirementsPath || REQUIREMENTS_PATH),
         tool: {
             name: 'pip-audit',
@@ -203,10 +216,12 @@ function normalizeAudit(raw, options = {}) {
             vulnerableDependencies: normalizedDependencies.filter((dependency) => dependency.vulnerabilities.length).length,
             findings: findings.length,
             actionableFindings: actionableFindings.length,
-            reviewedFindings: reviewedFindings.length
+            reviewedFindings: reviewedFindings.length,
+            auditErrors: auditErrors.length
         },
         actionableFindings,
         reviewedFindings,
+        auditErrors,
         dependencies: normalizedDependencies,
         raw
     };
@@ -224,6 +239,32 @@ function parsePipAuditJson(stdout) {
             return JSON.parse(text.slice(start, end + 1));
         }
         throw new Error('pip-audit output was not valid JSON');
+    }
+}
+
+function directRequirementNames(requirementsText) {
+    const names = [];
+    for (const rawLine of String(requirementsText || '').split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+        const requirement = line.split(';', 1)[0].trim();
+        const match = requirement.match(/^([A-Za-z0-9_.-]+)/);
+        if (match) names.push(match[1].toLowerCase().replace(/[-_.]+/g, '-'));
+    }
+    return Array.from(new Set(names));
+}
+
+function assertAuditCoverage(raw, requirementsPath) {
+    if (!raw || !Array.isArray(raw.dependencies) || !raw.dependencies.length) {
+        throw new Error('pip-audit returned zero dependencies; refusing an unaudited pass');
+    }
+    const required = directRequirementNames(fs.readFileSync(requirementsPath, 'utf8'));
+    const audited = new Set(raw.dependencies
+        .map((dependency) => String(dependency && dependency.name || '').toLowerCase()
+            .replace(/[-_.]+/g, '-')));
+    const missing = required.filter((name) => !audited.has(name));
+    if (missing.length) {
+        throw new Error(`pip-audit omitted requirement(s): ${missing.join(', ')}`);
     }
 }
 
@@ -271,6 +312,7 @@ function runPipAudit(options = {}) {
             const stderr = String(result.stderr || '').trim();
             throw new Error(`pip-audit failed before JSON could be parsed (${candidate.command}): ${err.message}${stderr ? `; stderr: ${stderr}` : ''}`);
         }
+        assertAuditCoverage(raw, requirementsPath);
         return normalizeAudit(raw, {
             requirementsPath,
             command: [candidate.command, ...args].join(' '),
@@ -298,11 +340,14 @@ function combineAuditReports(declared, minimum, options = {}, release = null) {
         ...tagFindings(minimum.reviewedFindings, 'minimum'),
         ...(release ? tagFindings(release.reviewedFindings, 'release-constraints') : [])
     ];
+    const auditErrors = [declared, minimum, release]
+        .filter(Boolean)
+        .flatMap((report) => Array.isArray(report.auditErrors) ? report.auditErrors : []);
     return {
         schemaVersion: 2,
         product: 'Astra Downloader',
         generatedAt: (options.now || new Date()).toISOString(),
-        status: actionableFindings.length ? 'fail' : 'pass',
+        status: actionableFindings.length || auditErrors.length ? 'fail' : 'pass',
         requirements: repoRelative(REQUIREMENTS_PATH),
         tool: {
             name: 'pip-audit',
@@ -318,10 +363,12 @@ function combineAuditReports(declared, minimum, options = {}, release = null) {
             minimum: minimum.summary,
             ...(release ? { releaseConstraints: release.summary } : {}),
             actionableFindings: actionableFindings.length,
-            reviewedFindings: reviewedFindings.length
+            reviewedFindings: reviewedFindings.length,
+            auditErrors: auditErrors.length
         },
         actionableFindings,
         reviewedFindings,
+        auditErrors,
         audits: { declared, minimum, ...(release ? { releaseConstraints: release } : {}) }
     };
 }
@@ -393,6 +440,8 @@ module.exports = {
     REVIEWED_VULNERABILITIES,
     combineAuditReports,
     isActionableSeverity,
+    assertAuditCoverage,
+    directRequirementNames,
     minimumRequirementsFor,
     normalizeAudit,
     normalizeSeverity,
