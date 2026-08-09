@@ -159,6 +159,10 @@
       <translation>Import cookies.txt</translation>
     </message>
     <message>
+      <source>No settings match this search.</source>
+      <translation>No settings match this search.</translation>
+    </message>
+    <message>
       <source>Connection</source>
       <translation>Connection</translation>
     </message>
@@ -247,6 +251,10 @@
       <translation>Performance</translation>
     </message>
     <message>
+      <source>Language</source>
+      <translation>Language</translation>
+    </message>
+    <message>
       <source>Tray behavior</source>
       <translation>Tray behavior</translation>
     </message>
@@ -267,6 +275,10 @@
       <translation>Reinstall ffmpeg</translation>
     </message>
     <message>
+      <source>Import and export</source>
+      <translation>Import and export</translation>
+    </message>
+    <message>
       <source>Export settings</source>
       <translation>Export settings</translation>
     </message>
@@ -281,6 +293,10 @@
     <message>
       <source>Save changes</source>
       <translation>Save changes</translation>
+    </message>
+    <message>
+      <source>Restore defaults</source>
+      <translation>Restore defaults</translation>
     </message>
     <message>
       <source>Unsaved changes</source>
@@ -671,6 +687,18 @@
       <translation>設定</translation>
     </message>
     <message>
+      <source>Find a setting</source>
+      <translation>Find a setting</translation>
+    </message>
+    <message>
+      <source>Filter settings</source>
+      <translation>Filter settings</translation>
+    </message>
+    <message>
+      <source>Search settings by name or group</source>
+      <translation>Search settings by name or group</translation>
+    </message>
+    <message>
       <source>Local API port</source>
       <translation>Local API port</translation>
     </message>
@@ -995,16 +1023,16 @@
       <translation>Stable</translation>
     </message>
     <message>
-      <source>Language</source>
-      <translation>Language</translation>
-    </message>
-    <message>
       <source>Companion language</source>
       <translation>Companion language</translation>
     </message>
     <message>
       <source>Language changes apply the next time Astra Downloader starts.</source>
       <translation>Language changes apply the next time Astra Downloader starts.</translation>
+    </message>
+    <message>
+      <source>Language changes apply after restarting Astra Downloader.</source>
+      <translation>Language changes apply after restarting Astra Downloader.</translation>
     </message>
     <message>
       <source>Keep yt-dlp up to date automatically</source>
@@ -1073,6 +1101,10 @@
     <message>
       <source>Settings status</source>
       <translation>Settings status</translation>
+    </message>
+    <message>
+      <source>Restore the editable settings to their shipped defaults.</source>
+      <translation>Restore the editable settings to their shipped defaults.</translation>
     </message>
     <message>
       <source>Starting</source>
@@ -1335,6 +1367,18 @@
       <translation>Resume pending downloads explicitly. Items needing sign-in remain paused.</translation>
     </message>
     <message>
+      <source>Settings already use their defaults.</source>
+      <translation>Settings already use their defaults.</translation>
+    </message>
+    <message>
+      <source>Could not restore defaults. Nothing changed; check disk permissions and retry.</source>
+      <translation>Could not restore defaults. Nothing changed; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>Restored defaults for {count} settings: {names}.</source>
+      <translation>Restored defaults for {count} settings: {names}.</translation>
+    </message>
+    <message>
       <source>No settings import is available to undo.</source>
       <translation>No settings import is available to undo.</translation>
     </message>
@@ -1547,6 +1591,14 @@
       <translation>Paste a link</translation>
     </message>
     <message>
+      <source>SponsorBlock categories</source>
+      <translation>SponsorBlock categories</translation>
+    </message>
+    <message>
+      <source>Settings restored and server restarted.</source>
+      <translation>Settings restored and server restarted.</translation>
+    </message>
+    <message>
       <source>History could not be read</source>
       <translation>History could not be read</translation>
     </message>
@@ -1613,6 +1665,10 @@
     <message>
       <source>{progress} percent complete</source>
       <translation>{progress} percent complete</translation>
+    </message>
+    <message>
+      <source>Settings restored. Restart Astra Downloader to apply the language.</source>
+      <translation>Settings restored. Restart Astra Downloader to apply the language.</translation>
     </message>
     <message>
       <source>Could not read download history: {error}</source>

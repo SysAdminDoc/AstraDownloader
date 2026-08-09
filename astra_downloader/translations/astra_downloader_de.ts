@@ -159,6 +159,10 @@
       <translation>cookies.txt importieren</translation>
     </message>
     <message>
+      <source>No settings match this search.</source>
+      <translation>Keine Einstellungen entsprechen dieser Suche.</translation>
+    </message>
+    <message>
       <source>Connection</source>
       <translation>Verbindung</translation>
     </message>
@@ -247,6 +251,10 @@
       <translation>Leistung</translation>
     </message>
     <message>
+      <source>Language</source>
+      <translation>Sprache</translation>
+    </message>
+    <message>
       <source>Tray behavior</source>
       <translation>Infobereich</translation>
     </message>
@@ -267,6 +275,10 @@
       <translation>ffmpeg neu installieren</translation>
     </message>
     <message>
+      <source>Import and export</source>
+      <translation>Import und Export</translation>
+    </message>
+    <message>
       <source>Export settings</source>
       <translation>Einstellungen exportieren</translation>
     </message>
@@ -281,6 +293,10 @@
     <message>
       <source>Save changes</source>
       <translation>Änderungen speichern</translation>
+    </message>
+    <message>
+      <source>Restore defaults</source>
+      <translation>Standards wiederherstellen</translation>
     </message>
     <message>
       <source>Unsaved changes</source>
@@ -671,6 +687,18 @@
       <translation>Einstellungen</translation>
     </message>
     <message>
+      <source>Find a setting</source>
+      <translation>Einstellung suchen</translation>
+    </message>
+    <message>
+      <source>Filter settings</source>
+      <translation>Einstellungen filtern</translation>
+    </message>
+    <message>
+      <source>Search settings by name or group</source>
+      <translation>Einstellungen nach Name oder Gruppe durchsuchen</translation>
+    </message>
+    <message>
       <source>Local API port</source>
       <translation>Lokaler API-Port</translation>
     </message>
@@ -995,16 +1023,16 @@
       <translation>Stabil</translation>
     </message>
     <message>
-      <source>Language</source>
-      <translation>Sprache</translation>
-    </message>
-    <message>
       <source>Companion language</source>
       <translation>Sprache der Anwendung</translation>
     </message>
     <message>
       <source>Language changes apply the next time Astra Downloader starts.</source>
       <translation>Sprachänderungen gelten beim nächsten Start von Astra Downloader.</translation>
+    </message>
+    <message>
+      <source>Language changes apply after restarting Astra Downloader.</source>
+      <translation>Sprachänderungen werden nach einem Neustart von Astra Downloader angewendet.</translation>
     </message>
     <message>
       <source>Keep yt-dlp up to date automatically</source>
@@ -1073,6 +1101,10 @@
     <message>
       <source>Settings status</source>
       <translation>Einstellungsstatus</translation>
+    </message>
+    <message>
+      <source>Restore the editable settings to their shipped defaults.</source>
+      <translation>Bearbeitbare Einstellungen auf die mitgelieferten Standards zurücksetzen.</translation>
     </message>
     <message>
       <source>Starting</source>
@@ -1335,6 +1367,18 @@
       <translation>Ausstehende Downloads explizit fortsetzen. Elemente, die eine Anmeldung benötigen, bleiben pausiert.</translation>
     </message>
     <message>
+      <source>Settings already use their defaults.</source>
+      <translation>Die Einstellungen verwenden bereits ihre Standards.</translation>
+    </message>
+    <message>
+      <source>Could not restore defaults. Nothing changed; check disk permissions and retry.</source>
+      <translation>Standards konnten nicht wiederhergestellt werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Restored defaults for {count} settings: {names}.</source>
+      <translation>Standards für {count} Einstellungen wiederhergestellt: {names}.</translation>
+    </message>
+    <message>
       <source>No settings import is available to undo.</source>
       <translation>Kein Einstellungen-Import zum Rückgängigmachen verfügbar.</translation>
     </message>
@@ -1547,6 +1591,14 @@
       <translation>Link einfügen</translation>
     </message>
     <message>
+      <source>SponsorBlock categories</source>
+      <translation>SponsorBlock-Kategorien</translation>
+    </message>
+    <message>
+      <source>Settings restored and server restarted.</source>
+      <translation>Einstellungen wiederhergestellt und Server neu gestartet.</translation>
+    </message>
+    <message>
       <source>History could not be read</source>
       <translation>Verlauf konnte nicht gelesen werden</translation>
     </message>
@@ -1613,6 +1665,10 @@
     <message>
       <source>{progress} percent complete</source>
       <translation>{progress} Prozent abgeschlossen</translation>
+    </message>
+    <message>
+      <source>Settings restored. Restart Astra Downloader to apply the language.</source>
+      <translation>Einstellungen wiederhergestellt. Starten Sie Astra Downloader neu, um die Sprache anzuwenden.</translation>
     </message>
     <message>
       <source>Could not read download history: {error}</source>

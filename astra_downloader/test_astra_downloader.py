@@ -13325,6 +13325,72 @@ class SettingsFormReloadTests(unittest.TestCase):
                  in gui.MainWindowCore._SETTINGS_FORM_FIELDS}
         self.assertEqual(kinds, {"text", "check", "number", "combo"})
 
+
+class SettingsNavigationTests(unittest.TestCase):
+    def _window(self, config):
+        manager = ad.DownloadManager(config, FakeHistory())
+        patches = [
+            mock.patch.object(ad.MainWindow, "_start_instance_command_listener"),
+            mock.patch.object(ad.MainWindow, "_start_readiness_probe"),
+            mock.patch.object(ad.QSystemTrayIcon, "show"),
+        ]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        window = ad.MainWindow(config, manager, FakeHistory())
+        self.addCleanup(_retire_test_window, window)
+        return window
+
+    def test_filter_narrows_rows_without_losing_their_group(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        window._filter_settings("proxy")
+        QApplication.processEvents()
+        groups = {title: group for group, _content, title in window._settings_group_specs}
+        self.assertFalse(window.cfg_proxy.isHidden())
+        self.assertTrue(window.cfg_metadata.isHidden())
+        self.assertFalse(groups["Performance"].isHidden())
+        self.assertTrue(groups["Post-processing"].isHidden())
+
+        window._filter_settings("language")
+        self.assertFalse(window.cfg_language.isHidden())
+        self.assertFalse(groups["Language"].isHidden())
+        self.assertTrue(groups["Tray behavior"].isHidden())
+
+    def test_restore_defaults_reports_changes_and_refreshes_the_form(self):
+        class MutableConfig(FakeConfig):
+            def update(self, mapping):
+                self.data.update(mapping)
+                return True
+
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        config = MutableConfig({
+            "Proxy": "https://proxy.example.test:8443",
+            "Language": "de",
+            "PacingJitterPercent": 35,
+            "SponsorBlockCategories": "sponsor",
+        })
+        window = self._window(config)
+
+        self.assertTrue(window._restore_default_settings())
+        QApplication.processEvents()
+        self.assertEqual(config.get("Proxy"), "")
+        self.assertEqual(config.get("Language"), "system")
+        self.assertEqual(config.get("PacingJitterPercent"), 0)
+        self.assertEqual(
+            config.get("SponsorBlockCategories"),
+            ad.DEFAULT_CONFIG["SponsorBlockCategories"],
+        )
+        self.assertEqual(window.cfg_proxy.text(), "")
+        self.assertEqual(window.cfg_language.currentData(), "system")
+        self.assertIn("Restored defaults", window.settings_status.text())
+
+
 class RevealInExplorerTests(unittest.TestCase):
     """Showing a finished file selects it, and the quoting is exact."""
 
