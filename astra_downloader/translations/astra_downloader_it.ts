@@ -799,8 +799,8 @@
       <translation>Keep intermediate files</translation>
     </message>
     <message>
-      <source>Keep the .part, .f### and .ytdl files a finished download leaves behind. Off by default: one download, one file.</source>
-      <translation>Keep the .part, .f### and .ytdl files a finished download leaves behind. Off by default: one download, one file.</translation>
+      <source>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.</source>
+      <translation>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.</translation>
     </message>
     <message>
       <source>Tracks</source>

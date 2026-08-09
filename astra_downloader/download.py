@@ -75,6 +75,7 @@ HOST_BACKOFF_MAX_ENTRIES = 64
 DOWNLOAD_STALL_TIMEOUT_SECONDS = 1800
 DOWNLOAD_WATCHDOG_POLL_SECONDS = 15
 DOWNLOAD_QUEUE_SCHEMA_VERSION = 1
+DOWNLOAD_INTERMEDIATE_DIRNAME = 'download-temp'
 PLAYLIST_PREVIEW_LIMIT = 200
 DOWNLOAD_RUNNING_STATES = {'queued', 'downloading', 'merging', 'extracting', 'trimming'}
 DOWNLOAD_PENDING_STATES = {'pending', 'paused', 'needs-auth'}
@@ -3330,6 +3331,32 @@ class DownloadManagerCore:
             "only to signed-in viewers."
         )
 
+    def _download_intermediate_dir(self, dl):
+        """Return the stable, app-owned staging directory for one download.
+
+        The directory is derived from the queue id rather than a random temp
+        name so a recovered queue item finds the same ``.part`` files after a
+        restart. Queue ids normally already use the safe ``dl_*`` form, but
+        restored state is untrusted, so sanitize it and add a deterministic
+        suffix whenever it changes.
+        """
+        install_dir = Path(self._dependencies['INSTALL_DIR']()).resolve()
+        root = (install_dir / DOWNLOAD_INTERMEDIATE_DIRNAME).resolve()
+        raw_id = str(getattr(dl, 'id', '') or 'download')
+        safe_id = re.sub(r'[^A-Za-z0-9._-]+', '_', raw_id)[:80]
+        if not safe_id:
+            safe_id = 'download'
+        if safe_id != raw_id:
+            suffix = uuid.uuid5(uuid.NAMESPACE_URL, raw_id).hex[:12]
+            safe_id = f'{safe_id.rstrip("._-") or "download"}-{suffix}'
+        candidate = (root / safe_id).resolve()
+        if candidate.parent != root:
+            # A pre-existing junction/symlink must never turn cleanup into a
+            # recursive delete outside the app-owned staging root.
+            suffix = uuid.uuid5(uuid.NAMESPACE_URL, raw_id).hex[:12]
+            candidate = root / f'download-{suffix}'
+        return candidate
+
     def _run_download(self, dl):
         with self._lock:
             if dl.status != 'queued':
@@ -3350,22 +3377,31 @@ class DownloadManagerCore:
         # Output template. A user-configured template (already validated by
         # config.normalize_output_template — allowlisted fields, no traversal,
         # keeps %(ext)s) is always relative to the download root and, when set,
-        # governs both single and playlist layout.
+        # governs both single and playlist layout. It must stay relative: yt-dlp
+        # ignores --paths when -o receives an absolute template.
         custom_tpl = str(self.config.get("OutputTemplate", "") or "")
         if custom_tpl:
-            out_tpl = str(Path(dl.output_dir) / custom_tpl)
+            out_tpl = custom_tpl
         elif is_playlist:
             # yt-dlp substitutes the literal string "NA" for a field it cannot
             # resolve, so a collection with no title used to create a folder
             # called NA and every such download piled into it. The alternation
             # falls back to the playlist id and then to a plain word.
-            out_tpl = str(
-                Path(dl.output_dir)
-                / "%(playlist_title,playlist_id|Playlist).200B"
-                / "%(title).200B.%(ext)s"
+            out_tpl = (
+                "%(playlist_title,playlist_id|Playlist).200B/"
+                "%(title).200B.%(ext)s"
             )
         else:
-            out_tpl = str(Path(dl.output_dir) / "%(title).200B.%(ext)s")
+            out_tpl = "%(title).200B.%(ext)s"
+
+        # yt-dlp downloads to temp: first and moves only the finished output
+        # under home:. KeepIntermediateFiles is deliberately also the
+        # diagnosis switch: it puts temp: beside the output and skips cleanup.
+        keep_intermediates = bool(self.config.get("KeepIntermediateFiles", False))
+        intermediate_dir = (
+            Path(dl.output_dir)
+            if keep_intermediates else self._download_intermediate_dir(dl)
+        )
 
         # Build args. v1.2.0: emit progress as JSON alongside the legacy MDLP
         # line so we can parse robustly when yt-dlp tweaks its human-readable
@@ -3374,7 +3410,10 @@ class DownloadManagerCore:
                 '--trim-filenames', '180',
                 '--replace-in-metadata', 'title,playlist_title',
                 '[\":<>|*?/\\\\]', '_',
-                '--ffmpeg-location', ffmpeg_dir, '-o', out_tpl,
+                '--ffmpeg-location', ffmpeg_dir,
+                '--paths', f'home:{dl.output_dir}',
+                '--paths', f'temp:{intermediate_dir}',
+                '-o', out_tpl,
                 '--progress-template',
                 'download:MDLP %(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s',
                 '--progress-template',
@@ -4643,15 +4682,24 @@ class DownloadManagerCore:
     def _sweep_download_intermediates(self, dl):
         """Leave one file behind for one finished download.
 
-        A merged download writes `Title.f137.mp4`, `Title.f140.m4a`,
-        `Title.mp4.part` and `Title.mp4.ytdl` alongside `Title.mp4`, and yt-dlp
-        does not always remove them — a partial run, a killed process or an
-        interrupted merge all leave them. Only files that belong to *this*
-        download's own destination are touched, and only after it succeeded:
-        on failure they are what a resume continues from.
+        New runs stage those files in a stable, per-download directory under
+        the app install root. A successful run can remove that whole staging
+        directory; a failed run must leave it because a retry or a recovered
+        queue item resumes from its `.part`. The legacy destination sweep stays
+        in place for intermediates created by older versions of the app.
         """
         if self.config.get("KeepIntermediateFiles", False):
             return
+        staging = self._download_intermediate_dir(dl)
+        try:
+            if staging.is_dir():
+                shutil.rmtree(staging)
+                self._dependencies['write_persistent_log'](
+                    f"Download {dl.id}: removed its intermediate staging directory."
+                )
+        except OSError:
+            # reason: staging cleanup is best effort; the finished file is the result
+            pass
         final = str(dl.filename or '').strip()
         if not final:
             return

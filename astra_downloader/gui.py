@@ -3544,8 +3544,9 @@ class MainWindowCore(QMainWindow):
         self.cfg_subs.setChecked(self.config.get("EmbedSubs", False))
         self.cfg_keep_intermediates = QCheckBox(tr("Keep intermediate files"))
         self.cfg_keep_intermediates.setToolTip(tr(
-            "Keep the .part, .f### and .ytdl files a finished download leaves "
-            "behind. Off by default: one download, one file."
+            "Put .part, .f### and .ytdl files beside the output and keep them "
+            "for diagnosis. Off by default: they use a private temporary "
+            "folder and are removed after a successful download."
         ))
         self.cfg_keep_intermediates.setChecked(
             self.config.get("KeepIntermediateFiles", False))
