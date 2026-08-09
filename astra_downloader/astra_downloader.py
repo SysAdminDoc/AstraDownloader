@@ -637,6 +637,36 @@ def write_persistent_log(message, path=None):
         pass
 
 
+def seed_log_ring(path=None):
+    """Restore the bounded in-memory log view from the persisted log tail."""
+    try:
+        target = Path(LOG_PATH if path is None else path)
+        if not target.is_file():
+            return 0
+        with open(target, 'rb') as stream:
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            stream.seek(max(0, size - LOG_MAX_BYTES), os.SEEK_SET)
+            raw = stream.read()
+        lines = raw.decode('utf-8', errors='replace').splitlines()
+        entries = []
+        for line in lines[-_LOG_RING_MAX:]:
+            match = re.match(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s(.*)$', line)
+            if match:
+                timestamp, message = match.groups()
+            else:
+                timestamp, message = '', line
+            if message:
+                entries.append({'ts': timestamp, 'msg': message[:MAX_TEXT_FIELD]})
+        with _LOG_LOCK:
+            _log_ring.clear()
+            _log_ring.extend(entries)
+        return len(entries)
+    except Exception:
+        # reason: a corrupt or locked historical log must not prevent startup
+        return 0
+
+
 def get_recent_log_entries():
     with _LOG_LOCK:
         return list(_log_ring)
@@ -3796,6 +3826,7 @@ class MainWindow(MainWindowCore):
                 'INSTALL_DIR': lambda: INSTALL_DIR,
                 'INSTANCE_CONTROL_HOST': lambda: INSTANCE_CONTROL_HOST,
                 'INSTANCE_CONTROL_PORT': lambda: INSTANCE_CONTROL_PORT,
+                'LOG_PATH': lambda: LOG_PATH,
                 'MAX_SITE_LOGIN_TEXT_BYTES': lambda: MAX_SITE_LOGIN_TEXT_BYTES,
                 'MODULE_FILE': lambda: __file__,
                 'PORT_FALLBACKS': lambda: PORT_FALLBACKS,
@@ -4330,6 +4361,7 @@ def main():
     visual_smoke = '--visual-smoke' in sys.argv
     startup_command = startup_command_from_argv()
     start_minimized = '-Background' in sys.argv or '--background' in sys.argv or startup_command == 'start'
+    seed_log_ring()
     _reconcile_stale_companion_activation()
     log_update_recovery_status()
 

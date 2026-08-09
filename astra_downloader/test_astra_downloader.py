@@ -1549,6 +1549,62 @@ class InstanceCommandTests(unittest.TestCase):
 
 
 class DiagnosticsBundleTests(unittest.TestCase):
+    def test_seed_log_ring_rehydrates_the_persisted_tail(self):
+        from collections import deque
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(ad, "_log_ring", deque(maxlen=ad._LOG_RING_MAX)):
+            path = Path(tmp) / "server.log"
+            path.write_text(
+                "2026-08-08 10:00:00 first\n"
+                "2026-08-08 10:00:01 second\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(ad.seed_log_ring(path), 2)
+            self.assertEqual(
+                [entry["msg"] for entry in ad.get_recent_log_entries()],
+                ["first", "second"],
+            )
+
+    def test_save_diagnostics_writes_the_redacted_payload_to_a_chosen_file(self):
+        class Window:
+            pass
+
+        window = Window()
+        events = []
+        window._append_log = events.append
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "diagnostics.json"
+            with mock.patch.object(ad.QFileDialog, "getSaveFileName", return_value=(str(target), "")):
+                self.assertTrue(ad.MainWindow._save_diagnostics_text(window, '{"ok": true}'))
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {"ok": True})
+        self.assertIn("Diagnostics saved", events[-1])
+
+    def test_reveal_log_file_uses_the_isolated_spawn_dependency(self):
+        class Window:
+            pass
+
+        window = Window()
+        events = []
+        spawned = []
+        window._append_log = events.append
+        window._dependencies = {
+            "LOG_PATH": lambda: log_path,
+            "build_reveal_command": lambda value: f"reveal {value}",
+            "spawn_detached": spawned.append,
+        }
+        window._value = lambda name: (
+            window._dependencies[name]()
+            if callable(window._dependencies[name])
+            else window._dependencies[name]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "server.log"
+            log_path.write_text("entry\n", encoding="utf-8")
+            self.assertTrue(ad.MainWindow._reveal_log_file(window))
+        self.assertEqual(spawned, [f"reveal {log_path}"])
+        self.assertIn("Revealed", events[-1])
+
     def test_bundle_is_allowlisted_bounded_and_redacts_seeded_secrets(self):
         secret = "seeded-secret-value-1234567890abcdef"
         logs = [

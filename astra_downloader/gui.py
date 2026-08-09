@@ -932,6 +932,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'INSTALL_DIR',
     'INSTANCE_CONTROL_HOST',
     'INSTANCE_CONTROL_PORT',
+    'LOG_PATH',
     'MAX_SITE_LOGIN_TEXT_BYTES',
     'MODULE_FILE',
     'PORT_FALLBACKS',
@@ -1583,6 +1584,10 @@ class MainWindowCore(QMainWindow):
         btn_diag.setToolTip("Review the redacted support payload before copying it.")
         btn_diag.clicked.connect(self._copy_diagnostics)
         log_header.addWidget(btn_diag)
+        btn_reveal_log = self._make_tool_button("Reveal log file", "ghost")
+        btn_reveal_log.setToolTip("Open the persisted server log in File Explorer.")
+        btn_reveal_log.clicked.connect(self._reveal_log_file)
+        log_header.addWidget(btn_reveal_log)
         layout.addLayout(log_header)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
@@ -1592,7 +1597,7 @@ class MainWindowCore(QMainWindow):
         )
         self.log_text.setMinimumHeight(180)
         self.log_text.document().setMaximumBlockCount(300)
-        self.log_text.setPlainText("Ready.")
+        self._restore_log_view()
         layout.addWidget(self.log_text, 1)
 
         self.tabs.addTab(page, "Browser extension")
@@ -5329,15 +5334,7 @@ class MainWindowCore(QMainWindow):
             self._show_settings_status("Copied token cleared from the clipboard.", "neutral")
 
     def _copy_diagnostics(self):
-        payload = self._dependencies['build_diagnostics_bundle'](
-            server_running=self.server_running,
-            endpoint=self.dash_endpoint.text(),
-            active_downloads=self.dl_manager.active_count(),
-            completed_downloads=self.dl_manager.total_completed,
-            recent_logs=self._dependencies['get_recent_log_entries'](),
-            secrets=(self.config.get('ServerToken', ''), self.cfg_token.text()),
-        )
-        text = json.dumps(payload, indent=2, ensure_ascii=False)
+        text = self._diagnostics_text()
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Review Diagnostics")
@@ -5358,6 +5355,8 @@ class MainWindowCore(QMainWindow):
         preview.setPlainText(text)
         preview.setAccessibleName("Redacted diagnostics preview")
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        save_button = buttons.addButton("Save diagnostics", QDialogButtonBox.ButtonRole.ActionRole)
+        save_button.clicked.connect(lambda: self._save_diagnostics_text(text))
         copy_button = buttons.addButton("Copy to Clipboard", QDialogButtonBox.ButtonRole.AcceptRole)
         copy_button.setDefault(True)
         copy_button.clicked.connect(dialog.accept)
@@ -5370,6 +5369,65 @@ class MainWindowCore(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             QApplication.clipboard().setText(text)
             self._append_log("Redacted diagnostics copied to clipboard")
+
+    def _diagnostics_text(self):
+        payload = self._dependencies['build_diagnostics_bundle'](
+            server_running=self.server_running,
+            endpoint=self.dash_endpoint.text(),
+            active_downloads=self.dl_manager.active_count(),
+            completed_downloads=self.dl_manager.total_completed,
+            recent_logs=self._dependencies['get_recent_log_entries'](),
+            secrets=(self.config.get('ServerToken', ''), self.cfg_token.text()),
+        )
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+
+    def _save_diagnostics_text(self, text):
+        target, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Save diagnostics",
+            str(Path.home() / "astra-diagnostics.json"),
+            "JSON files (*.json);;All files (*)",
+        )
+        if not target:
+            return False
+        try:
+            Path(target).write_text(str(text), encoding="utf-8")
+        except OSError as error:
+            self._append_log(f"Could not save diagnostics: {error}")
+            return False
+        self._append_log(f"Diagnostics saved to {Path(target).name}")
+        return True
+
+    def _reveal_log_file(self):
+        path = Path(self._value('LOG_PATH'))
+        try:
+            if not path.is_file():
+                self._dependencies['write_persistent_log'](
+                    "Reveal log requested; creating the persisted server log."
+                )
+            command = self._dependencies['build_reveal_command'](str(path))
+            if not command:
+                self._append_log("The persisted server log is not available yet.")
+                return False
+            self._dependencies['spawn_detached'](command)
+            self._append_log("Revealed the persisted server log.")
+            return True
+        except Exception as error:
+            self._append_log(f"Could not reveal the persisted server log: {error}")
+            return False
+
+    def _restore_log_view(self):
+        entries = self._dependencies['get_recent_log_entries']()
+        lines = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            message = str(entry.get('msg') or '').strip()
+            if not message:
+                continue
+            timestamp = str(entry.get('ts') or '')
+            lines.append(f"{timestamp[-8:]} {message}" if timestamp else message)
+        self.log_text.setPlainText("\n".join(lines) if lines else "Ready.")
 
     def _clear_log(self):
         self.log_text.setPlainText("Ready.")
