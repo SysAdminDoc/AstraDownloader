@@ -14,6 +14,11 @@ repository's git log.
 
 ### Added
 
+- **Metadata probes use the download identity.** Format lookups, playlist
+  previews and subscription scans now carry the configured proxy, browser
+  impersonation and the target site's stored sign-in. Probe cookie jars are
+  scoped by the same site check as downloads and removed after the probe.
+
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
   app always asked for both. You can now ask for creator subtitles only, the
