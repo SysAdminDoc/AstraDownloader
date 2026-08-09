@@ -413,7 +413,8 @@ class ReadinessProbe(QObject):
     completed = pyqtSignal(dict)
 
     def __init__(self, configured_runtime='auto', *, runtime_probe,
-                 provider_probe, ytdlp_version, ffmpeg_version, logger):
+                 provider_probe, ytdlp_version, ffmpeg_version, logger,
+                 impersonate_targets=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -421,17 +422,22 @@ class ReadinessProbe(QObject):
         self._ytdlp_version = ytdlp_version
         self._ffmpeg_version = ffmpeg_version
         self._logger = logger
+        self._impersonate_targets = impersonate_targets
 
     def run(self):
         try:
             runtime = self._runtime_probe(configured_runtime=self.configured_runtime)
             provider = self._provider_probe()
+            targets = (
+                self._impersonate_targets() if self._impersonate_targets else []
+            )
             payload = {
                 "ytDlp": self._ytdlp_version() or "",
                 "ffmpeg": self._ffmpeg_version() or "",
                 "runtime": runtime or {},
                 "deno": runtime or {},
                 "provider": provider or {},
+                "impersonateTargets": targets or [],
             }
         except Exception as error:
             self._logger(f"Readiness probe failed: {error}")
@@ -1342,7 +1348,10 @@ class MainWindowCore(QMainWindow):
         if self.readiness_thread is not None:
             return
         self.readiness_thread = QThread(self)
-        self.readiness_worker = self._dependencies['ReadinessProbe'](self.config.get('JavaScriptRuntime', 'auto'))
+        self.readiness_worker = self._dependencies['ReadinessProbe'](
+            self.config.get('JavaScriptRuntime', 'auto'),
+            impersonate_targets=self._dependencies['probe_impersonate_targets'],
+        )
         self.readiness_worker.moveToThread(self.readiness_thread)
         self.readiness_thread.started.connect(self.readiness_worker.run)
         self.readiness_worker.completed.connect(self._apply_readiness)
@@ -1378,8 +1387,34 @@ class MainWindowCore(QMainWindow):
             ),
         )
 
+    def _apply_impersonate_targets(self, targets):
+        combo = getattr(self, "cfg_impersonate", None)
+        if combo is None:
+            return
+        configured = getattr(self, "_configured_impersonate_target", "")
+        values = []
+        for target in targets or []:
+            target = str(target or "").strip()
+            if target and target not in values:
+                values.append(target)
+        combo.blockSignals(True)
+        try:
+            pending = combo.findData("__impersonate_pending__")
+            if pending >= 0:
+                combo.removeItem(pending)
+            for target in values:
+                if combo.findData(target) < 0:
+                    combo.addItem(target, target)
+            if configured and combo.findData(configured) < 0:
+                combo.addItem(f"{configured} (unavailable)", configured)
+            restored = combo.findData(configured)
+            combo.setCurrentIndex(restored if restored >= 0 else 0)
+        finally:
+            combo.blockSignals(False)
+
     def _apply_readiness(self, payload):
         if payload.get("error"):
+            self._apply_impersonate_targets([])
             for key in ("ytDlp", "ffmpeg", "deno", "provider"):
                 self._set_readiness(key, "Unavailable", "danger")
             return
@@ -1388,6 +1423,7 @@ class MainWindowCore(QMainWindow):
         ffmpeg = payload.get("ffmpeg")
         runtime = payload.get("runtime") or payload.get("deno") or {}
         provider = payload.get("provider") or {}
+        self._apply_impersonate_targets(payload.get("impersonateTargets"))
         self._set_tool_readiness("ytDlp", yt_dlp, self._value('YTDLP_PATH'))
         self._set_tool_readiness("ffmpeg", ffmpeg, self._value('FFMPEG_PATH'))
 
@@ -3202,13 +3238,13 @@ class MainWindowCore(QMainWindow):
         self.cfg_impersonate.addItem(tr("Off"), "")
         configured = self._dependencies['normalize_impersonate_target'](
             self.config.get("ImpersonateTarget", ""))
-        for target in self._dependencies['probe_impersonate_targets']():
-            self.cfg_impersonate.addItem(target, target)
-        if configured and self.cfg_impersonate.findData(configured) < 0:
-            # A target the installed binary no longer reports. Keep it
-            # selectable and say so, rather than silently resetting a choice
-            # the user made.
-            self.cfg_impersonate.addItem(f"{configured} (unavailable)", configured)
+        self._configured_impersonate_target = configured
+        self.cfg_impersonate.addItem(
+            tr("Checking installed yt-dlp…"),
+            "__impersonate_pending__",
+        )
+        if configured:
+            self.cfg_impersonate.addItem(configured, configured)
         restored = self.cfg_impersonate.findData(configured)
         self.cfg_impersonate.setCurrentIndex(restored if restored >= 0 else 0)
         impersonate_row.addWidget(self.cfg_impersonate)

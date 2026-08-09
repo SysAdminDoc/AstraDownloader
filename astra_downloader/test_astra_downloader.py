@@ -705,8 +705,13 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn('QLabel[class="errorCallout"]', ad.STYLESHEET)
         self.assertIn("self._runtime_probe", probe_source)
         self.assertIn("self._provider_probe", probe_source)
+        self.assertIn("self._impersonate_targets", probe_source)
+        self.assertIn("impersonate_targets", probe_wiring_source)
         self.assertIn("probe_javascript_runtime", probe_wiring_source)
         self.assertIn("probe_po_token_provider", probe_wiring_source)
+        settings_source = inspect.getsource(ad.MainWindow._build_settings)
+        self.assertNotIn("probe_impersonate_targets", settings_source)
+        self.assertIn("__impersonate_pending__", settings_source)
         self.assertIn("self.readiness_worker.moveToThread", source)
         self.assertIn("if is_frozen_app() and not visual_smoke", source)
         # The throwaway smoke render must not delegate to a live companion.

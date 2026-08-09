@@ -3686,7 +3686,7 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
     return True
 
 class ReadinessProbe(_OwnedReadinessProbe):
-    def __init__(self, configured_runtime='auto'):
+    def __init__(self, configured_runtime='auto', *, impersonate_targets=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -3694,6 +3694,10 @@ class ReadinessProbe(_OwnedReadinessProbe):
             ytdlp_version=lambda *args, **kwargs: get_ytdlp_version(*args, **kwargs),
             ffmpeg_version=lambda *args, **kwargs: get_ffmpeg_version(*args, **kwargs),
             logger=lambda message: write_persistent_log(message),
+            impersonate_targets=(
+                impersonate_targets
+                or (lambda: probe_impersonate_targets())
+            ),
         )
 
 # ══════════════════════════════════════════════════════════════
