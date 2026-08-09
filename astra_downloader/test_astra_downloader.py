@@ -8730,7 +8730,10 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
              mock.patch.object(ad, 'fetch_latest_companion_version', return_value="9.9.9"), \
              mock.patch.object(ad, 'download_file_atomic', side_effect=fake_download), \
              mock.patch.object(ad, 'fetch_expected_sha256', return_value=expected_hash), \
-             mock.patch.object(ad, 'schedule_companion_update_restart') as schedule, \
+             mock.patch.object(
+                 ad, 'schedule_companion_update_restart',
+                 return_value={'scheduled': True, 'target': 'AstraDownloader.exe'},
+             ) as schedule, \
              mock.patch.object(ad, 'schedule_companion_process_exit') as exit_later:
             resp = client.post("/update", headers={"X-Auth-Token": self.TOKEN})
             leftovers = list(Path(tmp).glob("*.exe"))
@@ -8936,6 +8939,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         self.assertIn('Wait-Process -Id $probe.Id -Timeout 30', helper_source)
         self.assertIn('$probeFinished = $probe.HasExited', helper_source)
         self.assertIn('Stop-Process -Id $probe.Id -Force', helper_source)
+        self.assertIn("if ($Status -eq 'active')", helper_source)
         self.assertNotIn('-Wait -PassThru', helper_source)
         self.assertIn('-BackupPath', helper_args)
 
@@ -9047,13 +9051,21 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
                                return_value={'scheduled': True,
                                              'target': str(Path(tmp) / "AstraDownloader.exe")}) as schedule, \
              mock.patch.object(ad, 'schedule_companion_process_exit'):
-            # First cycle: release A installs and its digest gets recorded.
+            # First cycle: release A is only scheduled. The detached helper is
+            # the authority that records a digest after activation succeeds.
             resp_a = client.post("/update", headers={"X-Auth-Token": self.TOKEN})
             self.assertEqual(resp_a.status_code, 200)
             self.assertTrue(resp_a.get_json().get("update_available"))
             self.assertEqual(schedule.call_count, 1)
-            self.assertEqual(ad.read_last_installed_update_sha256(), hash_a,
-                "the scheduled update's digest must be persisted")
+            self.assertIsNone(ad.read_last_installed_update_sha256(),
+                "a scheduled update must not suppress retries before activation")
+
+            ad._write_update_state(
+                ad._companion_update_state_path(), status='active',
+                active_version='9.9.9', rollback_version=ad.APP_VERSION,
+                sha256=hash_a,
+            )
+            self.assertEqual(ad.read_last_installed_update_sha256(), hash_a)
 
             # Same release served again: refused (no reinstall loop).
             resp_repeat = client.post("/update", headers={"X-Auth-Token": self.TOKEN})
@@ -9066,7 +9078,47 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             self.assertEqual(resp_b.status_code, 200)
             self.assertTrue(resp_b.get_json().get("update_available"))
             self.assertEqual(schedule.call_count, 2)
+            self.assertIsNone(ad.read_last_installed_update_sha256(),
+                "a new scheduled digest must wait for the detached helper to activate")
+
+            ad._write_update_state(
+                ad._companion_update_state_path(), status='active',
+                active_version='9.9.9', rollback_version=ad.APP_VERSION,
+                sha256=hash_b,
+            )
             self.assertEqual(ad.read_last_installed_update_sha256(), hash_b)
+
+    def test_failed_activation_state_does_not_suppress_retry(self):
+        client = self._client()
+        payload = self._fake_payload()
+        expected_hash = hashlib.sha256(payload).hexdigest()
+
+        def fake_download(_url, path, **_kwargs):
+            Path(path).write_bytes(payload)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(ad, 'INSTALL_DIR', Path(tmp)), \
+             mock.patch.object(ad, 'fetch_latest_companion_version', return_value='9.9.9'), \
+             mock.patch.object(ad, 'download_file_atomic', side_effect=fake_download), \
+             mock.patch.object(ad, 'fetch_expected_sha256', return_value=expected_hash), \
+             mock.patch.object(
+                 ad, 'schedule_companion_update_restart',
+                 return_value={'scheduled': True, 'target': 'AstraDownloader.exe'},
+             ) as schedule, \
+             mock.patch.object(ad, 'schedule_companion_process_exit') as exit_later:
+            ad._write_update_state(
+                ad._companion_update_state_path(),
+                status='activation-failed', active_version=ad.APP_VERSION,
+                rollback_version=ad.APP_VERSION, sha256=expected_hash,
+                error_code='staged-health-failed',
+            )
+            resp = client.post('/update', headers={'X-Auth-Token': self.TOKEN})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json().get('update_available'))
+        self.assertEqual(resp.get_json().get('status'), 'restart_scheduled')
+        schedule.assert_called_once()
+        exit_later.assert_called_once()
 
     def test_update_state_helpers_tolerate_missing_and_garbage_state(self):
         with tempfile.TemporaryDirectory() as tmp, \
@@ -9083,6 +9135,15 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             digest = "A" * 64
             ad.record_last_installed_update_sha256(digest)
             self.assertEqual(ad.read_last_installed_update_sha256(), "a" * 64)
+
+            state.write_text(json.dumps({
+                'status': 'activation-failed', 'sha256': 'b' * 64,
+            }), encoding='utf-8')
+            self.assertIsNone(ad.read_last_installed_update_sha256())
+            state.write_text(json.dumps({
+                'status': 'active', 'sha256': 'b' * 64,
+            }), encoding='utf-8')
+            self.assertEqual(ad.read_last_installed_update_sha256(), 'b' * 64)
 
 
 class NativeMessagingBootstrapTests(unittest.TestCase):
