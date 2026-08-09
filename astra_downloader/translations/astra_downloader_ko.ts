@@ -731,6 +731,10 @@
       <translation>Cancel</translation>
     </message>
     <message>
+      <source>Loading history…</source>
+      <translation>Loading history…</translation>
+    </message>
+    <message>
       <source>Play</source>
       <translation>Play</translation>
     </message>
@@ -757,6 +761,10 @@
     <message>
       <source>Best</source>
       <translation>Best</translation>
+    </message>
+    <message>
+      <source>Looking up available formats…</source>
+      <translation>Looking up available formats…</translation>
     </message>
     <message>
       <source>Status</source>
@@ -815,6 +823,10 @@
       <translation>Test passed</translation>
     </message>
     <message>
+      <source>Subscription scan started. This row will update when it finishes.</source>
+      <translation>Subscription scan started. This row will update when it finishes.</translation>
+    </message>
+    <message>
       <source>Up</source>
       <translation>Up</translation>
     </message>
@@ -829,6 +841,14 @@
     <message>
       <source>Add sign-in</source>
       <translation>Add sign-in</translation>
+    </message>
+    <message>
+      <source>History unavailable</source>
+      <translation>History unavailable</translation>
+    </message>
+    <message>
+      <source>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</source>
+      <translation>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</translation>
     </message>
     <message>
       <source>No downloads yet</source>
@@ -911,6 +931,18 @@
       <translation>Paste a link</translation>
     </message>
     <message>
+      <source>History could not be read</source>
+      <translation>History could not be read</translation>
+    </message>
+    <message>
+      <source>Astra Downloader kept the unreadable history aside instead of showing an empty list.</source>
+      <translation>Astra Downloader kept the unreadable history aside instead of showing an empty list.</translation>
+    </message>
+    <message>
+      <source>Open diagnostics</source>
+      <translation>Open diagnostics</translation>
+    </message>
+    <message>
       <source>This link tops out at {height}p.</source>
       <translation>This link tops out at {height}p.</translation>
     </message>
@@ -927,6 +959,10 @@
       <translation>{shown} of {total} shown</translation>
     </message>
     <message>
+      <source>Every {minutes} min · scanning now…</source>
+      <translation>Every {minutes} min · scanning now…</translation>
+    </message>
+    <message>
       <source>Session cookies — valid until the site signs you out</source>
       <translation>Session cookies — valid until the site signs you out</translation>
     </message>
@@ -937,6 +973,10 @@
     <message>
       <source>Test failed</source>
       <translation>Test failed</translation>
+    </message>
+    <message>
+      <source>Could not read download history: {error}</source>
+      <translation>Could not read download history: {error}</translation>
     </message>
     <message>
       <source>from</source>

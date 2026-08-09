@@ -210,13 +210,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: intermediates are written under a temp directory and only the finished file appears in the destination; resume across a restart still works; a setting can put them back beside the output for diagnosis.
   Complexity: M
 
-- [ ] P2 — Say when something is being fetched
-  Why: Three surfaces do visible work with no indication that work is happening, one of them on the GUI thread.
-  Evidence: `_start_server` (`gui.py:3511-3618`) walks the whole `PORT_FALLBACKS` list binding sockets (`:3532-3546`) and constructs the WSGI server (`:3584`) synchronously on the GUI thread, and `_update_server_ui` (`:3638`) is binary Running/Stopped with no "Starting". `_refresh_history` (`:4405-4476`) calls `history_mgr.load()` on the GUI thread then rebuilds up to 50 cards with no loading state — and no error branch, so an unreadable `history.json` renders the "No downloads yet" empty state, which reads as "you have downloaded nothing". `_scan_subscription` (`:2576-2585`) posts "queued" and returns; the row shows only `nextScanAt`. The format probe (`:5112-5146`) runs on a thread after a 700 ms debounce and silently rewrites the picker on return.
-  Touches: `astra_downloader/gui.py`
-  Acceptance: server start reports a starting state and does its socket work off the GUI thread; History distinguishes "empty" from "could not be read" and shows a loading state; a scanning subscription says so on its row; the picker indicates a probe in flight.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Generate subtitles locally for a video that has none

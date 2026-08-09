@@ -364,9 +364,16 @@ class PersistenceTests(unittest.TestCase):
         import inspect
 
         gui_module = __import__("gui")
-        source = inspect.getsource(gui_module.MainWindowCore._start_server)
+        start_source = inspect.getsource(gui_module.MainWindowCore._start_server)
+        finish_source = inspect.getsource(gui_module.MainWindowCore._finish_server_start)
+        source = (
+            start_source + finish_source
+        )
         self.assertIn('set_session("ServerPort", chosen_port)', source)
         self.assertNotIn('self.config.set("ServerPort"', source)
+        self.assertIn('self._server_starting = True', start_source)
+        self.assertIn('name="server-prepare"', start_source)
+        self.assertIn('name="server-serve"', finish_source)
         save_source = inspect.getsource(gui_module.MainWindowCore._save_settings)
         self.assertIn('get_persisted', save_source)
 
@@ -431,6 +438,33 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(len(backups), 1)
             finally:
                 ad.HISTORY_PATH = original
+
+    def test_history_view_can_identify_a_quarantined_store(self):
+        import gui
+
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = Path(tmp) / "history.json"
+            window = types.SimpleNamespace(
+                history_mgr=types.SimpleNamespace(
+                    _resolve_path=lambda: history_path,
+                ),
+                _dependencies={
+                    "quarantined_state_files": lambda: [{
+                        "path": str(history_path),
+                        "backup": str(history_path) + ".corrupt-fixture",
+                    }],
+                },
+            )
+            self.assertTrue(gui.MainWindowCore._history_is_quarantined(window))
+
+    def test_history_view_explains_loading_and_unreadable_states(self):
+        import inspect
+        import gui
+
+        source = inspect.getsource(gui.MainWindowCore._refresh_history)
+        self.assertIn('tr("Loading history…")', source)
+        self.assertIn('tr("History could not be read")', source)
+        self.assertIn('self._history_is_quarantined()', source)
 
     def test_json_loader_quarantines_oversized_state_before_parsing(self):
         import importlib
@@ -10640,6 +10674,9 @@ class QuickDownloadBatchTests(unittest.TestCase):
         def show(self):
             self.visible = True
 
+        def hide(self):
+            self.visible = False
+
     class _Combo:
         def __init__(self, value):
             self.value = value
@@ -11713,6 +11750,8 @@ class FormatProbeTests(unittest.TestCase):
             _force_exit=False,
             _probed_format_url=probed,
             _format_probe_generation=0,
+            _format_probe_in_flight=False,
+            _format_probe_request_url="",
             _dependencies={
                 "QUALITY_LADDER": lambda: ad.QUALITY_LADDER,
                 "normalize_url": ad.normalize_url,
@@ -11865,7 +11904,7 @@ class FormatProbeTests(unittest.TestCase):
             lambda **kwargs: types.SimpleNamespace(
                 start=lambda: started.append(kwargs)
             ),
-        ):
+        ), mock.patch.object(gui_module_for_tests(), "repolish"):
             window._probe_quick_download_formats()
         return started
 
@@ -11886,6 +11925,8 @@ class FormatProbeTests(unittest.TestCase):
     def test_a_single_pasted_link_is_probed(self):
         window = self._window()
         self.assertEqual(len(self._spawned(window)), 1)
+        self.assertTrue(window._format_probe_in_flight)
+        self.assertIn("Looking up", window.quick_download_status.text())
 
     def test_editing_past_a_probed_url_restores_the_full_ladder(self):
         window = self._window()

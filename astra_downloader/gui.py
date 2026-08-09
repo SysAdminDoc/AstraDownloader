@@ -1061,6 +1061,7 @@ class MainWindowCore(QMainWindow):
     instance_command = pyqtSignal(str)
     tools_update_finished = pyqtSignal(dict)
     tools_status_text_ready = pyqtSignal(str)
+    server_start_finished = pyqtSignal(object)
     site_login_finished = pyqtSignal(dict)
     site_login_test_finished = pyqtSignal(dict)
     format_probe_finished = pyqtSignal(dict)
@@ -1095,6 +1096,7 @@ class MainWindowCore(QMainWindow):
         self.instance_command.connect(self._handle_instance_command)
         self.tools_update_finished.connect(self._finish_ytdlp_update)
         self.tools_status_text_ready.connect(self._set_tools_status_text)
+        self.server_start_finished.connect(self._finish_server_start)
         self.site_login_finished.connect(self._finish_site_login_import)
         self.site_login_test_finished.connect(self._finish_site_login_test)
         self.format_probe_finished.connect(self._apply_format_probe)
@@ -1105,6 +1107,8 @@ class MainWindowCore(QMainWindow):
         self._format_probe_generation = 0
         self._format_probe_summary = {}
         self._format_probe_summary_url = ""
+        self._format_probe_in_flight = False
+        self._format_probe_request_url = ""
 
         self.setWindowTitle(self._value('APP_NAME'))
         # Dropping a link on a downloader should download it.
@@ -1295,6 +1299,11 @@ class MainWindowCore(QMainWindow):
         self.server_thread = None
         self.server_obj = None
         self.server_start_time = None
+        self._server_starting = False
+        self._server_start_cancel = None
+        self._server_start_thread = None
+        self._subscription_scan_pending = set()
+        self._subscription_scan_seen = set()
         self.readiness_thread = None
         self.readiness_worker = None
         self._instance_command_stop = threading.Event()
@@ -2420,7 +2429,25 @@ class MainWindowCore(QMainWindow):
                 payload = {}
                 records = []
                 self.subscription_status.setText(f"Could not read subscriptions: {error}")
-        signature = json.dumps(records, sort_keys=True, default=str)
+        manager_scanning = {
+            str(sub_id) for sub_id in (payload.get("scanning", []) or [])
+        } if isinstance(payload, dict) else set()
+        pending = getattr(self, "_subscription_scan_pending", set())
+        # The request thread may not have entered SubscriptionManager yet when
+        # this refresh runs. Keep the row honest across that tiny hand-off,
+        # then retire the local marker once the scheduler reports completion.
+        seen = getattr(self, "_subscription_scan_seen", set())
+        seen.update(manager_scanning.intersection(pending))
+        for sub_id in list(pending):
+            if sub_id in seen and sub_id not in manager_scanning:
+                pending.discard(sub_id)
+                seen.discard(sub_id)
+        scanning = manager_scanning | {str(sub_id) for sub_id in pending}
+        signature = json.dumps(
+            {"records": records, "scanning": sorted(scanning)},
+            sort_keys=True,
+            default=str,
+        )
         if not force and signature == self._subscriptions_signature:
             return
         self._subscriptions_signature = signature
@@ -2489,9 +2516,14 @@ class MainWindowCore(QMainWindow):
                     next_text = "pending"
             else:
                 next_text = "paused"
-            detail = (
-                f"Every {record.get('intervalMinutes', 60)} min · next scan {next_text}"
-            )
+            if str(record.get("id") or "") in scanning:
+                detail = tr("Every {minutes} min · scanning now…").format(
+                    minutes=record.get("intervalMinutes", 60)
+                )
+            else:
+                detail = (
+                    f"Every {record.get('intervalMinutes', 60)} min · next scan {next_text}"
+                )
             if record.get("lastError"):
                 detail += f" · {record['lastError']}"
             copy_layout.addWidget(make_label(detail, "toolbarMeta", word_wrap=True))
@@ -2930,15 +2962,50 @@ class MainWindowCore(QMainWindow):
             return
         result, error = manager.request_scan(sub_id)
         if error:
+            self._subscription_scan_pending.discard(str(sub_id))
             self.subscription_status.setText(error)
         else:
-            self.subscription_status.setText("Subscription scan queued. New uploads will appear in Downloads.")
+            self._subscription_scan_pending.add(str(sub_id))
         self._refresh_subscriptions(force=True)
+        if not error:
+            QTimer.singleShot(
+                500,
+                lambda pending_id=str(sub_id): self._finish_pending_scan_marker(pending_id),
+            )
+        if error:
+            self.subscription_status.setText(error)
+        else:
+            self.subscription_status.setText(
+                tr("Subscription scan started. This row will update when it finishes.")
+            )
+
+    def _finish_pending_scan_marker(self, sub_id):
+        """Retire the local scan marker when a very fast scan beats the poller."""
+        sub_id = str(sub_id)
+        if sub_id not in getattr(self, "_subscription_scan_pending", set()):
+            return
+        manager = self._subscription_manager()
+        if manager is None:
+            self._subscription_scan_pending.discard(sub_id)
+            return
+        try:
+            payload = manager.snapshot()
+            scanning = {
+                str(value) for value in (payload.get("scanning", []) or [])
+            } if isinstance(payload, dict) else set()
+        except Exception:
+            return
+        if sub_id not in scanning:
+            self._subscription_scan_pending.discard(sub_id)
+            self._subscription_scan_seen.discard(sub_id)
+            self._refresh_subscriptions(force=True)
 
     def _remove_subscription(self, sub_id):
         manager = self._subscription_manager()
         if manager is None:
             return
+        self._subscription_scan_pending.discard(str(sub_id))
+        self._subscription_scan_seen.discard(str(sub_id))
         _removed, error = manager.remove_subscription(sub_id)
         if error:
             self.subscription_status.setText(error)
@@ -3862,7 +3929,7 @@ class MainWindowCore(QMainWindow):
             self._start_server()
 
     def _start_server(self):
-        if self.server_running:
+        if self.server_running or self._server_starting:
             return
         if self._setup_running:
             self._append_log("Setup is already running. The server will start when it finishes.")
@@ -3873,83 +3940,162 @@ class MainWindowCore(QMainWindow):
             self._run_setup()
             return
 
-        configured_port = self._dependencies['clamp_int'](self.config.get("ServerPort", self._value('SERVER_PORT')), self._value('SERVER_PORT'), 1024, 65535)
-        api = self._dependencies['create_api'](self.config, self.dl_manager, self.history_mgr)
+        configured_port = self._dependencies['clamp_int'](
+            self.config.get("ServerPort", self._value('SERVER_PORT')),
+            self._value('SERVER_PORT'), 1024, 65535,
+        )
+        self._server_starting = True
+        self._server_start_cancel = threading.Event()
+        cancel = self._server_start_cancel
+        self._update_server_ui()
 
-        # Port discovery: try configured port first, then fall back to well-known
-        # alternatives. Fixes systems where Windows/Hyper-V has blocked the default
-        # (WinError 10013) or another process holds it (WinError 10048).
-        fallback_ports = [configured_port] + [p for p in self._value('PORT_FALLBACKS') if p != configured_port]
-        chosen_port = None
-        last_err: Exception | None = None
-        for candidate in fallback_ports:
-            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        def prepare():
+            server_obj = None
             try:
-                probe.bind(('127.0.0.1', candidate))
-                chosen_port = candidate
-                break
-            except OSError as e:
-                last_err = e
-                continue
-            finally:
-                try:
-                    probe.close()
-                except OSError:
-                    # reason: a failed bind may leave no closable probe socket
-                    pass
+                api = self._dependencies['create_api'](
+                    self.config, self.dl_manager, self.history_mgr
+                )
+                # Port discovery is local socket work. Keep it out of the GUI
+                # thread so a blocked Windows/Hyper-V port table cannot freeze
+                # the window while the user waits for the result.
+                fallback_ports = [configured_port] + [
+                    port for port in self._value('PORT_FALLBACKS')
+                    if port != configured_port
+                ]
+                chosen_port = None
+                last_err = None
+                for candidate in fallback_ports:
+                    if cancel.is_set():
+                        self.server_start_finished.emit({"cancelled": True})
+                        return
+                    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    try:
+                        probe.bind(('127.0.0.1', candidate))
+                        chosen_port = candidate
+                        break
+                    except OSError as error:
+                        last_err = error
+                    finally:
+                        try:
+                            probe.close()
+                        except OSError:
+                            # reason: a failed bind may leave no closable probe socket
+                            pass
 
-        if chosen_port is None:
-            assert last_err is not None
-            if getattr(last_err, 'winerror', None) == 10013:
-                msg = ("All candidate ports are blocked by Windows.\n\n"
-                       "Run as Administrator in PowerShell:\n"
-                       "  net stop winnat\n"
-                       "  netsh int ipv4 delete excludedportrange protocol=tcp "
-                       f"startport={configured_port} numberofports=1\n"
-                       "  net start winnat")
-            elif getattr(last_err, 'winerror', None) == 10048:
-                msg = "All candidate ports are already in use by other processes."
-            else:
-                msg = f"Cannot bind any server port: {last_err}"
-            self._append_log(f"Server error: {msg}")
-            self._show_server_error(msg)
+                if chosen_port is None:
+                    assert last_err is not None
+                    if getattr(last_err, 'winerror', None) == 10013:
+                        message = (
+                            "All candidate ports are blocked by Windows.\n\n"
+                            "Run as Administrator in PowerShell:\n"
+                            "  net stop winnat\n"
+                            "  netsh int ipv4 delete excludedportrange protocol=tcp "
+                            f"startport={configured_port} numberofports=1\n"
+                            "  net start winnat"
+                        )
+                    elif getattr(last_err, 'winerror', None) == 10048:
+                        message = "All candidate ports are already in use by other processes."
+                    else:
+                        message = f"Cannot bind any server port: {last_err}"
+                    self.server_start_finished.emit({
+                        "ok": False, "error": message,
+                    })
+                    return
+
+                # v1.2.0: prefer waitress (production-grade WSGI) and fall
+                # back to werkzeug only when waitress is unavailable.
+                server_obj = self._dependencies['_build_wsgi_server'](
+                    chosen_port, api
+                )
+                if cancel.is_set():
+                    try:
+                        server_obj.stop()
+                    except Exception:
+                        # reason: a server object that was never run has no
+                        # listener to close; the cancellation is still safe
+                        pass
+                    self.server_start_finished.emit({"cancelled": True})
+                    return
+                self.server_start_finished.emit({
+                    "ok": True,
+                    "port": chosen_port,
+                    "server": server_obj,
+                })
+            except Exception as error:
+                if server_obj is not None:
+                    try:
+                        server_obj.stop()
+                    except Exception:
+                        # reason: setup failure cleanup must not hide the root error
+                        pass
+                self.server_start_finished.emit({
+                    "ok": False, "error": str(error),
+                })
+
+        self._server_start_thread = threading.Thread(
+            target=prepare, name="server-prepare", daemon=True
+        )
+        self._server_start_thread.start()
+
+    def _finish_server_start(self, payload):
+        """Apply the worker result on the GUI thread and start serving."""
+        payload = payload if isinstance(payload, dict) else {}
+        cancel = self._server_start_cancel
+        self._server_start_thread = None
+        if not self._server_starting or (cancel is not None and cancel.is_set()):
+            server_obj = payload.get("server")
+            if server_obj is not None:
+                try:
+                    server_obj.stop()
+                except Exception:
+                    # reason: a cancelled server was never exposed to the user
+                    pass
+            return
+        self._server_starting = False
+        self._server_start_cancel = None
+        if payload.get("cancelled"):
+            self._append_log("Server start cancelled")
+            self._update_server_ui()
+            return
+        if not payload.get("ok"):
+            message = str(payload.get("error") or "Could not start the server.")
+            self._append_log(f"Server error: {message}")
+            self._show_server_error(message)
+            self._update_server_ui()
             return
 
+        chosen_port = int(payload.get("port"))
+        configured_port = self._dependencies['clamp_int'](
+            self.config.get("ServerPort", self._value('SERVER_PORT')),
+            self._value('SERVER_PORT'), 1024, 65535,
+        )
         if chosen_port != configured_port:
             self._append_log(
-                f"Port {configured_port} is unavailable; using fallback port {chosen_port} for this session."
+                f"Port {configured_port} is unavailable; using fallback port "
+                f"{chosen_port} for this session."
             )
-            # Session-only override: the dashboard/health see the bound port,
-            # but it is excluded from every save()/update() so a transient
-            # conflict (e.g. a stale instance briefly holding the port) can
-            # never permanently rewrite the user's configured ServerPort —
-            # the next start retries the configured port. (A plain set() here
-            # leaked to disk through any later full-config save, e.g. the
-            # yt-dlp update-check timestamp write.)
+            # Session-only override: transient conflicts must never rewrite
+            # the user's configured ServerPort on a later save.
             set_session = getattr(self.config, 'set_session', self.config.set)
             set_session("ServerPort", chosen_port)
             self._sync_connection_ui()
 
-        try:
-            # v1.2.0: prefer waitress (production-grade WSGI) and fall back
-            # to werkzeug's dev server only when waitress isn't available
-            # (legacy source environments can omit the declared dependency).
-            self.server_obj = self._dependencies['_build_wsgi_server'](chosen_port, api)
-        except Exception as e:
-            self.server_obj = None
-            self._append_log(f"Server error: {e}")
-            self._show_server_error(str(e))
+        self.server_obj = payload.get("server")
+        if self.server_obj is None:
+            self._append_log("Server error: no server object was prepared.")
+            self._show_server_error("No server object was prepared.")
+            self._update_server_ui()
             return
 
-        port = chosen_port
-
-        def run():
+        def run(server_obj=self.server_obj):
             try:
-                self.server_obj.run()
-            except Exception as e:
-                self.log_message.emit(f"Server error: {e}")
+                server_obj.run()
+            except Exception as error:
+                self.log_message.emit(f"Server error: {error}")
 
-        self.server_thread = threading.Thread(target=run, daemon=True)
+        self.server_thread = threading.Thread(
+            target=run, name="server-serve", daemon=True
+        )
         self.server_thread.start()
         self.server_running = True
         self.server_start_time = time.time()
@@ -3957,20 +4103,29 @@ class MainWindowCore(QMainWindow):
         if subscription_manager is not None:
             subscription_manager.start()
         self._append_log(
-            f"Server started on http://127.0.0.1:{port} "
+            f"Server started on http://127.0.0.1:{chosen_port} "
             f"(backend: {self.server_obj.backend})"
         )
         self._update_server_ui()
 
-        # Auto-update yt-dlp — throttled (once per 24h) so we don't re-run
-        # it on every single launch. Logs exit code instead of silently
-        # discarding it.
-        #
-        # v4.47.0 NF26: pass the manager's active_count so an in-flight
-        # download isn't raced by a yt-dlp.exe self-replace.
-        self._dependencies['maybe_auto_update_ytdlp'](self.config, self.dl_manager.active_count)
+        # Auto-update yt-dlp — throttled so a start never repeats the check.
+        self._dependencies['maybe_auto_update_ytdlp'](
+            self.config, self.dl_manager.active_count
+        )
 
     def _stop_server(self):
+        if self._server_starting:
+            if self._server_start_cancel is not None:
+                self._server_start_cancel.set()
+            worker = self._server_start_thread
+            if worker is not None and worker.is_alive():
+                worker.join(timeout=2)
+            self._server_start_thread = None
+            self._server_starting = False
+            self._server_start_cancel = None
+            self._append_log("Server start cancelled")
+            self._update_server_ui()
+            return
         subscription_manager = self._subscription_manager()
         if subscription_manager is not None:
             subscription_manager.stop()
@@ -3989,7 +4144,27 @@ class MainWindowCore(QMainWindow):
         self._update_server_ui()
 
     def _update_server_ui(self):
-        if self.server_running:
+        if self._server_starting:
+            self.status_dot.setProperty("tone", "neutral")
+            self.status_dot.setAccessibleName("Server status indicator: Starting")
+            self.status_label.setText("Starting")
+            self.status_label.setProperty("tone", "neutral")
+            self.status_label.setAccessibleName("Server status: Starting")
+            self.dash_status.setText("Starting server")
+            self.dash_hint.setText("Checking local ports and preparing the API")
+            self.server_badge.setProperty("tone", "neutral")
+            self.server_badge.setAccessibleName(
+                "Extension server status indicator: Starting"
+            )
+            self.btn_startstop.setText("Starting server…")
+            self.btn_startstop.setIcon(make_line_icon("Starting server"))
+            self.btn_startstop.setProperty("class", "secondary")
+            self.btn_startstop.setEnabled(False)
+            self.tray_startstop.setText("Starting server…")
+            self.tray_startstop.setEnabled(False)
+            self.tray.setToolTip(f"{self._value('APP_NAME')} - Starting")
+            self._set_readiness("server", "Starting", "neutral")
+        elif self.server_running:
             self.status_dot.setProperty("tone", "success")
             self.status_dot.setAccessibleName("Server status indicator: Running")
             self.status_label.setText("Running")
@@ -4004,7 +4179,9 @@ class MainWindowCore(QMainWindow):
             self.btn_startstop.setText("Stop server")
             self.btn_startstop.setIcon(make_line_icon("Stop server"))
             self.btn_startstop.setProperty("class", "secondary")
+            self.btn_startstop.setEnabled(True)
             self.tray_startstop.setText("Stop server")
+            self.tray_startstop.setEnabled(True)
             self.tray.setToolTip(f"{self._value('APP_NAME')} - Running")
             self._set_readiness("server", "Running", "success")
         else:
@@ -4022,7 +4199,9 @@ class MainWindowCore(QMainWindow):
             self.btn_startstop.setText("Start server")
             self.btn_startstop.setIcon(make_line_icon("Start server"))
             self.btn_startstop.setProperty("class", "primary")
+            self.btn_startstop.setEnabled(True)
             self.tray_startstop.setText("Start server")
+            self.tray_startstop.setEnabled(True)
             self.tray.setToolTip(f"{self._value('APP_NAME')} - Stopped")
             self._set_readiness("server", "Stopped", "neutral")
         repolish(self.btn_startstop)
@@ -4494,6 +4673,28 @@ class MainWindowCore(QMainWindow):
             limit=self._history_page_size if limit is None else limit,
         )
 
+    def _history_is_quarantined(self):
+        """Return whether the history store was replaced after an unreadable file."""
+        resolve = getattr(self.history_mgr, "_resolve_path", None)
+        read = self._dependencies.get("quarantined_state_files")
+        if not callable(resolve) or not callable(read):
+            return False
+        try:
+            target = Path(resolve()).resolve()
+        except (OSError, TypeError, ValueError):
+            return False
+        try:
+            entries = read() or []
+        except Exception:
+            return False
+        for entry in entries:
+            try:
+                if Path(entry.get("path", "")).resolve() == target:
+                    return True
+            except (AttributeError, OSError, TypeError, ValueError):
+                continue
+        return False
+
     def _history_filters_changed(self, *_args):
         # Every keystroke in the search box used to re-read and re-sanitise
         # history.json and rebuild up to 50 widgets. Wait for a pause instead.
@@ -4763,9 +4964,40 @@ class MainWindowCore(QMainWindow):
             f"Exported {len(rows)} filtered history row(s) to {path}", "success")
 
     def _refresh_history(self):
+        self.history_meta.setText(tr("Loading history…"))
+        self.btn_clear_history.setEnabled(False)
+        self.btn_history_prev.setEnabled(False)
+        self.btn_history_next.setEnabled(False)
+        self.btn_export_history.setEnabled(False)
         self._clear_layout(self.history_container)
 
-        data = self.history_mgr.load()
+        load_error = None
+        try:
+            data = self.history_mgr.load()
+        except Exception as error:  # noqa: BLE001
+            data = []
+            load_error = str(error)
+        unreadable = self._history_is_quarantined()
+        if load_error or unreadable or not isinstance(data, list):
+            self.history_meta.setText(tr("History unavailable"))
+            message = (
+                tr("Could not read download history. The unreadable file was set aside; "
+                   "restore it from the state notice or inspect diagnostics.")
+                if unreadable else
+                tr("Could not read download history: {error}").format(
+                    error=load_error or "invalid history data"
+                )
+            )
+            self.history_container.addWidget(make_empty_state(
+                tr("History could not be read"),
+                tr("Astra Downloader kept the unreadable history aside instead of "
+                   "showing an empty list."),
+                tr("Open diagnostics"),
+                lambda: self._nav_click("Browser extension"),
+            ))
+            self.history_container.addStretch()
+            self._show_history_status(message, "error")
+            return
         self.btn_clear_history.setEnabled(bool(data))
         result = self._history_query(entries=data)
         filtered_total = result["filteredTotal"]
@@ -5486,6 +5718,11 @@ class MainWindowCore(QMainWindow):
     def _reset_quality_choices(self):
         self._format_probe_summary = {}
         self._format_probe_summary_url = ""
+        self._format_probe_in_flight = False
+        self._format_probe_request_url = ""
+        if hasattr(self, "quick_download_status"):
+            self.quick_download_status.clear()
+            self.quick_download_status.hide()
         if not self._probed_format_url:
             return
         self._probed_format_url = ""
@@ -5510,8 +5747,15 @@ class MainWindowCore(QMainWindow):
             return
         if url == self._probed_format_url:
             return
+        if self._format_probe_in_flight and url == self._format_probe_request_url:
+            return
         self._format_probe_generation += 1
         generation = self._format_probe_generation
+        self._format_probe_in_flight = True
+        self._format_probe_request_url = url
+        self._set_quick_download_status(
+            tr("Looking up available formats…"), "neutral"
+        )
 
         def worker():
             try:
@@ -5539,11 +5783,15 @@ class MainWindowCore(QMainWindow):
             return
         if payload.get("url") != self.quick_download_url.text().strip():
             return
+        self._format_probe_in_flight = False
+        self._format_probe_request_url = ""
         if payload.get("error"):
             # A probe failure is not a download failure: the fixed ladder is
             # still a usable offer, so it stays and nothing is said.
             self._format_probe_summary = {}
             self._format_probe_summary_url = ""
+            self.quick_download_status.clear()
+            self.quick_download_status.hide()
             return
         summary = payload.get("summary")
         self._format_probe_summary = summary if isinstance(summary, dict) else {}
@@ -5551,6 +5799,8 @@ class MainWindowCore(QMainWindow):
         self._apply_sabr_limits(self._dependencies['sabr_only_formats'](summary))
         heights = self._dependencies['probed_video_heights'](summary)
         if not heights:
+            self.quick_download_status.clear()
+            self.quick_download_status.hide()
             return
         self._probed_format_url = payload.get("url") or ""
         self._set_quality_choices(
@@ -5936,7 +6186,7 @@ class MainWindowCore(QMainWindow):
                 self._tray_hint_shown = True
         else:
             self._stop_instance_command_listener()
-            if self.server_running:
+            if self.server_running or self._server_starting:
                 self._stop_server()
             else:
                 subscription_manager = self._subscription_manager()

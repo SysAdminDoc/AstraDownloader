@@ -26,7 +26,7 @@ repository's git log.
   clamped, load-time archive trimming keeps live claims, and an abandoned
   companion activation is marked failed after its timeout so it can be retried.
 - **Translation catalogues track every companion UI string.** The checked-in
-  source catalogues now cover all 221 extracted strings across all 11 locales,
+  source catalogues now cover all 249 extracted strings across all 11 locales,
   and the translation gate fails when generated keys drift from the GUI.
 - **Update and archive keys reject ambiguity.** Checksum sidecars must identify
   the requested asset, long URL-only subscription keys use a bounded digest,
@@ -48,6 +48,10 @@ repository's git log.
   estimates muxed or split media size and refuses a quick download when the
   destination volume cannot hold it; setup applies the same fail-closed check
   before fetching the ffmpeg archive.
+- **Background work says what it is doing.** Server startup now prepares ports
+  off the GUI thread and reports a starting state, history distinguishes an
+  unreadable store from an empty one, subscription rows show active scans, and
+  format probing tells the user when it is looking up available formats.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
