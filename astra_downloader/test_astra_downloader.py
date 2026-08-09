@@ -2665,6 +2665,24 @@ class IntermediateFileSweepTests(unittest.TestCase):
             self.assertTrue(bystander.exists(),
                             "only this download's own intermediates may be removed")
 
+    def test_a_successful_download_removes_its_private_staging_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                tempfile.TemporaryDirectory() as install_dir, \
+                mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+            manager, download = self._finished(tmpdir)
+            Path(download.filename).write_text("final", encoding="utf-8")
+            staging = manager._download_intermediate_dir(download)
+            staging.mkdir(parents=True)
+            partial = staging / "Holiday Clip.mp4.part"
+            partial.write_text("partial", encoding="utf-8")
+
+            with mock.patch.object(ad, "write_persistent_log", return_value=None):
+                manager._sweep_download_intermediates(download)
+
+            self.assertFalse(partial.exists())
+            self.assertFalse(staging.exists())
+            self.assertTrue(Path(download.filename).exists())
+
     def test_keeping_intermediates_is_a_setting(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             leftovers, _bystander = self._litter(tmpdir)
@@ -10675,6 +10693,137 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
                               with_cookies=False)
         self.assertIn('--yes-playlist', argv)
         self.assertNotIn('--no-playlist', argv)
+
+    def test_download_stages_intermediates_outside_destination_and_sweeps_them(self):
+        attempts = []
+        with tempfile.TemporaryDirectory() as output_dir, \
+                tempfile.TemporaryDirectory() as install_dir, \
+                mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+            final = Path(output_dir) / "Clip.mp4"
+
+            def popen(args, **_kwargs):
+                if '--ignore-config' not in args:
+                    return self._FakeProc([], 0)
+                attempts.append(list(args))
+                path_args = [
+                    args[index + 1]
+                    for index, value in enumerate(args[:-1])
+                    if value == '--paths'
+                ]
+                temp_arg = next(value for value in path_args if value.startswith('temp:'))
+                staging = Path(temp_arg[len('temp:'):])
+                staging.mkdir(parents=True)
+                (staging / "Clip.mp4.part").write_text("partial", encoding="utf-8")
+                final.write_text("finished", encoding="utf-8")
+                return self._FakeProc(
+                    [f'MDLP_FILEPATH {json.dumps(str(final))}'], 0
+                )
+
+            config = FakeConfig({
+                "DownloadPath": output_dir,
+                "AudioDownloadPath": output_dir,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            download = ad.Download("dl_private_stage", "https://example.com/video",
+                                   output_dir=output_dir)
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                    mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                    mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                manager._run_download(download)
+
+            self.assertEqual(download.status, "complete")
+            self.assertEqual(len(attempts), 1)
+            argv = attempts[0]
+            output_template = argv[argv.index('-o') + 1]
+            self.assertEqual(output_template, "%(title).200B.%(ext)s")
+            path_args = [
+                argv[index + 1]
+                for index, value in enumerate(argv[:-1])
+                if value == '--paths'
+            ]
+            self.assertIn(f"home:{output_dir}", path_args)
+            temp_arg = next(value for value in path_args if value.startswith('temp:'))
+            staging = Path(temp_arg[len('temp:'):])
+            self.assertTrue(staging.is_relative_to(Path(install_dir)))
+            self.assertFalse(staging.is_relative_to(Path(output_dir)))
+            self.assertTrue(final.exists())
+            self.assertEqual(list(Path(output_dir).iterdir()), [final])
+            self.assertFalse(staging.exists())
+
+    def test_keep_intermediates_stages_them_beside_the_output_for_diagnosis(self):
+        argv = self._argv_for(
+            "https://example.com/video",
+            config_overrides={"KeepIntermediateFiles": True},
+            with_cookies=False,
+        )
+        path_args = [
+            argv[index + 1]
+            for index, value in enumerate(argv[:-1])
+            if value == '--paths'
+        ]
+        self.assertIn(
+            next(value for value in path_args if value.startswith('home:'))
+            .replace('home:', 'temp:', 1),
+            path_args,
+        )
+        self.assertFalse(Path(argv[argv.index('-o') + 1]).is_absolute())
+
+    def test_recovered_download_reuses_staging_path_after_restart(self):
+        attempts = []
+        partial_seen = []
+        with tempfile.TemporaryDirectory() as output_dir, \
+                tempfile.TemporaryDirectory() as install_dir, \
+                mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+            queue_path = Path(install_dir) / "download-queue.json"
+            config = FakeConfig({
+                "DownloadPath": output_dir,
+                "AudioDownloadPath": output_dir,
+            })
+            manager = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            self.assertTrue(manager.pause_intake())
+            download_id, error = manager.start_download(
+                "https://example.com/video", title="Recover me"
+            )
+            self.assertIsNone(error)
+            original = manager.downloads[download_id]
+            staging = manager._download_intermediate_dir(original)
+            staging.mkdir(parents=True)
+            partial = staging / "Recover me.mp4.part"
+            partial.write_text("partial", encoding="utf-8")
+
+            restored = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            recovered = restored.downloads[download_id]
+            self.assertTrue(recovered.resume_partial)
+            self.assertEqual(restored._download_intermediate_dir(recovered), staging)
+            recovered.status = "queued"
+            final = Path(output_dir) / "Recover me.mp4"
+
+            def popen(args, **_kwargs):
+                if '--ignore-config' not in args:
+                    return self._FakeProc([], 0)
+                attempts.append(list(args))
+                temp_arg = next(
+                    args[index + 1]
+                    for index, value in enumerate(args[:-1])
+                    if value == '--paths' and args[index + 1].startswith('temp:')
+                )
+                resumed_staging = Path(temp_arg[len('temp:'):])
+                partial_seen.append((resumed_staging, partial.exists()))
+                final.write_text("finished", encoding="utf-8")
+                return self._FakeProc(
+                    [f'MDLP_FILEPATH {json.dumps(str(final))}'], 0
+                )
+
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                    mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                    mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                restored._run_download(recovered)
+
+            self.assertEqual(len(attempts), 1)
+            self.assertEqual(partial_seen, [(staging, True)])
+            self.assertNotIn('--force-overwrites', attempts[0])
+            self.assertFalse(staging.exists())
 
     def test_zero_exit_without_a_file_reports_skipped_not_complete(self):
         # yt-dlp exits 0 when --max-filesize rejects every format. Reporting

@@ -66,6 +66,10 @@ repository's git log.
   API or diagnostics surfaces, and are used as a cookie fallback for yt-dlp;
   the download page also exposes a one-link video password. Chromium browser
   readers are marked as likely unreadable on Windows 127+ before import.
+- **Intermediate files stay out of the destination.** yt-dlp now stages partial
+  and merge files in a stable per-download folder, cleans it after success, and
+  reuses it after a restart so failed downloads can resume. The existing
+  "Keep intermediate files" setting stages them beside the output for diagnosis.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the

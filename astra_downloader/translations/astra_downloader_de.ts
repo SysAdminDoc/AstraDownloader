@@ -799,8 +799,8 @@
       <translation>Zwischendateien behalten</translation>
     </message>
     <message>
-      <source>Keep the .part, .f### and .ytdl files a finished download leaves behind. Off by default: one download, one file.</source>
-      <translation>Die .part-, .f###- und .ytdl-Dateien behalten, die ein abgeschlossener Download hinterlässt. Standardmäßig deaktiviert: ein Download, eine Datei.</translation>
+      <source>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.</source>
+      <translation>Die .part-, .f###- und .ytdl-Dateien neben der Ausgabe ablegen und zur Diagnose behalten. Standardmäßig deaktiviert: Sie werden in einem privaten temporären Ordner verwendet und nach erfolgreichem Download entfernt.</translation>
     </message>
     <message>
       <source>Tracks</source>

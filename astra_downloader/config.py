@@ -191,8 +191,9 @@ DEFAULT_CONFIG = {
     "EmbedThumbnail": True,
     "EmbedChapters": True,
     "EmbedSubs": False,
-    # Leftover .part / .f### / .ytdl files are swept after a download
-    # succeeds. Turn this on to keep them when diagnosing a merge problem.
+    # Downloads stage .part / .f### / .ytdl files in a private per-download
+    # directory and sweep it after success. Turn this on to stage them beside
+    # the output and keep them when diagnosing a merge problem.
     "KeepIntermediateFiles": False,
     # Verify a chosen format is actually downloadable before committing to it.
     # Off by default: it costs an extra request per candidate format.

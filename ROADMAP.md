@@ -168,13 +168,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: a filter box narrows to matching controls and their group; every control has a per-field revert, or the page has a restore-defaults action that reports what changed; Language and Export/Import move to groups that name them.
   Complexity: M
 
-- [ ] P2 — Download intermediates somewhere other than the destination folder
-  Why: `.part` and `.f###` files are written into the user's Videos folder for the life of every download, where they are visible, get indexed, and get picked up by folder-syncing tools.
-  Evidence: `--paths` never appears in `astra_downloader/`; `-o` is built as an absolute path (`download.py:2593`, `:2602`). Implementation gotcha for whoever takes this: yt-dlp's help states `--paths` "is ignored if `--output` is an absolute path", so this needs `-o` made relative and `--paths home:<dir> temp:<dir>` passed together — adding `--paths temp:` alongside the current absolute `-o` is a silent no-op. The v2.1.0 sweep (`_sweep_download_intermediates`) must keep running, because a failed run's `.part` is what `resume_partial` continues from.
-  Touches: `astra_downloader/download.py`, `astra_downloader/config.py`
-  Acceptance: intermediates are written under a temp directory and only the finished file appears in the destination; resume across a restart still works; a setting can put them back beside the output for diagnosis.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Generate subtitles locally for a video that has none

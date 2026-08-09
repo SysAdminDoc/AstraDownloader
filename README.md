@@ -35,6 +35,10 @@ pasting a link never needs it.
   that site's registrable domain and attached to that site alone.
 - **Durable queue.** Downloads survive a restart. Pause intake, retry a
   failure, cancel a run.
+- **Keeps output folders clean.** Partial and merge files use a private,
+  per-download staging folder and only the finished file is moved into the
+  destination. The Settings page can put intermediates beside the output for
+  diagnosis.
 - **It tells you why.** A failure names its cause — missing JavaScript
   runtime, expired sign-in, size cap, SABR-limited formats, a site refusing
   the request — and offers the control that fixes it.
