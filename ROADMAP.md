@@ -32,13 +32,6 @@ Notes on the items above, from the same pass:
 
 
 
-- [ ] P3 — Package for winget and offer a portable mode
-  Why: Every comparable project ships through a package manager, and the install location is hardcoded with no portable option.
-  Evidence: `INSTALL_DIR` is unconditionally `%LOCALAPPDATA%\AstraDownloader` (`astra_downloader.py:244`) with no portable flag; the CLI exposes only `--background`, `--uninstall`, `--update-health-check` and `--visual-smoke`, while winget requires a silent-install path. ytDownloader, Open Video Downloader, NeoDLP and media-downloader all ship winget manifests.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/build.py`, `README.md`
-  Acceptance: A silent install path exists and is documented; a portable mode keeps all state beside the executable; a winget manifest is published. Resolve the open question in `RESEARCH.md` about one-folder versus single-file packaging before choosing the installer shape.
-  Complexity: L
-
 ## Audit Findings — 2026-08-06
 
 ### Notes on existing roadmap items

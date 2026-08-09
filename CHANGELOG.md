@@ -82,6 +82,10 @@ repository's git log.
 - **Filename templates explain their risks.** Settings renders an example,
   rejects reserved Windows names and overlong rendered paths, and enables
   yt-dlp's Windows filename sanitization.
+- **Portable and scripted distribution paths exist.** `--portable` keeps
+  application state and managed helpers beside the executable without machine
+  integrations; `--install` performs the normal per-user install without
+  opening the GUI, and a validated winget manifest is checked in.
 - **Throttle recovery is scoped to the host.** HTTP 429 and throttle failures
   pause only the registrable domain that returned them, honour a bounded
   Retry-After hint with optional jitter, keep other sites moving, and show the
