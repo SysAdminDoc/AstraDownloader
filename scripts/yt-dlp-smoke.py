@@ -33,20 +33,25 @@ def run_command(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def yt_dlp_command(*args: str) -> list[str]:
+    """Use the managed executable when the release gate supplies one."""
+    configured = os.environ.get("ASTRA_YTDLP_SMOKE_BINARY", "").strip()
+    executable = configured or sys.executable
+    prefix = [executable] if configured else [executable, "-m", "yt_dlp"]
+    return prefix + list(args)
+
+
 def main() -> int:
     smoke_url = os.environ.get("ASTRA_YTDLP_SMOKE_URL", DEFAULT_SMOKE_URL)
     with tempfile.TemporaryDirectory(prefix="astra-ytdlp-smoke-") as tmp:
         output_dir = Path(tmp)
-        version = run_command([sys.executable, "-m", "yt_dlp", "--version"], output_dir)
+        version = run_command(yt_dlp_command("--version"), output_dir)
         if version.returncode != 0:
             sys.stderr.write(version.stderr or version.stdout)
             return version.returncode or 1
 
         result = run_command(
-            [
-                sys.executable,
-                "-m",
-                "yt_dlp",
+            yt_dlp_command(
                 "--no-playlist",
                 "--no-progress",
                 "--max-filesize",
@@ -58,7 +63,7 @@ def main() -> int:
                 "-o",
                 "%(id)s.%(ext)s",
                 smoke_url,
-            ],
+            ),
             output_dir,
         )
         if result.returncode != 0:

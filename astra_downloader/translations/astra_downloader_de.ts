@@ -615,6 +615,10 @@
       <translation>Aus</translation>
     </message>
     <message>
+      <source>Checking installed yt-dlp…</source>
+      <translation>Checking installed yt-dlp…</translation>
+    </message>
+    <message>
       <source>JavaScript runtime</source>
       <translation>JavaScript-Laufzeitumgebung</translation>
     </message>

@@ -107,4 +107,26 @@ test('Python companion audit emits release-review JSON and fails closed', () => 
     assert.equal(duplicate.summary.findings, 1,
         'duplicate records from advisory services must collapse to one finding');
     assert.equal(duplicate.actionableFindings[0].description, 'longer duplicate');
+
+    const empty = audit.normalizeAudit({ dependencies: [] });
+    assert.equal(empty.status, 'fail',
+        'a zero-dependency audit result must not report a clean gate');
+    assert.match(empty.auditErrors[0], /zero dependencies/);
+
+    const nonZero = audit.normalizeAudit({
+        dependencies: [{ name: 'requests', version: '2.33.0', vulns: [] }]
+    }, { exitCode: 1 });
+    assert.equal(nonZero.status, 'fail',
+        'a non-zero pip-audit exit must fail even without parsed findings');
+
+    const tempRequirements = path.join(require('os').tmpdir(), `astra-audit-${process.pid}.txt`);
+    fs.writeFileSync(tempRequirements, 'requests>=2.33.0,<3\nflask>=3.1.3,<4\n');
+    try {
+        assert.throws(
+            () => audit.assertAuditCoverage({ dependencies: [{ name: 'requests' }] }, tempRequirements),
+            /omitted requirement\(s\): flask/
+        );
+    } finally {
+        fs.rmSync(tempRequirements, { force: true });
+    }
 });
