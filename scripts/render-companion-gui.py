@@ -27,7 +27,9 @@ CAPTURE_NAMES = (
     "history-populated",
     "history-cleared-undo",
     "history-restored",
+    "history-unreadable",
     "subscriptions-empty",
+    "subscriptions-scanning",
     "site-logins-stored",
     "settings-dirty",
     "settings-subtitles",
@@ -570,10 +572,19 @@ def main():
                     raise RuntimeError("High-DPI fixture was not captured at 2x resolution")
 
         def capture_history_state(window, history):
-            seed_history(history)
+            if scenario == "history-unreadable":
+                history_path = history._resolve_path()
+                window._dependencies["quarantined_state_files"] = lambda: [{
+                    "path": str(history_path),
+                    "backup": str(history_path) + ".corrupt-fixture",
+                }]
+            else:
+                seed_history(history)
             select_page(window, "History")
             window._refresh_history()
-            if scenario == "history-cleared-undo":
+            if scenario == "history-unreadable":
+                assert_visible_text(window, {"History could not be read", "History unavailable"})
+            elif scenario == "history-cleared-undo":
                 window._clear_history()
                 app.processEvents()
                 QTest.qWait(40)
@@ -597,7 +608,13 @@ def main():
         def capture_subscription_state(window):
             select_page(window, "Subscriptions")
             assert_visible_text(window, {"Astra channel"})
-            if not any("Every 60 min" in text for text in visible_text(window)):
+            if scenario == "subscriptions-scanning":
+                window._subscription_scan_pending.add("sub-fixture")
+                window._refresh_subscriptions(force=True)
+                app.processEvents()
+                if not any("scanning now" in text for text in visible_text(window)):
+                    raise RuntimeError("Subscription scan fixture did not expose its active state")
+            elif not any("Every 60 min" in text for text in visible_text(window)):
                 raise RuntimeError("Subscription fixture did not render its scan interval")
             capture_window(window, scenario)
 
@@ -794,7 +811,7 @@ def main():
                     capture_download_state(window, manager)
                 elif scenario.startswith("history-"):
                     capture_history_state(window, history)
-                elif scenario == "subscriptions-empty":
+                elif scenario.startswith("subscriptions-"):
                     capture_subscription_state(window)
                 elif scenario.startswith("site-logins-"):
                     capture_site_login_state(window)
