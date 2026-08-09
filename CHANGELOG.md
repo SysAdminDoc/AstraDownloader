@@ -41,6 +41,9 @@ repository's git log.
 - **Subscriptions and sign-ins are searchable.** Both lists now debounce text
   search and expose their useful state filters, including disabled/failing
   subscriptions and expired or missing cookie jars.
+- **Stored sign-ins can be tested.** Each sign-in row now runs a bounded,
+  metadata-only yt-dlp probe against its own site, cleans the temporary jar,
+  and leaves a plain-language pass/fail marker on the page.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the

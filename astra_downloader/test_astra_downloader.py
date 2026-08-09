@@ -235,6 +235,34 @@ class CompanionListFilterTests(unittest.TestCase):
             ["instagram.com"],
         )
 
+    def test_failed_sign_in_probe_leaves_a_visible_row_marker(self):
+        show_status = mock.Mock()
+        window = types.SimpleNamespace(
+            _site_login_testing=True,
+            _site_login_test_states={},
+            _show_site_login_status=show_status,
+            _refresh_site_logins=mock.Mock(),
+        )
+        with mock.patch.object(self.gui, "repolish"):
+            self.gui.MainWindowCore._finish_site_login_test(
+                window,
+                {
+                    "site": "x.com",
+                    "result": {},
+                    "error": "The stored session was rejected.",
+                },
+            )
+
+        self.assertFalse(window._site_login_testing)
+        self.assertEqual(
+            window._site_login_test_states["x.com"]["ok"], False
+        )
+        self.assertIn("Test failed", window._site_login_test_states["x.com"]["message"])
+        show_status.assert_called_once_with(
+            "The stored session was rejected.", "error"
+        )
+        window._refresh_site_logins.assert_called_once_with(force=True)
+
 
 class PersistenceTests(unittest.TestCase):
     def test_owned_config_store_uses_injected_persistence_and_rolls_back(self):
@@ -12104,6 +12132,50 @@ class SiteLoginDownloadTests(unittest.TestCase):
         )
         self.assertEqual(download.cookies_scope, 'youtube')
         self.assertNotIn('--cookies', argv)
+
+    def test_stored_sign_in_probe_is_scoped_bounded_and_cleaned(self):
+        captured = {}
+
+        class StoredLogin:
+            def export_jar_for_site(self, url, target_path):
+                captured['site_url'] = url
+                captured['jar_path'] = Path(target_path)
+                captured['jar_path'].write_text(
+                    '# Netscape HTTP Cookie File\n'
+                    '.x.com\tTRUE\t/\tTRUE\t2000000000\tauth\tSECRET\n',
+                    encoding='utf-8',
+                )
+                return str(captured['jar_path']), 'x.com'
+
+        class ProbeProc:
+            returncode = 0
+
+            def communicate(self, timeout=None):
+                captured['timeout'] = timeout
+                return '{}', ''
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(FakeConfig({'DownloadPath': tmpdir}), FakeHistory())
+            manager.site_logins = StoredLogin()
+            manager._dependencies['YTDLP_PATH'] = lambda: 'yt-dlp.exe'
+
+            def spawn_probe(args, **_kwargs):
+                captured['args'] = list(args)
+                return ProbeProc()
+
+            manager._dependencies['spawn_ytdlp'] = spawn_probe
+
+            result, error = manager.test_site_login('https://x.com/video', timeout=99)
+
+        self.assertIsNone(error, error)
+        self.assertTrue(result['ok'])
+        self.assertEqual(captured['site_url'], 'https://x.com/')
+        self.assertEqual(captured['timeout'], ad.SITE_LOGIN_TEST_TIMEOUT_SECONDS)
+        args = captured['args']
+        self.assertIn('--skip-download', args)
+        self.assertIn('--dump-single-json', args)
+        self.assertEqual(args[-1], 'https://x.com/')
+        self.assertFalse(captured['jar_path'].exists())
 
 
 class ProbeIdentityTests(unittest.TestCase):

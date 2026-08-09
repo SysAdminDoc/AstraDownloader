@@ -55,6 +55,7 @@ __all__ = (
     "SITE_LOGIN_BROWSERS", "MAX_SITE_LOGINS", "MAX_SITE_LOGIN_COOKIES",
     "MAX_SITE_LOGIN_TEXT_BYTES",
     "SITE_LOGIN_DIRNAME", "SITE_LOGIN_INDEX_NAME",
+    "SITE_LOGIN_TEST_TIMEOUT_SECONDS",
     "default_download_path",
 )
 
@@ -394,6 +395,7 @@ SITE_LOGIN_SCHEMA_VERSION = 1
 MAX_SITE_LOGINS = 50
 MAX_SITE_LOGIN_COOKIES = 400
 MAX_SITE_LOGIN_TEXT_BYTES = 1024 * 1024
+SITE_LOGIN_TEST_TIMEOUT_SECONDS = 30
 SITE_LOGIN_BROWSERS = (
     'brave', 'chrome', 'chromium', 'edge', 'firefox', 'opera', 'safari',
     'vivaldi', 'whale',
@@ -3560,6 +3562,77 @@ class DownloadManagerCore:
         finally:
             # The staging jar holds every cookie the browser exposed — far more
             # than the one site being stored. It never outlives this call.
+            self._unlink_quietly(staging)
+
+    def test_site_login(self, site, timeout=SITE_LOGIN_TEST_TIMEOUT_SECONDS):
+        """Verify one stored site jar with a bounded metadata-only probe."""
+        key = site_login_key(site)
+        if not key:
+            return None, 'Enter a valid site address before testing its sign-in.'
+        try:
+            timeout = min(float(timeout), float(SITE_LOGIN_TEST_TIMEOUT_SECONDS))
+        except (TypeError, ValueError):
+            timeout = float(SITE_LOGIN_TEST_TIMEOUT_SECONDS)
+        timeout = max(1.0, timeout)
+        install_dir = Path(self._dependencies['INSTALL_DIR']())
+        staging = install_dir / f".cookies.test.{uuid.uuid4().hex}.txt"
+        try:
+            try:
+                jar_path, stored_key = self.site_logins.export_jar_for_site(
+                    f'https://{key}/', staging
+                )
+            except Exception as exc:  # noqa: BLE001
+                return None, f'Could not prepare the sign-in test: {exc}'
+            if not jar_path or stored_key != key:
+                return None, (
+                    f'No usable stored sign-in was found for {key}. '
+                    'Import the cookies again, then test it.'
+                )
+            args = [
+                str(self._dependencies['YTDLP_PATH']()), '--ignore-config',
+                '--no-colors', '--no-warnings', '--skip-download', '--simulate',
+                '--dump-single-json', '--no-playlist', '--socket-timeout', '10',
+                '--retries', '1', '--fragment-retries', '1',
+                '--extractor-retries', '1', '--cookies', str(jar_path),
+                f'https://{key}/',
+            ]
+            try:
+                proc = self._dependencies['spawn_ytdlp'](
+                    args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    creationflags=self._dependencies['CREATE_NO_WINDOW'],
+                    env=self._dependencies['_build_subprocess_env'](),
+                )
+            except Exception as exc:  # noqa: BLE001
+                return None, f'Could not start the sign-in test: {exc}'
+            try:
+                _output, error_output = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    self._dependencies['terminate_process_tree'](proc)
+                except Exception as error:
+                    # reason: best-effort kill; the test is already bounded
+                    self._dependencies['write_persistent_log'](
+                        f'WARNING: sign-in test termination failed: {error}'
+                    )
+                return None, f'Sign-in test timed out for {key}.'
+            if proc.returncode != 0:
+                lines = [
+                    line.strip() for line in (error_output or '').splitlines()
+                    if line.strip()
+                ]
+                detail = lines[-1] if lines else 'yt-dlp rejected the stored session.'
+                return None, f'Sign-in test failed for {key}: {detail[:200]}'
+            return {
+                'site': key,
+                'ok': True,
+                'message': f'yt-dlp reached {key} with the stored sign-in.',
+            }, None
+        finally:
             self._unlink_quietly(staging)
 
     def _unlink_quietly(self, path):
