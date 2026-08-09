@@ -210,13 +210,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: intermediates are written under a temp directory and only the finished file appears in the destination; resume across a restart still works; a setting can put them back beside the output for diagnosis.
   Complexity: M
 
-- [ ] P2 — Refuse a download that cannot fit before starting it
-  Why: Nothing checks free space anywhere, so a large download fails at the end rather than the beginning, and the ffmpeg bootstrap writes ~190 MB with no precheck either.
-  Evidence: `shutil.disk_usage` appears nowhere in the repo. The storage notice added in v2.1.0 reports a write that has already failed. The format probe the app already runs for the quality picker returns per-format `filesize`/`filesize_approx`, so the estimate is in hand at the moment the user presses Download.
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: a download whose probed size exceeds free space on the destination volume is refused with a classified failure naming the shortfall; the dependency bootstrap checks space before fetching ffmpeg.
-  Complexity: S
-
 - [ ] P2 — Say when something is being fetched
   Why: Three surfaces do visible work with no indication that work is happening, one of them on the GUI thread.
   Evidence: `_start_server` (`gui.py:3511-3618`) walks the whole `PORT_FALLBACKS` list binding sockets (`:3532-3546`) and constructs the WSGI server (`:3584`) synchronously on the GUI thread, and `_update_server_ui` (`:3638`) is binary Running/Stopped with no "Starting". `_refresh_history` (`:4405-4476`) calls `history_mgr.load()` on the GUI thread then rebuilds up to 50 cards with no loading state — and no error branch, so an unreadable `history.json` renders the "No downloads yet" empty state, which reads as "you have downloaded nothing". `_scan_subscription` (`:2576-2585`) posts "queued" and returns; the row shows only `nextScanAt`. The format probe (`:5112-5146`) runs on a thread after a 700 ms debounce and silently rewrites the picker on return.

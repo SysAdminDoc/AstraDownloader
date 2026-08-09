@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -44,6 +45,7 @@ __all__ = (
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
+    "estimate_download_bytes", "check_download_disk_space",
     "po_provider_nudge_advice", "PO_PROVIDER_NUDGE_CODES", "PO_PROVIDER_NUDGE",
     "summarize_ytdlp_formats", "summarize_ytdlp_playlist",
     "ALLOWED_COOKIE_DOMAINS", "build_subprocess_env",
@@ -81,6 +83,8 @@ DOWNLOAD_RETRYABLE_ERROR_CODES = {
     'cookie-jar-failed',
     'worker-start-failed',
 }
+
+DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
 
 DOWNLOAD_FAILURE_RECOVERY = {
     'po-token-required': {
@@ -186,6 +190,11 @@ DOWNLOAD_FAILURE_RECOVERY = {
             'help here — then retry. Fewer simultaneous downloads also helps.'
         ),
         'next_action': 'slow-down-and-retry',
+    },
+    'insufficient-disk-space': {
+        'error': 'There is not enough free disk space for this download.',
+        'advice': 'Free space on the destination drive, then retry the download.',
+        'next_action': 'free-disk-space-and-retry',
     },
 }
 
@@ -1140,6 +1149,124 @@ def download_error_payload(error_code, error=None, advice=None):
         'advice': advice or meta.get('advice') or 'Retry after checking Astra Downloader diagnostics.',
         'next_action': meta.get('next_action', 'retry'),
     }
+
+
+def _format_byte_count(value):
+    value = max(0.0, float(value or 0))
+    units = ('B', 'KiB', 'MiB', 'GiB', 'TiB')
+    unit = units[0]
+    for candidate in units:
+        unit = candidate
+        if value < 1024 or candidate == units[-1]:
+            break
+        value /= 1024
+    return f'{value:.1f} {unit}' if unit != 'B' else f'{int(value)} B'
+
+
+def estimate_download_bytes(summary, *, audio_only=False, quality='best'):
+    """Estimate a conservative media size from a format-probe summary.
+
+    yt-dlp may select one muxed format or a separate video/audio pair. The
+    larger of those two estimates is used so the preflight cannot promise a
+    download that only fits when the extractor chooses the smaller path.
+    Zero-sized or missing estimates are ignored; an unknown size returns 0
+    and leaves the normal download path available.
+    """
+    if not isinstance(summary, dict):
+        return 0
+    formats = []
+    for entry in summary.get('formats') or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            size = int(entry.get('filesize') or 0)
+        except (TypeError, ValueError, OverflowError):
+            size = 0
+        if size > 0:
+            formats.append((entry, size))
+    if not formats:
+        return 0
+    if audio_only:
+        return max(
+            size for entry, size in formats if entry.get('has_audio')
+        ) if any(entry.get('has_audio') for entry, _size in formats) else 0
+
+    eligible_video = []
+    cap = None
+    if str(quality or 'best') != 'best':
+        try:
+            cap = int(quality)
+        except (TypeError, ValueError, OverflowError):
+            cap = None
+    for entry, size in formats:
+        if not entry.get('has_video'):
+            continue
+        if cap is not None:
+            try:
+                height = int(entry.get('height') or 0)
+            except (TypeError, ValueError, OverflowError):
+                height = 0
+            if height > cap:
+                continue
+        eligible_video.append((entry, size))
+    if not eligible_video:
+        return 0
+    muxed = max(
+        (size for entry, size in eligible_video if entry.get('has_audio')),
+        default=0,
+    )
+    audio_sizes = [
+        size for entry, size in formats
+        if entry.get('has_audio') and not entry.get('has_video')
+    ]
+    separate = max(
+        (size for entry, size in eligible_video if not entry.get('has_audio')),
+        default=0,
+    )
+    if separate and audio_sizes:
+        separate += max(audio_sizes)
+    return max(muxed, separate)
+
+
+def check_download_disk_space(path, required_bytes, *, reserve_bytes=DOWNLOAD_DISK_SPACE_RESERVE_BYTES):
+    """Return a classified failure when a destination cannot hold a download.
+
+    The nearest existing ancestor is used so a not-yet-created output folder
+    is checked on the same volume. Disk-usage failures are fail-closed: an
+    unknown free-space value must not turn a preflight into a false pass.
+    """
+    try:
+        required = max(0, int(required_bytes or 0))
+        reserve = max(0, int(reserve_bytes or 0))
+    except (TypeError, ValueError, OverflowError):
+        return download_error_payload(
+            'insufficient-disk-space',
+            error='Could not determine the download size before starting it.',
+        )
+    if required <= 0:
+        return None
+    target = Path(path or '.').expanduser()
+    while not target.exists() and target != target.parent:
+        target = target.parent
+    try:
+        free = int(shutil.disk_usage(str(target)).free)
+    except (OSError, ValueError) as exc:
+        return download_error_payload(
+            'insufficient-disk-space',
+            error=f'Could not check free disk space before downloading: {exc}',
+        )
+    needed = required + reserve
+    if free >= needed:
+        return None
+    return download_error_payload(
+        'insufficient-disk-space',
+        error=(
+            f'Not enough free disk space: the estimate is '
+            f'{_format_byte_count(required)}, only {_format_byte_count(free)} '
+            f'is free, and the download is short by '
+            f'{_format_byte_count(needed - free)}.'
+        ),
+    )
 
 
 def summarize_ytdlp_formats(info):

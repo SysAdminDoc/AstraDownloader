@@ -10708,6 +10708,36 @@ class QuickDownloadBatchTests(unittest.TestCase):
         self.assertIn("Queued dl_1", window.quick_download_status.text())
         self.assertEqual(window.quick_download_url.text(), "")
 
+    def test_probed_size_can_refuse_a_quick_download_before_queueing(self):
+        window, calls = self._window(
+            "https://vimeo.com/1", [("dl_1", None)]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            window.config = FakeConfig({"DownloadPath": tmpdir})
+            window._format_probe_summary_url = "https://vimeo.com/1"
+            window._format_probe_summary = {
+                "formats": [{
+                    "has_video": True,
+                    "has_audio": True,
+                    "height": 1080,
+                    "filesize": 500,
+                }],
+            }
+            window._dependencies.update({
+                "normalize_url": ad.normalize_url,
+                "estimate_download_bytes": ad.estimate_download_bytes,
+                "check_download_disk_space": lambda *_args, **_kwargs:
+                    ad.download_error_payload("insufficient-disk-space"),
+            })
+            with mock.patch.object(gui_module_for_tests(), "repolish"):
+                ad.MainWindow._start_quick_download(window)
+
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            window.quick_download_status.properties["state"], "error"
+        )
+        self.assertIn("free disk space", window.quick_download_status.text())
+
     def test_multiple_pasted_links_queue_as_a_batch(self):
         urls = [
             "https://www.youtube.com/watch?v=a",
@@ -11436,6 +11466,63 @@ class QuarantinedBinaryTests(unittest.TestCase):
         source = inspect.getsource(ad.main)
         self.assertIn("managed_binary_usable(YTDLP_PATH)", source)
         self.assertNotIn("not YTDLP_PATH.exists()", source)
+
+class DiskSpacePreflightTests(unittest.TestCase):
+    """Size estimates refuse a known-full destination before yt-dlp starts."""
+
+    SUMMARY = {
+        "formats": [
+            {"has_video": True, "has_audio": True, "height": 720,
+             "filesize": 50},
+            {"has_video": True, "has_audio": False, "height": 1080,
+             "filesize": 90},
+            {"has_video": False, "has_audio": True, "filesize": 5},
+        ],
+    }
+
+    def test_estimate_uses_the_larger_muxed_or_split_path(self):
+        self.assertEqual(
+            ad.estimate_download_bytes(self.SUMMARY, quality="best"),
+            95,
+        )
+        self.assertEqual(
+            ad.estimate_download_bytes(self.SUMMARY, quality="720"),
+            50,
+        )
+        self.assertEqual(
+            ad.estimate_download_bytes(self.SUMMARY, audio_only=True),
+            50,
+        )
+        self.assertEqual(
+            ad.estimate_download_bytes({"formats": [{"filesize": 0}]}),
+            0,
+        )
+
+    def test_disk_space_check_reports_a_classified_shortfall(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.object(
+                ad.shutil,
+                "disk_usage",
+                return_value=types.SimpleNamespace(free=100),
+            ):
+                self.assertIsNone(
+                    ad.check_download_disk_space(
+                        tmpdir, 60, reserve_bytes=20
+                    )
+                )
+                failure = ad.check_download_disk_space(
+                    tmpdir, 90, reserve_bytes=20
+                )
+
+        self.assertEqual(failure["error_code"], "insufficient-disk-space")
+        self.assertIn("short by", failure["error"])
+        self.assertIn("free-disk-space-and-retry", failure["next_action"])
+
+    def test_setup_source_checks_space_before_opening_the_ffmpeg_stream(self):
+        source = inspect.getsource(gui_module_for_tests().SetupWorkerCore.run)
+        self.assertIn("check_download_disk_space", source)
+        self.assertLess(source.index("check_download_disk_space"), source.index("http_get"))
+
 
 class FormatSortTests(unittest.TestCase):
     """Codec and frame-rate preferences compile to one --format-sort."""

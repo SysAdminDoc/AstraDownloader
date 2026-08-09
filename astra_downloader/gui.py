@@ -598,6 +598,7 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'managed_binary_state',
     'check_ffmpeg_capabilities',
     'DEFAULT_CONFIG',
+    'check_download_disk_space',
     'FFMPEG_PATH',
     'FFMPEG_SHA256_ASSET',
     'FFMPEG_SHA256_URL',
@@ -808,6 +809,15 @@ class SetupWorkerCore(QThread):
                 self._value('FFMPEG_PATH'), "ffmpeg")
             if self._ffmpeg_needs_refresh(ffmpeg_state):
                 self.log.emit("Downloading ffmpeg (this may take a moment)...")
+                space_failure = self._dependencies['check_download_disk_space'](
+                    self._value('INSTALL_DIR'),
+                    self._value('HELPER_DOWNLOAD_MAX_BYTES'),
+                    reserve_bytes=0,
+                )
+                if space_failure:
+                    raise RuntimeError(space_failure.get(
+                        'error', 'Not enough free disk space for ffmpeg.'
+                    ))
                 self.progress.emit(35)
                 tmp_zip = self._value('INSTALL_DIR') / f".ffmpeg.{uuid.uuid4().hex}.zip"
                 zip_progress_cb = self._ranged_progress_cb(35, 55)
@@ -1002,6 +1012,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     '_ffmpeg_version_probe',
     '_run_ytdlp_self_update',
     'build_diagnostics_bundle',
+    'check_download_disk_space',
     'clamp_int',
     'create_api',
     'evaluate_sabr_support',
@@ -1013,6 +1024,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'is_youtube_url',
     'probed_video_heights',
     'describe_sabr_voided_options',
+    'estimate_download_bytes',
     'sabr_only_formats',
     'SABR_LIMITED_NOTICE',
     'quality_choices_for_heights',
@@ -1091,6 +1103,8 @@ class MainWindowCore(QMainWindow):
         # after the user has typed on is discarded rather than applied.
         self._probed_format_url = ""
         self._format_probe_generation = 0
+        self._format_probe_summary = {}
+        self._format_probe_summary_url = ""
 
         self.setWindowTitle(self._value('APP_NAME'))
         # Dropping a link on a downloader should download it.
@@ -1997,6 +2011,46 @@ class MainWindowCore(QMainWindow):
             if error:
                 self._set_quick_download_status(error, "error")
                 return
+
+        # A format probe is the only honest size estimate yt-dlp gives us
+        # before a run. Use it for one-link quick downloads; batches and
+        # unprobed links retain the normal queue path rather than pretending
+        # an unknown size is safe or unsafe.
+        kind = self.quick_download_type.currentData()
+        if len(urls) == 1 and kind != "subtitles":
+            normalize_url = self._dependencies.get('normalize_url')
+            normalized, normalize_error = (
+                normalize_url(urls[0]) if normalize_url else ("", "")
+            )
+            if (
+                not normalize_error
+                and normalized
+                and normalized == getattr(self, "_format_probe_summary_url", "")
+            ):
+                estimate = self._dependencies['estimate_download_bytes'](
+                    getattr(self, "_format_probe_summary", {}),
+                    audio_only=kind == "audio",
+                    quality=self.quick_download_quality.currentData() or "best",
+                )
+                if estimate:
+                    output_dir = self._quick_download_dir or (
+                        self.config.get("AudioDownloadPath")
+                        if kind == "audio" and self.config.get("AudioDownloadPath")
+                        else self.config.get("DownloadPath")
+                    )
+                    space_failure = self._dependencies['check_download_disk_space'](
+                        output_dir, estimate
+                    )
+                    if space_failure:
+                        self._set_quick_download_status(
+                            space_failure.get("error") or "Not enough free disk space.",
+                            "error",
+                        )
+                        self._append_log(
+                            f"Quick download refused before start: "
+                            f"{space_failure.get('error', 'insufficient disk space')}"
+                        )
+                        return
 
         queued = []
         failures = []
@@ -5430,6 +5484,8 @@ class MainWindowCore(QMainWindow):
         self._format_probe_timer.start()
 
     def _reset_quality_choices(self):
+        self._format_probe_summary = {}
+        self._format_probe_summary_url = ""
         if not self._probed_format_url:
             return
         self._probed_format_url = ""
@@ -5486,8 +5542,12 @@ class MainWindowCore(QMainWindow):
         if payload.get("error"):
             # A probe failure is not a download failure: the fixed ladder is
             # still a usable offer, so it stays and nothing is said.
+            self._format_probe_summary = {}
+            self._format_probe_summary_url = ""
             return
         summary = payload.get("summary")
+        self._format_probe_summary = summary if isinstance(summary, dict) else {}
+        self._format_probe_summary_url = payload.get("url") or ""
         self._apply_sabr_limits(self._dependencies['sabr_only_formats'](summary))
         heights = self._dependencies['probed_video_heights'](summary)
         if not heights:

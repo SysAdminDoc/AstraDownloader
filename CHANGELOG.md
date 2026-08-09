@@ -44,6 +44,10 @@ repository's git log.
 - **Stored sign-ins can be tested.** Each sign-in row now runs a bounded,
   metadata-only yt-dlp probe against its own site, cleans the temporary jar,
   and leaves a plain-language pass/fail marker on the page.
+- **Known download sizes are checked before transfer.** A format probe now
+  estimates muxed or split media size and refuses a quick download when the
+  destination volume cannot hold it; setup applies the same fail-closed check
+  before fetching the ffmpeg archive.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
   catalogues — the ones a creator wrote and the machine transcript — and the
