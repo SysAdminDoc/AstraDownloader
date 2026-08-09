@@ -832,6 +832,8 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "ServerToken",
     "LegacyHealthTokenEcho",
     "LegacyHealthTokenOrigins",
+    "NativeChromeExtensionIds",
+    "NativeFirefoxExtensionIds",
 })
 
 # Subscription fields that describe one machine's scan history rather than
@@ -881,6 +883,7 @@ def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
         "exportedAt": float(now if now is not None else 0.0),
         "settings": settings,
         "subscriptions": exported_subscriptions,
+        "excludedSettings": sorted(BUNDLE_EXCLUDED_SETTINGS),
         # Names only — see the docstring.
         "siteLoginSites": names,
     }
@@ -941,6 +944,7 @@ def read_settings_bundle(payload):
         "appVersion": clean_text(payload.get("appVersion"), "", 40),
         "settings": settings,
         "subscriptions": subscriptions,
+        "excludedSettings": sorted(BUNDLE_EXCLUDED_SETTINGS),
         "siteLoginSites": sites,
     }, None
 
@@ -961,6 +965,9 @@ def describe_bundle_changes(current, bundle):
     return {
         "settings": changed,
         "subscriptions": len(bundle.get("subscriptions") or []),
+        "excludedSettings": list(
+            bundle.get("excludedSettings") or sorted(BUNDLE_EXCLUDED_SETTINGS)
+        ),
         "siteLoginSites": list(bundle.get("siteLoginSites") or []),
     }
 

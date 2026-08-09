@@ -131,6 +131,9 @@ repository's git log.
 - **Failed yt-dlp updates now back off.** A failed attempt is persisted and
   suppressed for one hour, while successful checks retain the normal 12-hour
   interval.
+- **Native-messaging access is revocable and machine-local.** Clearing an
+  extension allowlist removes its manifest and registry pointer, and settings
+  bundles explicitly report that both native-extension lists are not carried.
 - **The no-provider YouTube fallback now starts with `visionos`.** The client
   chain is pinned to the 2026-08-08 measurement while keeping the fallback
   explicit for the next yt-dlp extractor drift check.

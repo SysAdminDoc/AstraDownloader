@@ -182,12 +182,6 @@ Notes on existing items above — read these before starting them:
   Complexity: M
 
 
-- [ ] P1 — Make the native-messaging allowlist revocable, and keep it out of settings bundles
-  Why: Clearing the configured extension IDs revokes nothing, and the same setting rides in an exported bundle — so an imported bundle can name an attacker's extension ID and hand it the ServerToken, which is full control of the local download API.
-  Evidence: `register_native_messaging_hosts` returns early when both ID lists are empty (`astra_downloader.py:2913-2915`) and writes only under `if chrome_ids:` / `if firefox_ids:` (`:2918-2933`) — there is no delete path, so the manifest and its `HKCU\...\NativeMessagingHosts\...` pointer survive; removal happens only in `run_uninstall` (`:3502-3503`). The host serves `get-token` to an allowed extension (`:4026-4034`). `BUNDLE_EXCLUDED_SETTINGS` (`config.py:829-833`) excludes `ServerToken` and `LegacyHealthTokenOrigins` with a written rationale, but not `NativeChromeExtensionIds`, which also feeds `legacy_health_token_origin_allowlist` (`astra_downloader.py:2883`).
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/config.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: clearing or narrowing the ID list deletes the corresponding manifest and registry value on the next launch; both native-extension-ID settings join `BUNDLE_EXCLUDED_SETTINGS` and an import reports that they were not carried.
-  Complexity: S
 
 - [ ] P1 — Stop probing yt-dlp synchronously before the first frame
   Why: The window blocks on a yt-dlp subprocess during construction — the exact thing this file documents itself as deliberately deferring in two other places.
