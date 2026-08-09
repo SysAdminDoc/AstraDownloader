@@ -22,6 +22,49 @@ function sha256(filePath) {
     return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+function storedZip(entries) {
+    const locals = [];
+    const centrals = [];
+    let offset = 0;
+    for (const [name, content] of entries) {
+        const nameBytes = Buffer.from(name, 'utf8');
+        const data = Buffer.from(content);
+        const local = Buffer.alloc(30 + nameBytes.length + data.length);
+        local.writeUInt32LE(0x04034b50, 0);
+        local.writeUInt16LE(20, 4);
+        local.writeUInt16LE(0, 6);
+        local.writeUInt16LE(0, 8);
+        local.writeUInt32LE(data.length, 18);
+        local.writeUInt32LE(data.length, 22);
+        local.writeUInt16LE(nameBytes.length, 26);
+        nameBytes.copy(local, 30);
+        data.copy(local, 30 + nameBytes.length);
+        locals.push(local);
+
+        const central = Buffer.alloc(46 + nameBytes.length);
+        central.writeUInt32LE(0x02014b50, 0);
+        central.writeUInt16LE(20, 4);
+        central.writeUInt16LE(20, 6);
+        central.writeUInt16LE(0, 8);
+        central.writeUInt16LE(0, 10);
+        central.writeUInt32LE(data.length, 20);
+        central.writeUInt32LE(data.length, 24);
+        central.writeUInt16LE(nameBytes.length, 28);
+        central.writeUInt32LE(offset, 42);
+        nameBytes.copy(central, 46);
+        centrals.push(central);
+        offset += local.length;
+    }
+    const centralDirectory = Buffer.concat(centrals);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(entries.length, 8);
+    end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(centralDirectory.length, 12);
+    end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, centralDirectory, end]);
+}
+
 function writeCompanionInventoryFixture(root, buildDir) {
     const exe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2048, 9)]);
     const exePath = path.join(buildDir, 'AstraDownloader.exe');
@@ -239,6 +282,29 @@ test('companion staging validates the SHA-256 sidecar pair', () => {
     );
 });
 
+test('one-folder staging validates the ZIP contents and sidecar pair', () => {
+    const { readValidatedOnedirArchive, readValidatedSidecar } = require('../scripts/stage-companion-release');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-companion-onedir-'));
+    const archivePath = path.join(root, 'AstraDownloader-onedir.zip');
+    const archive = storedZip([
+        ['AstraDownloader/AstraDownloader.exe', Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2048, 8)])],
+        ['AstraDownloader/translations/astra_downloader_en.qm', Buffer.from('compiled')],
+    ]);
+    fs.writeFileSync(archivePath, archive);
+    const sidecarPath = `${archivePath}.sha256`;
+    const digest = crypto.createHash('sha256').update(archive).digest('hex');
+    fs.writeFileSync(sidecarPath, `${digest}  AstraDownloader-onedir.zip\n`);
+
+    assert.deepEqual(readValidatedOnedirArchive(archivePath), archive);
+    assert.equal(readValidatedSidecar(sidecarPath, archive, 'AstraDownloader-onedir.zip'), digest);
+
+    fs.writeFileSync(sidecarPath, `${digest}  AstraDownloader.exe\n`);
+    assert.throws(
+        () => readValidatedSidecar(sidecarPath, archive, 'AstraDownloader-onedir.zip'),
+        /sidecar does not match/
+    );
+});
+
 
 test('companion staging validates the opened descriptor rather than a path', () => {
     // Moved from the Astra Deck hardening suite with the script it pins.
@@ -253,6 +319,10 @@ test('companion staging validates the opened descriptor rather than a path', () 
         'companion staging must stage the EXE into build/ for release manifest inclusion');
     assert.match(stageScriptSource, /AstraDownloader\.exe\.sha256/,
         'companion staging must carry the checksum sidecar beside the EXE');
+    assert.match(stageScriptSource, /AstraDownloader-onedir\.zip/,
+        'companion staging must carry the one-folder archive');
+    assert.match(stageScriptSource, /readValidatedOnedirArchive/,
+        'companion staging must validate the one-folder archive contents');
     assert.doesNotMatch(stageScriptSource, /release:manifest/,
         'companion staging must not refer to a nonexistent release:manifest script');
     assert.doesNotMatch(stageScriptSource, /build:userscript/,

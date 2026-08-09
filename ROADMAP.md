@@ -116,13 +116,6 @@ Notes on existing items above — read these before starting them:
 
 ### P3
 
-- [ ] P3 — Publish a one-folder build beside the one-file exe
-  Why: `--onefile` self-extracts at runtime, which is the behaviour Defender's heuristics score, and it is the single largest support burden for this class of program. A `--onedir` zip removes the extraction step entirely and costs one extra build target.
-  Evidence: the documented mitigation ranking for PyInstaller false positives puts `--onedir` first, ahead of rebuilding the bootloader; winget's Mark-of-the-Web step via `IAttachmentExecute` also silently halts unsigned `.exe` *installer* types, which is a second reason the distributable should not be an installer. This contradicts the project's standing "single-file output" rule, so it is filed as an addition rather than a replacement: the one-file exe stays the headline download and the zip is the documented "flagged by antivirus?" fallback. Code signing remains permanently out of scope, so this and the published SHA-256 are the only levers available.
-  Touches: `astra_downloader/build.py`, `scripts/stage-companion-release.js`, `README.md`
-  Acceptance: `build.py` can emit a `--onedir` zip with its own SHA-256 sidecar alongside the one-file exe; the README names it as the antivirus fallback and states the tradeoff; the release staging gate verifies both artifacts.
-  Complexity: M
-
 - [ ] P3 — Stop deep-copying the whole subscription document on every archive mutation
   Why: Two full `deepcopy` passes over an up-to-20,000-entry archive plus a full JSON rewrite, per candidate, under the store lock, on the scheduler thread — so a 50-video scan does that 100+ times.
   Evidence: every mutating method takes `before = _copy(self._data)` (`subscriptions.py:103-105`, `:360-368`, `:415-419`, `:536-552`, `:654-662`) and `_save_locked` copies again for the writer. Cost is O(archive) per candidate. Note the sibling measurement already recorded in this file: `_refresh_subscriptions`' per-tick archive walk was measured at 3.88 ms and is explicitly *not* worth optimising — this is a different path and should be measured the same way, before and after.
