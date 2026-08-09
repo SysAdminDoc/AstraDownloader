@@ -3762,6 +3762,33 @@ class MainWindowCore(QMainWindow):
         ))
         self.cfg_keep_intermediates.setChecked(
             self.config.get("KeepIntermediateFiles", False))
+        self.cfg_write_info = QCheckBox(tr("Write info JSON sidecar"))
+        self.cfg_write_info.setChecked(self.config.get("WriteInfoJson", False))
+        self.cfg_write_description = QCheckBox(tr("Write description sidecar"))
+        self.cfg_write_description.setChecked(
+            self.config.get("WriteDescription", False)
+        )
+        self.cfg_write_thumbnail = QCheckBox(tr("Write thumbnail sidecar"))
+        self.cfg_write_thumbnail.setChecked(
+            self.config.get("WriteThumbnail", False)
+        )
+        self.cfg_split_chapters = QCheckBox(tr("Split chapters into files"))
+        self.cfg_split_chapters.setChecked(
+            self.config.get("SplitChapters", False)
+        )
+        self.cfg_live_from_start = QCheckBox(tr("Start live streams from the beginning"))
+        self.cfg_live_from_start.setChecked(
+            self.config.get("LiveFromStart", False)
+        )
+        self.cfg_wait_for_video = QSpinBox()
+        self.cfg_wait_for_video.setAccessibleName(tr("Wait for live video"))
+        self.cfg_wait_for_video.setRange(0, 3600)
+        self.cfg_wait_for_video.setSuffix(tr(" seconds"))
+        self.cfg_wait_for_video.setValue(
+            self._dependencies["clamp_int"](
+                self.config.get("WaitForVideoSeconds", 0), 0, 0, 3600
+            )
+        )
         # cfg_keep_intermediates is added after the subtitle rows below: the
         # track, format and language controls belong directly under the
         # checkbox that turns them on, not separated from it.
@@ -3843,6 +3870,29 @@ class MainWindowCore(QMainWindow):
                 lang_row.addStretch(1)
         self._sync_sublang_checkboxes(self.cfg_sublangs.text())
         pp_l.addWidget(self.cfg_keep_intermediates)
+        pp_l.addWidget(make_divider())
+        pp_l.addWidget(make_label("Archive output", "fieldLabel"))
+        pp_l.addWidget(make_label(
+            "Optional sidecars, chapter splitting and live-event controls. "
+            "These do not change the existing embed options.",
+            "fieldHint", word_wrap=True,
+        ))
+        for w in (
+            self.cfg_write_info, self.cfg_write_description,
+            self.cfg_write_thumbnail, self.cfg_split_chapters,
+            self.cfg_live_from_start,
+        ):
+            pp_l.addWidget(w)
+        wait_row = QHBoxLayout()
+        wait_row.setSpacing(8)
+        wait_row.addSpacing(28)
+        wait_row.addWidget(make_label("Wait for live video", "fieldHint"))
+        wait_row.addWidget(self.cfg_wait_for_video)
+        wait_row.addWidget(make_label(
+            "0 disables waiting; use this when a scheduled live event has not started.",
+            "fieldHint", word_wrap=True,
+        ), 1)
+        pp_l.addLayout(wait_row)
         pp_l.addWidget(make_divider())
         self.cfg_sponsorblock = QCheckBox(tr("Use SponsorBlock segments"))
         self.cfg_sponsorblock.setChecked(self.config.get("SponsorBlock", False))
@@ -5455,6 +5505,11 @@ class MainWindowCore(QMainWindow):
         ("cfg_chapters", "EmbedChapters", "check"),
         ("cfg_subs", "EmbedSubs", "check"),
         ("cfg_keep_intermediates", "KeepIntermediateFiles", "check"),
+        ("cfg_write_info", "WriteInfoJson", "check"),
+        ("cfg_write_description", "WriteDescription", "check"),
+        ("cfg_write_thumbnail", "WriteThumbnail", "check"),
+        ("cfg_split_chapters", "SplitChapters", "check"),
+        ("cfg_live_from_start", "LiveFromStart", "check"),
         ("cfg_verify_formats", "VerifyFormats", "check"),
         ("cfg_sponsorblock", "SponsorBlock", "check"),
         ("cfg_autoupdate", "AutoUpdateYtDlp", "check"),
@@ -5472,6 +5527,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_sleep_max", "MaxSleepIntervalSeconds", "number"),
         ("cfg_pacing_jitter", "PacingJitterPercent", "number"),
         ("cfg_sleep_requests", "SleepRequestsSeconds", "number"),
+        ("cfg_wait_for_video", "WaitForVideoSeconds", "number"),
         ("cfg_playlist_max", "PlaylistMaxItems", "number"),
         ("cfg_playlist_min_duration", "PlaylistMinDurationSeconds", "number"),
         ("cfg_playlist_max_duration", "PlaylistMaxDurationSeconds", "number"),
@@ -6486,6 +6542,18 @@ class MainWindowCore(QMainWindow):
                 site_profiles or [], indent=2, ensure_ascii=False
             ))
         self.cfg_outtmpl.setText(outtmpl)
+        def checked_setting(attribute, key):
+            widget = getattr(self, attribute, None)
+            return widget.isChecked() if widget is not None else bool(
+                self.config.get(key, False)
+            )
+
+        def numeric_setting(attribute, key):
+            widget = getattr(self, attribute, None)
+            return widget.value() if widget is not None else int(
+                self.config.get(key, 0) or 0
+            )
+
         saved = self.config.update({
             "ServerPort": new_port,
             "ServerToken": new_token,
@@ -6497,6 +6565,18 @@ class MainWindowCore(QMainWindow):
             "EmbedChapters": self.cfg_chapters.isChecked(),
             "EmbedSubs": self.cfg_subs.isChecked(),
             "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
+            "WriteInfoJson": checked_setting("cfg_write_info", "WriteInfoJson"),
+            "WriteDescription": checked_setting(
+                "cfg_write_description", "WriteDescription"
+            ),
+            "WriteThumbnail": checked_setting(
+                "cfg_write_thumbnail", "WriteThumbnail"
+            ),
+            "SplitChapters": checked_setting("cfg_split_chapters", "SplitChapters"),
+            "LiveFromStart": checked_setting("cfg_live_from_start", "LiveFromStart"),
+            "WaitForVideoSeconds": numeric_setting(
+                "cfg_wait_for_video", "WaitForVideoSeconds"
+            ),
             "VerifyFormats": self.cfg_verify_formats.isChecked(),
             "VideoCodecPreference": self.cfg_video_codec.currentData(),
             "AudioCodecPreference": self.cfg_audio_codec.currentData(),

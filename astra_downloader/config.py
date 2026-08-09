@@ -199,6 +199,15 @@ DEFAULT_CONFIG = {
     "EmbedThumbnail": True,
     "EmbedChapters": True,
     "EmbedSubs": False,
+    # Archive sidecars and chapter/live capture are opt-in. They write beside
+    # the finished media and deliberately do not alter the existing embed
+    # switches above.
+    "WriteInfoJson": False,
+    "WriteDescription": False,
+    "WriteThumbnail": False,
+    "SplitChapters": False,
+    "LiveFromStart": False,
+    "WaitForVideoSeconds": 0,
     # Downloads stage .part / .f### / .ytdl files in a private per-download
     # directory and sweep it after success. Turn this on to stage them beside
     # the output and keep them when diagnosing a merge problem.
@@ -1307,6 +1316,8 @@ def sanitize_config(raw):
     data["ServerToken"] = token if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", token) else uuid.uuid4().hex
     for key in (
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
+        "WriteInfoJson", "WriteDescription", "WriteThumbnail",
+        "SplitChapters", "LiveFromStart",
         "KeepIntermediateFiles", "VerifyFormats",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",
@@ -1368,6 +1379,9 @@ def sanitize_config(raw):
             data["MaxSleepIntervalSeconds"] < data["SleepIntervalSeconds"]):
         data["MaxSleepIntervalSeconds"] = data["SleepIntervalSeconds"]
     data["SleepRequestsSeconds"] = clamp_int(data.get("SleepRequestsSeconds"), 0, 0, 60)
+    data["WaitForVideoSeconds"] = clamp_int(
+        data.get("WaitForVideoSeconds"), 0, 0, 3600
+    )
     data["PacingJitterPercent"] = clamp_int(
         data.get("PacingJitterPercent"), 0, 0, 100
     )
