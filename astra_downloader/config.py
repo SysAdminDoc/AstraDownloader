@@ -93,8 +93,9 @@ _MAX_PATH_FIELD = 2048
 MAX_LOCAL_JSON_BYTES = 16 * 1024 * 1024
 DOWNLOAD_REQUEST_ALLOWED_FIELDS = frozenset({
     "url", "audioOnly", "format", "quality", "outputDir", "title",
-    "referer", "cookies", "section", "playlistItems",
+    "referer", "cookies", "section", "playlistItems", "videoPassword",
 })
+_MAX_VIDEO_PASSWORD_BYTES = 4096
 DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS = frozenset({
     "args", "argv", "flags", "extraArgs", "extractorArgs",
     "postprocessorArgs", "postprocessor_args", "externalDownloaderArgs",
@@ -792,6 +793,22 @@ def validate_download_request_body(body):
         return None, "Download format must be a string.", "invalid-download-format"
     if "quality" in body and not isinstance(body["quality"], str):
         return None, "Download quality must be a string.", "invalid-download-quality"
+    if "videoPassword" in body:
+        video_password = body["videoPassword"]
+        if not isinstance(video_password, str):
+            return None, "Video password must be a string.", "invalid-video-password"
+        try:
+            password_bytes = len(video_password.encode("utf-8"))
+        except UnicodeError:
+            password_bytes = _MAX_VIDEO_PASSWORD_BYTES + 1
+        if "\x00" in video_password or (
+            video_password and password_bytes > _MAX_VIDEO_PASSWORD_BYTES
+        ):
+            return (
+                None,
+                "Video password must be between 1 and 4096 UTF-8 bytes.",
+                "invalid-video-password",
+            )
     if "section" in body:
         section, section_error = normalize_download_section(body.get("section"))
         if section_error:

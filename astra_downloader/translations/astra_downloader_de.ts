@@ -151,6 +151,10 @@
       <translation>Abonnements sind verfügbar, sobald die lokale Anwendung läuft.</translation>
     </message>
     <message>
+      <source>Store username/password</source>
+      <translation>Benutzername/Passwort speichern</translation>
+    </message>
+    <message>
       <source>Read from browser</source>
       <translation>Aus dem Browser lesen</translation>
     </message>
@@ -415,6 +419,14 @@
       <translation>Videolink einfügen, auch mehrere auf einmal</translation>
     </message>
     <message>
+      <source>One-link video password</source>
+      <translation>Videopasswort für einen Link</translation>
+    </message>
+    <message>
+      <source>Video password — one link only (optional)</source>
+      <translation>Videopasswort — nur ein Link (optional)</translation>
+    </message>
+    <message>
       <source>Download type</source>
       <translation>Downloadtyp</translation>
     </message>
@@ -631,6 +643,22 @@
       <translation>Adresse der Website, bei der Sie angemeldet sind — x.com, instagram.com, vimeo.com</translation>
     </message>
     <message>
+      <source>Site sign-in username</source>
+      <translation>Benutzername der Website-Anmeldung</translation>
+    </message>
+    <message>
+      <source>Username or email</source>
+      <translation>Benutzername oder E-Mail</translation>
+    </message>
+    <message>
+      <source>Site sign-in password</source>
+      <translation>Passwort der Website-Anmeldung</translation>
+    </message>
+    <message>
+      <source>Password</source>
+      <translation>Passwort</translation>
+    </message>
+    <message>
       <source>Browser to read cookies from</source>
       <translation>Browser zum Lesen von Cookies</translation>
     </message>
@@ -659,8 +687,8 @@
       <translation>Status der gespeicherten Anmeldung</translation>
     </message>
     <message>
-      <source>Import this site's cookies to unblock the download waiting on it.</source>
-      <translation>Cookies dieser Website importieren, um den wartenden Download freizugeben.</translation>
+      <source>Import this site's cookies or store its username/password to unblock the download waiting on it.</source>
+      <translation>Importieren Sie die Cookies dieser Website oder speichern Sie Benutzername/Passwort, um den wartenden Download freizugeben.</translation>
     </message>
     <message>
       <source>Test</source>
@@ -1251,6 +1279,14 @@
       <translation>Kein Proof-of-Origin-Anbieter läuft. Downloads fallen auf die tokenfreien tv- und android_vr-Clients zurück.</translation>
     </message>
     <message>
+      <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
+      <translation>Für einen einzelnen geschützten Link. Gespeicherte Zugangsdaten finden Sie unter Anmeldungen.</translation>
+    </message>
+    <message>
+      <source>Video passwords are available for a single link only.</source>
+      <translation>Videopasswörter sind nur für einen einzelnen Link verfügbar.</translation>
+    </message>
+    <message>
       <source>Subscriptions unavailable</source>
       <translation>Abonnements nicht verfügbar</translation>
     </message>
@@ -1267,20 +1303,24 @@
       <translation>Fügen Sie oben einen YouTube-Kanal oder eine Playlist hinzu. Neue Uploads werden im eingestellten Intervall eingereiht.</translation>
     </message>
     <message>
-      <source>Store a signed-in session so private or members-only videos download. Cookies stay on this PC and are only ever sent to the site they came from.</source>
-      <translation>Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies bleiben auf diesem PC und werden nur an die Website gesendet, von der sie stammen.</translation>
+      <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
+      <translation>Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.</translation>
     </message>
     <message>
       <source>Read from</source>
       <translation>Lesen aus</translation>
     </message>
     <message>
-      <source>Chrome, Edge, and Brave 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file from the browser and import that instead. Firefox can normally be read directly.</source>
-      <translation>Chrome, Edge und Brave 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt — exportieren Sie stattdessen eine cookies.txt aus dem Browser und importieren Sie diese. Firefox lässt sich normalerweise direkt lesen.</translation>
+      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
+      <translation>Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt — exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername/Passwort. Firefox lässt sich normalerweise direkt lesen.</translation>
     </message>
     <message>
-      <source>Expired — sign in again to refresh it</source>
-      <translation>Abgelaufen — melden Sie sich erneut an, um sie zu erneuern</translation>
+      <source>Username/password — stored securely</source>
+      <translation>Benutzername/Passwort — sicher gespeichert</translation>
+    </message>
+    <message>
+      <source>cookies + username/password</source>
+      <translation>Cookies + Benutzername/Passwort</translation>
     </message>
     <message>
       <source>Run a bounded metadata-only sign-in test.</source>
@@ -1507,12 +1547,20 @@
       <translation>Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Anmeldungen“.</translation>
     </message>
     <message>
-      <source>Missing on disk — import it again</source>
-      <translation>Auf dem Datenträger nicht gefunden — erneut importieren</translation>
+      <source>Expired — sign in again to refresh it</source>
+      <translation>Abgelaufen — melden Sie sich erneut an, um sie zu erneuern</translation>
+    </message>
+    <message>
+      <source>username/password</source>
+      <translation>Benutzername/Passwort</translation>
     </message>
     <message>
       <source>cookies for other sites were discarded.</source>
       <translation>Cookies anderer Websites wurden verworfen.</translation>
+    </message>
+    <message>
+      <source>username/password stored securely.</source>
+      <translation>Benutzername/Passwort sicher gespeichert.</translation>
     </message>
     <message>
       <source>Could not restore the stored sign-in.</source>
@@ -1647,8 +1695,20 @@
       <translation>Alle {minutes} Min. · Scan läuft…</translation>
     </message>
     <message>
-      <source>Session cookies — valid until the site signs you out</source>
-      <translation>Sitzungscookies — gültig, bis die Website Sie abmeldet</translation>
+      <source>likely unreadable on Windows 127+</source>
+      <translation>unter Windows 127+ wahrscheinlich nicht lesbar</translation>
+    </message>
+    <message>
+      <source>Missing on disk — import it again</source>
+      <translation>Auf dem Datenträger nicht gefunden — erneut importieren</translation>
+    </message>
+    <message>
+      <source>cookie</source>
+      <translation>Cookie</translation>
+    </message>
+    <message>
+      <source>cookies</source>
+      <translation>Cookies</translation>
     </message>
     <message>
       <source>Test failed</source>
@@ -1695,6 +1755,14 @@
       <translation>Einrichtung wird abgeschlossen…</translation>
     </message>
     <message>
+      <source>cookie session expired</source>
+      <translation>Cookie-Sitzung abgelaufen</translation>
+    </message>
+    <message>
+      <source>Session cookies — valid until the site signs you out</source>
+      <translation>Sitzungscookies — gültig, bis die Website Sie abmeldet</translation>
+    </message>
+    <message>
       <source>from</source>
       <translation>von</translation>
     </message>
@@ -1717,14 +1785,6 @@
     <message>
       <source>First cookie expires</source>
       <translation>Erstes Cookie läuft ab</translation>
-    </message>
-    <message>
-      <source>cookie</source>
-      <translation>Cookie</translation>
-    </message>
-    <message>
-      <source>cookies</source>
-      <translation>Cookies</translation>
     </message>
     <message>
       <source>YouTube requires a PO token for this video. Start the PO-token provider, then retry the download.</source>

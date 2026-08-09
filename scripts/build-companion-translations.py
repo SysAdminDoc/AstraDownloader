@@ -454,6 +454,14 @@ CATALOGS = {
             "Gespeichert",
         "Best":
             "Beste",
+        "One-link video password":
+            "Videopasswort für einen Link",
+        "Video password — one link only (optional)":
+            "Videopasswort — nur ein Link (optional)",
+        "For a single protected link. Stored site credentials live under Sign-ins.":
+            "Für einen einzelnen geschützten Link. Gespeicherte Zugangsdaten finden Sie unter Anmeldungen.",
+        "Video passwords are available for a single link only.":
+            "Videopasswörter sind nur für einen einzelnen Link verfügbar.",
         "Status":
             "Status",
         "Subscriptions unavailable":
@@ -464,12 +472,36 @@ CATALOGS = {
             "Keine geplanten Abonnements",
         "Add a YouTube channel or playlist above. New uploads will be queued on its interval.":
             "Fügen Sie oben einen YouTube-Kanal oder eine Playlist hinzu. Neue Uploads werden im eingestellten Intervall eingereiht.",
-        "Store a signed-in session so private or members-only videos download. Cookies stay on this PC and are only ever sent to the site they came from.":
-            "Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies bleiben auf diesem PC und werden nur an die Website gesendet, von der sie stammen.",
+        "Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.":
+            "Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.",
         "Read from":
             "Lesen aus",
-        "Chrome, Edge, and Brave 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file from the browser and import that instead. Firefox can normally be read directly.":
-            "Chrome, Edge und Brave 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt — exportieren Sie stattdessen eine cookies.txt aus dem Browser und importieren Sie diese. Firefox lässt sich normalerweise direkt lesen.",
+        "Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.":
+            "Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt — exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername/Passwort. Firefox lässt sich normalerweise direkt lesen.",
+        "likely unreadable on Windows 127+":
+            "unter Windows 127+ wahrscheinlich nicht lesbar",
+        "Site sign-in username":
+            "Benutzername der Website-Anmeldung",
+        "Username or email":
+            "Benutzername oder E-Mail",
+        "Site sign-in password":
+            "Passwort der Website-Anmeldung",
+        "Password":
+            "Passwort",
+        "Store username/password":
+            "Benutzername/Passwort speichern",
+        "username/password stored securely.":
+            "Benutzername/Passwort sicher gespeichert.",
+        "Username/password — stored securely":
+            "Benutzername/Passwort — sicher gespeichert",
+        "cookie session expired":
+            "Cookie-Sitzung abgelaufen",
+        "cookies + username/password":
+            "Cookies + Benutzername/Passwort",
+        "username/password":
+            "Benutzername/Passwort",
+        "Import this site's cookies or store its username/password to unblock the download waiting on it.":
+            "Importieren Sie die Cookies dieser Website oder speichern Sie Benutzername/Passwort, um den wartenden Download freizugeben.",
         "Expired — sign in again to refresh it":
             "Abgelaufen — melden Sie sich erneut an, um sie zu erneuern",
         "Signed in to":

@@ -128,9 +128,12 @@ rebinding.
 
 Downloads only reach public internet addresses — loopback, RFC1918,
 link-local, reserved, and multicast targets are refused, as are URLs that
-embed credentials. Stored cookies never leave the machine and are never
-readable through the API, the GUI, the log, or the diagnostics payload: only
-counts, sources, and expiry are exposed. See
+embed credentials. Stored cookies and site username/password credentials
+never leave the machine and are never readable through the API, the GUI, the
+log, diagnostics, or settings bundles: only safe metadata such as counts,
+sources, expiry, and whether credentials are present is exposed. One-off
+video passwords are held only for the current single-link download and are
+not written to queue or history records. See
 [`docs/yt-dlp-cookie-threat-model.md`](docs/yt-dlp-cookie-threat-model.md).
 
 **No external downloader is offered.** aria2c, curl and the rest are refused
