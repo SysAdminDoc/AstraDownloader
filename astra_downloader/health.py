@@ -299,8 +299,14 @@ def build_youtube_extractor_args(url, po_token_provider=None,
         # so it is dead weight, and android_vr is erratic in 2026
         # (format-18-only drops, UNPLAYABLE on made-for-kids) so it rides
         # last. yt-dlp merges these youtube extractor args with the
-        # formats=duplicate entry above.
-        args += ['--extractor-args', 'youtube:player_client=tv,web_embedded,android_vr']
+        # formats=duplicate entry above. The provisioned nightly was last
+        # measured on 2026-08-08: visionos is the first viable token-exempt
+        # client, so keep it ahead of the older fallback chain while leaving
+        # the rest explicit for a deterministic no-provider path.
+        args += [
+            '--extractor-args',
+            'youtube:player_client=visionos,tv,web_embedded,android_vr',
+        ]
     return args
 
 

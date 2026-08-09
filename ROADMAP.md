@@ -173,13 +173,6 @@ Notes on existing items above — read these before starting them:
   Acceptance: the format probe, the playlist preview and the subscription scan carry the stored sign-in for the target site, the configured impersonation target and the configured proxy, under the same `_cookie_jar_matches_target` scoping the download uses; a test asserts the probe argv for a signed-in domain.
   Complexity: M
 
-- [ ] P1 — Stop hardcoding the YouTube client chain
-  Why: The token-exempt fallback names a 2026-era client list that yt-dlp has since moved past, so the app now overrides its own dependency's better default and cannot benefit from an extractor fix without a code change.
-  Evidence: `build_youtube_extractor_args` emits the literal `youtube:player_client=tv,web_embedded,android_vr` (`health.py:303`). Measured against the provisioned nightly (2026.08.04.234419) on 2026-08-06: with no `player_client` override the extractor resolved via **`visionos` then `android_vr`** and selected `401+251` with no JS challenge at all; with Astra's hardcoded chain it fetched the tv client config and player, ran a Deno JS challenge, emitted the SABR-only skip warning, and selected the same `401+251`. `visionos` does not appear anywhere in `astra_downloader/`. Upstream, `web_safari` was replaced by `web` across the YouTube defaults and `web_embedded` was replaced by `tv_downgraded` as the age-restricted fallback (yt-dlp PR #17261, which closed eight `web_safari` breakage issues at once).
-  Touches: `astra_downloader/health.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: the no-provider path expresses a *subtraction from* yt-dlp's default (the `default,-<client>` syntax) rather than a fixed list, or at minimum adds `visionos` at the head; a test pins the emitted argv and a comment records the date the chain was last measured, so the next drift is visible.
-  Complexity: S
-
 - [ ] P1 — Stop the yt-dlp updater retrying on every idle queue
   Why: The 12-hour throttle marker is written only on success, so a persistently failing update — blocked proxy, AV write-lock — re-runs after every single download, forever.
   Evidence: `mark_ytdlp_update_check` has exactly two call sites (`astra_downloader.py:1702`, `:1756`), both on success paths. Every failure return in `_run_ytdlp_self_update` skips it: `active-version-unverified` (`:1628`), `staging-failed` (`:1637`), `update-timeout` (`:1665`), `update-launch-failed` (`:1672`), `update-command-failed` (`:1686`), `staged-version-unverified` (`:1695`). `should_check_ytdlp_update` (`:1573`) therefore stays true and `maybe_refresh_ytdlp` fires on every drain to idle (`download.py:3390`). Each attempt runs `atomic_copy_verified` over the ~16 MB binary (three passes) plus a 120 s-timeout subprocess.

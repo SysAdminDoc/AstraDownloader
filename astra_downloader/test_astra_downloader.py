@@ -5790,7 +5790,7 @@ class PoTokenProviderTests(unittest.TestCase):
         # Without a reachable PO-token provider the default web/mweb clients
         # need GVS tokens and fail; fall back to the token-exempt clients first
         # so extraction degrades instead of failing outright.
-        fallback = 'youtube:player_client=tv,web_embedded,android_vr'
+        fallback = 'youtube:player_client=visionos,tv,web_embedded,android_vr'
         for absent in (None, {'ok': False}, {}):
             with self.subTest(provider=absent):
                 args = ad.build_youtube_extractor_args(
@@ -5801,9 +5801,11 @@ class PoTokenProviderTests(unittest.TestCase):
                 idx = args.index(fallback)
                 self.assertEqual(args[idx - 1], '--extractor-args')
         # Chain hygiene: bare `web` is NOT token-exempt (SABR-only without a
-        # GVS token), and android_vr is erratic so it must ride last.
+        # GVS token), visionos is the measured first choice, and android_vr
+        # is erratic so it must ride last.
         clients = fallback.split('=', 1)[1].split(',')
         self.assertNotIn('web', clients)
+        self.assertEqual(clients[0], 'visionos')
         self.assertEqual(clients[-1], 'android_vr')
         # When the provider IS reachable the web client + PO token is preferred,
         # so the exempt-client override must be omitted.
