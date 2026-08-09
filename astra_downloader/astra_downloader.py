@@ -146,6 +146,8 @@ try:
     )
     from .subscriptions import (
         SUBSCRIPTION_MAX_INTERVAL_MINUTES,
+        SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS,
+        SUBSCRIPTION_RETRY_BASE_SECONDS,
         SUBSCRIPTION_MIN_INTERVAL_MINUTES,
         SUBSCRIPTION_SCHEMA_VERSION,
         SubscriptionManager,
@@ -253,6 +255,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
     )
     from subscriptions import (
         SUBSCRIPTION_MAX_INTERVAL_MINUTES,
+        SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS,
+        SUBSCRIPTION_RETRY_BASE_SECONDS,
         SUBSCRIPTION_MIN_INTERVAL_MINUTES,
         SUBSCRIPTION_SCHEMA_VERSION,
         SubscriptionManager,
