@@ -3680,6 +3680,7 @@ class SetupWorker(SetupWorkerCore):
                 'ICON_PATH': lambda: ICON_PATH,
                 'ICON_URL': lambda: ICON_URL,
                 'INSTALL_DIR': lambda: INSTALL_DIR,
+                'is_portable_mode': lambda: is_portable_mode(),
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 'YTDLP_SHA256_ASSET': lambda: YTDLP_SHA256_ASSET,
                 'YTDLP_SHA256_URL': lambda: YTDLP_SHA256_URL,

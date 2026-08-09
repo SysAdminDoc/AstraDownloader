@@ -608,6 +608,7 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'ICON_PATH',
     'ICON_URL',
     'INSTALL_DIR',
+    'is_portable_mode',
     'YTDLP_PATH',
     'YTDLP_SHA256_ASSET',
     'YTDLP_SHA256_URL',
@@ -904,29 +905,35 @@ class SetupWorkerCore(QThread):
                     self._dependencies['write_persistent_log'](f"Icon download skipped: {e}")
             self.progress.emit(70)
 
-            # Desktop shortcut
-            self.log.emit("Creating desktop shortcut...")
-            self._create_shortcut()
-            self.progress.emit(80)
+            if self._dependencies['is_portable_mode']():
+                self.log.emit(
+                    "Portable mode: keeping application state beside the executable."
+                )
+                self.progress.emit(95)
+            else:
+                # Desktop shortcut
+                self.log.emit("Creating desktop shortcut...")
+                self._create_shortcut()
+                self.progress.emit(80)
 
-            # Startup task
-            self.log.emit("Registering startup task...")
-            self._register_startup()
-            self.progress.emit(85)
+                # Startup task
+                self.log.emit("Registering startup task...")
+                self._register_startup()
+                self.progress.emit(85)
 
-            # Protocol handlers
-            self.log.emit("Registering protocol handlers...")
-            self._register_protocols()
-            self.progress.emit(90)
+                # Protocol handlers
+                self.log.emit("Registering protocol handlers...")
+                self._register_protocols()
+                self.progress.emit(90)
 
-            # Add/Remove Programs
-            self.log.emit("Registering in Apps & Features...")
-            self._register_uninstall()
-            self.progress.emit(95)
+                # Add/Remove Programs
+                self.log.emit("Registering in Apps & Features...")
+                self._register_uninstall()
+                self.progress.emit(95)
 
-            # Persist the integrations stamp so subsequent launches skip the
-            # shortcut/protocol/task re-registration pass (v1.2.0 idempotency).
-            self._dependencies['_set_integrations_stamp']()
+                # Persist the integrations stamp so subsequent launches skip
+                # the registration pass (v1.2.0 idempotency).
+                self._dependencies['_set_integrations_stamp']()
 
             # Verify/update yt-dlp through the staged health-check + rollback
             # path. Setup remains successful if this optional maintenance step
