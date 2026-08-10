@@ -1,11 +1,8 @@
 # Roadmap
 
-Actionable items only — work a coding agent can pick up and implement without
-external dependencies. Completed items are deleted; shipped work lives in git
-history and `CHANGELOG.md`. Items that need something outside this repository
-live in `Roadmap_Blocked.md`.
+Actionable work only. Historical and completed roadmap material is archived in CHANGELOG.md; blocked work is kept in Roadmap_Blocked.md.
 
-## Carried over
+## Actionable Items
 
 - [ ] P2 — Build a light theme, including the surfaces that are already mixed
   Why: The product is dark-first by design, but nothing verifies what happens
@@ -32,20 +29,6 @@ live in `Roadmap_Blocked.md`.
   bar matches the body in both schemes; icons re-render per scheme; the render
   harness gains a theme axis.
   Complexity: L
-
-## Research-Driven Additions — v2.6.0 pass (2026-08-09)
-
-Every item traces to a finding in `RESEARCH.md`. Measurements were taken on this
-machine (Intel Core Ultra 9 285, 24 logical cores, Windows 11 26100) against the
-binaries the app actually provisions.
-
-### P0
-
-Ten items, all either user-harming or ship-blocking. Suggested order: the three
-transcription items are one chain and are worth doing together; the portable
-item is one root cause behind three destructive symptoms and should precede any
-packaging work; the two keyboard traps and the subscription error are each a
-short, self-contained fix; publishing unblocks everything downstream.
 
 - [ ] P0 — Restore a supply chain that can actually transcribe, and probe the capability
   Why: v2.6.0's headline feature cannot work on any current install, and the app
@@ -254,26 +237,6 @@ short, self-contained fix; publishing unblocks everything downstream.
   import result names the settings it changed on the Settings page; tests pin the
   exclusion set against `DEFAULT_CONFIG` so a new key cannot be added silently.
   Complexity: M
-
-- [ ] P0 — Publish the shipped versions, and fail the release gate when a version has no release
-  Why: Six versions of fixes — including three `security:` commits and the whole
-  v2.6.0 feature set — have never reached a user, and both delivery paths point
-  at the stale one.
-  Evidence: `gh release list` returns a single release, `v2.0.0` (2026-08-06),
-  and `git tag -l` returns a single tag; `APP_VERSION` is 2.6.0. The updater
-  resolves `releases/latest` (`astra_downloader.py:410-413`), so an installed
-  v2.0.0 sees itself as current forever, and Astra Deck's
-  `INSTALLER_URL` (`ytkit-v4.58.2.user.js:32248`) hands new users the same
-  v2.0.0 asset. The `v2.0.0` release also carries no `AstraDownloader-onedir.zip`,
-  so the antivirus fallback README documents has never been published.
-  Touches: `CHANGELOG.md`, `scripts/check-versions.js`,
-  `scripts/stage-companion-release.js`, release process
-  Acceptance: v2.6.0 is tagged and released with both artifacts and their
-  sidecars, intermediate tags are backfilled, and a gate fails when `APP_VERSION`
-  has no matching published release/tag.
-  Complexity: M
-
-### P1
 
 - [ ] P1 — Make the license gate run the inspection it exists for
   Why: The gate that is supposed to enforce the license policy only asserts that
@@ -548,8 +511,6 @@ short, self-contained fix; publishing unblocks everything downstream.
   Recycle Bin; Restore defaults gains an undo.
   Complexity: M
 
-### P2
-
 - [ ] P2 — Decide what the language picker is allowed to advertise
   Why: Eleven locales are offered and nine render as English, which is a worse
   experience than offering two, and the gap has more than doubled.
@@ -771,8 +732,6 @@ short, self-contained fix; publishing unblocks everything downstream.
   Acceptance: each sub-item is fixed with a test, or explicitly recorded as
   accepted in `SECURITY.md` where it is a deliberate property.
   Complexity: M
-
-### P3
 
 - [ ] P3 — Split `gui.py` along page boundaries
   Why: At 7,743 lines it now has measurable failure modes, not just a smell.
