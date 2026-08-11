@@ -268,6 +268,10 @@ def create_api(config, dl_manager, history, *, dependencies):
         max_events=RATE_LIMIT_HEALTH_MAX,
         window_seconds=RATE_LIMIT_HEALTH_WINDOW_SECONDS,
     )
+    subscription_scan_rate_limiter = RateLimiter(
+        max_events=RATE_LIMIT_DOWNLOAD_MAX,
+        window_seconds=RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS,
+    )
     companion_update_rate_limiter = RateLimiter(
         max_events=RATE_LIMIT_UPDATE_MAX,
         window_seconds=RATE_LIMIT_UPDATE_WINDOW_SECONDS,
@@ -1146,6 +1150,16 @@ def create_api(config, dl_manager, history, *, dependencies):
         manager, response = _subscription_manager_or_error()
         if response is not None:
             return response
+        allowed, retry_after = subscription_scan_rate_limiter.allow('subscription-scan')
+        if not allowed:
+            return cors_response(
+                {
+                    "error": "Too many subscription scans in a short period. Please wait a moment.",
+                    "code": "subscription-scan-rate-limited",
+                },
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
         result, error = manager.request_scan(subscription_id)
         if error:
             return _subscription_error(error, "subscription-scan-rejected", 404)

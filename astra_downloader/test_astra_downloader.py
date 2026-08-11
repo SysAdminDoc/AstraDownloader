@@ -1672,6 +1672,153 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(removed.status_code, 200)
             self.assertTrue(removed.get_json()["removed"])
 
+    def test_subscription_scan_endpoint_is_rate_limited(self):
+        token = "s" * 32
+
+        class FakeSubscriptions:
+            def request_scan(self, subscription_id):
+                return {"id": subscription_id, "scheduled": True}, None
+
+        config = FakeConfig({"ServerToken": token})
+        api = ad.create_api(
+            config,
+            ad.DownloadManager(config, FakeHistory()),
+            FakeHistory(),
+            subscriptions=FakeSubscriptions(),
+        )
+        client = api.test_client()
+        headers = {"X-Auth-Token": token, "Host": "127.0.0.1"}
+
+        responses = [
+            client.post("/subscriptions/sub_1/scan", headers=headers)
+            for _ in range(ad.RATE_LIMIT_DOWNLOAD_MAX + 1)
+        ]
+
+        self.assertEqual(
+            [response.status_code for response in responses[:-1]],
+            [202] * ad.RATE_LIMIT_DOWNLOAD_MAX,
+        )
+        self.assertEqual(responses[-1].status_code, 429)
+        self.assertEqual(
+            responses[-1].get_json()["code"], "subscription-scan-rate-limited"
+        )
+        self.assertIn("Retry-After", responses[-1].headers)
+
+    def test_manual_scan_claims_before_thread_start_and_coalesces_requests(self):
+        release = threading.Event()
+        probe_started = threading.Event()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "manual-scan.json")
+            record, error = store.add_subscription("https://www.youtube.com/@manual")
+            self.assertIsNone(error)
+
+            def probe(_url):
+                probe_started.set()
+                release.wait(2)
+                return [], None
+
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=probe,
+                enqueue=lambda *_args: ("dl", None),
+            )
+            first, error = manager.request_scan(record["id"])
+            self.assertIsNone(error)
+            self.assertTrue(first["scheduled"])
+            second, error = manager.request_scan(record["id"])
+            self.assertIsNone(error)
+            self.assertEqual(second, {
+                "id": record["id"], "scheduled": False, "scanning": True
+            })
+            self.assertTrue(probe_started.wait(1))
+            release.set()
+            deadline = time.time() + 2
+            while manager.snapshot()["scanning"] and time.time() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(manager.snapshot()["scanning"], [])
+
+    def test_manual_scan_exception_is_logged_and_releases_claim(self):
+        logs = []
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "manual-error.json")
+            record, error = store.add_subscription("https://www.youtube.com/@manual-error")
+            self.assertIsNone(error)
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: ([], None),
+                enqueue=lambda *_args: ("dl", None),
+                logger=logs.append,
+            )
+
+            def fail_scan(*_args, **_kwargs):
+                raise RuntimeError("manual probe exploded")
+
+            manager.scan_subscription = fail_scan
+            result, error = manager.request_scan(record["id"])
+            self.assertIsNone(error)
+            self.assertTrue(result["scheduled"])
+            deadline = time.time() + 2
+            while not logs and time.time() < deadline:
+                time.sleep(0.01)
+
+            self.assertTrue(any("manual probe exploded" in message for message in logs))
+            self.assertEqual(manager.snapshot()["scanning"], [])
+
+    def test_stopping_a_scan_breaks_before_the_next_candidate(self):
+        entries = [
+            {
+                "id": f"stop-video-{index}",
+                "title": f"Stop {index}",
+                "url": f"https://www.youtube.com/watch?v=stop-video-{index}",
+            }
+            for index in range(3)
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "stop-scan.json")
+            record, error = store.add_subscription("https://www.youtube.com/@stop")
+            self.assertIsNone(error)
+            queued = []
+            manager = None
+
+            def enqueue(_subscription, candidate, _key):
+                queued.append(candidate["id"])
+                if len(queued) == 1:
+                    manager._stop.set()
+                return f"dl_{candidate['id']}", None
+
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: (entries, None),
+                enqueue=enqueue,
+            )
+            result = manager.scan_subscription(record["id"])
+
+        self.assertEqual(result["queued"], 1)
+        self.assertEqual(queued, ["stop-video-0"])
+
+    def test_stop_logs_when_the_scheduler_thread_outlives_the_timeout(self):
+        logs = []
+
+        class StuckThread:
+            def is_alive(self):
+                return True
+
+            def join(self, timeout):
+                self.timeout = timeout
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ad.SubscriptionManager(
+                store=self._store(Path(tmp) / "stop-timeout.json"),
+                probe=lambda _url: ([], None),
+                enqueue=lambda *_args: ("dl", None),
+                logger=logs.append,
+            )
+            manager._thread = StuckThread()
+
+            manager.stop(timeout=0.1)
+
+        self.assertTrue(any("stop timed out" in message for message in logs))
+
     def test_subscription_persistence_failure_is_a_retryable_server_error(self):
         token = "s" * 32
         config = FakeConfig({"ServerToken": token})

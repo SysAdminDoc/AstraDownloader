@@ -91,6 +91,10 @@ repository's git log.
 - **Failed sign-in removal is now non-destructive.** If the site-login index
   cannot be rewritten, the stored credentials and index entry remain available
   instead of being silently split apart.
+- **Subscription scans now stop and coalesce cleanly.** Shutdown interrupts
+  candidate intake, timed-out scheduler joins are logged, concurrent manual
+  requests share one scan, scan-thread exceptions are recorded, and the scan
+  endpoint has a bounded retry window.
 
 ## [2.6.0] - 2026-08-09
 
