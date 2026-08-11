@@ -48,6 +48,10 @@ repository's git log.
   now rate-limits and backs off after failures, startup removes orphaned update
   artifacts, failed scheduling records a terminal state, and update markers
   use UTC plus durable replacement semantics.
+- **Subscription probes now participate in yt-dlp activity tracking.** The
+  updater sees live scans and other yt-dlp probes through the shared activity
+  view, and startup removes fresh probe/import cookie jars left by an abrupt
+  exit.
 
 ## [2.6.0] - 2026-08-09
 

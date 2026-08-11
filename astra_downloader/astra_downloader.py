@@ -110,7 +110,7 @@ try:
         parse_netscape_cookies, registrable_domain, site_login_key,
         select_site_profile,
         Download, DownloadManagerCore,
-        DownloadQueueStore,
+        DownloadQueueStore, YTDLPActivityRegistry,
         PO_PROVIDER_NUDGE, PO_PROVIDER_NUDGE_CODES, po_provider_nudge_advice,
         apply_download_failure_classification, build_video_format_args,
         build_format_sort_args,
@@ -236,7 +236,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         parse_netscape_cookies, registrable_domain, site_login_key,
         select_site_profile,
         Download, DownloadManagerCore,
-        DownloadQueueStore,
+        DownloadQueueStore, YTDLPActivityRegistry,
         PO_PROVIDER_NUDGE, PO_PROVIDER_NUDGE_CODES, po_provider_nudge_advice,
         apply_download_failure_classification, build_video_format_args,
         build_format_sort_args,
@@ -680,9 +680,24 @@ def validate_ytdlp_spawn_args(args):
     return safe_args[:1] + missing + safe_args[1:]
 
 
+_YTDLP_ACTIVITY = YTDLPActivityRegistry()
+
+
 def spawn_ytdlp(args, **kwargs):
     """Launch yt-dlp only after applying final process-boundary policy."""
-    return subprocess.Popen(validate_ytdlp_spawn_args(args), **kwargs)
+    token = _YTDLP_ACTIVITY.reserve()
+    try:
+        process = subprocess.Popen(validate_ytdlp_spawn_args(args), **kwargs)
+    except Exception:
+        _YTDLP_ACTIVITY.release(token)
+        raise
+    if callable(getattr(process, 'poll', None)):
+        _YTDLP_ACTIVITY.attach(token, process)
+    else:
+        # Test doubles and unusual launch adapters without poll() cannot be
+        # observed safely; do not leave a permanent busy marker behind.
+        _YTDLP_ACTIVITY.release(token)
+    return process
 
 
 def probe_subscription_uploads(
@@ -740,6 +755,7 @@ def probe_subscription_uploads(
     finally:
         if identity_cleanup:
             identity_cleanup()
+        _YTDLP_ACTIVITY.release_process(proc)
     if proc.returncode != 0:
         lines = [line.strip() for line in (error_output or '').splitlines() if line.strip()]
         return [], (lines[-1] if lines else "yt-dlp could not scan the subscription.")[:240]
@@ -4001,6 +4017,8 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
                 'spawn_ytdlp': lambda *args, **kwargs: spawn_ytdlp(*args, **kwargs),
+                'ytdlp_activity_count': lambda: _YTDLP_ACTIVITY.active_count(),
+                'release_ytdlp_activity': lambda process: _YTDLP_ACTIVITY.release_process(process),
                 'spawn_media_process': lambda *args, **kwargs: spawn_media_process(*args, **kwargs),
                 'terminate_process_tree': lambda *args, **kwargs: terminate_process_tree(*args, **kwargs),
                 'write_persistent_log': lambda *args, **kwargs: write_persistent_log(*args, **kwargs),
@@ -4042,6 +4060,7 @@ def build_subscription_manager(config, dl_manager):
         enqueue=enqueue,
         status_reader=lambda download_id: dl_manager.status_of(download_id, default='failed'),
         logger=lambda message: write_persistent_log(message),
+        activity_registry=_YTDLP_ACTIVITY,
     )
 
 
