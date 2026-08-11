@@ -21,31 +21,73 @@ CAPTURE_NAMES = (
     "dashboard-light-theme",
     "dashboard-error-degraded",
     "dashboard-german",
+    "dashboard-spanish",
+    "dashboard-french",
+    "dashboard-italian",
+    "dashboard-japanese",
+    "dashboard-korean",
+    "dashboard-portuguese",
+    "dashboard-russian",
+    "dashboard-chinese",
     "downloads-first-run",
     "downloads-arabic-rtl",
     "downloads-active-pending",
+    "downloads-focus-1x",
     "downloads-light-theme",
     "downloads-clipboard-staged",
     "downloads-subtitles-only",
     "downloads-recovery-terminal",
     "downloads-rate-limited",
+    "downloads-quarantine",
+    "downloads-paused-intake",
+    "downloads-queue-full",
+    "downloads-format-probe",
     "history-populated",
     "history-cleared-undo",
     "history-restored",
     "history-unreadable",
+    "history-filter-empty",
+    "history-pagination",
     "subscriptions-empty",
+    "subscriptions-populated",
     "subscriptions-scanning",
+    "subscriptions-error",
+    "subscriptions-filter-empty",
+    "subscriptions-disabled",
+    "site-logins-empty",
     "site-logins-stored",
+    "site-logins-error",
+    "site-logins-filter-empty",
     "settings-dirty",
     "settings-subtitles",
     "settings-bundle-imported",
     "settings-fallback-port",
     "settings-invalid",
+    "settings-search-active",
+    "settings-invalid-site-profiles",
     "settings-save-failed",
     "settings-update-busy",
+    "settings-focus-125x",
     "reflow-900x620-hidpi-large-font",
     "diagnostics-review",
 )
+
+LOCALE_SCENARIOS = {
+    "dashboard-spanish": "es",
+    "dashboard-french": "fr",
+    "dashboard-italian": "it",
+    "dashboard-japanese": "ja",
+    "dashboard-korean": "ko",
+    "dashboard-portuguese": "pt_BR",
+    "dashboard-russian": "ru",
+    "dashboard-chinese": "zh_CN",
+}
+
+SCALE_SCENARIOS = {
+    "downloads-focus-1x": 1.0,
+    "settings-focus-125x": 1.25,
+    "reflow-900x620-hidpi-large-font": 2.0,
+}
 
 
 def main():
@@ -66,10 +108,17 @@ def main():
                     startupinfo=startupinfo,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-            subprocess.run(
+            result = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve())],
-                env=env, check=True, **child_kwargs,
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, **child_kwargs,
             )
+            if result.returncode:
+                if result.stdout:
+                    print(result.stdout, end="")
+                raise subprocess.CalledProcessError(
+                    result.returncode, result.args,
+                )
         for name in CAPTURE_NAMES:
             output = OUTPUT_DIR / f"{name}.png"
             if not output.exists() or output.stat().st_size < 10_000:
@@ -80,7 +129,7 @@ def main():
         raise RuntimeError(f"Unknown companion render scenario: {scenario}")
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    os.environ.setdefault("QT_SCALE_FACTOR", "2")
+    os.environ["QT_SCALE_FACTOR"] = str(SCALE_SCENARIOS.get(scenario, 1.0))
     os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
     try:
         hold_seconds = max(0.0, min(30.0, float(os.environ.get("ASTRA_COMPANION_RENDER_HOLD_SECONDS", "0"))))
@@ -107,13 +156,15 @@ def main():
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(app_module.APP_NAME)
         app.setApplicationVersion(app_module.APP_VERSION)
-        if scenario == "dashboard-german":
-            app._astra_translator = app_module.install_companion_translator(app, "de")
-        elif scenario == "downloads-arabic-rtl":
-            # Arabic is the only advertised locale that flips the whole
-            # layout, and until this scenario existed nothing ever rendered
-            # one — so no gate could see what RTL did to the page.
+        if scenario == "downloads-arabic-rtl":
             app._astra_translator = app_module.install_companion_translator(app, "ar")
+        else:
+            locale = {
+                "dashboard-german": "de",
+                **LOCALE_SCENARIOS,
+            }.get(scenario)
+            if locale:
+                app._astra_translator = app_module.install_companion_translator(app, locale)
         for font_name in ("segoeui.ttf", "seguisb.ttf", "segoeuib.ttf"):
             font_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / font_name
             if font_path.exists():
@@ -204,9 +255,19 @@ def main():
                 "Download", "History", "Sign-ins", "Subscriptions",
                 "Browser extension", "Settings",
             ).index(page_name)
+            focus_targets = {
+                "Download": window.quick_download_url,
+                "History": window.history_search,
+                "Sign-ins": window.site_login_url,
+                "Subscriptions": window.subscription_search,
+                "Browser extension": window.btn_startstop,
+                "Settings": window.settings_filter,
+            }
+            focus_target = focus_targets[page_name]
             window._nav_click(page_name)
             for nav_button in window.nav_buttons:
                 nav_button.clearFocus()
+            focus_target.setFocus(Qt.FocusReason.OtherFocusReason)
             app.processEvents()
             window.repaint()
             app.processEvents()
@@ -219,6 +280,11 @@ def main():
             for nav_button in window.nav_buttons:
                 if not window.sidebar.rect().contains(nav_button.geometry()):
                     raise RuntimeError(f"Navigation control escaped the native rail on {page_name}")
+            if not focus_target.hasFocus() or app.focusWidget() is None:
+                raise RuntimeError(f"Companion page has no focused control on {page_name}")
+            if app.focusWidget().window() is not window:
+                raise RuntimeError(f"Focused control escaped the companion window on {page_name}")
+            window._render_focus_target = focus_target
 
         def assert_download_options_reflow(window):
             """Pin the minimum-size fixture's option rows, not its screenshot."""
@@ -299,7 +365,10 @@ def main():
             rendered = visible_text(window)
             missing = [text for text in expected if text not in rendered]
             if missing:
-                raise RuntimeError(f"Operational state text is not visible: {missing}")
+                raise RuntimeError(
+                    f"Operational state text is not visible: {missing}; "
+                    f"visible={sorted(rendered)}"
+                )
 
         def capture_window(window, name, *, dpr=1):
             if name not in CAPTURE_NAMES:
@@ -314,14 +383,17 @@ def main():
             image = window.grab().toImage()
             if image.isNull() or image.deviceIndependentSize().toSize() != logical_size:
                 raise RuntimeError(f"Companion capture geometry is invalid for {name}")
-            actual_dpr = round(image.devicePixelRatio())
-            if actual_dpr < dpr:
+            actual_dpr = float(image.devicePixelRatio())
+            if abs(actual_dpr - float(dpr)) > 0.01:
                 raise RuntimeError(
                     f"Companion capture {name} expected {dpr}x DPI, got {image.devicePixelRatio():.1f}x"
                 )
-            rail_x = max(1, min(window.sidebar.width() - 1, 116)) * actual_dpr
+            focus_target = getattr(window, "_render_focus_target", None)
+            if focus_target is not None and not focus_target.hasFocus():
+                raise RuntimeError(f"Companion capture lost focus before painting: {name}")
+            rail_x = int(round(max(1, min(window.sidebar.width() - 1, 116)) * actual_dpr))
             rail_colors = {
-                image.pixelColor(rail_x, y * actual_dpr).name()
+                image.pixelColor(rail_x, int(round(y * actual_dpr))).name()
                 for y in range(12, max(13, window.height() - 12), 24)
             }
             if len(rail_colors) < 3:
@@ -380,8 +452,8 @@ def main():
             )
             manager.total_completed = 1
 
-        def seed_history(history):
-            history.replace([
+        def seed_history(history, count=2):
+            records = [
                 {
                     "id": "history-1",
                     "url": "https://www.youtube.com/watch?v=history00001",
@@ -402,7 +474,21 @@ def main():
                     "duration": 263,
                     "date": "2026-07-29",
                 },
-            ])
+            ]
+            for index in range(len(records) + 1, max(len(records), count) + 1):
+                records.append({
+                    "id": f"history-{index}",
+                    "url": f"https://www.youtube.com/watch?v=history{index:05d}",
+                    "title": f"Archived workflow {index}",
+                    "filename": str(
+                        Path(temp_dir) / "Videos" / f"Archived workflow {index}.mp4"
+                    ),
+                    "format": "mp4",
+                    "quality": "720",
+                    "duration": 180 + index,
+                    "date": f"2026-07-{(index % 28) + 1:02d}",
+                })
+            history.replace(records)
 
         def capture_dashboard_state(window):
             select_page(window, "Browser extension")
@@ -436,6 +522,31 @@ def main():
                     select_page(window, page)
                     scroll_current_page_to_top(window)
                     assert_visible_text(window, expected_german)
+                select_page(window, "Browser extension")
+            elif scenario in LOCALE_SCENARIOS:
+                source_nav = [
+                    "Download", "History", "Sign-ins", "Subscriptions",
+                    "Browser extension", "Settings",
+                ]
+                nav_text = [button.text() for button in window.nav_buttons]
+                if nav_text == source_nav:
+                    raise RuntimeError(
+                        f"{LOCALE_SCENARIOS[scenario]} navigation catalogue did not render"
+                    )
+                if scenario in {"dashboard-japanese", "dashboard-korean", "dashboard-chinese"}:
+                    for button in window.nav_buttons:
+                        if button.fontMetrics().horizontalAdvance(button.text()) > max(
+                                0, button.width() - 36
+                        ):
+                            raise RuntimeError(
+                                f"CJK navigation text is clipped: {button.text()!r}"
+                            )
+                for page in (
+                    "Download", "History", "Sign-ins", "Subscriptions",
+                    "Browser extension", "Settings",
+                ):
+                    select_page(window, page)
+                    scroll_current_page_to_top(window)
                 select_page(window, "Browser extension")
             elif scenario == "dashboard-starting":
                 window.status_label.setText("Starting")
@@ -570,6 +681,38 @@ def main():
                     "failures": 1,
                 }
                 manager._running_ids.clear()
+            elif scenario == "downloads-quarantine":
+                manager.downloads = {}
+                manager._running_ids.clear()
+                quarantine_path = Path(temp_dir) / "state" / "queue.json"
+                window._dependencies["quarantined_state_files"] = lambda: [{
+                    "path": str(quarantine_path),
+                    "backup": str(quarantine_path) + ".corrupt-fixture",
+                }]
+                window._refresh_quarantine_notice()
+            elif scenario == "downloads-paused-intake":
+                if not manager.pause_intake():
+                    raise RuntimeError("Could not pause the queue for the fixture")
+            elif scenario == "downloads-queue-full":
+                manager.capacity = lambda: {
+                    "running": 0,
+                    "runningLimit": 3,
+                    "pending": 200,
+                    "total": 200,
+                    "totalLimit": 200,
+                    "available": 0,
+                    "intakePaused": False,
+                }
+                manager.start_download = lambda **_kwargs: (
+                    None,
+                    "Download queue is full (200/200). Remove a queued item before adding another.",
+                )
+            elif scenario == "downloads-format-probe":
+                def hold_format_probe(_url):
+                    time.sleep(5)
+                    return {}, ""
+
+                manager.list_formats = hold_format_probe
             elif scenario == "downloads-first-run":
                 manager.downloads = {}
                 manager._running_ids.clear()
@@ -686,9 +829,39 @@ def main():
                         raise RuntimeError("Rate-limited queue item has no host countdown")
                     if not any("This host is paused" in text for text in rendered):
                         raise RuntimeError("Rate-limited recovery callout is missing")
+                elif scenario == "downloads-quarantine":
+                    if not window.quarantine_panel.isVisible():
+                        raise RuntimeError("Download quarantine panel is not visible")
+                    if "queue.json could not be read" not in window.quarantine_notice.text():
+                        raise RuntimeError("Download quarantine notice is incomplete")
+                elif scenario == "downloads-paused-intake":
+                    if window.btn_queue_pause.text() != "Resume queue":
+                        raise RuntimeError("Paused intake fixture did not expose Resume queue")
+                    if not window.btn_queue_pause.toolTip().startswith(
+                            "Resume pending downloads explicitly"
+                    ):
+                        raise RuntimeError("Paused intake fixture has the wrong recovery hint")
+                elif scenario == "downloads-queue-full":
+                    window.quick_download_url.setText(
+                        "https://www.youtube.com/watch?v=queuefull01"
+                    )
+                    window._start_quick_download()
+                    if window.queue_capacity_badge.text() != "200 / 200 jobs":
+                        raise RuntimeError("Queue-full fixture did not expose the full capacity")
+                    if "Download queue is full" not in window.quick_download_status.text():
+                        raise RuntimeError("Queue-full fixture did not surface the rejection")
+                elif scenario == "downloads-format-probe":
+                    window.quick_download_url.setText(
+                        "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                    )
+                    window._probe_quick_download_formats()
+                    if not window._format_probe_in_flight:
+                        raise RuntimeError("Format-probe fixture did not stay in flight")
+                    if window.quick_download_status.text() != "Looking up available formats…":
+                        raise RuntimeError("Format-probe fixture did not expose its pending state")
             capture_window(
                 window, scenario,
-                dpr=2 if scenario == "reflow-900x620-hidpi-large-font" else 1,
+                dpr=SCALE_SCENARIOS.get(scenario, 1.0),
             )
             if scenario == "reflow-900x620-hidpi-large-font":
                 output = QImage(str(OUTPUT_DIR / f"{scenario}.png"))
@@ -702,6 +875,8 @@ def main():
                     "path": str(history_path),
                     "backup": str(history_path) + ".corrupt-fixture",
                 }]
+            elif scenario == "history-pagination":
+                seed_history(history, count=55)
             else:
                 seed_history(history)
             select_page(window, "History")
@@ -723,6 +898,23 @@ def main():
                 assert_visible_text(
                     window, {"Keyboard navigation deep dive", "Offline media workflow"}
                 )
+            elif scenario == "history-filter-empty":
+                window.history_search.setText("does-not-match")
+                window._refresh_history()
+                app.processEvents()
+                QTest.qWait(60)
+                app.processEvents()
+                assert_visible_text(window, {"No matching downloads"})
+            elif scenario == "history-pagination":
+                if not window.btn_history_next.isEnabled():
+                    raise RuntimeError("History pagination fixture has no next page")
+                window._move_history_page(1)
+                if not window.btn_history_prev.isEnabled():
+                    raise RuntimeError("History pagination fixture did not enable previous")
+                if "51–55 of 55 filtered" not in window.history_meta.text():
+                    raise RuntimeError(
+                        f"History pagination metadata is wrong: {window.history_meta.text()!r}"
+                    )
             else:
                 assert_visible_text(
                     window, {"Keyboard navigation deep dive", "Offline media workflow"}
@@ -730,33 +922,99 @@ def main():
             capture_window(window, scenario)
 
         def capture_subscription_state(window):
+            manager = window._subscription_manager()
+            if scenario == "subscriptions-empty":
+                manager._records = []
+            elif scenario == "subscriptions-error":
+                def failing_snapshot():
+                    raise RuntimeError("fixture subscription read failure")
+
+                manager.snapshot = failing_snapshot
+            elif scenario == "subscriptions-disabled":
+                manager._records[0]["enabled"] = False
+                manager._records[0]["nextScanAt"] = None
             select_page(window, "Subscriptions")
-            assert_visible_text(window, {"Astra channel"})
             if scenario == "subscriptions-scanning":
                 window._subscription_scan_pending.add("sub-fixture")
                 window._refresh_subscriptions(force=True)
                 app.processEvents()
                 if not any("scanning now" in text for text in visible_text(window)):
                     raise RuntimeError("Subscription scan fixture did not expose its active state")
-            elif not any("Every 60 min" in text for text in visible_text(window)):
-                raise RuntimeError("Subscription fixture did not render its scan interval")
+            elif scenario == "subscriptions-empty":
+                assert_visible_text(window, {"No scheduled subscriptions"})
+            elif scenario == "subscriptions-populated":
+                assert_visible_text(window, {"Astra channel"})
+                if not any("Every 60 min" in text for text in visible_text(window)):
+                    raise RuntimeError("Subscription fixture did not render its scan interval")
+            elif scenario == "subscriptions-error":
+                assert_visible_text(window, {
+                    "Subscriptions unavailable",
+                    "Could not read subscriptions: fixture subscription read failure",
+                })
+            elif scenario == "subscriptions-filter-empty":
+                window.subscription_search.setText("does-not-match")
+                window._refresh_subscriptions(force=True)
+                app.processEvents()
+                QTest.qWait(60)
+                app.processEvents()
+                assert_visible_text(window, {"No subscriptions match these filters"})
+            elif scenario == "subscriptions-disabled":
+                index = window.subscription_status_filter.findData("disabled")
+                if index < 0:
+                    raise RuntimeError("Subscription disabled filter is missing")
+                window.subscription_status_filter.setCurrentIndex(index)
+                window._refresh_subscriptions(force=True)
+                assert_visible_text(window, {"Astra channel"})
+                if not any("paused" in text for text in visible_text(window)):
+                    raise RuntimeError("Disabled subscription fixture did not show paused state")
+                if window.subscription_status_filter.currentData() != "disabled":
+                    raise RuntimeError("Disabled subscription filter did not stay selected")
+            else:
+                raise RuntimeError(f"Unhandled subscription fixture: {scenario}")
             capture_window(window, scenario)
 
         def capture_site_login_state(window):
             select_page(window, "Sign-ins")
-            # Fixture only: a stored sign-in with no cookie values anywhere in
-            # the rendered page, which is the property this view must hold.
             store = window.dl_manager.site_logins
-            store.import_netscape_text(
-                "x.com",
-                ".x.com	TRUE	/	TRUE	2000000000	auth_token	fixture-value",
-            )
-            window._refresh_site_logins(force=True)
-            app.processEvents()
-            assert_visible_text(window, {"x.com"})
-            rendered = " ".join(visible_text(window))
-            if "fixture-value" in rendered or "auth_token" in rendered:
-                raise RuntimeError("Cookie values must never render in the sign-ins view")
+            if scenario == "site-logins-error":
+                def failing_entries():
+                    raise RuntimeError("fixture sign-in store failure")
+
+                store.entries = failing_entries
+                window._refresh_site_logins(force=True)
+                app.processEvents()
+                QTest.qWait(60)
+                app.processEvents()
+                assert_visible_text(window, {
+                    "Site sign-ins are unavailable in this session.",
+                    "Could not read stored sign-ins: fixture sign-in store failure",
+                })
+            elif scenario == "site-logins-empty":
+                window._refresh_site_logins(force=True)
+                app.processEvents()
+                QTest.qWait(60)
+                app.processEvents()
+                assert_visible_text(window, {"No stored sign-ins"})
+            else:
+                # Fixture only: a stored sign-in with no cookie values anywhere
+                # in the rendered page, which is the property this view must hold.
+                store.import_netscape_text(
+                    "x.com",
+                    ".x.com	TRUE	/	TRUE	2000000000	auth_token	fixture-value",
+                )
+                if scenario == "site-logins-filter-empty":
+                    window.site_login_search.setText("does-not-match")
+                window._refresh_site_logins(force=True)
+                app.processEvents()
+                QTest.qWait(60)
+                app.processEvents()
+                if scenario == "site-logins-filter-empty":
+                    assert_visible_text(window, {"No sign-ins match these filters"})
+                else:
+                    assert_visible_text(window, {"x.com"})
+                rendered = " ".join(visible_text(window))
+                if "fixture-value" in rendered or "auth_token" in rendered:
+                    raise RuntimeError("Cookie values must never render in the sign-ins view")
             capture_window(window, scenario)
 
         def capture_settings_state(window, config):
@@ -879,7 +1137,25 @@ def main():
                 window._save_settings()
                 if window.cfg_outtmpl.property("state") != "error":
                     raise RuntimeError("Invalid settings fixture did not highlight the field")
+                window._render_focus_target = window.cfg_outtmpl
                 expected = "Check the highlighted fields before saving."
+            elif scenario == "settings-search-active":
+                window.settings_filter.setText("proxy")
+                app.processEvents()
+                if not window.cfg_proxy.isVisible():
+                    raise RuntimeError("Settings search did not reveal the proxy field")
+                if window.cfg_dl_path.isVisible():
+                    raise RuntimeError("Settings search left an unrelated field visible")
+                expected = "Connection"
+            elif scenario == "settings-invalid-site-profiles":
+                window.cfg_site_profiles.setPlainText("{not valid JSON")
+                window._save_settings()
+                if window.cfg_site_profiles.property("state") != "error":
+                    raise RuntimeError(
+                        "Invalid site-profile JSON fixture did not highlight the field"
+                    )
+                window._render_focus_target = window.cfg_site_profiles
+                expected = "Named site profiles"
             elif scenario == "settings-save-failed":
                 config.update = lambda _mapping: False
                 window._save_settings()
@@ -898,12 +1174,31 @@ def main():
             if scenario == "settings-fallback-port":
                 # The Connection card is the top of the page.
                 scroll_current_page_to_top(window)
+            elif scenario == "settings-search-active":
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(window.cfg_proxy, 0, 160)
+                    app.processEvents()
+                    QTest.qWait(40)
+            elif scenario == "settings-invalid-site-profiles":
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(window.cfg_site_profiles, 0, 160)
+                    app.processEvents()
+                    QTest.qWait(40)
             elif scenario not in ("settings-subtitles", "settings-bundle-imported"):
                 # That scenario already scrolled to the controls it exists to
                 # show; scrolling to the bottom here would hide them again.
                 scroll_current_page_to_bottom(window)
             assert_visible_text(window, {expected})
-            capture_window(window, scenario)
+            capture_window(
+                window, scenario,
+                dpr=SCALE_SCENARIOS.get(scenario, 1.0),
+            )
 
         def capture_diagnostics(window):
             diagnostics_output = OUTPUT_DIR / "diagnostics-review.png"
