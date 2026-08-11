@@ -54,6 +54,9 @@ pasting a link never needs it.
 - **Preview Windows-safe names.** Settings renders an example output path,
   flags reserved names and overlong paths before saving, and enables yt-dlp's
   Windows filename sanitization by default.
+- **Browser pairing stays scoped.** Native messaging is registered for the
+  installed Chromium-family browsers and Firefox only after browser-specific
+  extension IDs pass validation.
 - **It tells you why before it fails.** The Download page pre-flight panel
   names stale yt-dlp, missing JavaScript runtime, stale or incomplete FFmpeg,
   expired sign-ins, GitHub API exhaustion, and token-provider trouble, with a

@@ -96,6 +96,7 @@ try:
         DOWNLOAD_PENDING_STATES, DOWNLOAD_RETRYABLE_ERROR_CODES,
         DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
         DOWNLOAD_RUNNING_STATES, DOWNLOAD_STALL_TIMEOUT_SECONDS,
+        DOWNLOAD_INTERMEDIATE_DIRNAME,
         DOWNLOAD_TERMINAL_STATES, DOWNLOAD_WATCHDOG_POLL_SECONDS,
         DOWNLOAD_QUEUE_SCHEMA_VERSION, MAX_CONCURRENT, MAX_QUEUED_TOTAL,
         HOST_BACKOFF_BASE_SECONDS, HOST_BACKOFF_MAX_SECONDS,
@@ -230,6 +231,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         DOWNLOAD_PENDING_STATES, DOWNLOAD_RETRYABLE_ERROR_CODES,
         DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
         DOWNLOAD_RUNNING_STATES, DOWNLOAD_STALL_TIMEOUT_SECONDS,
+        DOWNLOAD_INTERMEDIATE_DIRNAME,
         DOWNLOAD_TERMINAL_STATES, DOWNLOAD_WATCHDOG_POLL_SECONDS,
         DOWNLOAD_QUEUE_SCHEMA_VERSION, MAX_CONCURRENT, MAX_QUEUED_TOTAL,
         HOST_BACKOFF_BASE_SECONDS, HOST_BACKOFF_MAX_SECONDS,
@@ -467,8 +469,13 @@ WHISPER_MODEL_PATH = INSTALL_DIR / WHISPER_MODEL_NAME
 # is intentionally much higher than the helper-executable floor: a truncated
 # model can look present and fail only after a user waits for transcription.
 WHISPER_MODEL_MIN_BYTES = 16 * 1024 * 1024
+# Hugging Face's ``main`` branch is mutable. Pin the model to the reviewed
+# repository revision so the digest and the bytes fetched by setup cannot
+# silently drift between releases.
+WHISPER_MODEL_REVISION = '5359861c739e955e79d9a303bcbc70fb988958b1'
 WHISPER_MODEL_URL = (
-    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/'
+    'https://huggingface.co/ggerganov/whisper.cpp/resolve/'
+    f'{WHISPER_MODEL_REVISION}/'
     f'{WHISPER_MODEL_NAME}?download=true'
 )
 WHISPER_MODEL_SHA256 = (
@@ -499,6 +506,25 @@ DENO_DIR = INSTALL_DIR / 'deno'
 DENO_PATH = DENO_DIR / 'deno.exe'
 NATIVE_HOST_DIR = INSTALL_DIR / 'native-hosts'
 DEFAULT_FIREFOX_EXTENSION_IDS = ("ytkit@sysadmindoc.github.io",)
+# Chromium-family browsers all read a Chrome-style ``allowed_origins`` host
+# manifest, but each browser has its own per-user HKCU registry root.
+CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS = (
+    'Software\\Google\\Chrome\\NativeMessagingHosts',
+    'Software\\Microsoft\\Edge\\NativeMessagingHosts',
+    'Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts',
+    'Software\\Vivaldi\\NativeMessagingHosts',
+    'Software\\Opera Software\\Opera Stable\\NativeMessagingHosts',
+    'Software\\Chromium\\NativeMessagingHosts',
+)
+FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT = (
+    'Software\\Mozilla\\NativeMessagingHosts'
+)
+# Chrome extension IDs are hashes encoded in exactly 32 characters from a-p.
+# Gecko IDs are commonly email-shaped, but may also be generated opaque IDs;
+# reject separators, control characters, and URL-like values without imposing
+# Chrome's alphabet on Firefox.
+CHROME_EXTENSION_ID_RE = re.compile(r'^[a-p]{32}$')
+FIREFOX_EXTENSION_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._%+@-]{0,127}$')
 DENO_ZIP_URL = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
 DENO_SHA256_URL = DENO_ZIP_URL + ".sha256sum"
 DENO_SHA256_ASSET = Path(urlparse(DENO_ZIP_URL).path).name
@@ -3641,7 +3667,26 @@ def register_uninstall_entry(target, base_args):
         write_persistent_log(f"Uninstall registration failed: {e}")
 
 
-def parse_native_extension_ids(value, fallback=()):
+def is_valid_native_extension_id(value, browser='chrome'):
+    """Return whether an ID is safe for a browser native-host manifest."""
+    text = str(value or '').strip()
+    browser = str(browser or '').strip().lower()
+    if browser == 'chrome':
+        return bool(CHROME_EXTENSION_ID_RE.fullmatch(text.lower()))
+    if browser == 'firefox':
+        return bool(FIREFOX_EXTENSION_ID_RE.fullmatch(text))
+    return bool(text and len(text) <= 128 and not any(
+        ord(char) < 0x20 or char in '/\\<>' for char in text
+    ))
+
+
+def parse_native_extension_ids(value, fallback=(), browser=None):
+    """Split, deduplicate, and optionally validate native-host IDs.
+
+    ``browser=None`` keeps the generic parser useful for legacy origin
+    settings. Registration and manifest construction always pass the target
+    browser so untrusted text cannot become an ``allowed_origins`` entry.
+    """
     if isinstance(value, (list, tuple)):
         raw = value
     elif isinstance(value, str):
@@ -3651,13 +3696,23 @@ def parse_native_extension_ids(value, fallback=()):
     out = []
     for item in raw:
         text = str(item or '').strip()
-        if text and text not in out:
+        if not text:
+            continue
+        if browser and not is_valid_native_extension_id(text, browser):
+            continue
+        if str(browser or '').lower() == 'chrome':
+            text = text.lower()
+        if text not in out:
             out.append(text)
     if out:
         return out
     for item in fallback or ():
         text = str(item or '').strip()
-        if text and text not in out:
+        if not text or (browser and not is_valid_native_extension_id(text, browser)):
+            continue
+        if str(browser or '').lower() == 'chrome':
+            text = text.lower()
+        if text not in out:
             out.append(text)
     return out
 
@@ -3733,25 +3788,41 @@ def _revoke_native_messaging_host(manifest_path, registry_key):
 def register_native_messaging_hosts(target, base_args, config):
     if sys.platform != 'win32':
         return
-    chrome_ids = parse_native_extension_ids(config.get("NativeChromeExtensionIds", ""))
-    firefox_ids = parse_native_extension_ids(config.get("NativeFirefoxExtensionIds", ""))
+    chrome_ids = parse_native_extension_ids(
+        config.get("NativeChromeExtensionIds", ""), browser="chrome"
+    )
+    firefox_ids = parse_native_extension_ids(
+        config.get("NativeFirefoxExtensionIds", ""), browser="firefox"
+    )
     chrome_manifest = NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.chrome.json"
     firefox_manifest = NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.firefox.json"
-    chrome_registry_key = (
-        f"Software\\Google\\Chrome\\NativeMessagingHosts\\{NATIVE_HOST_NAME}"
+    chrome_registry_keys = tuple(
+        f"{root}\\{NATIVE_HOST_NAME}"
+        for root in CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS
     )
     firefox_registry_key = (
-        f"Software\\Mozilla\\NativeMessagingHosts\\{NATIVE_HOST_NAME}"
+        f"{FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{NATIVE_HOST_NAME}"
     )
+
+    def revoke_chromium_host():
+        try:
+            chrome_manifest.unlink(missing_ok=True)
+        except OSError as error:
+            write_persistent_log(
+                f"Native messaging manifest cleanup failed for {chrome_manifest}: {error}"
+            )
+        for registry_key in chrome_registry_keys:
+            unregister_native_host_registry_value(registry_key)
+
     if base_args:
         write_persistent_log("Native messaging host registration skipped: source runs need an executable wrapper.")
         if not chrome_ids:
-            _revoke_native_messaging_host(chrome_manifest, chrome_registry_key)
+            revoke_chromium_host()
         if not firefox_ids:
             _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
         return
     if not chrome_ids and not firefox_ids:
-        _revoke_native_messaging_host(chrome_manifest, chrome_registry_key)
+        revoke_chromium_host()
         _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
         write_persistent_log("Native messaging host registration disabled: no extension IDs configured.")
         return
@@ -3759,12 +3830,10 @@ def register_native_messaging_hosts(target, base_args, config):
         NATIVE_HOST_DIR.mkdir(parents=True, exist_ok=True)
         if chrome_ids:
             atomic_write_json(chrome_manifest, build_native_host_manifest(target, chrome_ids, browser="chrome"))
-            register_native_host_registry_value(
-                chrome_registry_key,
-                chrome_manifest,
-            )
+            for registry_key in chrome_registry_keys:
+                register_native_host_registry_value(registry_key, chrome_manifest)
         else:
-            _revoke_native_messaging_host(chrome_manifest, chrome_registry_key)
+            revoke_chromium_host()
         if firefox_ids:
             atomic_write_json(firefox_manifest, build_native_host_manifest(target, firefox_ids, browser="firefox"))
             register_native_host_registry_value(
@@ -4658,9 +4727,13 @@ def run_uninstall():
             'Software\\Classes\\ytdl',
             'Software\\Classes\\mediadl',
             'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AstraDownloader',
-            f'Software\\Google\\Chrome\\NativeMessagingHosts\\{NATIVE_HOST_NAME}',
-            f'Software\\Mozilla\\NativeMessagingHosts\\{NATIVE_HOST_NAME}',
             INTEGRATIONS_STAMP_KEY,
+        ] + [
+            f'{root}\\{NATIVE_HOST_NAME}'
+            for root in (
+                *CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS,
+                FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT,
+            )
         ]:
             try:
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, path + '\\shell\\open\\command')
@@ -4827,6 +4900,7 @@ class MainWindow(MainWindowCore):
                 'HISTORY_RETENTION_MIN': lambda: HISTORY_RETENTION_MIN,
                 'HISTORY_RETENTION_MAX': lambda: HISTORY_RETENTION_MAX,
                 'DOWNLOAD_PENDING_STATES': lambda: DOWNLOAD_PENDING_STATES,
+                'DOWNLOAD_INTERMEDIATE_DIRNAME': lambda: DOWNLOAD_INTERMEDIATE_DIRNAME,
                 'DOWNLOAD_RETRYABLE_ERROR_CODES': lambda: DOWNLOAD_RETRYABLE_ERROR_CODES,
                 'DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES': lambda: DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
                 'DOWNLOAD_RUNNING_STATES': lambda: DOWNLOAD_RUNNING_STATES,
@@ -5334,7 +5408,8 @@ def build_native_host_manifest(exe_path, extension_ids, browser="chrome"):
     `allowed_extensions` with Gecko IDs. Both are the browser-pinned security
     boundary HTTP /health lacks.
     """
-    ids = [e for e in (extension_ids or []) if isinstance(e, str) and e]
+    browser = str(browser or 'chrome').strip().lower()
+    ids = parse_native_extension_ids(extension_ids, browser=browser)
     manifest = {
         "name": NATIVE_HOST_NAME,
         "description": "Astra Downloader token bootstrap",

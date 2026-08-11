@@ -322,6 +322,40 @@ class NormalizationTests(unittest.TestCase):
         )
         self.assertFalse(invalid["valid"])
 
+    def test_output_template_preview_matches_literal_percent_and_windows_safety(self):
+        import config as config_module
+
+        literal = config_module.output_template_preview(
+            "%%(title)s.%(ext)s", r"C:\Videos"
+        )
+        self.assertEqual(literal["relative"], "%(title)s.mp4")
+
+        for reserved_name in ("CONIN$", "CONOUT$", "COM0", "LPT0"):
+            report = config_module.output_template_preview(
+                reserved_name + ".%(ext)s", r"C:\Videos"
+            )
+            self.assertEqual(report["reserved"], (reserved_name,))
+
+        safe = config_module.output_template_preview(
+            "CONIN$.%(ext)s", r"C:\Videos", windows_filenames=True
+        )
+        self.assertEqual(safe["relative"], "_CONIN$.mp4")
+        self.assertFalse(safe["reserved"])
+        self.assertTrue(safe["windowsFilenames"])
+
+    def test_output_template_preview_checks_the_staging_prefix(self):
+        import config as config_module
+
+        staging = "C:\\" + ("staging-" * 30)
+        report = config_module.output_template_preview(
+            "%(title)s.%(ext)s",
+            r"C:\Videos",
+            staging_prefix=staging,
+        )
+        self.assertFalse(report["length"] > report["max_path"])
+        self.assertGreater(report["stagingLength"], report["max_path"])
+        self.assertTrue(report["too_long"])
+
     def test_default_download_path_prefers_the_windows_known_folder(self):
         import config as config_module
 
@@ -12589,14 +12623,35 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
         self.assertEqual(ad.parse_native_extension_ids("", fallback=("fallback",)), ["fallback"])
 
     def test_host_manifest_pins_allowed_extension_origins(self):
-        m = ad.build_native_host_manifest("C:/x/AstraDownloader.exe", ["aaa", "bbb"], browser="chrome")
+        chrome_a = "a" * 32
+        chrome_b = "b" * 32
+        m = ad.build_native_host_manifest(
+            "C:/x/AstraDownloader.exe", [chrome_a, chrome_b], browser="chrome"
+        )
         self.assertEqual(m["name"], ad.NATIVE_HOST_NAME)
         self.assertEqual(m["type"], "stdio")
         self.assertEqual(
             m["allowed_origins"],
-            ["chrome-extension://aaa/", "chrome-extension://bbb/"],
+            [f"chrome-extension://{chrome_a}/", f"chrome-extension://{chrome_b}/"],
         )
         self.assertNotIn("allowed_extensions", m)
+
+    def test_native_manifest_filters_invalid_browser_ids(self):
+        self.assertEqual(
+            ad.parse_native_extension_ids(
+                "short " + ("c" * 32) + " " + ("d" * 32), browser="chrome"
+            ),
+            ["c" * 32, "d" * 32],
+        )
+        manifest = ad.build_native_host_manifest(
+            "C:/x/AstraDownloader.exe",
+            ["not an id", "chrome-extension://evil", "e" * 32],
+            browser="chrome",
+        )
+        self.assertEqual(manifest["allowed_origins"], [
+            "chrome-extension://" + ("e" * 32) + "/",
+        ])
+        self.assertFalse(ad.is_valid_native_extension_id("../escape", "firefox"))
 
     def test_firefox_host_manifest_pins_allowed_extension_ids(self):
         m = ad.build_native_host_manifest(
@@ -12615,7 +12670,7 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
              mock.patch.object(ad.sys, "platform", "win32"), \
              mock.patch.object(ad, "register_native_host_registry_value") as reg:
             config = FakeConfig({
-                "NativeChromeExtensionIds": "chromeaaa",
+                "NativeChromeExtensionIds": "a" * 32,
                 "NativeFirefoxExtensionIds": "ytkit@sysadmindoc.github.io",
             })
 
@@ -12627,15 +12682,19 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
             self.assertTrue(firefox_manifest.exists())
             self.assertEqual(
                 json.loads(chrome_manifest.read_text(encoding="utf-8"))["allowed_origins"],
-                ["chrome-extension://chromeaaa/"],
+                ["chrome-extension://" + ("a" * 32) + "/"],
             )
             self.assertEqual(
                 json.loads(firefox_manifest.read_text(encoding="utf-8"))["allowed_extensions"],
                 ["ytkit@sysadmindoc.github.io"],
             )
             registry_keys = [call.args[0] for call in reg.call_args_list]
-            self.assertIn(f"Software\\Google\\Chrome\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}", registry_keys)
-            self.assertIn(f"Software\\Mozilla\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}", registry_keys)
+            for root in ad.CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS:
+                self.assertIn(f"{root}\\{ad.NATIVE_HOST_NAME}", registry_keys)
+            self.assertIn(
+                f"{ad.FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{ad.NATIVE_HOST_NAME}",
+                registry_keys,
+            )
 
     def test_register_native_messaging_hosts_revokes_cleared_allowlists(self):
         with tempfile.TemporaryDirectory() as tmp, \
@@ -12656,12 +12715,10 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
             self.assertFalse(chrome_manifest.exists())
             self.assertFalse(firefox_manifest.exists())
             revoked = [call.args[0] for call in revoke.call_args_list]
+            for root in ad.CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS:
+                self.assertIn(f"{root}\\{ad.NATIVE_HOST_NAME}", revoked)
             self.assertIn(
-                f"Software\\Google\\Chrome\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}",
-                revoked,
-            )
-            self.assertIn(
-                f"Software\\Mozilla\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}",
+                f"{ad.FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{ad.NATIVE_HOST_NAME}",
                 revoked,
             )
 
@@ -16644,6 +16701,51 @@ class SettingsNavigationTests(unittest.TestCase):
             ["system", "de", "en"],
         )
 
+    def test_settings_search_indexes_safe_site_profile_fields(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        window.cfg_site_profiles.setPlainText(json.dumps([{
+            "Name": "YouTube archive",
+            "Domain": "youtube.com",
+            "Quality": "1080",
+            "Proxy": "https://user:secret@example.invalid:8443",
+        }]))
+        indexed = window._settings_search_text(window.cfg_site_profiles)
+        self.assertIn("youtube archive", indexed)
+        self.assertIn("youtube.com", indexed)
+        self.assertIn("1080", indexed)
+        self.assertNotIn("secret", indexed)
+        window._filter_settings("youtube.com")
+        self.assertFalse(window.cfg_site_profiles.isHidden())
+
+    def test_browse_buttons_have_distinct_accessible_names(self):
+        from PyQt6.QtWidgets import QPushButton
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        self.assertEqual(
+            window.first_run_browse.accessibleName(),
+            "Browse: First-run download folder",
+        )
+        self.assertEqual(
+            next(
+                button for button in window.findChildren(QPushButton)
+                if button.text() == "Browse"
+                and button.accessibleName() == "Browse: Video download folder"
+            ).accessibleName(),
+            "Browse: Video download folder",
+        )
+        self.assertEqual(
+            next(
+                button for button in window.findChildren(QPushButton)
+                if button.text() == "Browse"
+                and button.accessibleName() == "Browse: Audio download folder"
+            ).accessibleName(),
+            "Browse: Audio download folder",
+        )
+
     def test_live_wait_setting_is_labeled_as_a_retry_interval(self):
         from PyQt6.QtWidgets import QApplication, QLabel
 
@@ -18153,6 +18255,11 @@ class WhisperModelProvisioningTests(unittest.TestCase):
                 result = ad.provision_whisper_model()
             self.assertEqual(result, str(model))
             self.assertEqual(calls[0][0], ad.WHISPER_MODEL_URL)
+            self.assertIn(
+                f"resolve/{ad.WHISPER_MODEL_REVISION}/",
+                calls[0][0],
+            )
+            self.assertNotIn("resolve/main/", calls[0][0])
             self.assertNotEqual(calls[0][1], model)
             self.assertEqual(calls[0][2]["max_bytes"], ad.HELPER_DOWNLOAD_MAX_BYTES)
 

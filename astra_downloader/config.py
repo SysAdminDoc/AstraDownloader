@@ -807,7 +807,7 @@ def normalize_output_template(value):
     norm = tpl.replace("\\", "/")
     if norm.startswith("/") or re.match(r"^[A-Za-z]:", norm) or ".." in norm.split("/"):
         return ""
-    if not re.fullmatch(r"[A-Za-z0-9 %()._\-/\[\]]+", norm):
+    if not re.fullmatch(r"[A-Za-z0-9 %()._\-/\[\]$]+", norm):
         return ""
     if "%(ext)s" not in norm:
         return ""
@@ -828,6 +828,8 @@ def normalize_output_template(value):
 WINDOWS_MAX_PATH = 260
 _WINDOWS_RESERVED_NAMES = frozenset({
     "CON", "PRN", "AUX", "NUL",
+    "CONIN$", "CONOUT$",
+    "COM0", "LPT0",
     *(f"COM{index}" for index in range(1, 10)),
     *(f"LPT{index}" for index in range(1, 10)),
 })
@@ -861,6 +863,13 @@ _OUTPUT_TEMPLATE_PREVIEW_VALUES = {
 
 
 def _render_output_template_preview(template):
+    literal_percent = "\x00ASTRA_PERCENT\x00"
+
+    # yt-dlp consumes %% as one literal percent before it expands fields.
+    # Mask it first; replacing %% with % up front turns a literal
+    # ``%%(title)s`` into a real title field in the preview.
+    template = template.replace("%%", literal_percent)
+
     def replace(match):
         field, _pad, precision, _conversion = match.groups()
         value = str(_OUTPUT_TEMPLATE_PREVIEW_VALUES.get(field, field))
@@ -868,8 +877,7 @@ def _render_output_template_preview(template):
             value = value[:int(precision)]
         return value
 
-    # A doubled percent is a literal percent in a yt-dlp template.
-    return _OUTPUT_TOKEN_RE.sub(replace, template.replace("%%", "%"))
+    return _OUTPUT_TOKEN_RE.sub(replace, template).replace(literal_percent, "%")
 
 
 def _windows_reserved_output_component(component):
@@ -877,7 +885,20 @@ def _windows_reserved_output_component(component):
     return stem if stem in _WINDOWS_RESERVED_NAMES else ""
 
 
-def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PATH):
+def _sanitize_windows_preview_path(relative):
+    """Approximate yt-dlp's --windows-filenames result for the preview."""
+    components = []
+    for component in str(relative or "").replace("/", "\\").split("\\"):
+        clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", component)
+        clean = clean.rstrip(" .") or "_"
+        if _windows_reserved_output_component(clean):
+            clean = "_" + clean
+        components.append(clean)
+    return "\\".join(components)
+
+
+def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PATH,
+                            windows_filenames=False, staging_prefix=""):
     """Render a safe example and report Windows path hazards before saving."""
     raw = clean_text(template, "", 300)
     if raw:
@@ -887,18 +908,29 @@ def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PAT
                 "valid": False, "normalized": "", "relative": "", "path": "",
                 "length": 0, "max_path": int(max_path),
                 "reserved": (), "too_long": False,
+                "stagingLength": 0, "stagingPath": "",
+                "windowsFilenames": bool(windows_filenames),
             }
     else:
         normalized = _OUTPUT_TEMPLATE_PREVIEW_DEFAULT
     relative = _render_output_template_preview(normalized).replace("/", "\\")
+    if windows_filenames:
+        relative = _sanitize_windows_preview_path(relative)
     root = clean_path_text(output_dir) or "C:\\Videos"
     path = root.rstrip("\\/") + "\\" + relative
+    staging_root = clean_path_text(staging_prefix)
+    staging_path = (
+        staging_root.rstrip("\\/") + "\\" + relative
+        if staging_root else ""
+    )
     reserved = []
-    for component in relative.split("\\"):
-        name = _windows_reserved_output_component(component)
-        if name and name not in reserved:
-            reserved.append(name)
+    if not windows_filenames:
+        for component in relative.split("\\"):
+            name = _windows_reserved_output_component(component)
+            if name and name not in reserved:
+                reserved.append(name)
     length = len(path)
+    staging_length = len(staging_path)
     return {
         "valid": True,
         "normalized": normalized,
@@ -907,7 +939,13 @@ def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PAT
         "length": length,
         "max_path": int(max_path),
         "reserved": tuple(reserved),
-        "too_long": length > int(max_path),
+        "stagingPath": staging_path,
+        "stagingLength": staging_length,
+        "too_long": (
+            length > int(max_path)
+            or bool(staging_path and staging_length > int(max_path))
+        ),
+        "windowsFilenames": bool(windows_filenames),
     }
 
 
