@@ -10,55 +10,6 @@ Filed 2026-08-11. Findings were made against `1428bc5` and **re-verified against
 `2811827`** after the intervening 12 commits; everything already fixed there was
 dropped rather than filed. Line numbers are from `2811827`.
 
-### P0
-
-- [ ] P0 — Publish the shipped versions, and fail the gate when a version has no release
-  Why: Six versions of fixes have never reached a user, both delivery paths
-  resolve to the stale one, and the roadmap item that tracked this was archived
-  into `CHANGELOG.md` as shipped while nothing was published.
-  Evidence: `gh release list` returns one release, `v2.0.0` (2026-08-06);
-  `git tag` returns one tag; `APP_VERSION` is 2.6.0. Astra Deck hands new users
-  `https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe`
-  (`Astra-Deck/extension/features/download-ui/index.js:213`), which resolves to
-  that build, and the in-app updater resolves the same feed. `v2.0.0` carries no
-  `AstraDownloader-onedir.zip`, so the antivirus fallback the README documents
-  has never existed. `CHANGELOG.md:866` holds the archived copy of this item.
-  `scripts/check-versions.js` now agrees across 5 sources but still checks no
-  published release, while its own header comment states the self-update path
-  compares `APP_VERSION` against the newest published release tag.
-  Touches: `scripts/check-versions.js`, `scripts/stage-companion-release.js`,
-  `CHANGELOG.md`, release process
-  Acceptance: v2.6.0 is tagged and released with both artifacts and their
-  sidecars, intermediate tags are backfilled, and `npm run check:versions` fails
-  when `APP_VERSION` has no matching published release. Unblocks the winget
-  submission in `Roadmap_Blocked.md`.
-  Complexity: M
-
-- [ ] P0 — Make `npm run check` pass again
-  Why: The repo's primary gate exits 1, and because the script is `&&`-chained
-  the four gates behind the failing one have not run since it was wired up.
-  Evidence: `npm run check` exits 1. `check-companion-inventory.js` runs
-  `inspectCompanionInventory` and reports **32 issues** (37 before the
-  dependency refresh): unresolved SPDX / decision / obligations for `blinker`,
-  `cffi`, `colorama`, `itsdangerous`, `jinja2`, `packaging`,
-  `pyinstaller-hooks-contrib`; `decision=unresolved` for `pyqt6` ("the MIT
-  repository license alone does not select a PyQt distribution route") and
-  `pyqt6-qt6`; and moving `latest` targets with unresolved versions and digests
-  for `yt-dlp`, `ffmpeg` and `deno`. These are policy fields, not build
-  staleness — the gate reads `build/AstraDownloader.exe`, which is present. Run
-  individually the downstream gates pass (`check:versions`: 5 sources agree at
-  v2.6.0; `audit:python`: 0 findings), so the failure is hiding four green gates
-  rather than four red ones. The two classes need different work: the binary
-  entries are mechanical and fall out of the release item above; the PyQt
-  entries are a maintainer decision. NeoDLP's release notes are the working
-  precedent for the binary half — an exact shipped-binary version matrix per
-  release.
-  Touches: `astra_downloader/license-policy.json`,
-  `scripts/companion-license-inventory.js`, `package.json`
-  Acceptance: `npm run check` exits 0 with the inspection enabled; the npm
-  script reports every gate's result rather than stopping at the first failure.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 — Let a download carry its own output name

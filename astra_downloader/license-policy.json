@@ -63,6 +63,60 @@
       "obligations": [
         "Retain the BSD copyright notice and disclaimer."
       ]
+    },
+    "blinker": {
+      "licenseExpression": "MIT",
+      "decision": "approved",
+      "approvalEvidence": "Wheel declares the license only through a trove classifier, which the resolver deliberately refuses to guess from. Read from the embedded blinker-1.9.0.dist-info/LICENSE.txt: the MIT permission grant and warranty disclaimer, Copyright 2010 Jason Kirtland.",
+      "sourceUrl": "https://github.com/pallets-eco/blinker",
+      "noticeUrl": "https://github.com/pallets-eco/blinker/blob/main/LICENSE.txt",
+      "obligations": [
+        "Retain the MIT license and copyright notice with the binary distribution."
+      ]
+    },
+    "colorama": {
+      "licenseExpression": "BSD-3-Clause",
+      "decision": "approved",
+      "approvalEvidence": "Classifier says only \"BSD License\", which does not select a clause count. Read from the embedded colorama-0.4.6.dist-info/licenses/LICENSE.txt: three conditions including the \"Neither the name ... nor the names of its contributors\" endorsement clause, Copyright (c) 2010 Jonathan Hartley.",
+      "sourceUrl": "https://github.com/tartley/colorama",
+      "noticeUrl": "https://github.com/tartley/colorama/blob/master/LICENSE.txt",
+      "obligations": [
+        "Retain the BSD copyright notice, conditions, and disclaimer.",
+        "Do not use the copyright holder's or contributors' names to endorse this product without written permission."
+      ]
+    },
+    "itsdangerous": {
+      "licenseExpression": "BSD-3-Clause",
+      "decision": "approved",
+      "approvalEvidence": "Classifier says only \"BSD License\". Read from the embedded itsdangerous-2.2.0.dist-info/LICENSE.txt: three conditions including the endorsement clause, Copyright 2011 Pallets.",
+      "sourceUrl": "https://github.com/pallets/itsdangerous",
+      "noticeUrl": "https://github.com/pallets/itsdangerous/blob/main/LICENSE.txt",
+      "obligations": [
+        "Retain the BSD copyright notice, conditions, and disclaimer.",
+        "Do not use the copyright holder's or contributors' names to endorse this product without written permission."
+      ]
+    },
+    "jinja2": {
+      "licenseExpression": "BSD-3-Clause",
+      "decision": "approved",
+      "approvalEvidence": "Classifier says only \"BSD License\". Read from the embedded jinja2-3.1.6.dist-info/licenses/LICENSE.txt: three conditions including the endorsement clause, Copyright 2007 Pallets.",
+      "sourceUrl": "https://github.com/pallets/jinja",
+      "noticeUrl": "https://github.com/pallets/jinja/blob/main/LICENSE.txt",
+      "obligations": [
+        "Retain the BSD copyright notice, conditions, and disclaimer.",
+        "Do not use the copyright holder's or contributors' names to endorse this product without written permission."
+      ]
+    },
+    "packaging": {
+      "licenseExpression": "Apache-2.0 OR BSD-2-Clause",
+      "decision": "approved",
+      "approvalEvidence": "Wheel declares License-Expression: Apache-2.0 OR BSD-2-Clause and ships both texts (LICENSE.APACHE, LICENSE.BSD). A disjunction is not auto-approvable even when every branch is, because choosing the branch is a distribution decision: this build takes the Apache-2.0 branch, whose notice and NOTICE-retention terms are the ones recorded below.",
+      "sourceUrl": "https://github.com/pypa/packaging",
+      "noticeUrl": "https://github.com/pypa/packaging/blob/main/LICENSE.APACHE",
+      "obligations": [
+        "Retain the Apache-2.0 license text and attribution notices with the binary distribution.",
+        "State that the Apache-2.0 branch of the dual license is the one exercised."
+      ]
     }
   },
   "runtimeHelpers": [
