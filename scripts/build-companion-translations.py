@@ -1301,6 +1301,23 @@ CATALOGS = {
 # constant picker loops. Keep the German catalogue complete so the advertised
 # locale remains a genuinely translated build rather than an English fallback.
 CATALOGS["de"].update({
+    "yt-dlp freshness": "Aktualität von yt-dlp",
+    "FFmpeg security and filters": "FFmpeg-Sicherheit und Filter",
+    "Stored sign-in expiry": "Ablauf gespeicherter Anmeldungen",
+    "Anonymous GitHub API budget": "Anonymes GitHub-API-Budget",
+    "Proof-of-origin token provider": "Proof-of-Origin-Token-Anbieter",
+    "refresh-ytdlp": "yt-dlp aktualisieren",
+    "provision-runtime": "Laufzeit bereitstellen",
+    "refresh-sign-in": "Anmeldung aktualisieren",
+    "retry-github": "GitHub erneut versuchen",
+    "use-sign-in": "Anmeldung verwenden",
+    "Checking": "Wird geprüft",
+    "Pre-flight": "Vorabprüfung",
+    "Checks known download failure causes before a job starts. Each row names the remedy.":
+        "Prüft bekannte Downloadfehler, bevor ein Auftrag startet. Jede Zeile nennt die Lösung.",
+    "GitHub's anonymous budget is exhausted; retry after its reset.":
+        "Das anonyme GitHub-Budget ist erschöpft; versuchen Sie es nach dem Zurücksetzen erneut.",
+    "{action} for {label}": "{action} für {label}",
     "Format": "Format",
     "Quality": "Qualität",
     "Duration": "Dauer",

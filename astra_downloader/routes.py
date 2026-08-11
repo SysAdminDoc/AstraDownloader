@@ -171,6 +171,9 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'get_recent_log_entries',
     'get_ytdlp_version',
     'evaluate_sabr_support',
+    'evaluate_preflight_checks',
+    'get_preflight_ffmpeg_capabilities',
+    'get_github_api_budget',
     'describe_media_url_block',
     'is_youtube_url',
     'legacy_health_token_origin_allowlist',
@@ -229,6 +232,9 @@ def create_api(config, dl_manager, history, *, dependencies):
     get_recent_log_entries = dependencies['get_recent_log_entries']
     get_ytdlp_version = dependencies['get_ytdlp_version']
     evaluate_sabr_support = dependencies['evaluate_sabr_support']
+    evaluate_preflight_checks = dependencies['evaluate_preflight_checks']
+    get_preflight_ffmpeg_capabilities = dependencies['get_preflight_ffmpeg_capabilities']
+    get_github_api_budget = dependencies['get_github_api_budget']
     describe_media_url_block = dependencies['describe_media_url_block']
     is_youtube_url = dependencies['is_youtube_url']
     legacy_health_token_origin_allowlist = dependencies['legacy_health_token_origin_allowlist']
@@ -456,6 +462,10 @@ def create_api(config, dl_manager, history, *, dependencies):
         runtime_status = _public_runtime_status(probe_javascript_runtime(
             configured_runtime=config.get('JavaScriptRuntime', 'auto')
         ))
+        ytdlp_version = get_ytdlp_version()
+        ffmpeg_version = get_ffmpeg_version()
+        po_token_provider = probe_po_token_provider()
+        ffmpeg_capabilities = get_preflight_ffmpeg_capabilities()
         resp = {
             "status": "ok", "service": SERVICE_ID, "api": SERVICE_API_VERSION,
             "name": APP_NAME, "version": APP_VERSION,
@@ -467,17 +477,17 @@ def create_api(config, dl_manager, history, *, dependencies):
             "nativeChannelRequired": not legacy_health_token_echo,
             # v1.2.0: surface tool versions so the extension can show
             # "yt-dlp 2026.04.01" in the repair panel + warn on stale binaries.
-            "ytDlpVersion": get_ytdlp_version(),
-            "ffmpegVersion": get_ffmpeg_version(),
+            "ytDlpVersion": ytdlp_version,
+            "ffmpegVersion": ffmpeg_version,
             # v1.4.0 (N1): retain the field for extension wire compatibility.
             # The companion disables yt-dlp plugin loading, so this remains
             # null and is never reported as a usable download provider.
-            "poTokenProvider": probe_po_token_provider(),
+            "poTokenProvider": po_token_provider,
             # v1.4.0 (NX10): bundled ffmpeg freshness audit. The extension
             # popup can surface a "ffmpeg looks stale (X.x); update via
             # the Repair panel" pill when current=false. null = first-run
             # bootstrap before ffmpeg is on disk.
-            "ffmpegCapabilities": check_ffmpeg_capabilities(),
+            "ffmpegCapabilities": ffmpeg_capabilities,
             # External JavaScript runtime capability. The legacy denoRuntime
             # key remains during the additive migration to javascriptRuntime.
             "denoRuntime": runtime_status,
@@ -493,7 +503,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             # and SABR entries, but SABR entries cannot be downloaded. The
             # extension health panel surfaces "SABR: limited" when native
             # support is absent, so users understand why some downloads fail.
-            "sabrSupport": evaluate_sabr_support(get_ytdlp_version()),
+            "sabrSupport": evaluate_sabr_support(ytdlp_version),
             "rateLimit": {
                 "downloadMaxPerWindow": RATE_LIMIT_DOWNLOAD_MAX,
                 "downloadWindowSeconds": RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS,
@@ -506,6 +516,21 @@ def create_api(config, dl_manager, history, *, dependencies):
             # bearer token — an unauthenticated local process gets an empty list.
             "recentErrors": get_recent_log_entries() if check_auth() else [],
         }
+        try:
+            sign_in_entries = dl_manager.site_logins.entries()
+        except Exception:
+            # The pre-flight has no reason to expose a persistence exception or
+            # the names of stored sites. An unavailable index is simply an
+            # empty, non-blocking sign-in surface until the GUI can repair it.
+            sign_in_entries = []
+        resp["preflight"] = evaluate_preflight_checks(
+            ytdlp_version=ytdlp_version,
+            ffmpeg_capabilities=ffmpeg_capabilities,
+            javascript_runtime=runtime_status,
+            sign_in_entries=sign_in_entries,
+            github_api_budget=get_github_api_budget(),
+            po_token_provider=po_token_provider,
+        )
         # The snapshot carries every subscribed channel URL and title, which is
         # a list of what this user follows — the same class of thing as
         # recentErrors above, and gated the same way.

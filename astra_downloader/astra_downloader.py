@@ -161,7 +161,8 @@ try:
         parse_ytdlp_version_output,
         probe_whisper_runtime,
         probe_javascript_execution as _owned_probe_javascript_execution,
-        ytdlp_needs_external_runtime,
+        ytdlp_needs_external_runtime, missing_ffmpeg_filters,
+        REQUIRED_FFMPEG_FILTERS, evaluate_preflight_checks,
     )
     from .i18n import (
         SUPPORTED_LOCALES, install_companion_translator,
@@ -294,7 +295,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         parse_ytdlp_version_output,
         probe_whisper_runtime,
         probe_javascript_execution as _owned_probe_javascript_execution,
-        ytdlp_needs_external_runtime,
+        ytdlp_needs_external_runtime, missing_ffmpeg_filters,
+        REQUIRED_FFMPEG_FILTERS, evaluate_preflight_checks,
     )
     from i18n import (
         SUPPORTED_LOCALES, install_companion_translator,
@@ -525,6 +527,16 @@ COMPANION_UPDATE_RELEASE_API_URL = "https://api.github.com/repos/SysAdminDoc/Ast
 COMPANION_UPDATE_VERSION_URL_TEMPLATE = "https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/{tag}/astra_downloader/astra_downloader.py"
 COMPANION_UPDATE_EXE_URL = "https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe"
 COMPANION_UPDATE_SHA256_URL = "https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe.sha256"
+# The release check already talks to GitHub anonymously. Keep the most recent
+# rate-limit headers so the readiness panel can name an exhausted API budget
+# without adding another network request to every /health poll.
+_GITHUB_API_BUDGET_LOCK = threading.Lock()
+_GITHUB_API_BUDGET = {
+    'remaining': None,
+    'limit': None,
+    'resetAt': None,
+    'source': 'not-observed',
+}
 COMPANION_UPDATE_TIMEOUT_SECONDS = 120
 COMPANION_UPDATE_MIN_BYTES = 1024
 COMPANION_VERSION_SOURCE_MAX_BYTES = 256 * 1024
@@ -1956,8 +1968,68 @@ def check_ffmpeg_capabilities(force=False):
     return _ffmpeg_capabilities_probe.check(force=force)
 
 
+_ffmpeg_filter_probe_lock = threading.Lock()
+_ffmpeg_filter_probe_value = None
+_ffmpeg_filter_probe_checked_at = 0.0
+_FFMPEG_FILTER_PROBE_TTL_SECONDS = 3600
+
+
+def probe_ffmpeg_filters(force=False):
+    """Check the small filter surface used by local transcription.
+
+    A missing executable is reported as unchecked rather than as a false
+    positive. The subprocess is only started for the managed executable and
+    the result is cached so readiness and /health cannot create a probe storm.
+    """
+    global _ffmpeg_filter_probe_value, _ffmpeg_filter_probe_checked_at
+    path = Path(FFMPEG_PATH)
+    if not path.is_file():
+        return {
+            'filterCheck': False,
+            'missingFilters': [],
+            'filterReason': 'ffmpeg-not-installed',
+        }
+    with _ffmpeg_filter_probe_lock:
+        now = time.time()
+        if (
+            not force and _ffmpeg_filter_probe_value is not None
+            and now - _ffmpeg_filter_probe_checked_at < _FFMPEG_FILTER_PROBE_TTL_SECONDS
+        ):
+            return dict(_ffmpeg_filter_probe_value)
+    output = _run_captured(
+        [str(path), '-hide_banner', '-filters'], timeout=5,
+    )
+    if not output:
+        result = {
+            'filterCheck': False,
+            'missingFilters': [],
+            'filterReason': 'filter-probe-failed',
+        }
+    else:
+        result = {
+            'filterCheck': True,
+            'missingFilters': missing_ffmpeg_filters(output),
+            'filterReason': 'ready',
+        }
+    with _ffmpeg_filter_probe_lock:
+        _ffmpeg_filter_probe_value = dict(result)
+        _ffmpeg_filter_probe_checked_at = time.time()
+    return result
+
+
+def get_preflight_ffmpeg_capabilities(force=False):
+    """Return the cached security-floor result plus filter capability data."""
+    result = dict(check_ffmpeg_capabilities(force=force) or {})
+    result.update(probe_ffmpeg_filters(force=force))
+    return result
+
+
 def reset_ffmpeg_capabilities_cache():
+    global _ffmpeg_filter_probe_value, _ffmpeg_filter_probe_checked_at
     _ffmpeg_capabilities_probe.reset()
+    with _ffmpeg_filter_probe_lock:
+        _ffmpeg_filter_probe_value = None
+        _ffmpeg_filter_probe_checked_at = 0.0
 
 
 # ── v1.2.0: throttled yt-dlp auto-update helpers ──
@@ -2479,6 +2551,38 @@ def parse_companion_release_tag(payload):
     return tag if re.fullmatch(r'v\d+\.\d+\.\d+', tag) else ''
 
 
+def _header_int(headers, name):
+    try:
+        value = headers.get(name)
+        return int(value) if value is not None and str(value).strip() else None
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def observe_github_api_budget(response):
+    """Record anonymous GitHub rate-limit headers without retaining a token."""
+    headers = getattr(response, 'headers', {}) or {}
+    remaining = _header_int(headers, 'X-RateLimit-Remaining')
+    limit = _header_int(headers, 'X-RateLimit-Limit')
+    reset_at = _header_int(headers, 'X-RateLimit-Reset')
+    if remaining is None and limit is None and reset_at is None:
+        return get_github_api_budget()
+    snapshot = {
+        'remaining': max(0, remaining) if remaining is not None else None,
+        'limit': max(0, limit) if limit is not None else None,
+        'resetAt': max(0, reset_at) if reset_at is not None else None,
+        'source': 'github-api',
+    }
+    with _GITHUB_API_BUDGET_LOCK:
+        _GITHUB_API_BUDGET.update(snapshot)
+        return dict(_GITHUB_API_BUDGET)
+
+
+def get_github_api_budget():
+    with _GITHUB_API_BUDGET_LOCK:
+        return dict(_GITHUB_API_BUDGET)
+
+
 def fetch_latest_companion_release_tag(timeout=15):
     """Resolve the newest published Release tag for this repository."""
     response = http_requests.get(
@@ -2486,6 +2590,7 @@ def fetch_latest_companion_release_tag(timeout=15):
         timeout=timeout,
         headers={'Accept': 'application/vnd.github+json'},
     )
+    observe_github_api_budget(response)
     response.raise_for_status()
     try:
         payload = response.json()
@@ -4341,6 +4446,9 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'get_recent_log_entries': lambda *args, **kwargs: get_recent_log_entries(*args, **kwargs),
         'get_ytdlp_version': lambda *args, **kwargs: get_ytdlp_version(*args, **kwargs),
         'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
+        'evaluate_preflight_checks': lambda *args, **kwargs: evaluate_preflight_checks(*args, **kwargs),
+        'get_preflight_ffmpeg_capabilities': lambda *args, **kwargs: get_preflight_ffmpeg_capabilities(*args, **kwargs),
+        'get_github_api_budget': lambda *args, **kwargs: get_github_api_budget(*args, **kwargs),
         'describe_media_url_block': lambda *args, **kwargs: describe_media_url_block(*args, **kwargs),
         'is_youtube_url': lambda *args, **kwargs: is_youtube_url(*args, **kwargs),
         'legacy_health_token_origin_allowlist': lambda *args, **kwargs: legacy_health_token_origin_allowlist(*args, **kwargs),
@@ -4657,7 +4765,9 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
 class ReadinessProbe(_OwnedReadinessProbe):
     def __init__(self, configured_runtime='auto', *, impersonate_targets=None,
                  whisper_model_state=None, whisper_runtime_state=None,
-                 readiness_sink=None):
+                 readiness_sink=None, preflight_evaluator=None,
+                 ffmpeg_capabilities=None, sign_in_entries=None,
+                 github_api_budget=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -4682,6 +4792,19 @@ class ReadinessProbe(_OwnedReadinessProbe):
                 ))
             ),
             readiness_sink=readiness_sink,
+            preflight_evaluator=(
+                preflight_evaluator
+                or (lambda **kwargs: evaluate_preflight_checks(**kwargs))
+            ),
+            ffmpeg_capabilities=(
+                ffmpeg_capabilities
+                or (lambda: get_preflight_ffmpeg_capabilities())
+            ),
+            sign_in_entries=sign_in_entries,
+            github_api_budget=(
+                github_api_budget
+                or (lambda: get_github_api_budget())
+            ),
         )
 
 # ══════════════════════════════════════════════════════════════
