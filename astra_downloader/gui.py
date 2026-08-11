@@ -35,6 +35,11 @@ try:
 except ImportError:  # Flat source-path compatibility.
     from config import default_download_path
 
+try:
+    from .i18n import ADVERTISED_LOCALES
+except ImportError:  # Flat source-path compatibility.
+    from i18n import ADVERTISED_LOCALES
+
 
 __all__ = (
     "MainWindow", "SetupWorker", "FolderPickerService", "repolish",
@@ -4890,27 +4895,18 @@ class MainWindowCore(QMainWindow):
         language_row.addStretch()
         self.cfg_language = QComboBox()
         self.cfg_language.setAccessibleName(tr("Companion language"))
-        for label, value in (
-            ("System default", "system"),
-            ("العربية", "ar"),
-            ("Deutsch", "de"),
-            ("English", "en"),
-            ("Español", "es"),
-            ("Français", "fr"),
-            ("Italiano", "it"),
-            ("日本語", "ja"),
-            ("한국어", "ko"),
-            ("Português (Brasil)", "pt_BR"),
-            ("Русский", "ru"),
-            ("简体中文", "zh_CN"),
-        ):
-            self.cfg_language.addItem(label, value)
+        self.cfg_language.addItem(tr("System default"), "system")
+        language_labels = {"de": "Deutsch", "en": "English"}
+        for value in ADVERTISED_LOCALES:
+            self.cfg_language.addItem(language_labels.get(value, value), value)
         selected_language = self.config.get("Language", "system")
         self.cfg_language.setCurrentIndex(
             max(0, self.cfg_language.findData(selected_language))
         )
         self.cfg_language.setToolTip(
-            tr("Language changes apply the next time Astra Downloader starts.")
+            tr(
+                "Language changes apply the next time Astra Downloader starts."
+            )
         )
         language_row.addWidget(self.cfg_language)
         language_l.addLayout(language_row)

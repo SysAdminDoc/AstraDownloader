@@ -14,7 +14,9 @@ checks that:
   * no catalogue carries a key the GUI no longer has (a stale key is a
     translation nobody will ever see, and it hides real coverage);
   * the reference locale is complete, so at least one locale proves the
-    pipeline end to end.
+    pipeline end to end;
+  * every locale exposed by the picker clears the non-English translation
+    floor; partial catalogues may remain for legacy configurations.
 
 It deliberately does NOT require every locale to be complete. Translating
 into a language you do not read is how a UI ends up confidently wrong, and
@@ -39,6 +41,10 @@ from extract_companion_strings import extract_all  # noqa: E402
 # The locale that must be complete. German is the one the GUI render
 # scenarios drive, so it is the locale a regression would actually surface.
 REFERENCE_LOCALE = "de"
+# Keep this policy in sync with i18n.py. Partial catalogues remain shipped for
+# old configurations, but only these locales are presented to new users.
+ADVERTISED_LOCALES = ("de", "en")
+COMPANION_LOCALE_MIN_COVERAGE = 0.80
 
 
 def catalogue_sources(path):
@@ -48,6 +54,18 @@ def catalogue_sources(path):
         element.text or ""
         for element in root.iter("source")
     ]
+
+
+def translated_coverage(path, expected):
+    """Count non-English translations, excluding generated fallback entries."""
+    expected = set(expected)
+    translated = 0
+    for message in ET.parse(path).getroot().iter("message"):
+        source = message.findtext("source") or ""
+        translation = message.findtext("translation") or ""
+        if source in expected and translation.strip() and translation != source:
+            translated += 1
+    return translated, len(expected)
 
 
 def main():
@@ -76,6 +94,23 @@ def main():
             problems.append(
                 f"{locale}: {len(stale)} catalogue key(s) no longer exist in "
                 f"the UI, first: {sorted(stale)[0]!r}"
+            )
+    for locale in ADVERTISED_LOCALES:
+        path = TRANSLATIONS_DIR / f"astra_downloader_{locale}.ts"
+        if not path.exists():
+            problems.append(f"{locale}: advertised locale has no catalogue")
+            continue
+        if locale == "en":
+            # English is the source language, so its generated fallback
+            # catalogue is complete by definition rather than by translation.
+            continue
+        translated, total = translated_coverage(path, expected_set)
+        ratio = translated / total if total else 0.0
+        if ratio < COMPANION_LOCALE_MIN_COVERAGE:
+            problems.append(
+                f"{locale}: advertised coverage {translated}/{total} "
+                f"({ratio:.1%}) is below the "
+                f"{COMPANION_LOCALE_MIN_COVERAGE:.0%} floor"
             )
     if problems:
         print("[check-companion-translations] FAIL")

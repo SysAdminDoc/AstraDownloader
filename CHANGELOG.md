@@ -14,6 +14,11 @@ repository's git log.
 
 ### Fixed
 
+- **The language picker now advertises only usable translations.** English and
+  German clear the 80% coverage floor; partial catalogues remain available for
+  legacy configurations and RTL compatibility, but are no longer presented as
+  finished choices. The translation gate enforces the same floor for advertised
+  locales.
 - **The companion now follows light and dark system themes.** The new Theme
   setting supports system, light, and dark modes; native title bars, controls,
   inline status colors, generated icons, and the hidden render harness all
