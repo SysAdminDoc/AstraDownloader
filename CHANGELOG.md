@@ -77,6 +77,10 @@ repository's git log.
 - **Subscription state no longer loses over-limit history on load.** Extra
   records are preserved and reported, archive-key migrations keep the
   highest-priority collision, and deliberate archive trimming is logged.
+- **Subscription and pending-queue schemas migrate forward safely.** Missing
+  and older schema markers are normalized on the next save, while newer files
+  stay untouched and report the required Astra Downloader version instead of
+  masquerading as a disk-space failure.
 
 ## [2.6.0] - 2026-08-09
 

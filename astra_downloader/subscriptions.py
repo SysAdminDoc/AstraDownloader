@@ -133,6 +133,22 @@ def _safe_nonnegative_int(value, default=0):
     return max(0, parsed)
 
 
+def _stored_schema_version(value):
+    """Parse a JSON schema marker without treating booleans as integers."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) and value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return None
+
+
 def _next_retry_at(attempts, now):
     """Return an increasing retry time for a failed archive attempt."""
     attempts = max(1, _safe_nonnegative_int(attempts, 1))
@@ -257,6 +273,7 @@ class SubscriptionStore:
         self._clock = clock
         self._lock = threading.RLock()
         self._compatible = True
+        self._persistence_error = ""
         self._data = self._load()
 
     @staticmethod
@@ -296,12 +313,28 @@ class SubscriptionStore:
         raw = self._reader(self.path, {})
         if not isinstance(raw, dict):
             return self._empty()
-        if raw and raw.get("schemaVersion") != self.schema_version:
+        stored_version = _stored_schema_version(raw.get("schemaVersion"))
+        if raw and stored_version is not None and stored_version > self.schema_version:
             self._compatible = False
+            self._persistence_error = (
+                "Subscription state was written by a newer, incompatible Astra "
+                f"Downloader version (schema {stored_version}; this build reads "
+                f"{self.schema_version}). Update Astra Downloader before editing "
+                "subscriptions."
+            )
+            self._logger(self._persistence_error)
             self._logger(
                 "Subscription state schema is incompatible; preserving the file without changes."
             )
             return self._empty()
+        if raw and (stored_version is None or stored_version < self.schema_version):
+            previous = (
+                str(stored_version) if stored_version is not None else "missing or invalid"
+            )
+            self._logger(
+                f"Migrating subscription state schema {previous} to "
+                f"{self.schema_version}."
+            )
         now = self._clock()
         subscriptions = []
         seen_ids = set()
@@ -465,10 +498,25 @@ class SubscriptionStore:
             # store lock is held. Copying the entire archive here turns every
             # candidate mutation into another O(archive) deepcopy.
             self._writer(self.path, self._data)
+            self._persistence_error = ""
             return True
         except Exception as error:  # noqa: BLE001
+            self._persistence_error = (
+                "Could not save subscriptions. Check disk space and permissions."
+            )
             self._logger(f"Subscription state save failed: {error}")
             return False
+
+    def persistence_error(self):
+        """Return the current durable-state error, if one is known."""
+        with self._lock:
+            return self._persistence_error
+
+    def _save_failure_message(self):
+        return (
+            self._persistence_error
+            or "Could not save subscriptions. Check disk space and permissions."
+        )
 
     def _snapshot_archive_entry_locked(self, snapshots, key):
         if key in snapshots:
@@ -514,6 +562,8 @@ class SubscriptionStore:
         if not record:
             return False, "That subscription could not be restored."
         with self._lock:
+            if not self._compatible:
+                return False, self._save_failure_message()
             if len(self._data["subscriptions"]) >= self.max_records:
                 return False, f"Subscription limit reached ({self.max_records})."
             if self._find_locked(record["id"]):
@@ -524,7 +574,7 @@ class SubscriptionStore:
             self._data["subscriptions"].append(record)
             if not self._save_locked():
                 self._data["subscriptions"].pop()
-                return False, "Could not save subscriptions. Check disk space and permissions."
+                return False, self._save_failure_message()
             return _copy(record), None
 
     def add_subscription(self, url, *, interval_minutes=60, enabled=True, title="", now=None):
@@ -533,6 +583,8 @@ class SubscriptionStore:
             return None, "Subscriptions must use a YouTube channel or playlist URL."
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
+            if not self._compatible:
+                return None, self._save_failure_message()
             if len(self._data["subscriptions"]) >= self.max_records:
                 return None, f"Subscription limit reached ({self.max_records})."
             if any(item["url"] == url for item in self._data["subscriptions"]):
@@ -560,13 +612,15 @@ class SubscriptionStore:
             self._data["subscriptions"].append(record)
             if not self._save_locked():
                 self._data["subscriptions"].pop()
-                return None, "Could not save subscriptions. Check disk space and permissions."
+                return None, self._save_failure_message()
             return _copy(record), None
 
     def update_subscription(self, sub_id, *, url=None, interval_minutes=None,
                             enabled=None, title=None, now=None):
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
+            if not self._compatible:
+                return None, self._save_failure_message()
             record = self._find_locked(str(sub_id))
             if record is None:
                 return None, "Subscription no longer exists."
@@ -601,11 +655,13 @@ class SubscriptionStore:
             if not self._save_locked():
                 record.clear()
                 record.update(before)
-                return None, "Could not save subscriptions. Check disk space and permissions."
+                return None, self._save_failure_message()
             return _copy(record), None
 
     def remove_subscription(self, sub_id):
         with self._lock:
+            if not self._compatible:
+                return False, self._save_failure_message()
             index = next(
                 (
                     index for index, item in enumerate(self._data["subscriptions"])
@@ -618,7 +674,7 @@ class SubscriptionStore:
             removed = self._data["subscriptions"].pop(index)
             if not self._save_locked():
                 self._data["subscriptions"].insert(index, removed)
-                return False, "Could not save subscriptions. Check disk space and permissions."
+                return False, self._save_failure_message()
             return True, None
 
     def due_subscriptions(self, now=None):
@@ -633,6 +689,8 @@ class SubscriptionStore:
     def begin_scan(self, sub_id, now=None):
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
+            if not self._compatible:
+                return None
             record = self._find_locked(str(sub_id))
             if record is None:
                 return None
@@ -678,6 +736,8 @@ class SubscriptionStore:
             return RESERVE_SAVE_FAILED
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
+            if not self._compatible:
+                return RESERVE_SAVE_FAILED
             existing = self._data["archive"].get(key)
             attempts = 0
             if existing:
@@ -960,6 +1020,12 @@ class SubscriptionManager:
     def remove_subscription(self, sub_id):
         return self.store.remove_subscription(str(sub_id))
 
+    def _persistence_message(self):
+        return (
+            self.store.persistence_error()
+            or "Could not save subscriptions. Check disk space and permissions."
+        )
+
     def start(self):
         with self._lock:
             if self._thread and self._thread.is_alive():
@@ -1035,9 +1101,15 @@ class SubscriptionManager:
         try:
             started = self.store.begin_scan(sub_id, now=now)
             if not started:
-                return {"id": sub_id, "queued": 0, "skipped": 0, "error": "Subscription no longer exists."}
+                return {
+                    "id": sub_id,
+                    "queued": 0,
+                    "skipped": 0,
+                    "error": self.store.persistence_error()
+                    or "Subscription no longer exists.",
+                }
             if manual and not self.store.reset_archive_retries(sub_id, now=now):
-                message = "Could not reset subscription retry state; check disk space and permissions."
+                message = self._persistence_message()
                 self.store.finish_scan(sub_id, error=message, now=now)
                 return {"id": sub_id, "queued": 0, "skipped": 0, "error": message}
             try:
@@ -1094,6 +1166,8 @@ class SubscriptionManager:
                     continue
                 if reserved != RESERVE_OK:
                     errors.append(
+                        self._persistence_message()
+                        if reserved == RESERVE_SAVE_FAILED else
                         "Could not record the scheduled download; check disk "
                         "space and permissions."
                     )
@@ -1112,20 +1186,22 @@ class SubscriptionManager:
                     errors.append(message)
                     continue
                 if not self.store.mark_archive_queued(key, download_id, now=now):
-                    errors.append("Could not save scheduled download archive state.")
+                    errors.append(self._persistence_message())
                 queued += 1
 
             # Identical failures repeat once per candidate; the user needs
             # the cause, not the count.
             unique_errors = list(dict.fromkeys(errors))
             error = "; ".join(unique_errors[:3])
-            self.store.finish_scan(
+            finished = self.store.finish_scan(
                 sub_id,
                 queued=queued,
                 skipped=skipped,
                 error=error,
                 now=now,
             )
+            if not finished and not error:
+                error = self._persistence_message()
             return {
                 "id": sub_id,
                 "queued": queued,
