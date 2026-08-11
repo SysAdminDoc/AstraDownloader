@@ -307,6 +307,10 @@ DEFAULT_CONFIG = {
     # Named per-domain defaults. Secrets deliberately do not belong here:
     # cookies and credentials remain in SiteLoginStore, scoped by site.
     "SiteProfiles": [],
+    # The default follows the operating system's light/dark preference. An
+    # explicit choice is kept in settings so the GUI can switch immediately
+    # and restore the same presentation on the next launch.
+    "Theme": "system",
     "Language": "system",
     "StartMinimized": False,
     "CloseToTray": True,
@@ -1528,6 +1532,8 @@ def sanitize_config(raw):
     data["Xff"] = normalize_xff(data.get("Xff"))
     data["GeoVerificationProxy"] = normalize_proxy(data.get("GeoVerificationProxy"))
     data["SiteProfiles"] = normalize_site_profiles(data.get("SiteProfiles"))
+    theme = clean_text(data.get("Theme"), "system", 16).lower()
+    data["Theme"] = theme if theme in {"system", "light", "dark"} else "system"
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
     allowed_languages = {
         "system", "ar", "de", "en", "es", "fr", "it", "ja", "ko",

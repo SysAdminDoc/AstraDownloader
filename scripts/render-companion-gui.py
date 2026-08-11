@@ -18,11 +18,13 @@ OUTPUT_DIR = ROOT / "build" / "companion-ui-smoke"
 CAPTURE_NAMES = (
     "dashboard-starting",
     "dashboard-online",
+    "dashboard-light-theme",
     "dashboard-error-degraded",
     "dashboard-german",
     "downloads-first-run",
     "downloads-arabic-rtl",
     "downloads-active-pending",
+    "downloads-light-theme",
     "downloads-clipboard-staged",
     "downloads-subtitles-only",
     "downloads-recovery-terminal",
@@ -55,7 +57,19 @@ def main():
         for name in CAPTURE_NAMES:
             env = dict(os.environ)
             env["ASTRA_COMPANION_RENDER_SCENARIO"] = name
-            subprocess.run([sys.executable, str(Path(__file__).resolve())], env=env, check=True)
+            child_kwargs = {}
+            if os.name == "nt":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                child_kwargs.update(
+                    startupinfo=startupinfo,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            subprocess.run(
+                [sys.executable, str(Path(__file__).resolve())],
+                env=env, check=True, **child_kwargs,
+            )
         for name in CAPTURE_NAMES:
             output = OUTPUT_DIR / f"{name}.png"
             if not output.exists() or output.stat().st_size < 10_000:
@@ -106,7 +120,8 @@ def main():
                 QFontDatabase.addApplicationFont(str(font_path))
         default_font = QFont("Segoe UI", 9)
         app.setFont(default_font)
-        app.setStyleSheet(app_module.STYLESHEET)
+        render_theme = "light" if scenario.endswith("-light-theme") else "dark"
+        app_module.apply_application_theme(render_theme)
         if app_module.ICON_PATH.exists():
             app.setWindowIcon(QIcon(str(app_module.ICON_PATH)))
         retained_windows = []
@@ -155,6 +170,7 @@ def main():
                 "StartMinimized": False,
                 "DownloadPath": str(Path(temp_dir) / "Videos"),
                 "AudioDownloadPath": str(Path(temp_dir) / "Music"),
+                "Theme": render_theme,
                 "FirstRunComplete": scenario != "downloads-first-run",
             })
             history = app_module.History()
@@ -439,7 +455,7 @@ def main():
                     "Starting", "Starting local server",
                     "Checking the local API and installed tools…",
                 })
-            elif scenario == "dashboard-online":
+            elif scenario in {"dashboard-online", "dashboard-light-theme"}:
                 window.status_label.setText("Running")
                 window.status_label.setProperty("tone", "success")
                 window.status_dot.setProperty("tone", "success")

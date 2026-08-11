@@ -49,24 +49,69 @@ __all__ = (
     "SetupWorkerCore",
     "MainWindowCore",
     "GUI_ACCESSIBILITY_COLORS", "system_reduced_motion_enabled",
+    "set_gui_theme", "set_line_icon", "refresh_line_icons",
     "default_download_path",
     "filter_subscription_records", "filter_site_login_entries",
 )
 
-GUI_ACCESSIBILITY_COLORS = {
-    "surface": "#0a0d12",
-    "sidebar": "#080b0f",
-    "log_surface": "#0d1218",
-    "primary": "#fff8f4",
-    "muted": "#8d97a4",
-    "neutral": "#9ca5b0",
-    "neutral_indicator": "#747f8d",
-    "readiness_text": "#d9dde2",
-    "log_text": "#b4bcc6",
-    "success": "#75dcb1",
-    "warning": "#edbd76",
-    "danger": "#ff8d82",
+_THEME_ACCESSIBILITY_COLORS = {
+    "dark": {
+        "surface": "#0a0d12",
+        "sidebar": "#080b0f",
+        "log_surface": "#0d1218",
+        "primary": "#fff8f4",
+        "muted": "#8d97a4",
+        "neutral": "#9ca5b0",
+        "neutral_indicator": "#747f8d",
+        "readiness_text": "#d9dde2",
+        "log_text": "#b4bcc6",
+        "success": "#75dcb1",
+        "warning": "#edbd76",
+        "danger": "#ff8d82",
+        "accent": "#ff6552",
+        "accent_hover": "#ff7867",
+        "accent_text": "#170806",
+    },
+    "light": {
+        "surface": "#f6f8fb",
+        "sidebar": "#e8edf3",
+        "log_surface": "#ffffff",
+        "primary": "#18212b",
+        "muted": "#536273",
+        "neutral": "#536273",
+        "neutral_indicator": "#5c6c7b",
+        "readiness_text": "#253343",
+        "log_text": "#445466",
+        "success": "#087f55",
+        "warning": "#8a5700",
+        "danger": "#b52f25",
+        "accent": "#d94c3b",
+        "accent_hover": "#e05b49",
+        "accent_text": "#2c0d08",
+    },
 }
+
+# This remains a mutable compatibility mapping because a few small widgets
+# use its values while constructing inline typography. Theme changes update it
+# in place so existing windows do not retain the old dark colors.
+GUI_ACCESSIBILITY_COLORS = dict(_THEME_ACCESSIBILITY_COLORS["dark"])
+
+_ICON_THEME = "dark"
+_ICON_STROKE_COLORS = {
+    "dark": "#aab2bd",
+    "light": "#445466",
+}
+
+
+def set_gui_theme(theme):
+    """Select the inline GUI palette and return its normalized scheme."""
+    normalized = str(theme or "dark").strip().lower()
+    normalized = normalized if normalized in _THEME_ACCESSIBILITY_COLORS else "dark"
+    GUI_ACCESSIBILITY_COLORS.clear()
+    GUI_ACCESSIBILITY_COLORS.update(_THEME_ACCESSIBILITY_COLORS[normalized])
+    global _ICON_THEME
+    _ICON_THEME = normalized
+    return normalized
 
 CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
@@ -201,7 +246,7 @@ def make_line_icon(name, size=18):
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     if size != 18:
         painter.scale(size / 18, size / 18)
-    painter.setPen(QPen(QColor("#aab2bd"), 1.5, Qt.PenStyle.SolidLine,
+    painter.setPen(QPen(QColor(_ICON_STROKE_COLORS[_ICON_THEME]), 1.5, Qt.PenStyle.SolidLine,
                         Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     if key == "dashboard":
         for x, y in ((2, 2), (10, 2), (2, 10), (10, 10)):
@@ -297,6 +342,43 @@ def make_line_icon(name, size=18):
         painter.drawEllipse(4, 11, 4, 4)
     painter.end()
     return QIcon(pixmap)
+
+
+def set_line_icon(widget, name, size=18):
+    """Attach a theme-aware line icon and remember how to redraw it later."""
+    widget.setProperty("astraIconName", str(name))
+    widget.setProperty("astraIconSize", int(size))
+    icon = make_line_icon(name, size=size)
+    if hasattr(widget, "setIcon"):
+        widget.setIcon(icon)
+        widget.setIconSize(QSize(size, size))
+    elif hasattr(widget, "setPixmap"):
+        widget.setPixmap(icon.pixmap(size, size))
+    return icon
+
+
+def refresh_line_icons(root=None):
+    """Re-rasterize registered icons below one widget or the application."""
+    root = root or QApplication.instance()
+    if root is None:
+        return 0
+    if isinstance(root, QApplication):
+        widgets = []
+        for top_level in root.topLevelWidgets():
+            widgets.extend((top_level, *top_level.findChildren(QWidget)))
+    elif isinstance(root, QWidget):
+        widgets = [root, *root.findChildren(QWidget)]
+    else:
+        widgets = []
+    refreshed = 0
+    for widget in widgets:
+        name = widget.property("astraIconName")
+        if not name:
+            continue
+        size = widget.property("astraIconSize") or 18
+        set_line_icon(widget, name, int(size))
+        refreshed += 1
+    return refreshed
 
 
 def download_status_tone(status):
@@ -426,7 +508,7 @@ def make_empty_state(title, body, action_text=None, action=None):
     layout.addStretch(2)
     glyph = QLabel()
     glyph.setProperty("class", "emptyGlyph")
-    glyph.setPixmap(make_line_icon("Download" if "Queue" in title else "History", size=36).pixmap(36, 36))
+    set_line_icon(glyph, "Download" if "Queue" in title else "History", size=36)
     glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(glyph)
     empty_title = make_label(title, "emptyTitle")
@@ -1280,20 +1362,12 @@ class MainWindowCore(QMainWindow):
                 brand_icon.setPixmap(brand_pixmap)
         if brand_icon.pixmap().isNull():
             brand_icon.setText("A")
-            brand_icon.setStyleSheet(
-                "background:#ff6552;color:#180706;border-radius:8px;"
-                "font-size:18px;font-weight:800;"
-            )
+            brand_icon.setProperty("class", "brandFallback")
         brand_copy = QVBoxLayout()
         brand_copy.setSpacing(2)
-        title_lbl = make_label("ASTRA DOWNLOADER")
-        title_lbl.setStyleSheet(
-            "font-size: 12px; font-weight: 750; "
-            f"color: {GUI_ACCESSIBILITY_COLORS['primary']}; letter-spacing: .35px;"
-        )
-        ver_lbl = make_label(f"LOCAL  ·  v{self._value('APP_VERSION')}", "muted")
-        ver_lbl.setStyleSheet(
-            f"font-size: 11px; color: {GUI_ACCESSIBILITY_COLORS['muted']};"
+        title_lbl = make_label("ASTRA DOWNLOADER", "brandTitle")
+        ver_lbl = make_label(
+            f"LOCAL  ·  v{self._value('APP_VERSION')}", "brandVersion"
         )
         brand_copy.addWidget(title_lbl)
         brand_copy.addWidget(ver_lbl)
@@ -1318,8 +1392,7 @@ class MainWindowCore(QMainWindow):
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             btn.setAccessibleName(f"{translated_name} {tr('page')}")
-            btn.setIcon(make_line_icon(name))
-            btn.setIconSize(QSize(18, 18))
+            set_line_icon(btn, name)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(f"{tr('Open')} {translated_name}")
             btn.clicked.connect(lambda checked, n=name: self._nav_click(n))
@@ -1740,8 +1813,7 @@ class MainWindowCore(QMainWindow):
         translated = tr(text)
         btn = QPushButton(translated)
         btn.setProperty("class", class_name)
-        btn.setIcon(make_line_icon(text))
-        btn.setIconSize(QSize(15, 15))
+        set_line_icon(btn, text, size=15)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         target = str(target or "").strip()
         btn.setAccessibleName(f"{translated}: {target}" if target else translated)
@@ -4796,6 +4868,23 @@ class MainWindowCore(QMainWindow):
 
         # Language
         language_card, language_l = self._make_settings_group("Language")
+        theme_row = QHBoxLayout()
+        theme_row.addWidget(make_label("Theme", "fieldLabel"))
+        theme_row.addStretch()
+        self.cfg_theme = QComboBox()
+        self.cfg_theme.setAccessibleName(tr("Theme"))
+        self.cfg_theme.addItem(tr("System default"), "system")
+        self.cfg_theme.addItem(tr("Dark"), "dark")
+        self.cfg_theme.addItem(tr("Light"), "light")
+        selected_theme = self.config.get("Theme", "system")
+        self.cfg_theme.setCurrentIndex(
+            max(0, self.cfg_theme.findData(selected_theme))
+        )
+        self.cfg_theme.setToolTip(
+            tr("System default follows the operating system appearance.")
+        )
+        theme_row.addWidget(self.cfg_theme)
+        language_l.addLayout(theme_row)
         language_row = QHBoxLayout()
         language_row.addWidget(make_label("Language", "fieldLabel"))
         language_row.addStretch()
@@ -4938,7 +5027,7 @@ class MainWindowCore(QMainWindow):
 
         save_row = QHBoxLayout()
         save_row.setContentsMargins(166, 14, 0, 0)
-        self.settings_status = make_label("", "fieldHint")
+        self.settings_status = make_label("", "settingsStatus")
         self.settings_status.setAccessibleName(tr("Settings status"))
         save_row.addWidget(self.settings_status, 1)
         btn_save = self._make_tool_button("Save changes", "primary")
@@ -5399,7 +5488,7 @@ class MainWindowCore(QMainWindow):
                 tr("Extension server status indicator: Starting")
             )
             self.btn_startstop.setText(tr("Starting server…"))
-            self.btn_startstop.setIcon(make_line_icon("Starting server"))
+            set_line_icon(self.btn_startstop, "Starting server")
             self.btn_startstop.setProperty("class", "secondary")
             self.btn_startstop.setEnabled(False)
             self.tray_startstop.setText(tr("Starting server…"))
@@ -5419,7 +5508,7 @@ class MainWindowCore(QMainWindow):
                 tr("Extension server status indicator: Online")
             )
             self.btn_startstop.setText(tr("Stop server"))
-            self.btn_startstop.setIcon(make_line_icon("Stop server"))
+            set_line_icon(self.btn_startstop, "Stop server")
             self.btn_startstop.setProperty("class", "secondary")
             self.btn_startstop.setEnabled(True)
             self.tray_startstop.setText(tr("Stop server"))
@@ -5439,7 +5528,7 @@ class MainWindowCore(QMainWindow):
                 tr("Extension server status indicator: Offline")
             )
             self.btn_startstop.setText(tr("Start server"))
-            self.btn_startstop.setIcon(make_line_icon("Start server"))
+            set_line_icon(self.btn_startstop, "Start server")
             self.btn_startstop.setProperty("class", "primary")
             self.btn_startstop.setEnabled(True)
             self.tray_startstop.setText(tr("Start server"))
@@ -5937,9 +6026,10 @@ class MainWindowCore(QMainWindow):
         self.btn_queue_pause.setText(
             "Resume queue" if capacity['intakePaused'] else "Pause intake"
         )
-        self.btn_queue_pause.setIcon(make_line_icon(
-            "Resume queue" if capacity['intakePaused'] else "Pause intake"
-        ))
+        set_line_icon(
+            self.btn_queue_pause,
+            "Resume queue" if capacity['intakePaused'] else "Pause intake",
+        )
         self.btn_queue_pause.setToolTip(
             tr(
                 "Resume pending downloads explicitly. Items needing sign-in remain paused."
@@ -6074,6 +6164,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_force_ip_version", "ForceIPVersion", "combo"),
         ("cfg_subtitle_mode", "SubtitleMode", "combo"),
         ("cfg_subtitle_format", "SubtitleFormat", "combo"),
+        ("cfg_theme", "Theme", "combo"),
         ("cfg_language", "Language", "combo"),
     )
 
@@ -6188,6 +6279,7 @@ class MainWindowCore(QMainWindow):
             self._value("SERVER_PORT"), 1024, 65535,
         )
         old_language = self.config.get("Language", "system")
+        old_theme = self.config.get("Theme", "system")
         update = getattr(self.config, "update", None)
         if not callable(update):
             self._show_settings_status(
@@ -6209,6 +6301,13 @@ class MainWindowCore(QMainWindow):
             return False
 
         self._reload_settings_form()
+        if self.config.get("Theme", "system") != old_theme:
+            apply_theme = self._dependencies.get("apply_theme")
+            if callable(apply_theme):
+                try:
+                    apply_theme(self.config.get("Theme", "system"))
+                except Exception as error:  # noqa: BLE001
+                    self._append_log(f"Could not apply the selected theme: {error}")
         self._dependencies["reset_deno_runtime_cache"]()
         self._start_readiness_probe()
         new_port = self._dependencies["clamp_int"](
@@ -6278,6 +6377,7 @@ class MainWindowCore(QMainWindow):
             self._value("SERVER_PORT"), 1024, 65535,
         )
         old_language = self.config.get("Language", "system")
+        old_theme = self.config.get("Theme", "system")
         update = getattr(self.config, "update", None)
         if not callable(update):
             self._show_settings_status(
@@ -6304,6 +6404,13 @@ class MainWindowCore(QMainWindow):
             return False
 
         self._reload_settings_form()
+        if self.config.get("Theme", "system") != old_theme:
+            apply_theme = self._dependencies.get("apply_theme")
+            if callable(apply_theme):
+                try:
+                    apply_theme(self.config.get("Theme", "system"))
+                except Exception as error:  # noqa: BLE001
+                    self._append_log(f"Could not apply the selected theme: {error}")
         self._dependencies["reset_deno_runtime_cache"]()
         self._start_readiness_probe()
         new_port = self._dependencies["clamp_int"](
@@ -7018,10 +7125,10 @@ class MainWindowCore(QMainWindow):
         # "Unsaved changes" indicator from an edit made right after saving.
         self._settings_status_generation = getattr(self, "_settings_status_generation", 0) + 1
         self.settings_status.setText(message)
-        color = GUI_ACCESSIBILITY_COLORS.get(
-            tone, GUI_ACCESSIBILITY_COLORS["neutral"]
-        )
-        self.settings_status.setStyleSheet(f"color: {color}; font-size: 12px;")
+        self.settings_status.setProperty("tone", tone if tone in {
+            "neutral", "success", "warning", "danger"
+        } else "neutral")
+        repolish(self.settings_status)
         self.settings_status.setAccessibleName(
             tr("Settings status: {message}").format(
                 message=tr(message) if message else tr("No current message")
@@ -7245,6 +7352,7 @@ class MainWindowCore(QMainWindow):
         old_port = self._dependencies['clamp_int'](persisted_get("ServerPort", self._value('SERVER_PORT')), self._value('SERVER_PORT'), 1024, 65535)
         old_token = self.config.get("ServerToken", "")
         old_clipboard_grabber = self.config.get("ClipboardLinkGrabber", False)
+        old_theme = self.config.get("Theme", "system")
         old_language = self.config.get("Language", "system")
         new_port = self.cfg_port.value()
         new_token = self.cfg_token.text().strip()
@@ -7456,6 +7564,11 @@ class MainWindowCore(QMainWindow):
                 if hasattr(self, "cfg_language")
                 else old_language
             ),
+            "Theme": (
+                self.cfg_theme.currentData()
+                if hasattr(self, "cfg_theme")
+                else old_theme
+            ),
             "AutoUpdateYtDlp": self.cfg_autoupdate.isChecked(),
             "CloseToTray": self.cfg_closetotray.isChecked(),
             "StartMinimized": self.cfg_startmin.isChecked(),
@@ -7477,6 +7590,14 @@ class MainWindowCore(QMainWindow):
 
         self._dependencies['reset_deno_runtime_cache']()
         self._start_readiness_probe()
+
+        theme_changed = self.config.get("Theme", "system") != old_theme
+        apply_theme = self._dependencies.get("apply_theme")
+        if theme_changed and callable(apply_theme):
+            try:
+                apply_theme(self.config.get("Theme", "system"))
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not apply the selected theme: {error}")
 
         if self.config.get("GenerateSubtitles", False):
             model_usable = self._dependencies.get('managed_binary_usable')
@@ -8224,6 +8345,7 @@ _OWNED_EXPORTS = {
     "SetupWorker", "SetupWorkerCore",
     "MainWindow", "MainWindowCore",
     "GUI_ACCESSIBILITY_COLORS", "system_reduced_motion_enabled",
+    "set_gui_theme", "set_line_icon", "refresh_line_icons",
 }
 _resolve_legacy = make_legacy_resolver(
     name for name in __all__ if name not in _OWNED_EXPORTS
