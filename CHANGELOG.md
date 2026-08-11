@@ -25,6 +25,19 @@ repository's git log.
   `/health` now classify stale yt-dlp, missing JavaScript runtime, FFmpeg
   security/filter gaps, expired sign-ins, anonymous GitHub API exhaustion, and
   token-provider failures, with a safe action for each condition.
+- **Native browser pairing now covers the Chromium family safely.** Chrome,
+  Edge, Brave, Vivaldi, Opera and Chromium receive their own per-user
+  registry roots, while Chrome and Firefox extension IDs are validated before
+  they enter a native-host manifest.
+- **Output-template diagnostics now follow the download path.** Literal `%%`
+  fields stay literal, Windows-safe filename sanitization and reserved names
+  are previewed, and MAX_PATH is checked against the private staging prefix as
+  well as the finished-file destination. The local Whisper model URL is pinned
+  to its reviewed Hugging Face revision.
+- **Settings controls are clearer to assistive technology.** Browse buttons
+  identify their destination, and the site-profile editor contributes safe
+  names, domains and format values to Settings search without indexing proxy
+  credentials.
 - **The companion UI render harness now covers focus, DPI, locales, and recovery states.**
   It renders the bundled locale set, 1x/1.25x/2x scale fixtures, genuine empty
   states, filters, pagination, queue recovery, format probing, and invalid settings.

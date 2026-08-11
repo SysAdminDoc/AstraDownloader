@@ -1254,6 +1254,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'HISTORY_RETENTION_MIN',
     'HISTORY_RETENTION_MAX',
     'DOWNLOAD_PENDING_STATES',
+    'DOWNLOAD_INTERMEDIATE_DIRNAME',
     'DOWNLOAD_RETRYABLE_ERROR_CODES',
     'DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES',
     'DOWNLOAD_RUNNING_STATES',
@@ -1774,6 +1775,26 @@ class MainWindowCore(QMainWindow):
             except Exception:
                 # reason: a transient Qt widget can disappear during a filter refresh
                 pass
+        if isinstance(widget, QTextEdit):
+            # Site profiles are JSON rather than a line edit. Index only the
+            # non-secret fields so a proxy URL or other private value never
+            # becomes searchable metadata, while profile names and domains do.
+            try:
+                profile_value = json.loads(widget.toPlainText() or "[]")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                profile_value = []
+            safe_profile_keys = {
+                "Name", "Domain", "VideoFormat", "AudioFormat", "Quality",
+                "ImpersonateTarget", "ForceIPVersion", "Xff",
+            }
+            if isinstance(profile_value, list):
+                for profile in profile_value:
+                    if isinstance(profile, dict):
+                        parts.extend(
+                            str(profile[key])
+                            for key in safe_profile_keys
+                            if profile.get(key) not in (None, "")
+                        )
         return " ".join(str(part) for part in parts if part).casefold()
 
     def _settings_item_search_text(self, item):
@@ -1916,7 +1937,10 @@ class MainWindowCore(QMainWindow):
         set_line_icon(btn, text, size=15)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         target = str(target or "").strip()
-        btn.setAccessibleName(f"{translated}: {target}" if target else translated)
+        target_label = tr(target) if target else ""
+        btn.setAccessibleName(
+            f"{translated}: {target_label}" if target_label else translated
+        )
         return btn
 
     def _make_readiness_row(self, key, label_text, value_text="Checking"):
@@ -2447,7 +2471,9 @@ class MainWindowCore(QMainWindow):
         )
         self.first_run_destination.setAccessibleName(tr("First-run download folder"))
         destination_row.addWidget(self.first_run_destination, 2)
-        self.first_run_browse = self._make_tool_button("Browse")
+        self.first_run_browse = self._make_tool_button(
+            "Browse", target="First-run download folder"
+        )
         self.first_run_browse.clicked.connect(
             lambda: self._browse(self.first_run_destination)
         )
@@ -4542,7 +4568,7 @@ class MainWindowCore(QMainWindow):
             str(Path(default_download_path()) / "YouTube")
         )
         row.addWidget(self.cfg_dl_path, 1)
-        btn = self._make_tool_button("Browse")
+        btn = self._make_tool_button("Browse", target="Video download folder")
         btn.clicked.connect(lambda: self._browse(self.cfg_dl_path))
         row.addWidget(btn)
         paths_l.addLayout(row)
@@ -4555,7 +4581,7 @@ class MainWindowCore(QMainWindow):
         self.cfg_audio_path.setAccessibleName(tr("Audio download folder"))
         self.cfg_audio_path.setPlaceholderText(tr("Same as video folder"))
         row2.addWidget(self.cfg_audio_path, 1)
-        btn2 = self._make_tool_button("Browse")
+        btn2 = self._make_tool_button("Browse", target="Audio download folder")
         btn2.clicked.connect(lambda: self._browse(self.cfg_audio_path))
         row2.addWidget(btn2)
         paths_l.addLayout(row2)
@@ -4612,6 +4638,9 @@ class MainWindowCore(QMainWindow):
         paths_l.addWidget(self.cfg_windows_filenames)
         self.cfg_outtmpl.textChanged.connect(self._update_output_template_preview)
         self.cfg_dl_path.textChanged.connect(self._update_output_template_preview)
+        self.cfg_windows_filenames.stateChanged.connect(
+            self._update_output_template_preview
+        )
         self._update_output_template_preview()
         layout.addWidget(paths_card)
 
@@ -7788,6 +7817,23 @@ class MainWindowCore(QMainWindow):
         # without deleting the live binary first.
         self._run_setup(force_ffmpeg=True)
 
+    def _output_template_preview_options(self):
+        checkbox = getattr(self, "cfg_windows_filenames", None)
+        windows_filenames = bool(
+            checkbox is not None and checkbox.isChecked()
+        )
+        try:
+            install_dir = self._value("INSTALL_DIR")
+            staging_name = self._value("DOWNLOAD_INTERMEDIATE_DIRNAME")
+        except (KeyError, TypeError, AttributeError):
+            staging_prefix = ""
+        else:
+            staging_prefix = str(Path(install_dir) / str(staging_name))
+        return {
+            "windows_filenames": windows_filenames,
+            "staging_prefix": staging_prefix,
+        }
+
     def _update_output_template_preview(self, *_args):
         """Show the rendered example and any Windows path hazards."""
         label = getattr(self, "outtmpl_preview", None)
@@ -7797,6 +7843,7 @@ class MainWindowCore(QMainWindow):
         report = builder(
             self.cfg_outtmpl.text(),
             self.cfg_dl_path.text(),
+            **self._output_template_preview_options(),
         )
         if not report.get("valid"):
             label.setText(tr("Preview unavailable until the template is valid."))
@@ -7938,7 +7985,11 @@ class MainWindowCore(QMainWindow):
             )
         preview_builder = self._dependencies.get("output_template_preview")
         if outtmpl_raw and outtmpl and callable(preview_builder):
-            report = preview_builder(outtmpl, dl_path)
+            report = preview_builder(
+                outtmpl,
+                dl_path,
+                **self._output_template_preview_options(),
+            )
             if report.get("reserved"):
                 mark_error(
                     self.cfg_outtmpl,
