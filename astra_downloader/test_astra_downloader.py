@@ -5147,6 +5147,48 @@ class ApiSecurityTests(unittest.TestCase):
         })
         self.assertEqual(authenticated_resp.status_code, 200)
 
+    def test_auth_and_legacy_health_settings_are_read_after_config_restore(self):
+        old_token = "d" * 32
+        new_token = "e" * 32
+        extension_origin = "chrome-extension://restoredconfigid"
+        config = FakeConfig({
+            "ServerToken": old_token,
+            "LegacyHealthTokenEcho": False,
+        })
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        client = api.test_client()
+
+        self.assertEqual(
+            client.get("/history?limit=1", headers={"X-Auth-Token": old_token}).status_code,
+            200,
+        )
+        config.set("ServerToken", new_token)
+        config.set("LegacyHealthTokenEcho", True)
+        config.set("LegacyHealthTokenOrigins", extension_origin)
+
+        self.assertEqual(
+            client.get("/history?limit=1", headers={"X-Auth-Token": old_token}).status_code,
+            401,
+        )
+        self.assertEqual(
+            client.get("/history?limit=1", headers={"X-Auth-Token": new_token}).status_code,
+            200,
+        )
+        restored_health = client.get("/health", headers={
+            "Origin": extension_origin,
+            "X-MDL-Client": "MediaDL",
+        }).get_json()
+        self.assertEqual(restored_health.get("token"), new_token)
+        self.assertTrue(restored_health["legacyTokenEcho"])
+
+        config.set("LegacyHealthTokenEcho", False)
+        disabled_health = client.get("/health", headers={
+            "Origin": extension_origin,
+            "X-MDL-Client": "MediaDL",
+        }).get_json()
+        self.assertNotIn("token", disabled_health)
+
     def test_download_rejects_non_object_json_body(self):
         token = "c" * 32
         config = FakeConfig({"ServerToken": token})

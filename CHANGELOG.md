@@ -71,6 +71,9 @@ repository's git log.
 - **Legacy health-token echo requires an extension origin.** Compatibility
   responses no longer reveal the bearer token to origin-less local callers;
   only normalized origins in the configured allowlist can receive it.
+- **Restored server credentials take effect immediately.** API authentication
+  and legacy health-token settings are read from the live config on each
+  request, so restoring `config.json` no longer requires a process restart.
 
 ## [2.6.0] - 2026-08-09
 

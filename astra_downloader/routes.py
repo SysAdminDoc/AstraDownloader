@@ -250,12 +250,6 @@ def create_api(config, dl_manager, history, *, dependencies):
     # popup + ytkit.js EXT_FETCH) post tiny payloads (<2 KB).
     api.config['MAX_CONTENT_LENGTH'] = MAX_REQUEST_BYTES
 
-    token = config.get("ServerToken")
-    legacy_health_token_echo = coerce_bool(
-        config.get("LegacyHealthTokenEcho", DEFAULT_CONFIG["LegacyHealthTokenEcho"]),
-        DEFAULT_CONFIG["LegacyHealthTokenEcho"],
-    )
-    legacy_health_token_origins = legacy_health_token_origin_allowlist(config)
     # v1.2.0: token-bucket rate limit on /download. Other endpoints are
     # cheap and read-only; we don't limit them (local-only service, no
     # realistic DoS vector beyond /download work queue).
@@ -303,6 +297,7 @@ def create_api(config, dl_manager, history, *, dependencies):
 
     def check_auth():
         provided = request.headers.get("X-Auth-Token", "")
+        token = config.get("ServerToken")
         return bool(token and provided and hmac.compare_digest(str(provided), str(token)))
 
     def request_json_object():
@@ -315,7 +310,8 @@ def create_api(config, dl_manager, history, *, dependencies):
 
     def is_allowed_extension_origin(origin):
         normalized = normalize_extension_origin(origin)
-        return bool(normalized and normalized in legacy_health_token_origins)
+        origins = legacy_health_token_origin_allowlist(config)
+        return bool(normalized and normalized in origins)
 
     # v3.15.0: DNS-rebinding defense. A browser visiting attacker.com that
     # rebinds the host to 127.0.0.1 will send `Host: attacker.com` — legitimate
@@ -399,6 +395,11 @@ def create_api(config, dl_manager, history, *, dependencies):
 
     @api.route('/health')
     def health():
+        token = config.get("ServerToken")
+        legacy_health_token_echo = coerce_bool(
+            config.get("LegacyHealthTokenEcho", DEFAULT_CONFIG["LegacyHealthTokenEcho"]),
+            DEFAULT_CONFIG["LegacyHealthTokenEcho"],
+        )
         allowed, retry_after = health_rate_limiter.allow('health')
         if not allowed:
             return cors_response(
@@ -495,6 +496,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         # not using a timing-safe check). Keep the legacy X-MDL-Token header for
         # client compatibility, but also accept the standard X-Auth-Token.
         legacy = request.headers.get('X-MDL-Token', '')
+        token = config.get("ServerToken")
         legacy_ok = bool(token and legacy and hmac.compare_digest(str(legacy), str(token)))
         if not (check_auth() or legacy_ok):
             return cors_response({"error": "Unauthorized"}, 403)
