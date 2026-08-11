@@ -35,6 +35,7 @@ OUT_EXE = ROOT / "AstraDownloader.exe"
 OUT_SHA256 = ROOT / "AstraDownloader.exe.sha256"
 OUT_ONEDIR_ZIP = ROOT / "AstraDownloader-onedir.zip"
 OUT_ONEDIR_SHA256 = ROOT / "AstraDownloader-onedir.zip.sha256"
+PORTABLE_MARKER_NAME = ".astradownloader-portable"
 TRANSLATIONS_DIR = HERE / "translations"
 TRANSLATION_BUILD_SCRIPT = ROOT / "scripts" / "build-companion-translations.py"
 
@@ -218,6 +219,13 @@ def write_onedir_archive(source_dir, archive_path):
             compression=zipfile.ZIP_DEFLATED,
             compresslevel=9,
         ) as archive:
+            marker = zipfile.ZipInfo(
+                (Path(source_dir.name) / PORTABLE_MARKER_NAME).as_posix()
+            )
+            marker.date_time = (1980, 1, 1, 0, 0, 0)
+            marker.compress_type = zipfile.ZIP_DEFLATED
+            marker.external_attr = 0o100644 << 16
+            archive.writestr(marker, b"Astra Downloader portable one-folder layout\n")
             files = sorted(
                 (path for path in source_dir.rglob("*") if path.is_file()),
                 key=lambda path: path.relative_to(source_dir).as_posix().lower(),

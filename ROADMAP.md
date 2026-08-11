@@ -30,40 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P0 — Derive portable mode from where the executable lives, not from argv
-  Why: One root cause produces three separate high-severity defects, two of them
-  destructive, and it is also the blocker that keeps winget packaging out of
-  reach.
-  Evidence: `portable_mode_requested` (`astra_downloader.py:312-320`) reads argv
-  and `ASTRA_PORTABLE` only, so portability is lost on any launch the user did
-  not type the flag for. (a) The one-folder zip that README:146 recommends as
-  the antivirus fallback, launched normally, reaches
-  `ensure_installed_executable` (`:2872-2906`), which copies **only**
-  `AstraDownloader.exe` — verified as a 7,816,473-byte stub in a 289-entry
-  archive that needs its sibling `_internal/` — over the installed copy (the
-  guard at `:2893` preserves only a *strictly newer* version) and then repoints
-  the shortcuts, logon task and protocol handlers at the dead file. (b)
-  `_run_companion_self_update` relaunches with a hardcoded `['--start-server']`
-  (`:2737-2742`), so a portable copy becomes an installed one and writes every
-  registration README:104 promises it will not. (c) `run_uninstall`
-  (`:3842-3919`) branches on the same flag, so a portable copy's `--uninstall`
-  without `--portable` runs `shutil.rmtree(INSTALL_DIR)` on
-  `%LOCALAPPDATA%\AstraDownloader` and destroys a different install's config,
-  history and sign-ins. Same flag also leaves the single-instance mutex
-  `Local\AstraDownloader.SingleInstance` (`:4365`) and ports 9752/9753 shared, so
-  a portable launch silently raises the installed window instead. (The stub's
-  *inability to start* is inferred from the PyInstaller layout, not observed —
-  needs live validation; the copy, the version guard and the re-pointing are all
-  verified from code and artifact.)
-  Touches: `astra_downloader/astra_downloader.py`, `README.md`
-  Acceptance: a marker file beside the executable (plus an "am I inside
-  `INSTALL_DIR`?" check) determines portability, with argv as an override; the
-  self-update relaunch propagates it; the onedir build refuses to self-relocate;
-  uninstall scope is derived from the running copy; the mutex and control ports
-  are namespaced per data root; `README.md` states which layout needs which
-  flag. Tests cover each of the three symptoms.
-  Complexity: M
-
 - [ ] P0 — Make the PO-token path real, or stop taking the branch that needs it
   Why: The integration cannot work by construction, and the failure is
   inverted — when the provider probe *succeeds*, YouTube downloads get worse.

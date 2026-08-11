@@ -21,6 +21,10 @@ repository's git log.
 - **Windows subtitle filter paths are escaped at both parser levels.** The
   legacy FFmpeg argument builder now emits the doubled escaping required for
   drive letters and filter punctuation.
+- **Portable mode follows the executable layout.** The one-folder archive
+  carries a marker, installed copies remain rooted in `%LOCALAPPDATA%`,
+  one-folder builds refuse unsafe self-relocation, and portable instance
+  control plus uninstall cleanup are isolated to their own data root.
 
 ## [2.6.0] - 2026-08-09
 

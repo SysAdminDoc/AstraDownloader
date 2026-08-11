@@ -92,11 +92,12 @@ directory and registers the same per-user integrations:
 .\AstraDownloader.exe --install
 ```
 
-For a portable copy, place the executable in a writable folder and launch it
-with `--portable`:
+For a portable copy, extract `AstraDownloader-onedir.zip` into a writable
+folder and launch `AstraDownloader.exe` normally. The archive includes a
+portable marker, so its state stays beside the executable automatically:
 
 ```powershell
-.\AstraDownloader.exe --portable
+.\AstraDownloader.exe
 ```
 
 Portable mode keeps configuration, queue/history, sign-ins, logs, and the
@@ -105,6 +106,13 @@ Start Menu, desktop, protocol, logon-task, or browser native-messaging
 registrations. The checked-in portable manifest under
 `packaging/winget/manifests` is validated by Windows Package Manager before
 release submission.
+
+The one-file executable is the installable layout: running it normally copies
+the executable to `%LOCALAPPDATA%\AstraDownloader` and registers integrations.
+If you deliberately keep a one-file copy elsewhere, pass `--portable`; the
+running copy then owns its state beside itself. `--install` always selects the
+managed install layout. A portable one-folder copy cannot self-update by
+replacing only its executable; extract the next one-folder archive instead.
 
 The build is unsigned, so SmartScreen will warn on first run — choose **More
 info → Run anyway**. That is permanent policy, not an oversight: verify the
@@ -123,6 +131,9 @@ protocol handlers:
 ```powershell
 & "$env:LOCALAPPDATA\AstraDownloader\AstraDownloader.exe" --uninstall
 ```
+
+To remove only the state from a portable folder while keeping its executable
+and downloaded media, run `--uninstall` from that folder.
 
 ## Run from source
 

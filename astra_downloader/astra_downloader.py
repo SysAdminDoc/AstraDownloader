@@ -6,7 +6,7 @@ Manages yt-dlp downloads with a PyQt6 GUI, system tray, and REST API on port 975
 First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 """
 
-import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, struct, math, stat
+import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, hashlib, struct, math, stat
 import queue
 from pathlib import Path
 from datetime import datetime
@@ -313,16 +313,73 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
 APP_VERSION = "2.6.0"
+PORTABLE_MARKER_NAME = ".astradownloader-portable"
+INSTANCE_CONTROL_PORT_DEFAULT = 9752
+INSTANCE_LOCK_PORT_DEFAULT = 9753
 
 
-def portable_mode_requested(argv=None):
-    """Return whether this launch must keep application state beside itself."""
+def default_install_dir(localappdata=None):
+    """Return the per-user install/state root used by packaged launches."""
+    base = localappdata
+    if base is None:
+        base = os.environ.get("LOCALAPPDATA")
+    if not base:
+        base = Path.home() / "AppData" / "Local"
+    return Path(base) / "AstraDownloader"
+
+
+def _launch_executable_path(executable=None):
+    if executable is not None:
+        return Path(executable).expanduser().resolve()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve()
+    return Path(__file__).resolve()
+
+
+def portable_marker_path(executable=None):
+    return _launch_executable_path(executable).parent / PORTABLE_MARKER_NAME
+
+
+def _path_is_within(path, root):
+    try:
+        Path(path).resolve().relative_to(Path(root).resolve())
+        return True
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def portable_mode_requested(argv=None, *, executable=None, install_dir=None,
+                            frozen=None):
+    """Return whether this launch must keep application state beside itself.
+
+    A packaged one-folder distribution carries ``PORTABLE_MARKER_NAME`` beside
+    its executable. The marker is ignored inside the managed install root so a
+    copied or unpacked install cannot accidentally switch another install to a
+    portable state root. ``--portable`` remains an explicit override for a
+    one-file copy; ``--install`` is the corresponding installed-mode override.
+    Source runs retain their historical AppData default unless explicitly
+    requested portable.
+    """
     args = sys.argv[1:] if argv is None else list(argv)
+    normalized_args = {str(arg).strip().lower() for arg in args}
+    if "--install" in normalized_args:
+        return False
     if any(str(arg).strip().lower() == "--portable" for arg in args):
         return True
-    return str(os.environ.get("ASTRA_PORTABLE", "")).strip().lower() in {
+    if str(os.environ.get("ASTRA_PORTABLE", "")).strip().lower() in {
         "1", "true", "yes", "on",
-    }
+    }:
+        return True
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+    if not frozen:
+        return False
+    executable_path = _launch_executable_path(executable)
+    managed_root = Path(install_dir or default_install_dir()).resolve()
+    return (
+        not _path_is_within(executable_path.parent, managed_root)
+        and portable_marker_path(executable_path).is_file()
+    )
 
 
 def runtime_state_dir(portable=None):
@@ -330,9 +387,32 @@ def runtime_state_dir(portable=None):
     if portable is None:
         portable = PORTABLE_MODE
     if portable:
-        executable = sys.executable if getattr(sys, "frozen", False) else __file__
-        return Path(executable).resolve().parent
-    return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "AstraDownloader"
+        return _launch_executable_path().parent
+    return default_install_dir()
+
+
+def instance_ports_for_root(root, installed_root=None):
+    """Return deterministic control/lock ports isolated by the state root."""
+    resolved = Path(root).resolve()
+    managed_root = Path(installed_root or default_install_dir()).resolve()
+    if resolved == managed_root:
+        return INSTANCE_CONTROL_PORT_DEFAULT, INSTANCE_LOCK_PORT_DEFAULT
+    digest = hashlib.sha256(os.path.normcase(str(resolved)).encode("utf-8")).digest()
+    base = 20000 + (int.from_bytes(digest[:4], "big") % 20000)
+    if base % 2:
+        base += 1
+    return base, base + 1
+
+
+def instance_namespace_for_root(root=None):
+    """Return the stable suffix used by the per-root instance mutex."""
+    resolved = Path(root or INSTALL_DIR).resolve()
+    managed_root = Path(default_install_dir()).resolve()
+    if resolved == managed_root:
+        return "installed"
+    return hashlib.sha256(
+        os.path.normcase(str(resolved)).encode("utf-8")
+    ).hexdigest()[:16]
 
 
 PORTABLE_MODE = portable_mode_requested()
@@ -345,8 +425,6 @@ SERVICE_ID = "astra-downloader"
 # the major version stays at 2 (additive, backward-compatible).
 SERVICE_API_VERSION = 2
 INSTANCE_CONTROL_HOST = '127.0.0.1'
-INSTANCE_CONTROL_PORT = 9752
-INSTANCE_LOCK_PORT = 9753
 DIAGNOSTIC_LOG_ENTRY_LIMIT = 30
 DIAGNOSTIC_TEXT_LIMIT = 600
 # Stall watchdog for the download subprocess. `for line in proc.stdout` blocks
@@ -357,6 +435,7 @@ DIAGNOSTIC_TEXT_LIMIT = 600
 # output for this long — is killed. Deliberately generous so a slow ffmpeg merge
 # of a large file (which can be silent for minutes) is never false-killed.
 INSTALL_DIR = runtime_state_dir()
+INSTANCE_CONTROL_PORT, INSTANCE_LOCK_PORT = instance_ports_for_root(INSTALL_DIR)
 CONFIG_PATH = INSTALL_DIR / 'config.json'
 HISTORY_PATH = INSTALL_DIR / 'history.json'
 DOWNLOAD_QUEUE_PATH = INSTALL_DIR / 'download-queue.json'
@@ -2759,6 +2838,17 @@ def _run_companion_self_update(restart=True, dl_manager=None):
 
 def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
     current_version = APP_VERSION
+    if is_portable_mode() and is_onedir_build():
+        return {
+            'ok': False,
+            'error': (
+                'The one-folder portable build cannot replace only its executable. '
+                'Download the next one-folder archive to update it.'
+            ),
+            'error_code': 'portable-onedir-update-unsupported',
+            'current_version': current_version,
+            'latest_version': '',
+        }
     try:
         latest_version = fetch_latest_companion_version()
     except Exception as e:  # noqa: BLE001
@@ -2899,8 +2989,11 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
             active_version=current_version, rollback_version=current_version,
             active_sha256='', rollback_sha256='', error_code='',
         )
+        restart_args = ['--start-server']
+        if is_portable_mode():
+            restart_args.append('--portable')
         schedule = schedule_companion_update_restart(
-            update_path, install_target_exe(), ['--start-server'],
+            update_path, install_target_exe(), restart_args,
             expected_sha256=downloaded_digest,
             expected_version=latest_version,
             previous_version=current_version,
@@ -3005,6 +3098,14 @@ def current_executable_path():
     return Path(__file__).resolve()
 
 
+def is_onedir_build():
+    """Return whether the running frozen app needs sibling files to start."""
+    if not is_frozen_app():
+        return False
+    executable = current_executable_path()
+    return (executable.parent / "_internal").is_dir()
+
+
 def install_target_exe():
     if is_portable_mode():
         return current_executable_path()
@@ -3042,7 +3143,7 @@ def ensure_installed_executable(*, allow_downgrade=False):
     binary and use the byte-verified copy primitive for replacement.
     """
     current = current_executable_path()
-    if not is_frozen_app() or is_portable_mode():
+    if not is_frozen_app() or is_portable_mode() or is_onedir_build():
         return current
 
     target = install_target_exe()
@@ -3980,7 +4081,8 @@ def remove_portable_state():
             CONFIG_PATH, HISTORY_PATH, DOWNLOAD_QUEUE_PATH, SUBSCRIPTIONS_PATH,
             LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH, ICON_PATH,
             WHISPER_MODEL_PATH,
-            DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
+            WHISPER_BIN_DIR, DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
+            INSTALL_DIR / 'site-logins', INSTALL_DIR / 'download-temp',
             _ytdlp_update_state_path(), _companion_update_state_path(),
             INSTALL_DIR / YTDLP_ROLLBACK_FILENAME,
             INSTALL_DIR / COMPANION_ROLLBACK_FILENAME,
@@ -4092,18 +4194,11 @@ def run_uninstall():
 
 
 def stop_running_companion_for_uninstall():
-    """Stop only Astra Downloader and its child process tree before removal."""
+    """Ask only the instance for this data root to stop before removal."""
     graceful = send_instance_command('shutdown', attempts=3, delay=0.2)
     if graceful:
         # Give closeEvent time to stop the local API and cancel owned jobs.
         time.sleep(0.75)
-    if sys.platform == 'win32':
-        current_pid = str(os.getpid())
-        subprocess.run(
-            ['taskkill', '/F', '/T', '/IM', 'AstraDownloader.exe', '/FI', f'PID ne {current_pid}'],
-            capture_output=True,
-            creationflags=CREATE_NO_WINDOW,
-        )
     return graceful
 
 
@@ -4544,7 +4639,11 @@ def check_single_instance(startup_command=''):
             kernel32.CreateMutexW.argtypes = (wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR)
             kernel32.CreateMutexW.restype = wintypes.HANDLE
             kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-            handle = kernel32.CreateMutexW(None, False, "Local\\AstraDownloader.SingleInstance")
+            mutex_name = (
+                "Local\\AstraDownloader.SingleInstance."
+                + instance_namespace_for_root()
+            )
+            handle = kernel32.CreateMutexW(None, False, mutex_name)
             if not handle:
                 error = ctypes.get_last_error()
                 raise OSError(error, f"single-instance mutex creation failed ({error})")
@@ -4732,6 +4831,11 @@ def companion_install_exit_code(argv=None):
         return 2
     if not is_frozen_app():
         write_persistent_log("The silent install path requires the packaged executable.")
+        return 2
+    if is_onedir_build():
+        write_persistent_log(
+            "The one-folder build is already self-contained; use the one-file executable for --install."
+        )
         return 2
     target = install_target_exe().resolve()
     installed = ensure_installed_executable()
