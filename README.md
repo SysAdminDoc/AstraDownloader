@@ -46,10 +46,11 @@ pasting a link never needs it.
   per-download staging folder and only the finished file is moved into the
   destination. The Settings page can put intermediates beside the output for
   diagnosis.
-- **Archive deliberately.** Opt into info JSON, descriptions, thumbnails and
-  split chapter files, or start a live stream from its beginning. A bounded
-  live-video retry interval handles scheduled events without changing the
-  existing embed options.
+- **Archive deliberately.** Opt into info JSON, Kodi/Jellyfin NFO metadata,
+  descriptions and thumbnails, with `tvshow.nfo`/`season.nfo` for channel
+  folders, or split chapter files and start a live stream from its beginning.
+  A bounded live-video retry interval handles scheduled events without
+  changing the existing embed options.
 - **Preview Windows-safe names.** Settings renders an example output path,
   flags reserved names and overlong paths before saving, and enables yt-dlp's
   Windows filename sanitization by default.

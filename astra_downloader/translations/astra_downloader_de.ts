@@ -1231,6 +1231,14 @@
       <translation>Info-JSON als Begleitdatei schreiben</translation>
     </message>
     <message>
+      <source>Write media-server NFO sidecar</source>
+      <translation>NFO-Begleitdatei für Medienserver schreiben</translation>
+    </message>
+    <message>
+      <source>Write Kodi/Jellyfin-compatible NFO metadata beside downloaded media and create tvshow.nfo and season.nfo for channel folders.</source>
+      <translation>Kodi/Jellyfin-kompatible NFO-Metadaten neben heruntergeladenen Medien schreiben und tvshow.nfo sowie season.nfo für Kanäle erstellen.</translation>
+    </message>
+    <message>
       <source>Write description sidecar</source>
       <translation>Beschreibung als Begleitdatei schreiben</translation>
     </message>

@@ -228,6 +228,10 @@ CATALOGS = {
             "Nachbearbeitung",
         "Write info JSON sidecar":
             "Info-JSON als Begleitdatei schreiben",
+        "Write media-server NFO sidecar":
+            "NFO-Begleitdatei für Medienserver schreiben",
+        "Write Kodi/Jellyfin-compatible NFO metadata beside downloaded media and create tvshow.nfo and season.nfo for channel folders.":
+            "Kodi/Jellyfin-kompatible NFO-Metadaten neben heruntergeladenen Medien schreiben und tvshow.nfo sowie season.nfo für Kanäle erstellen.",
         "Write description sidecar":
             "Beschreibung als Begleitdatei schreiben",
         "Write thumbnail sidecar":

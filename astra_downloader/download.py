@@ -18,6 +18,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+import xml.etree.ElementTree as ET
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,6 +63,9 @@ __all__ = (
     "TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS", "parse_whisper_progress",
     "TRANSCRIPTION_WAV_BYTES_PER_SECOND", "TRANSCRIPTION_FALLBACK_DURATION_SECONDS",
     "estimate_transcription_wav_bytes",
+    "build_media_server_nfo", "build_tvshow_nfo", "build_season_nfo",
+    "write_media_server_nfo", "write_media_server_sidecars",
+    "NFO_MAX_TEXT_CHARS",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
     "estimate_download_bytes", "check_download_disk_space",
@@ -147,6 +151,444 @@ DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
 # caller has no duration metadata of its own.
 TRANSCRIPTION_WAV_BYTES_PER_SECOND = 32000
 TRANSCRIPTION_FALLBACK_DURATION_SECONDS = 60 * 60
+NFO_INFO_JSON_SUFFIX = '.info.json'
+NFO_MAX_INFO_JSON_BYTES = 8 * 1024 * 1024
+NFO_MAX_TEXT_CHARS = 8192
+NFO_MAX_LIST_ITEMS = 64
+NFO_MAX_INFO_FILES = 2000
+NFO_MEDIA_EXTENSIONS = frozenset({
+    '.aac', '.avi', '.flac', '.flv', '.m4a', '.m4v', '.mkv', '.mov',
+    '.mp3', '.mp4', '.ogg', '.opus', '.ts', '.wav', '.webm',
+})
+
+
+def _nfo_text(value, limit=NFO_MAX_TEXT_CHARS):
+    """Bound and XML-clean one metadata value before ElementTree sees it."""
+    if value is None or isinstance(value, (dict, list, tuple, set)):
+        return ''
+    if isinstance(value, bool):
+        return ''
+    text = str(value).strip()
+    # XML 1.0 does not permit control characters or lone UTF-16 surrogates.
+    text = ''.join(
+        char for char in text
+        if char in '\t\n\r'
+        or (ord(char) >= 0x20 and not 0xD800 <= ord(char) <= 0xDFFF)
+    )
+    return text[:max(1, int(limit))]
+
+
+def _nfo_first(metadata, *keys):
+    for key in keys:
+        value = metadata.get(key)
+        text = _nfo_text(value)
+        if text:
+            return text
+    return ''
+
+
+def _nfo_items(metadata, *keys):
+    values = []
+    for key in keys:
+        raw = metadata.get(key)
+        if isinstance(raw, str):
+            candidates = [raw]
+        elif isinstance(raw, (list, tuple, set)):
+            candidates = raw
+        else:
+            candidates = []
+        for candidate in candidates:
+            text = _nfo_text(candidate, 1024)
+            if text and text.casefold() not in {item.casefold() for item in values}:
+                values.append(text)
+            if len(values) >= NFO_MAX_LIST_ITEMS:
+                return values
+    return values
+
+
+def _nfo_number(metadata, *keys):
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, bool) or value is None:
+            continue
+        try:
+            number = int(float(str(value).strip()))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if 0 <= number <= 100000:
+            return number
+    return None
+
+
+def _nfo_date(metadata):
+    raw = _nfo_first(metadata, 'upload_date', 'release_date', 'date')
+    if re.fullmatch(r'\d{8}', raw):
+        return f'{raw[:4]}-{raw[4:6]}-{raw[6:]}'
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', raw):
+        return raw
+    timestamp = metadata.get('timestamp')
+    if isinstance(timestamp, (int, float)) and not isinstance(timestamp, bool):
+        try:
+            return datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d')
+        except (OverflowError, OSError, ValueError):
+            # reason: malformed extractor timestamps are optional metadata
+            pass
+    return ''
+
+
+def _nfo_provider(metadata, provider=None):
+    raw = _nfo_text(provider) or _nfo_first(metadata, 'extractor_key', 'extractor')
+    lowered = raw.casefold()
+    if 'youtube' in lowered:
+        return 'youtube'
+    normalized = re.sub(r'[^a-z0-9_-]+', '', lowered)[:40]
+    return normalized or 'astra'
+
+
+def _nfo_id(metadata, *keys):
+    return _nfo_first(metadata, *(keys or ('id', 'video_id', 'episode_id', 'display_id')))
+
+
+def _nfo_is_episode(metadata):
+    if _nfo_number(metadata, 'season_number', 'season') is not None:
+        return True
+    if _nfo_number(metadata, 'episode_number', 'episode', 'episode_sort') is not None:
+        return True
+    if _nfo_first(metadata, 'series', 'showtitle'):
+        return True
+    return bool(
+        _nfo_first(metadata, 'playlist_title')
+        and (
+            _nfo_first(metadata, 'playlist_id')
+            or _nfo_number(metadata, 'playlist_index') is not None
+        )
+    )
+
+
+def _nfo_show_context(metadata):
+    return bool(
+        _nfo_first(metadata, 'series', 'showtitle', 'playlist_title')
+        and (
+            _nfo_first(metadata, 'playlist_id', 'channel_id', 'series_id')
+            or _nfo_number(metadata, 'playlist_index') is not None
+            or _nfo_number(metadata, 'season_number', 'season') is not None
+        )
+    )
+
+
+def _nfo_season_number(metadata):
+    number = _nfo_number(metadata, 'season_number', 'season')
+    if number is not None:
+        return number
+    return 1 if _nfo_show_context(metadata) else None
+
+
+def _nfo_episode_number(metadata):
+    number = _nfo_number(metadata, 'episode_number', 'episode', 'episode_sort')
+    if number is not None:
+        return number
+    if _nfo_show_context(metadata):
+        return _nfo_number(metadata, 'playlist_index')
+    return None
+
+
+def _nfo_url(value):
+    text = _nfo_text(value, 4096)
+    parsed = urlparse(text)
+    return text if parsed.scheme.lower() in {'http', 'https'} and parsed.netloc else ''
+
+
+def _nfo_add(parent, tag, value, attributes=None):
+    text = _nfo_text(value)
+    if not text:
+        return None
+    element = ET.SubElement(parent, tag, attributes or {})
+    element.text = text
+    return element
+
+
+def _nfo_add_uniqueid(root, metadata, provider, identifier=None):
+    value = _nfo_text(identifier) or _nfo_id(metadata)
+    if not value:
+        return
+    uniqueid = ET.SubElement(
+        root, 'uniqueid', {'type': provider, 'default': 'true'}
+    )
+    uniqueid.text = value
+    provider_tag = f'{provider}id'
+    if re.fullmatch(r'[a-z][a-z0-9_-]{0,39}', provider_tag):
+        _nfo_add(root, provider_tag, value)
+
+
+def _nfo_media_root(metadata):
+    return ET.Element('episodedetails' if _nfo_is_episode(metadata) else 'movie')
+
+
+def _nfo_common_media_fields(root, metadata, provider, *, episode=False):
+    title = _nfo_first(metadata, 'title', 'fulltitle') or 'Untitled media'
+    _nfo_add(root, 'title', title)
+    _nfo_add(root, 'originaltitle', _nfo_first(metadata, 'original_title'))
+    if episode:
+        showtitle = _nfo_first(
+            metadata, 'series', 'showtitle', 'playlist_title', 'channel',
+            'uploader',
+        )
+        _nfo_add(root, 'showtitle', showtitle)
+    _nfo_add(root, 'plot', _nfo_first(metadata, 'description', 'comment'))
+    _nfo_add(root, 'website', _nfo_url(metadata.get('webpage_url') or metadata.get('original_url')))
+    studio = _nfo_first(metadata, 'channel', 'uploader', 'artist', 'creator')
+    _nfo_add(root, 'studio', studio)
+    _nfo_add(root, 'director', _nfo_first(metadata, 'uploader', 'channel'))
+    for category in _nfo_items(metadata, 'categories', 'genre'):
+        _nfo_add(root, 'genre', category)
+    for tag in _nfo_items(metadata, 'tags'):
+        _nfo_add(root, 'tag', tag)
+    duration = metadata.get('duration')
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+        try:
+            seconds = max(0, float(duration))
+        except (TypeError, ValueError, OverflowError):
+            seconds = 0
+        if seconds:
+            _nfo_add(root, 'runtime', max(1, int(round(seconds / 60))))
+    premiered = _nfo_date(metadata)
+    _nfo_add(root, 'premiered', premiered)
+    _nfo_add(root, 'aired', premiered if episode else '')
+    if premiered:
+        _nfo_add(root, 'year', premiered[:4])
+    thumbnail = _nfo_url(metadata.get('thumbnail'))
+    _nfo_add(root, 'thumb', thumbnail)
+    _nfo_add_uniqueid(root, metadata, provider)
+
+
+def _nfo_bytes(root):
+    try:
+        ET.indent(root, space='  ')
+    except AttributeError:
+        # reason: Python 3.10 lacks ET.indent; the XML remains valid without pretty-printing
+        pass
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+
+
+def build_media_server_nfo(metadata, *, provider=None):
+    """Build a Kodi/Jellyfin-compatible movie or episode NFO document."""
+    source = metadata if isinstance(metadata, dict) else {}
+    episode = _nfo_is_episode(source)
+    root = _nfo_media_root(source)
+    provider_name = _nfo_provider(source, provider)
+    _nfo_common_media_fields(root, source, provider_name, episode=episode)
+    if episode:
+        season = _nfo_season_number(source)
+        number = _nfo_episode_number(source)
+        _nfo_add(root, 'season', season)
+        _nfo_add(root, 'episode', number)
+    return _nfo_bytes(root)
+
+
+def build_tvshow_nfo(metadata, *, provider=None):
+    """Build the folder-level NFO used for a downloaded channel or series."""
+    source = metadata if isinstance(metadata, dict) else {}
+    root = ET.Element('tvshow')
+    title = _nfo_first(
+        source, 'series', 'showtitle', 'playlist_title', 'channel', 'uploader',
+    ) or 'Untitled show'
+    _nfo_add(root, 'title', title)
+    _nfo_add(root, 'plot', _nfo_first(source, 'description', 'comment'))
+    _nfo_add(root, 'studio', _nfo_first(source, 'channel', 'uploader', 'creator'))
+    for category in _nfo_items(source, 'categories', 'genre'):
+        _nfo_add(root, 'genre', category)
+    _nfo_add(root, 'thumb', _nfo_url(source.get('thumbnail')))
+    provider_name = _nfo_provider(source, provider)
+    show_id = _nfo_first(
+        source, 'playlist_id', 'channel_id', 'series_id', 'uploader_id', 'id',
+    )
+    _nfo_add_uniqueid(root, source, provider_name, show_id)
+    return _nfo_bytes(root)
+
+
+def build_season_nfo(metadata, season_number=None, *, provider=None):
+    """Build the folder-level NFO used for a channel season."""
+    source = metadata if isinstance(metadata, dict) else {}
+    number = season_number
+    if number is None:
+        number = _nfo_season_number(source)
+    if number is None:
+        number = 1
+    try:
+        number = max(0, min(100000, int(number)))
+    except (TypeError, ValueError, OverflowError):
+        number = 1
+    root = ET.Element('season')
+    showtitle = _nfo_first(
+        source, 'series', 'showtitle', 'playlist_title', 'channel', 'uploader',
+    ) or 'Untitled show'
+    _nfo_add(root, 'title', f'Season {number}')
+    _nfo_add(root, 'showtitle', showtitle)
+    _nfo_add(root, 'seasonnumber', number)
+    provider_name = _nfo_provider(source, provider)
+    show_id = _nfo_first(
+        source, 'playlist_id', 'channel_id', 'series_id', 'uploader_id', 'id',
+    )
+    if show_id:
+        _nfo_add_uniqueid(
+            root, source, provider_name, f'{show_id}-season-{number}'
+        )
+    _nfo_add(root, 'thumb', _nfo_url(source.get('thumbnail')))
+    return _nfo_bytes(root)
+
+
+def _write_nfo_bytes(payload, target):
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f'.{target.name}.{uuid.uuid4().hex}.tmp')
+    try:
+        with temporary.open('wb') as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except Exception:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            # reason: cleanup must not replace the original NFO write failure
+            pass
+        raise
+    return target
+
+
+def write_media_server_nfo(metadata, media_path, *, provider=None):
+    """Atomically write the item NFO beside one existing media file."""
+    media = Path(media_path)
+    if media.suffix.casefold() == '.nfo' or media.name.endswith(NFO_INFO_JSON_SUFFIX):
+        raise ValueError('NFO sidecars require a media path, not metadata input')
+    return _write_nfo_bytes(
+        build_media_server_nfo(metadata, provider=provider),
+        media.with_suffix('.nfo'),
+    )
+
+
+def _nfo_resolved_inside(candidate, root):
+    try:
+        Path(candidate).resolve(strict=False).relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _nfo_media_for_info(info_path, root, requested_media=None):
+    base = Path(str(info_path)[:-len(NFO_INFO_JSON_SUFFIX)])
+    candidates = [base]
+    requested = Path(requested_media) if requested_media else None
+    if requested is not None:
+        candidates.extend((requested, requested.with_suffix('')))
+    for candidate in candidates:
+        if (
+            candidate.is_file()
+            and candidate.suffix.casefold() in NFO_MEDIA_EXTENSIONS
+            and _nfo_resolved_inside(candidate, root)
+        ):
+            return candidate
+    stem = info_path.name[:-len(NFO_INFO_JSON_SUFFIX)]
+    try:
+        siblings = sorted(info_path.parent.iterdir(), key=lambda item: item.name.casefold())
+    except OSError:
+        siblings = []
+    for candidate in siblings:
+        if not candidate.is_file() or candidate.suffix.casefold() not in NFO_MEDIA_EXTENSIONS:
+            continue
+        if candidate.stem == stem or candidate.name.startswith(f'{stem}.'):
+            if _nfo_resolved_inside(candidate, root):
+                return candidate
+    return None
+
+
+def _nfo_load_metadata(info_path):
+    try:
+        if info_path.stat().st_size > NFO_MAX_INFO_JSON_BYTES:
+            return None
+        with info_path.open('r', encoding='utf-8') as handle:
+            data = json.load(handle)
+    except (OSError, UnicodeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _nfo_show_directory(media_directory):
+    parent = Path(media_directory)
+    if re.fullmatch(r'season[ ._-]*\d+', parent.name, re.IGNORECASE):
+        return parent.parent
+    return parent
+
+
+def write_media_server_sidecars(output_root, media_path=None):
+    """Convert yt-dlp info JSON files into item, show, and season NFO files."""
+    root = Path(output_root).resolve(strict=False)
+    if not root.is_dir():
+        return []
+    try:
+        info_paths = sorted(root.rglob(f'*{NFO_INFO_JSON_SUFFIX}'), key=lambda item: str(item).casefold())
+    except (OSError, RuntimeError):
+        return []
+    records = []
+    for info_path in info_paths[:NFO_MAX_INFO_FILES]:
+        if not _nfo_resolved_inside(info_path, root):
+            continue
+        metadata = _nfo_load_metadata(info_path)
+        if metadata is None:
+            continue
+        media = _nfo_media_for_info(info_path, root, media_path)
+        if media is None:
+            continue
+        records.append((media, metadata))
+
+    written = []
+    seen_media = set()
+    for media, metadata in records:
+        resolved_media = str(media.resolve(strict=False)).casefold()
+        if resolved_media in seen_media:
+            continue
+        seen_media.add(resolved_media)
+        target = write_media_server_nfo(metadata, media)
+        if _nfo_resolved_inside(target, root):
+            written.append(target)
+
+    grouped = {}
+    for media, metadata in records:
+        if not _nfo_show_context(metadata):
+            continue
+        show_directory = _nfo_show_directory(media.parent)
+        if not _nfo_resolved_inside(show_directory, root):
+            continue
+        grouped.setdefault(show_directory, []).append((media, metadata))
+    for show_directory, group in sorted(grouped.items(), key=lambda item: str(item[0]).casefold()):
+        representative = group[0][1]
+        tvshow_path = show_directory / 'tvshow.nfo'
+        written.append(_write_nfo_bytes(build_tvshow_nfo(representative), tvshow_path))
+        seasons = {}
+        for media, metadata in group:
+            season_number = _nfo_season_number(metadata)
+            if season_number is None:
+                continue
+            season_directory = media.parent
+            seasons.setdefault((season_directory, season_number), metadata)
+        for (season_directory, season_number), metadata in sorted(
+            seasons.items(), key=lambda item: (str(item[0][0]).casefold(), item[0][1])
+        ):
+            if not _nfo_resolved_inside(season_directory, root):
+                continue
+            written.append(_write_nfo_bytes(
+                build_season_nfo(metadata, season_number),
+                season_directory / 'season.nfo',
+            ))
+    unique = []
+    seen_targets = set()
+    for target in written:
+        key = str(Path(target).resolve(strict=False)).casefold()
+        if key not in seen_targets:
+            seen_targets.add(key)
+            unique.append(Path(target))
+    return unique
 
 
 def _stored_schema_version(value):
@@ -2853,6 +3295,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'spawn_media_process',
     'spawn_ytdlp',
     'terminate_process_tree',
+    'write_media_server_sidecars',
     'write_persistent_log',
 })
 
@@ -4597,7 +5040,7 @@ class DownloadManagerCore:
                 args.append('--embed-thumbnail')
             if effective_config.get("EmbedChapters"):
                 args.append('--embed-chapters')
-        if effective_config.get("WriteInfoJson"):
+        if effective_config.get("WriteInfoJson") or effective_config.get("WriteNfo"):
             args.append('--write-info-json')
         if effective_config.get("WriteDescription"):
             args.append('--write-description')
@@ -5103,6 +5546,22 @@ class DownloadManagerCore:
                     dl.status = "complete"
                     dl.progress = 100
             if dl.status == 'complete':
+                if effective_config.get('WriteNfo'):
+                    try:
+                        written_nfo = self._dependencies['write_media_server_sidecars'](
+                            dl.output_dir, media_path=dl.filename
+                        )
+                        if not written_nfo:
+                            self._dependencies['write_persistent_log'](
+                                f'Download {dl.id}: NFO sidecar requested but no '
+                                'yt-dlp metadata could be matched to media.'
+                            )
+                    except Exception as error:
+                        # reason: NFO is optional post-processing; preserve a completed media file
+                        self._dependencies['write_persistent_log'](
+                            f'Download {dl.id}: NFO sidecar generation failed: '
+                            f'{_redact_download_secrets(error, dl)}'
+                        )
                 self._run_local_subtitles(dl, effective_config)
 
         except FileNotFoundError:
