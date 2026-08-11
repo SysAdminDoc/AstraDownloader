@@ -15905,6 +15905,44 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(groups["Language"].isHidden())
         self.assertTrue(groups["Tray behavior"].isHidden())
 
+    def test_every_registered_settings_control_marks_the_form_dirty(self):
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        for attribute, _key, kind in window._SETTINGS_FORM_FIELDS:
+            with self.subTest(attribute=attribute):
+                widget = getattr(window, attribute)
+                window._show_settings_status("")
+                if kind == "text":
+                    if hasattr(widget, "toPlainText"):
+                        widget.setPlainText(widget.toPlainText() + " ")
+                    else:
+                        widget.setText(widget.text() + " ")
+                elif kind == "check":
+                    widget.setChecked(not widget.isChecked())
+                elif kind == "number":
+                    value = widget.value()
+                    widget.setValue(
+                        value + 1 if value < widget.maximum() else value - 1
+                    )
+                elif kind == "combo":
+                    self.assertGreater(widget.count(), 1)
+                    widget.setCurrentIndex((widget.currentIndex() + 1) % widget.count())
+                QApplication.processEvents()
+                self.assertEqual(
+                    window.settings_status.text(),
+                    "Unsaved changes",
+                )
+
+        for name, widget in window.cfg_sb_categories.items():
+            with self.subTest(attribute=f"cfg_sb_categories[{name}]"):
+                window._show_settings_status("")
+                widget.setChecked(not widget.isChecked())
+                QApplication.processEvents()
+                self.assertEqual(window.settings_status.text(), "Unsaved changes")
+
     def test_restore_defaults_reports_changes_and_refreshes_the_form(self):
         class MutableConfig(FakeConfig):
             def update(self, mapping):

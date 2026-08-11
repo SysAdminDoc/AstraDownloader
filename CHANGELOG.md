@@ -36,6 +36,9 @@ repository's git log.
   credentials, site profiles, network identity and extra output roots are
   excluded on export and ignored on import; the Settings status now lists the
   names of fields it changed.
+- **Every editable setting now reports unsaved changes.** Dirty-state wiring is
+  derived from the settings form registry, including all SponsorBlock category
+  checkboxes, so newly registered controls cannot silently discard edits.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
