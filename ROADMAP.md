@@ -30,39 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P1 — Give the companion updater a backoff, a rate limit, and a startup sweep
-  Why: Each call re-downloads ~47 MB before it can discover it was unnecessary,
-  nothing bounds the repeat rate, the scratch files are never cleaned, and a
-  failed schedule leaves a status marker stuck for the session.
-  Evidence: `POST /update` (`routes.py:1175-1209`) has no `RateLimiter` where six
-  sibling routes do, and `d36bb69`'s backoff covers only the yt-dlp path
-  (`should_check_ytdlp_update`, `astra_downloader.py:1793-1805`); the download at
-  `:2620` precedes the digest-skew guard at `:2689`. The same anonymous
-  `api.github.com` endpoint the updater polls has a 60/hour ceiling — the bug
-  ytdlp-interface #360 reports. Scratch files up to
-  `HELPER_DOWNLOAD_MAX_BYTES` = 500 MB land in `INSTALL_DIR` (`:929`, `:2618`,
-  `:2298`, `:2333`) and only `remove_portable_state` ever removes any, and its
-  `.AstraDownloader.` prefix test misses the double-dot `..AstraDownloader.update.
-  ….download` temp. `activation-pending` is written at `:2732` **before**
-  `schedule_companion_update_restart` at `:2737`, and the `except` at `:2759`
-  never rewrites it, so `/health` reports it forever and
-  `read_last_installed_update_sha256` returns `None`, disabling the skew guard;
-  the staleness test at `:1707` diffs naive local wall-clock, so a backwards
-  clock step keeps it fresh permanently.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/routes.py`
-  While in here: `os.replace` is not a durable rename on Windows — CPython calls
-  `MoveFileExW(..., MOVEFILE_REPLACE_EXISTING)` with no `MOVEFILE_WRITE_THROUGH`,
-  so the rename is atomic for visibility but unflushed. That is the right default
-  for the 14 rebuildable-state sites, but the self-update stage
-  (`astra_downloader.py:1967`) and the durable-state write (`:2480`) are the two
-  that carry state worth not losing.
-  Acceptance: `/update` is rate-limited and backs off after failure; the version
-  check precedes the download; a failed schedule records a terminal state; a
-  startup sweep removes orphaned update scratch files including the double-dot
-  form; staleness uses a monotonic or UTC comparison; the two durability-
-  sensitive replaces flush.
-  Complexity: M
-
 - [ ] P1 — Make subscription scans visible to the "is yt-dlp busy" guard
   Why: The auto-updater replaces a running executable and blames itself, and a
   self-update can orphan a scan whose cookie jar then survives on disk.

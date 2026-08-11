@@ -44,6 +44,10 @@ repository's git log.
   preflight names a short output or staging volume; failed and cancelled jobs
   remove private scratch data, and startup removes orphaned staging IDs while
   preserving recovered queue work.
+- **Companion updates are throttled and recoverable.** The `/update` endpoint
+  now rate-limits and backs off after failures, startup removes orphaned update
+  artifacts, failed scheduling records a terminal state, and update markers
+  use UTC plus durable replacement semantics.
 
 ## [2.6.0] - 2026-08-09
 

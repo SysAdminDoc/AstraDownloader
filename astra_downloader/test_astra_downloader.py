@@ -10364,7 +10364,8 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
 
     def test_version_check_failure_returns_502(self):
         client = self._client()
-        with mock.patch.object(ad, 'fetch_latest_companion_version', side_effect=RuntimeError("offline")):
+        with mock.patch.object(ad, 'fetch_latest_companion_version', side_effect=RuntimeError("offline")), \
+             mock.patch.object(ad, 'download_file_atomic') as download:
             resp = client.post("/update", headers={"X-Auth-Token": self.TOKEN})
 
         self.assertEqual(resp.status_code, 502)
@@ -10372,6 +10373,43 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         self.assertFalse(body.get("ok"))
         self.assertEqual(body.get("error_code"), "version-check-failed")
         self.assertIn("Check Astra Downloader logs", body.get("error"))
+        download.assert_not_called()
+
+    def test_update_endpoint_rate_limits_repeated_release_checks(self):
+        client = self._client()
+        result = {
+            'ok': True, 'update_available': False, 'status': 'current',
+            'current_version': ad.APP_VERSION, 'latest_version': ad.APP_VERSION,
+        }
+        with mock.patch.object(ad, '_run_companion_self_update', return_value=result) as run_update:
+            responses = [
+                client.post('/update', headers={'X-Auth-Token': self.TOKEN})
+                for _ in range(ad.RATE_LIMIT_UPDATE_MAX + 1)
+            ]
+
+        self.assertEqual([response.status_code for response in responses[:-1]], [200] * ad.RATE_LIMIT_UPDATE_MAX)
+        self.assertEqual(responses[-1].status_code, 429)
+        self.assertEqual(responses[-1].get_json()['error_code'], 'update-rate-limited')
+        self.assertEqual(run_update.call_count, ad.RATE_LIMIT_UPDATE_MAX)
+
+    def test_update_endpoint_backs_off_after_a_failed_attempt(self):
+        client = self._client()
+        failure = {
+            'ok': False, 'error': 'offline', 'error_code': 'install-failed',
+            'current_version': ad.APP_VERSION, 'latest_version': '',
+        }
+        with mock.patch.object(ad, '_run_companion_self_update', return_value=failure) as run_update:
+            first = client.post('/update', headers={'X-Auth-Token': self.TOKEN})
+            second = client.post('/update', headers={'X-Auth-Token': self.TOKEN})
+
+        self.assertEqual(first.status_code, 500)
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(second.get_json()['error_code'], 'update-backoff')
+        self.assertGreaterEqual(
+            int(second.headers['Retry-After']),
+            ad.COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS,
+        )
+        run_update.assert_called_once()
 
     def test_concurrent_companion_update_is_rejected_before_network_work(self):
         client = self._client()
@@ -10413,6 +10451,32 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         self.assertEqual(body.get("latest_version"), "9.9.9")
         schedule.assert_called_once()
         exit_later.assert_called_once()
+
+    def test_failed_schedule_records_terminal_activation_state(self):
+        client = self._client()
+        payload = self._fake_payload()
+        expected_hash = hashlib.sha256(payload).hexdigest()
+
+        def fake_download(_url, path, **_kwargs):
+            Path(path).write_bytes(payload)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(ad, 'INSTALL_DIR', Path(tmp)), \
+             mock.patch.object(ad, 'fetch_latest_companion_version', return_value='9.9.9'), \
+             mock.patch.object(ad, 'download_file_atomic', side_effect=fake_download), \
+             mock.patch.object(ad, 'fetch_expected_sha256', return_value=expected_hash), \
+             mock.patch.object(ad, 'schedule_companion_update_restart', side_effect=RuntimeError('helper refused')), \
+             mock.patch.object(ad, 'schedule_companion_process_exit') as exit_later:
+            response = client.post('/update', headers={'X-Auth-Token': self.TOKEN})
+            state = ad._read_update_state(ad._companion_update_state_path())
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.get_json()['error_code'], 'schedule-failed')
+        self.assertEqual(state['status'], 'activation-failed')
+        self.assertEqual(state['error_code'], 'schedule-failed')
+        self.assertEqual(state['active_version'], ad.APP_VERSION)
+        self.assertTrue(state['updated_at'].endswith('Z'))
+        exit_later.assert_not_called()
 
     def test_download_started_during_update_window_aborts_restart_with_409(self):
         # TOCTOU regression: the route checks active_count() once at entry,
@@ -10642,6 +10706,8 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         self.assertIn('Wait-Process -Id $probe.Id -Timeout 30', helper_source)
         self.assertIn('$probeFinished = $probe.HasExited', helper_source)
         self.assertIn('Stop-Process -Id $probe.Id -Force', helper_source)
+        self.assertIn('$MOVEFILE_WRITE_THROUGH = 0x8', helper_source)
+        self.assertIn('$stream.Flush($true)', helper_source)
         self.assertIn("if ($Status -eq 'active')", helper_source)
         self.assertNotIn('-Wait -PassThru', helper_source)
         self.assertIn('-BackupPath', helper_args)
@@ -10692,6 +10758,28 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             state = ad._reconcile_stale_companion_activation()
 
         self.assertEqual(state['status'], 'activation-pending')
+        self.assertTrue(state['updated_at'].endswith('Z'))
+
+    def test_startup_sweep_removes_single_and_double_dot_update_scratch(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ad, 'INSTALL_DIR', Path(tmp)):
+            root = Path(tmp)
+            stale = {
+                '.AstraDownloader.update.old.exe',
+                '..AstraDownloader.update.old.exe.123.download',
+                '.AstraDownloader.apply-update.old.ps1',
+                '.yt-dlp.update.old.exe',
+                '..yt-dlp.update.old.exe.456.download',
+            }
+            retained = {
+                'AstraDownloader.exe',
+                '.AstraDownloader.last-known-good.exe',
+                'notes.txt',
+            }
+            for name in stale | retained:
+                (root / name).write_bytes(b'placeholder')
+
+            self.assertEqual(ad.cleanup_update_scratch_files(), len(stale))
+            self.assertEqual({path.name for path in root.iterdir()}, retained)
 
     # ── Audit fix: version-skew reinstall-loop guard ──
     # main's APP_VERSION can be bumped before the release asset exists; in
