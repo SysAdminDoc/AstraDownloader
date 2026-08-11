@@ -2135,17 +2135,30 @@ class MainWindowCore(QMainWindow):
         ))
         quick_layout.addLayout(password_row)
 
-        options_row = QHBoxLayout()
-        options_row.setSpacing(8)
-        options_row.addWidget(make_label("Profile", "fieldHint"))
+        # These controls used to share one HBox. At the documented minimum
+        # size, a large system font made Qt squeeze the combo boxes until
+        # their text and drop-down arrows painted over their neighbours.
+        # Keep the controls in deliberate rows so every current value remains
+        # a readable label instead of relying on accidental elision.
+        self.quick_download_options_container = QWidget()
+        options_layout = QVBoxLayout(self.quick_download_options_container)
+        options_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.setSpacing(6)
+        self.quick_download_options_layout = options_layout
+
+        profile_row_widget = QWidget(self.quick_download_options_container)
+        profile_row = QHBoxLayout(profile_row_widget)
+        profile_row.setContentsMargins(0, 0, 0, 0)
+        profile_row.setSpacing(8)
+        profile_row.addWidget(make_label("Profile", "fieldHint"))
         self.quick_download_profile = QComboBox()
         self.quick_download_profile.setAccessibleName(tr("Site profile"))
-        self.quick_download_profile.setMinimumWidth(170)
+        self.quick_download_profile.setMinimumWidth(210)
         self.quick_download_profile.setToolTip(tr("Automatic site profile"))
         self.quick_download_profile.currentIndexChanged.connect(
             self._quick_download_profile_changed
         )
-        options_row.addWidget(self.quick_download_profile)
+        profile_row.addWidget(self.quick_download_profile)
         self.quick_download_type = QComboBox()
         self.quick_download_type.setAccessibleName(tr("Download type"))
         self.quick_download_type.addItem(tr("Video"), "video")
@@ -2154,14 +2167,23 @@ class MainWindowCore(QMainWindow):
         self.quick_download_type.currentIndexChanged.connect(
             self._sync_quick_download_options
         )
-        options_row.addWidget(self.quick_download_type)
+        profile_row.addWidget(self.quick_download_type)
+        profile_row.addStretch(1)
+        options_layout.addWidget(profile_row_widget)
+
+        media_row_widget = QWidget(self.quick_download_options_container)
+        media_row = QHBoxLayout(media_row_widget)
+        media_row.setContentsMargins(0, 0, 0, 0)
+        media_row.setSpacing(8)
         self.quick_download_format = QComboBox()
         self.quick_download_format.setAccessibleName(tr("Download format"))
-        options_row.addWidget(self.quick_download_format)
+        self.quick_download_format.setMinimumWidth(100)
+        media_row.addWidget(self.quick_download_format)
         self.quick_download_quality = QComboBox()
         self.quick_download_quality.setAccessibleName(tr("Download quality"))
+        self.quick_download_quality.setMinimumWidth(100)
         self._set_quality_choices(self._value('QUALITY_LADDER'))
-        options_row.addWidget(self.quick_download_quality)
+        media_row.addWidget(self.quick_download_quality)
         # A pasted link is probed for the formats it really has, so the picker
         # stops offering 2160p on a 720p video. Debounced, because a paste
         # arrives one keystroke at a time when typed.
@@ -2177,21 +2199,29 @@ class MainWindowCore(QMainWindow):
             tr("Send this download somewhere other than the default folder.")
         )
         self.btn_quick_download_dest.clicked.connect(self._pick_quick_download_dir)
-        options_row.addWidget(self.btn_quick_download_dest)
-        options_row.addStretch()
-        options_row.addWidget(make_label("Clip from", "fieldHint"))
+        media_row.addWidget(self.btn_quick_download_dest)
+        media_row.addStretch(1)
+        options_layout.addWidget(media_row_widget)
+
+        clip_row_widget = QWidget(self.quick_download_options_container)
+        clip_row = QHBoxLayout(clip_row_widget)
+        clip_row.setContentsMargins(0, 0, 0, 0)
+        clip_row.setSpacing(8)
+        clip_row.addWidget(make_label("Clip from", "fieldHint"))
         self.quick_download_start = QLineEdit()
         self.quick_download_start.setAccessibleName(tr("Clip start timestamp"))
         self.quick_download_start.setPlaceholderText("0:00")
         self.quick_download_start.setMaximumWidth(84)
-        options_row.addWidget(self.quick_download_start)
-        options_row.addWidget(make_label("to", "fieldHint"))
+        clip_row.addWidget(self.quick_download_start)
+        clip_row.addWidget(make_label("to", "fieldHint"))
         self.quick_download_end = QLineEdit()
         self.quick_download_end.setAccessibleName(tr("Clip end timestamp"))
         self.quick_download_end.setPlaceholderText("1:30")
         self.quick_download_end.setMaximumWidth(84)
-        options_row.addWidget(self.quick_download_end)
-        quick_layout.addLayout(options_row)
+        clip_row.addWidget(self.quick_download_end)
+        clip_row.addStretch(1)
+        options_layout.addWidget(clip_row_widget)
+        quick_layout.addWidget(self.quick_download_options_container)
         self.quick_download_clip_hint = make_label(
             tr("Clip ranges apply to a single link."), "fieldHint",
             word_wrap=True,
@@ -2332,7 +2362,16 @@ class MainWindowCore(QMainWindow):
         scroll.setWidget(content)
         self.downloads_scroll = scroll
         layout.addWidget(scroll, 1)
-        self.tabs.addTab(page, "Download")
+        # The download page has a fixed collection of setup, readiness and
+        # queue surfaces above its own queue scroller. Let the page itself
+        # scroll at the documented minimum window size so a wrapped options
+        # row keeps its full height instead of being compressed into the
+        # neighbouring controls.
+        page_scroll = QScrollArea()
+        page_scroll.setWidgetResizable(True)
+        page_scroll.setWidget(page)
+        self.download_page_scroll = page_scroll
+        self.tabs.addTab(page_scroll, "Download")
 
     @staticmethod
     def _split_sublangs(text):
