@@ -4572,6 +4572,9 @@ class DownloadManagerCore:
                                       if a != '--cookies' and (i == 0 or args[i - 1] != '--cookies')]
                         dl.status = "downloading"
                         dl.error = ""
+                        dl.error_code = ""
+                        dl.error_advice = ""
+                        dl.error_action = ""
                         dl.progress = 0
                         self.progress_updated.emit()
                         if stop_watchdog is not None:
@@ -4664,8 +4667,14 @@ class DownloadManagerCore:
                                 dl, 'network-unreachable', error=dl.error
                             )
                         elif proc.returncode == 0:
-                            dl.status = "complete"
-                            dl.progress = 100
+                            skip_reason = self._empty_result_reason(dl)
+                            if skip_reason:
+                                dl.status = "skipped"
+                                dl.progress = 0
+                                dl.error = skip_reason
+                            else:
+                                dl.status = "complete"
+                                dl.progress = 100
                         else:
                             dl.status = "failed"
                             if last_error:

@@ -85,6 +85,9 @@ repository's git log.
   handler errors now carry the same CORS, cache, and security headers as normal
   responses, are logged for recovery, and subscription persistence failures
   return a retryable 503 with a distinct code.
+- **Cookie-less live retries reset their failure state.** A successful retry no
+  longer leaves stale rate-limit advice or host backoff behind, and a retry
+  that exits cleanly without writing media is reported as `skipped`.
 
 ## [2.6.0] - 2026-08-09
 
