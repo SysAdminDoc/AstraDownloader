@@ -185,7 +185,9 @@ fallback when the one-file executable is flagged: it avoids runtime
 self-extraction at the cost of a larger download and an extracted folder.
 Both artifacts are tied to the same version and one-file analysis build ID;
 the portable zip carries the shared build metadata for staging verification.
-`npm run release:stage` validates and stages both artifacts.
+`npm run release:provenance` writes the CycloneDX SBOM and the PEP 751
+`pylock.toml`; `npm run release:stage` validates and stages both artifacts
+and refuses a release whose SBOM does not describe the staged binary.
 Release dependencies are pinned in
 [`astra_downloader/constraints-release.txt`](astra_downloader/constraints-release.txt).
 

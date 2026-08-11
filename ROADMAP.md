@@ -12,32 +12,6 @@ dropped rather than filed. Line numbers are from `2811827`.
 
 ### P2
 
-- [ ] P2 — Publish a lock file and an SBOM beside the release
-  Why: The license gate's unresolved entries and the release's missing
-  provenance are the same problem, and the standards that fix both landed in
-  2026.
-  Evidence: PEP 751 is **Final**; `pylock.toml` is installable by pip 26.1+
-  (`pip install -r pylock.toml`) and consumable in-process via `packaging`
-  26.3's `Pylock.select()`. pip 26.0/26.1 added `--uploaded-prior-to` (relative
-  durations like `P3D` since 26.1), which refuses packages published inside the
-  window when typosquats and compromised releases are normally caught. CISA's
-  **2026 Minimum Elements for an SBOM** (2026-07-29) supersedes NTIA 2021 and
-  adds component hash, license, tool name and generation context to the required
-  fields; CycloneDX and SPDX both satisfy it. The repo already builds an
-  inventory (`scripts/companion-license-inventory.js`) and already runs
-  pip-audit (`scripts/audit-python-deps.js`) — the missing pieces are a
-  published lock artifact and a standard serialization. Depends on the release
-  item for somewhere to publish them.
-  Touches: `scripts/audit-python-deps.js`,
-  `scripts/companion-license-inventory.js`,
-  `scripts/stage-companion-release.js`,
-  `astra_downloader/constraints-release.txt`
-  Acceptance: a release publishes `pylock.toml` plus a CycloneDX JSON SBOM
-  carrying every field CISA's 2026 minimum elements require; the release resolve
-  uses a cooldown; the staging gate fails when the SBOM does not describe the
-  staged artifact.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Close the second batch of smaller gaps

@@ -18,7 +18,8 @@ const ROOT = path.join(__dirname, '..');
 
 const GATES = [
     ['unit tests', process.execPath, ['--test', 'tests/companion-license-inventory.test.js',
-        'tests/python-catch-reason-gate.test.js', 'tests/python-dependency-policy.test.js']],
+        'tests/python-catch-reason-gate.test.js', 'tests/python-dependency-policy.test.js',
+        'tests/release-provenance.test.js']],
     ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
     ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
     ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],

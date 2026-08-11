@@ -25,6 +25,7 @@
     "smoke:gui": "py -3.12 scripts/render-companion-gui.py",
     "smoke:yt-dlp": "py -3.12 scripts/yt-dlp-smoke.py",
     "translations": "py -3.12 scripts/build-companion-translations.py",
+    "release:provenance": "node scripts/write-release-provenance.js",
     "release:stage": "node scripts/stage-companion-release.js"
   }
 }
