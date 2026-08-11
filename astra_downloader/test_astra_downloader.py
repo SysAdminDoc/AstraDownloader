@@ -17390,6 +17390,18 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             "auto",
         )
 
+    def test_transcription_wav_estimate_uses_clip_duration_and_safe_fallback(self):
+        clipped = types.SimpleNamespace(section={"start": 2.5, "end": 5.0})
+        self.assertEqual(
+            ad.estimate_transcription_wav_bytes(clipped),
+            2.5 * ad.TRANSCRIPTION_WAV_BYTES_PER_SECOND,
+        )
+        self.assertEqual(
+            ad.estimate_transcription_wav_bytes(types.SimpleNamespace()),
+            ad.TRANSCRIPTION_FALLBACK_DURATION_SECONDS
+            * ad.TRANSCRIPTION_WAV_BYTES_PER_SECOND,
+        )
+
     def test_whisper_progress_is_parsed_and_clamped(self):
         self.assertEqual(ad.parse_whisper_progress("progress = 37%"), 37.0)
         self.assertEqual(ad.parse_whisper_progress("progress: 120%"), 100.0)
@@ -17475,6 +17487,80 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             self.assertIn("hello", output.read_text(encoding="utf-8"))
             self.assertEqual(download.status, "complete")
             self.assertEqual(download.progress, 100.0)
+            self.assertEqual(list(root.glob(".clip*")), [])
+
+    def test_transcription_preflights_wav_space_and_stages_beside_install(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
+            config, download = self._download(media)
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            checks = []
+            process_args = []
+
+            class InspectProcess(self._TranscriptProcess):
+                def __init__(inner_self, args, **kwargs):
+                    process_args.append(list(args))
+                    super().__init__(args, **kwargs)
+
+            def check(path, required, **kwargs):
+                checks.append((Path(path), required, Path(kwargs["staging_path"])))
+                return None
+
+            with mock.patch.object(ad, "INSTALL_DIR", root / "install"), \
+                    mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
+                    mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
+                    mock.patch.object(ad, "check_download_disk_space", side_effect=check), \
+                    mock.patch.object(ad, "spawn_media_process", InspectProcess):
+                self.assertTrue(manager._run_local_subtitles(download, config))
+                staging = manager._download_intermediate_dir(download)
+
+            self.assertEqual(checks, [(root, checks[0][1], staging)])
+            self.assertEqual(
+                checks[0][1],
+                ad.TRANSCRIPTION_FALLBACK_DURATION_SECONDS
+                * ad.TRANSCRIPTION_WAV_BYTES_PER_SECOND,
+            )
+            self.assertTrue(process_args)
+            self.assertTrue(all(str(staging) in " ".join(args) for args in process_args))
+            self.assertEqual(list(root.glob(".clip*")), [])
+
+    def test_transcription_disk_failure_is_reported_before_spawning_helpers(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
+            config, download = self._download(media)
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            failure = ad.download_error_payload(
+                "insufficient-disk-space", error="fixture has no staging space"
+            )
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=failure), \
+                    mock.patch.object(ad, "spawn_media_process") as spawn:
+                self.assertFalse(manager._run_local_subtitles(download, config))
+
+            self.assertFalse(spawn.called)
+            self.assertEqual(download.status, "complete")
+            self.assertEqual(download.error_code, "insufficient-disk-space")
+            self.assertIn("fixture has no staging space", download.error)
 
     def test_whisper_watchdog_bounds_the_real_child_and_reports_progress(self):
         import importlib
@@ -17610,6 +17696,7 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
                 self.assertFalse(manager._run_local_subtitles(download, config))
             self.assertEqual(download.status, "cancelled")
             self.assertFalse((root / "clip.srt").exists())
+            self.assertEqual(list(root.glob(".clip*")), [])
 
 
 class WhisperModelProvisioningTests(unittest.TestCase):

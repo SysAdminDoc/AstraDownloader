@@ -86,6 +86,9 @@ repository's git log.
   an independent single-job gate with a shared timeout, an exact-child
   watchdog, below-normal process priority, and real `-pp` progress; a timeout
   leaves the downloaded media complete and subtitle retryable.
+- **Local transcription scratch now stays out of download folders.** WAV and
+  intermediate SRT files use the managed per-download staging directory, with
+  a conservative disk-space preflight before either helper starts.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
