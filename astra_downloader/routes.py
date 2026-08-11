@@ -19,6 +19,7 @@ __all__ = (
     "create_api", "_ServerAdapter", "_build_wsgi_server", "RateLimiter",
     "RATE_LIMIT_DOWNLOAD_MAX", "RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS",
     "RATE_LIMIT_PICKFOLDER_MAX", "RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS",
+    "RATE_LIMIT_HEALTH_MAX", "RATE_LIMIT_HEALTH_WINDOW_SECONDS",
     "CORS_MAX_AGE_SECONDS", "MAX_REQUEST_BYTES", "MAX_RESPONSE_BYTES",
 )
 
@@ -144,6 +145,8 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS',
     'RATE_LIMIT_PICKFOLDER_MAX',
     'RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS',
+    'RATE_LIMIT_HEALTH_MAX',
+    'RATE_LIMIT_HEALTH_WINDOW_SECONDS',
     'RATE_LIMIT_UPDATE_MAX',
     'RATE_LIMIT_UPDATE_WINDOW_SECONDS',
     'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS',
@@ -198,6 +201,8 @@ def create_api(config, dl_manager, history, *, dependencies):
     RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS = dependencies['RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS']
     RATE_LIMIT_PICKFOLDER_MAX = dependencies['RATE_LIMIT_PICKFOLDER_MAX']
     RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS = dependencies['RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS']
+    RATE_LIMIT_HEALTH_MAX = dependencies['RATE_LIMIT_HEALTH_MAX']
+    RATE_LIMIT_HEALTH_WINDOW_SECONDS = dependencies['RATE_LIMIT_HEALTH_WINDOW_SECONDS']
     RATE_LIMIT_UPDATE_MAX = dependencies['RATE_LIMIT_UPDATE_MAX']
     RATE_LIMIT_UPDATE_WINDOW_SECONDS = dependencies['RATE_LIMIT_UPDATE_WINDOW_SECONDS']
     COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS = dependencies['COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS']
@@ -261,6 +266,10 @@ def create_api(config, dl_manager, history, *, dependencies):
     pickfolder_rate_limiter = RateLimiter(
         max_events=RATE_LIMIT_PICKFOLDER_MAX,
         window_seconds=RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS,
+    )
+    health_rate_limiter = RateLimiter(
+        max_events=RATE_LIMIT_HEALTH_MAX,
+        window_seconds=RATE_LIMIT_HEALTH_WINDOW_SECONDS,
     )
     companion_update_rate_limiter = RateLimiter(
         max_events=RATE_LIMIT_UPDATE_MAX,
@@ -390,6 +399,13 @@ def create_api(config, dl_manager, history, *, dependencies):
 
     @api.route('/health')
     def health():
+        allowed, retry_after = health_rate_limiter.allow('health')
+        if not allowed:
+            return cors_response(
+                {"error": "Too many health requests in a short period. Please wait a moment."},
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
         runtime_status = _public_runtime_status(probe_javascript_runtime(
             configured_runtime=config.get('JavaScriptRuntime', 'auto')
         ))
@@ -434,6 +450,8 @@ def create_api(config, dl_manager, history, *, dependencies):
             "rateLimit": {
                 "downloadMaxPerWindow": RATE_LIMIT_DOWNLOAD_MAX,
                 "downloadWindowSeconds": RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS,
+                "healthMaxPerWindow": RATE_LIMIT_HEALTH_MAX,
+                "healthWindowSeconds": RATE_LIMIT_HEALTH_WINDOW_SECONDS,
             },
             # Recent log lines can contain absolute paths (usernames), exception
             # text, and download IDs. /health is otherwise unauthenticated (only

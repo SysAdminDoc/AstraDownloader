@@ -483,8 +483,10 @@ class ExecutableVersionProbe:
         self._clock = clock
         self._ttl_seconds = max(0, float(ttl_seconds))
         self._value = None
+        self._has_value = False
         self._checked_at = 0.0
-        self._lock = threading.Lock()
+        self._in_flight = False
+        self._condition = threading.Condition()
 
     @staticmethod
     def _resolve(value):
@@ -494,32 +496,54 @@ class ExecutableVersionProbe:
         path = Path(self._resolve(self._path))
         if not path.exists():
             return None
-        with self._lock:
+        with self._condition:
             now = self._clock()
             if (
                 not force
-                and self._value is not None
+                and self._has_value
                 and (now - self._checked_at) < self._ttl_seconds
             ):
                 return self._value
-        # The executable probe can take several seconds on a cold cache.
-        # Keep the cache lock out of the subprocess so another caller can
-        # take the fast path or refresh independently while this one waits.
-        value = self._parser(self._runner([str(path), *self._args]))
-        with self._lock:
-            self._value = value
-            self._checked_at = self._clock()
-            return self._value
+            if self._in_flight:
+                # A cold /health request must not turn one blocked executable
+                # into N subprocesses. Wait for the owner and use its result,
+                # including a cached None, even when this caller requested a
+                # forced refresh.
+                while self._in_flight:
+                    self._condition.wait()
+                if self._has_value:
+                    return self._value
+            self._in_flight = True
+        # The executable probe can take several seconds on a cold cache. The
+        # condition is released while it runs, so callers can wait on the
+        # in-flight marker without blocking reset/prime operations.
+        try:
+            try:
+                value = self._parser(self._runner([str(path), *self._args]))
+            except Exception:
+                # Health is advisory. A timeout, AV block, or parser failure
+                # is a negative result and must still receive the TTL.
+                value = None
+        finally:
+            with self._condition:
+                self._value = value
+                self._has_value = True
+                self._checked_at = self._clock()
+                self._in_flight = False
+                self._condition.notify_all()
+        return value
 
     def reset(self):
-        with self._lock:
+        with self._condition:
             self._value = None
+            self._has_value = False
             self._checked_at = 0.0
 
     def prime(self, value, checked_at=None):
         """Publish a version already verified by an update transaction."""
-        with self._lock:
+        with self._condition:
             self._value = value
+            self._has_value = True
             self._checked_at = self._clock() if checked_at is None else float(checked_at)
 
 

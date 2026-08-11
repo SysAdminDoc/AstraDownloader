@@ -535,6 +535,11 @@ RATE_LIMIT_DOWNLOAD_MAX = 30
 RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS = 60
 RATE_LIMIT_PICKFOLDER_MAX = 5
 RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS = 60
+# Health is read-only, but it still runs executable capability probes. Keep a
+# small polling budget so a local client cannot turn a cold cache into a probe
+# storm while normal extension polling remains comfortably below the ceiling.
+RATE_LIMIT_HEALTH_MAX = 30
+RATE_LIMIT_HEALTH_WINDOW_SECONDS = 60
 # Companion release checks hit both GitHub's API and a raw source endpoint.
 # Keep a small legitimate retry allowance while preventing a broken release
 # from turning one impatient click into a repeated multi-megabyte download.
@@ -4092,6 +4097,8 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS': RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS,
         'RATE_LIMIT_PICKFOLDER_MAX': RATE_LIMIT_PICKFOLDER_MAX,
         'RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS': RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS,
+        'RATE_LIMIT_HEALTH_MAX': RATE_LIMIT_HEALTH_MAX,
+        'RATE_LIMIT_HEALTH_WINDOW_SECONDS': RATE_LIMIT_HEALTH_WINDOW_SECONDS,
         'RATE_LIMIT_UPDATE_MAX': RATE_LIMIT_UPDATE_MAX,
         'RATE_LIMIT_UPDATE_WINDOW_SECONDS': RATE_LIMIT_UPDATE_WINDOW_SECONDS,
         'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS': COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS,
