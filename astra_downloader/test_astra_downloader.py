@@ -1009,6 +1009,120 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(set(entries), {keys[0], keys[2]})
             self.assertEqual(entries[keys[0]]["status"], "queued")
 
+    def test_loading_over_cap_subscriptions_preserves_and_reports_them(self):
+        logs = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "over-cap-subscriptions.json"
+            records = [
+                {
+                    "id": f"sub_over_{index}",
+                    "url": f"https://www.youtube.com/@over-cap-{index}",
+                    "enabled": False,
+                }
+                for index in range(3)
+            ]
+            path.write_text(json.dumps({
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION,
+                "subscriptions": records,
+                "archive": {},
+            }), encoding="utf-8")
+            store = ad.SubscriptionStore(
+                path=path,
+                reader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                logger=logs.append,
+                max_records=2,
+            )
+
+            self.assertEqual(len(store.list_subscriptions()), 3)
+            self.assertTrue(any("preserving" in message for message in logs))
+            self.assertIsNotNone(store.update_subscription(
+                "sub_over_0", title="Still here"
+            )[0])
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(len(persisted["subscriptions"]), 3)
+
+    def test_loading_over_cap_archive_preserves_and_reports_entries(self):
+        logs = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "over-cap-archive.json"
+            archive = {
+                f"id:archive-{index}": {
+                    "url": f"https://www.youtube.com/watch?v=archive-{index}",
+                    "status": "complete",
+                    "updatedAt": 1000 + index,
+                }
+                for index in range(3)
+            }
+            path.write_text(json.dumps({
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION,
+                "subscriptions": [],
+                "archive": archive,
+            }), encoding="utf-8")
+            store = ad.SubscriptionStore(
+                path=path,
+                reader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                logger=logs.append,
+                max_archive_entries=2,
+            )
+
+            self.assertEqual(len(store.archive_entries()), 3)
+            self.assertTrue(any("over-limit" in message for message in logs))
+            owner, error = store.add_subscription("https://www.youtube.com/@archive-owner")
+            self.assertIsNone(error)
+            candidate = {
+                "id": "archive-new",
+                "url": "https://www.youtube.com/watch?v=archive-new",
+                "title": "New archive entry",
+            }
+            self.assertEqual(
+                store.reserve_archive(
+                    ad.subscription_archive_key(candidate),
+                    candidate,
+                    owner["id"],
+                    now=2000,
+                ),
+                subscriptions_module().RESERVE_OK,
+            )
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+            self.assertLessEqual(len(persisted["archive"]), 2)
+            self.assertTrue(any("removed" in message for message in logs))
+
+    def test_archive_key_migration_keeps_the_highest_priority_collision(self):
+        logs = []
+        url = "https://www.youtube.com/watch?v=collision-video"
+        key = ad.subscription_archive_key({"url": url})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "archive-collision.json"
+            path.write_text(json.dumps({
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION,
+                "subscriptions": [],
+                "archive": {
+                    "url:legacy-collision": {
+                        "url": url,
+                        "status": "failed",
+                        "updatedAt": 9000,
+                    },
+                    key: {
+                        "url": url,
+                        "status": "complete",
+                        "updatedAt": 1000,
+                    },
+                },
+            }), encoding="utf-8")
+            store = ad.SubscriptionStore(
+                path=path,
+                reader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                logger=logs.append,
+            )
+
+            entries = store.archive_entries()
+            self.assertEqual(set(entries), {key})
+            self.assertEqual(entries[key]["status"], "complete")
+            self.assertTrue(any("duplicate" in message for message in logs))
+
     def test_failed_archive_trim_restores_only_the_changed_entries(self):
         subs = subscriptions_module()
         with tempfile.TemporaryDirectory() as tmp:
@@ -1408,7 +1522,7 @@ class SubscriptionTests(unittest.TestCase):
             store = self._store(path, clock=lambda: 1000.0)
             self.assertEqual(store.list_subscriptions()[0]["nextScanAt"], 1900.0)
 
-    def test_subscription_load_trimming_keeps_live_archive_claims(self):
+    def test_subscription_load_preserves_over_cap_archive_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "archive-bound.json"
             entries = {
@@ -1436,7 +1550,9 @@ class SubscriptionTests(unittest.TestCase):
                 writer=ad.atomic_write_json,
                 max_archive_entries=2,
             )
-            self.assertEqual(set(store.archive_entries()), {"queued", "complete"})
+            self.assertEqual(
+                set(store.archive_entries()), {"failed", "complete", "queued"}
+            )
 
     def test_subscription_routes_cover_crud_and_auth_boundary(self):
         token = "s" * 32
