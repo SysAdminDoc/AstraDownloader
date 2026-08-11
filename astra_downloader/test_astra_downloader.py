@@ -517,6 +517,61 @@ class PersistenceTests(unittest.TestCase):
                     )
                     self.assertEqual(errors, [])
 
+    def test_config_writes_a_schema_version_and_preserves_future_keys(self):
+        import importlib
+
+        config_module = importlib.import_module("config")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            future_version = config_module.CONFIG_SCHEMA_VERSION + 1
+            future_value = {"enabled": True, "options": ["future", 7]}
+            path.write_text(json.dumps({
+                "schemaVersion": future_version,
+                "ConcurrentFragments": 8,
+                "FutureSetting": future_value,
+            }), encoding="utf-8")
+            messages = []
+            store = config_module.ConfigStore(
+                install_dir=Path(tmp),
+                path=path,
+                sanitizer=config_module.sanitize_config,
+                loader=config_module.load_json_file,
+                writer=config_module.atomic_write_json,
+                logger=messages.append,
+                schema_version=config_module.CONFIG_SCHEMA_VERSION,
+            )
+
+            self.assertEqual(store.get("ConcurrentFragments"), 8)
+            self.assertEqual(store.get("FutureSetting"), None)
+            self.assertTrue(any("newer version" in message for message in messages))
+
+            self.assertTrue(store.update({"DownloadRetries": 12}))
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["schemaVersion"], future_version)
+            self.assertEqual(saved["FutureSetting"], future_value)
+            self.assertEqual(saved["DownloadRetries"], 12)
+
+    def test_config_migrates_a_missing_schema_version(self):
+        import importlib
+
+        config_module = importlib.import_module("config")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(json.dumps({"ConcurrentFragments": 6}), encoding="utf-8")
+            store = config_module.ConfigStore(
+                install_dir=Path(tmp),
+                path=path,
+                sanitizer=config_module.sanitize_config,
+                loader=config_module.load_json_file,
+                writer=config_module.atomic_write_json,
+                logger=self.fail,
+                schema_version=config_module.CONFIG_SCHEMA_VERSION,
+            )
+
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["schemaVersion"], config_module.CONFIG_SCHEMA_VERSION)
+            self.assertEqual(store.get("ConcurrentFragments"), 6)
+
     def test_config_store_quarantines_when_sanitization_rejects_a_document(self):
         import importlib
 

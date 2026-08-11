@@ -61,7 +61,7 @@ try:
         create_api as _owned_create_api,
     )
     from .config import (
-        DEFAULT_CONFIG, ConfigStore, DOWNLOAD_REQUEST_ALLOWED_FIELDS,
+        DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION, ConfigStore, DOWNLOAD_REQUEST_ALLOWED_FIELDS,
         DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS,
         HistoryStore, PORT_FALLBACKS, SERVER_PORT,
         default_download_path,
@@ -187,7 +187,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         create_api as _owned_create_api,
     )
     from config import (
-        DEFAULT_CONFIG, ConfigStore, DOWNLOAD_REQUEST_ALLOWED_FIELDS,
+        DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION, ConfigStore, DOWNLOAD_REQUEST_ALLOWED_FIELDS,
         DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS,
         HistoryStore, PORT_FALLBACKS, SERVER_PORT,
         default_download_path,
@@ -3915,6 +3915,7 @@ class Config(ConfigStore):
             loader=load_json_file,
             writer=lambda path, data: atomic_write_json(path, data),
             logger=lambda message: write_persistent_log(message),
+            schema_version=CONFIG_SCHEMA_VERSION,
             read_only=read_only,
         )
 

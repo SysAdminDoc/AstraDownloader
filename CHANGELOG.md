@@ -59,6 +59,9 @@ repository's git log.
 - **Managed binaries install only after verification.** yt-dlp, QuickJS and
   the Whisper model now download into disposable sibling paths, verify there,
   and replace the active binary only after the checksum passes.
+- **Config files are forward-compatible and versioned.** A schema marker is
+  written to `config.json`, and settings from newer builds survive an older
+  build's load/save cycle with a visible recovery log entry.
 
 ## [2.6.0] - 2026-08-09
 
