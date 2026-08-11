@@ -19971,6 +19971,126 @@ class ButtonLabelCaseTests(unittest.TestCase):
                 offenders.append((label, capitals))
         self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
 
+class OutputNameTests(unittest.TestCase):
+    """A per-download name is a file stem, never a path and never a template.
+
+    Open Video Downloader shipped a path-traversal fix in v3.1.2 for this exact
+    feature, so the normalizer refuses rather than sanitizes: rewriting
+    ``../../evil`` into ``evil`` would teach the caller that traversal was
+    accepted and leave the next laxer build to actually honour it.
+    """
+
+    ACCEPTED = ("My Video", "Episode 1 - The Beginning", "good-name_01", "a.b.c")
+    REFUSED = (
+        "a/b", "a" + chr(92) + "b", "C:evil", "..", "../../evil",
+        "%(title)s", "50%", "CON", "con.mp4", "NUL", "LPT1",
+        "a<b", "a>b", 'a"b', "a|b", "a?b", "a*b", "a:b",
+        "a" + chr(0) + "b", "a" + chr(10) + "b",
+        "", "   ", ".", " . ",
+    )
+
+    def test_accepted_names_survive_normalization(self):
+        for value in self.ACCEPTED:
+            with self.subTest(value=value):
+                self.assertEqual(ad.normalize_output_name(value), value)
+
+    def test_refused_names_normalize_to_empty(self):
+        for value in self.REFUSED:
+            with self.subTest(value=value):
+                self.assertEqual(
+                    ad.normalize_output_name(value), "",
+                    f"{value!r} must be refused, not sanitized into a usable name",
+                )
+
+    def test_surrounding_whitespace_and_trailing_dots_are_trimmed(self):
+        # Windows silently drops a trailing dot or space, so the stem the user
+        # sees in the hint has to be the stem that reaches the filesystem.
+        self.assertEqual(ad.normalize_output_name("  spaced  "), "spaced")
+        self.assertEqual(ad.normalize_output_name("trailing. "), "trailing")
+
+    def test_the_name_is_capped_rather_than_rejected(self):
+        capped = ad.normalize_output_name("x" * 500)
+        self.assertEqual(len(capped), ad.MAX_OUTPUT_NAME_LENGTH)
+
+    def test_a_refused_name_never_reaches_the_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmp, "AudioDownloadPath": tmp}),
+                FakeHistory(),
+            )
+            dl_id, error = manager.start_download(
+                url="https://www.youtube.com/watch?v=abc12345678",
+                output_name="../../evil",
+            )
+            self.assertIsNone(error)
+            self.assertEqual(manager.downloads[dl_id].output_name, "")
+
+    def test_an_accepted_name_reaches_the_queue_and_the_status_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmp, "AudioDownloadPath": tmp}),
+                FakeHistory(),
+            )
+            dl_id, error = manager.start_download(
+                url="https://www.youtube.com/watch?v=abc12345678",
+                output_name="  Holiday clip  ",
+            )
+            self.assertIsNone(error)
+            self.assertEqual(manager.downloads[dl_id].output_name, "Holiday clip")
+            self.assertEqual(
+                manager.downloads[dl_id].to_dict().get("outputName"), "Holiday clip"
+            )
+
+    def test_the_name_round_trips_a_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue_path = Path(tmp) / "download-queue.json"
+            config = FakeConfig({"DownloadPath": tmp, "AudioDownloadPath": tmp})
+            manager = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            self.assertTrue(manager.pause_intake())
+            dl_id, error = manager.start_download(
+                url="https://www.youtube.com/watch?v=abc12345678",
+                output_name="Holiday clip",
+            )
+            self.assertIsNone(error)
+            persisted = json.loads(queue_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["downloads"][0]["outputName"], "Holiday clip")
+
+            reopened = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            self.assertEqual(reopened.downloads[dl_id].output_name, "Holiday clip")
+
+    def test_a_traversal_name_written_into_the_queue_file_is_refused_on_restore(self):
+        # The queue document is a file on disk. A name written by an older,
+        # laxer build - or by hand - must not become an output path just
+        # because it survived to a restart.
+        with tempfile.TemporaryDirectory() as tmp:
+            queue_path = Path(tmp) / "download-queue.json"
+            config = FakeConfig({"DownloadPath": tmp, "AudioDownloadPath": tmp})
+            manager = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            self.assertTrue(manager.pause_intake())
+            dl_id, error = manager.start_download(
+                url="https://www.youtube.com/watch?v=abc12345678",
+                output_name="Holiday clip",
+            )
+            self.assertIsNone(error)
+            document = json.loads(queue_path.read_text(encoding="utf-8"))
+            for record in document["downloads"]:
+                record["outputName"] = "../../evil"
+            queue_path.write_text(json.dumps(document), encoding="utf-8")
+
+            reopened = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            self.assertEqual(reopened.downloads[dl_id].output_name, "")
+
+    def test_the_argv_uses_the_name_for_a_single_download_only(self):
+        # A playlist shares one output template across every entry, so a single
+        # stem would have each item overwrite the last.
+        source = inspect.getsource(ad.DownloadManagerCore._run_download)
+        self.assertIn("if requested_name and not is_playlist:", source)
+        self.assertIn("out_tpl = f'{requested_name}.%(ext)s'", source)
+
+    def test_the_api_accepts_the_field(self):
+        self.assertIn("outputName", ad.DOWNLOAD_REQUEST_ALLOWED_FIELDS)
+
+
 class QueueRollbackTests(unittest.TestCase):
     """A rejected queue mutation puts the download back exactly as it was."""
 

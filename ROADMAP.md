@@ -12,26 +12,6 @@ dropped rather than filed. Line numbers are from `2811827`.
 
 ### P2
 
-- [ ] P2 — Let a download carry its own output name
-  Why: It is the longest-standing unmet request in this product category and the
-  app already has every supporting piece except the field.
-  Evidence: `OutputTemplate` is a single global setting (`config.py:330`) and
-  the download record has no name override — the accepted `/download` field list
-  maps only `title`. MeTube #56 has been open since 2021-09-19 and Parabolic
-  #767 asks for the same thing. The Windows-safe name preview
-  (`config.py:822-865`) already exists to validate exactly this input, and the
-  queue store already versions its schema so the value round-trips a restart.
-  Guard rail from the field: Open Video Downloader shipped a path-traversal fix
-  in v3.1.2 for exactly this feature — a title is attacker-influenced, so
-  validate the **resolved** path, not the template.
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui_download_page.py`,
-  `astra_downloader/routes.py`
-  Acceptance: a single-link download can be given a name in the paste area and
-  through the API; it is validated by the existing preview/reserved-name path
-  and by a resolved-path containment check; the queue record round-trips it
-  across a restart; a test covers a traversal attempt.
-  Complexity: M
-
 - [ ] P2 — Detect the system proxy
   Why: The app has a full proxy settings surface and no way to inherit the one
   Windows already knows about, so a user behind a corporate proxy must copy it

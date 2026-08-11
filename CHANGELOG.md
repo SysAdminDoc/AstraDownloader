@@ -26,6 +26,15 @@ repository's git log.
 
 ### Fixed
 
+- **A download can carry its own file name.** "Save as" on the Download page,
+  and `outputName` through the local API, name a single download's output; the
+  extension is still added by yt-dlp. The name is a stem, never a path: folder
+  separators, drive letters, `..`, `%` template syntax, control characters and
+  Windows reserved device names are refused rather than sanitized, the resolved
+  path is proved to stay inside the download folder, and a name is re-checked
+  when the durable queue is restored so an older build's record cannot become an
+  output path after a restart.
+
 - **`npm run check` reports every gate.** The `&&` chain meant the first red
   gate hid the six behind it; a runner now executes all of them, prints a
   per-gate PASS/FAIL summary, and treats a gate that cannot be spawned as a

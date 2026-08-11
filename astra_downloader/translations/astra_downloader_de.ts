@@ -595,6 +595,10 @@
       <translation>Die automatische Zuordnung ist aktiv; kein Profil passt zu diesem Link.</translation>
     </message>
     <message>
+      <source>That name cannot be used. Remove any folder separators, drive letters, %, or reserved device names such as CON.</source>
+      <translation>Dieser Name kann nicht verwendet werden. Entfernen Sie Ordnertrennzeichen, Laufwerksbuchstaben, %, oder reservierte Gerätenamen wie CON.</translation>
+    </message>
+    <message>
       <source>Video passwords are available for a single link only.</source>
       <translation>Videopasswörter sind nur für einen einzelnen Link verfügbar.</translation>
     </message>
@@ -1045,6 +1049,18 @@
     <message>
       <source>auto-generated subtitles only</source>
       <translation>nur automatisch erzeugte Untertitel</translation>
+    </message>
+    <message>
+      <source>Trimmed to {name}.&lt;ext&gt;</source>
+      <translation>Gekürzt auf {name}.&lt;ext&gt;</translation>
+    </message>
+    <message>
+      <source>Saves as {name}.&lt;ext&gt;</source>
+      <translation>Wird als {name}.&lt;ext&gt; gespeichert</translation>
+    </message>
+    <message>
+      <source>A saved file name applies to a single link only.</source>
+      <translation>Ein gespeicherter Dateiname gilt nur für einen einzelnen Link.</translation>
     </message>
     <message>
       <source>for a yt-dlp clip</source>
@@ -1577,6 +1593,26 @@
     <message>
       <source>Download only the last 30 seconds using yt-dlp.</source>
       <translation>Nur die letzten 30 Sekunden mit yt-dlp herunterladen.</translation>
+    </message>
+    <message>
+      <source>Save as</source>
+      <translation>Speichern als</translation>
+    </message>
+    <message>
+      <source>Output file name</source>
+      <translation>Name der Ausgabedatei</translation>
+    </message>
+    <message>
+      <source>Leave empty to use the video title</source>
+      <translation>Leer lassen, um den Videotitel zu verwenden</translation>
+    </message>
+    <message>
+      <source>Name the saved file. The extension is added for you. Applies to a single link.</source>
+      <translation>Benennt die gespeicherte Datei. Die Dateiendung wird automatisch ergänzt. Gilt für einen einzelnen Link.</translation>
+    </message>
+    <message>
+      <source>Output file name status</source>
+      <translation>Status des Ausgabedateinamens</translation>
     </message>
     <message>
       <source>Site profile summary</source>
@@ -2405,10 +2441,6 @@
     <message>
       <source>Subtitle tracks</source>
       <translation>Untertitelspuren</translation>
-    </message>
-    <message>
-      <source>Save as</source>
-      <translation>Speichern als</translation>
     </message>
     <message>
       <source>Subtitle format</source>

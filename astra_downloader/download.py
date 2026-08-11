@@ -3099,7 +3099,8 @@ class Download:
                  output_dir=None, title=None, referer=None, cookies_file=None,
                  requires_auth=False, created_at=None, queue_order=0, section=None,
                  playlist_items=None, subscription_id=None, archive_key=None,
-                 subtitles_only=False, clock=None, profile_name=None):
+                 subtitles_only=False, clock=None, profile_name=None,
+                 output_name=None):
         self._clock = clock or time.time
         self.id = dl_id
         self.url = url
@@ -3108,6 +3109,10 @@ class Download:
         self.quality = quality
         self.output_dir = output_dir
         self.title = title or "Unknown"
+        # An explicit "call this file X" for one download. Empty means "use the
+        # configured template", which is the behaviour every existing queue
+        # record and every existing caller already expresses.
+        self.output_name = str(output_name or "")
         self.referer = referer
         self.section = dict(section) if isinstance(section, dict) else None
         self.playlist_items = list(playlist_items) if playlist_items else None
@@ -3193,6 +3198,8 @@ class Download:
             payload["subtitlesOnly"] = True
         if self.profile_name is not None:
             payload["profileName"] = self.profile_name
+        if self.output_name:
+            payload["outputName"] = self.output_name
         return payload
 
 
@@ -3220,6 +3227,7 @@ RETRY_ROLLBACK_FIELDS = (
 AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'audio_only', 'format', 'quality', 'output_dir',
     'title', 'referer', 'section', 'playlist_items', 'subtitles_only',
+    'output_name',
     'subscription_id', 'archive_key', 'requires_auth', 'status',
     'error', 'error_code', 'error_advice', 'error_action',
     '_credentials', '_video_password', 'profile_name',
@@ -3299,6 +3307,8 @@ class DownloadQueueStore:
                if download.subscription_id else {}),
             **({'archiveKey': download.archive_key}
                if download.archive_key else {}),
+            **({'outputName': download.output_name}
+               if getattr(download, 'output_name', '') else {}),
             **({'subtitlesOnly': True} if download.subtitles_only else {}),
             **({'subtitleRetry': True} if getattr(download, 'subtitle_retry', False) else {}),
             **({'profileName': getattr(download, 'profile_name', None)}
@@ -3349,6 +3359,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'normalize_output_dir',
     'normalize_sponsorblock_categories',
     'normalize_download_section',
+    'normalize_output_name',
     'normalize_playlist_items',
     'normalize_url',
     'probe_javascript_runtime',
@@ -3649,6 +3660,12 @@ class DownloadManagerCore:
                     item.get('subtitlesOnly'), False
                 ),
                 profile_name=profile_name,
+                # Re-normalized on restore rather than trusted: the queue file
+                # is on disk and a name written by an older, laxer build (or by
+                # hand) must not become an output path after a restart.
+                output_name=self._dependencies['normalize_output_name'](
+                    item.get('outputName')
+                ),
             )
             dl.subtitle_retry = self._dependencies['coerce_bool'](
                 item.get('subtitleRetry'), False
@@ -4202,7 +4219,7 @@ class DownloadManagerCore:
                        output_dir=None, title=None, referer=None, cookies=None,
                        section=None, playlist_items=None, subscription_id=None,
                        archive_key=None, subtitles_only=False, video_password=None,
-                       profile_name=None):
+                       profile_name=None, output_name=None):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
@@ -4215,6 +4232,10 @@ class DownloadManagerCore:
                 'That address is on a private, loopback, or link-local network. '
                 'Astra Downloader only downloads from public sites.'
             )
+        # Normalized at the queue boundary, like the URL denylist above, so
+        # every entry point (HTTP, GUI, clipboard, scheduler) gets the same
+        # rejection instead of each caller remembering to ask.
+        output_name = self._dependencies['normalize_output_name'](output_name)
         if profile_name is not None:
             profile_name = self._dependencies['clean_text'](profile_name, '', 80)
             if profile_name and not select_site_profile(
@@ -4338,6 +4359,7 @@ class DownloadManagerCore:
                 dl.subscription_id = subscription_id
                 dl.archive_key = archive_key
                 dl.profile_name = profile_name
+                dl.output_name = output_name
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
                 dl._credentials = None
@@ -4368,6 +4390,7 @@ class DownloadManagerCore:
                     archive_key=archive_key,
                     subtitles_only=subtitles_only,
                     profile_name=profile_name,
+                    output_name=output_name,
                 )
                 dl._cookies = list(cookies) if cookies else None
                 dl._video_password = video_password
@@ -5161,8 +5184,33 @@ class DownloadManagerCore:
         # keeps %(ext)s) is always relative to the download root and, when set,
         # governs both single and playlist layout. It must stay relative: yt-dlp
         # ignores --paths when -o receives an absolute template.
+        # A per-download name wins over both the configured template and the
+        # built-in defaults, but only for a single item: applying one stem to
+        # every entry of a playlist would have each download overwrite the
+        # last. normalize_output_name has already refused anything with a
+        # separator, so the stem cannot escape the output directory; the
+        # containment assertion below proves that rather than trusting it.
+        requested_name = self._dependencies['normalize_output_name'](
+            getattr(dl, 'output_name', '')
+        )
+        if requested_name and not is_playlist:
+            resolved = (Path(dl.output_dir) / f'{requested_name}.mp4').resolve()
+            root = Path(dl.output_dir).resolve()
+            if resolved.parent != root:
+                self._dependencies['write_persistent_log'](
+                    f'Download {dl.id}: refusing output name that resolves outside '
+                    f'the download folder; using the configured template instead.'
+                )
+                requested_name = ''
+        elif requested_name:
+            requested_name = ''
+
         custom_tpl = str(effective_config.get("OutputTemplate", "") or "")
-        if custom_tpl:
+        if requested_name:
+            # yt-dlp treats a literal % in -o as a template token, and the
+            # normalizer has already rejected any name containing one.
+            out_tpl = f'{requested_name}.%(ext)s'
+        elif custom_tpl:
             out_tpl = custom_tpl
         elif is_playlist:
             # yt-dlp substitutes the literal string "NA" for a field it cannot

@@ -878,6 +878,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'maybe_auto_update_ytdlp',
     'normalize_output_dir',
     'normalize_download_section',
+    'normalize_output_name',
     'normalize_output_template',
     'output_template_preview',
     'normalize_playlist_date',
@@ -2061,6 +2062,29 @@ class MainWindowCore(
             )
             self.quick_download_subs_hint.setVisible(subtitles_only)
 
+    def _sync_quick_download_name_hint(self, *_args):
+        """Tell the user before they press Download whether the name is usable."""
+        field = getattr(self, "quick_download_name", None)
+        hint = getattr(self, "quick_download_name_hint", None)
+        if field is None or hint is None:
+            return
+        raw = field.text().strip()
+        if not raw:
+            hint.hide()
+            hint.setText("")
+            return
+        normalized = self._dependencies['normalize_output_name'](raw)
+        if not normalized:
+            hint.setText(tr(
+                "That name cannot be used. Remove any folder separators, "
+                "drive letters, %, or reserved device names such as CON."
+            ))
+        elif normalized != raw:
+            hint.setText(tr_format("Trimmed to {name}.<ext>", name=normalized))
+        else:
+            hint.setText(tr_format("Saves as {name}.<ext>", name=normalized))
+        hint.show()
+
     def _start_quick_download(self):
         if (
             getattr(self, "_first_run", False)
@@ -2092,6 +2116,27 @@ class MainWindowCore(
                 "error",
             )
             return
+        name_field = getattr(self, "quick_download_name", None)
+        requested_name = name_field.text().strip() if name_field is not None else ""
+        output_name = ""
+        if requested_name:
+            if len(urls) != 1:
+                self._set_quick_download_status(
+                    tr("A saved file name applies to a single link only."),
+                    "error",
+                )
+                return
+            output_name = self._dependencies['normalize_output_name'](requested_name)
+            if not output_name:
+                self._set_quick_download_status(
+                    tr(
+                        "That name cannot be used. Remove any folder separators, "
+                        "drive letters, %, or reserved device names such as CON."
+                    ),
+                    "error",
+                )
+                name_field.setFocus(Qt.FocusReason.OtherFocusReason)
+                return
         if start or end:
             if len(urls) > 1:
                 self._set_quick_download_status(
@@ -2174,6 +2219,7 @@ class MainWindowCore(
                 output_dir=self._quick_download_dir or None,
                 video_password=video_password if len(urls) == 1 else None,
                 profile_name=profile_name,
+                output_name=output_name or None,
             )
             if error:
                 failures.append((url, error))
