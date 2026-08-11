@@ -19,7 +19,7 @@ __all__ = (
     "parse_impersonate_targets", "ImpersonateTargetsProbe",
     "IMPERSONATE_TARGET_RE",
     "probe_po_token_provider", "reset_po_token_provider_cache",
-    "PO_TOKEN_PROVIDER_PORT", "BGUTIL_POT_MIN_VERSION", "probe_deno_runtime",
+    "probe_deno_runtime",
     "QUICKJS_MIN_VERSION", "JS_RUNTIMES",
     "probe_javascript_runtime", "build_javascript_runtime_args",
     "reset_deno_runtime_cache", "provision_deno", "_parse_ytdlp_release_date",
@@ -37,14 +37,11 @@ __all__ = (
     "_compare_semver", "evaluate_sabr_support", "SABR_NATIVE_MIN_VERSION",
     "ExecutableVersionProbe", "parse_ytdlp_version_output",
     "parse_ffmpeg_version_output",
-    "PoTokenProviderProbe",
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",
     "probe_javascript_execution", "evaluate_javascript_runtime",
 )
 
-PO_TOKEN_PROVIDER_PORT = 4416
-BGUTIL_POT_MIN_VERSION = "1.3.0"
 YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
 DENO_MIN_VERSION = "2.3.0"
 NODE_MIN_VERSION = "22.0.0"
@@ -278,37 +275,28 @@ def build_javascript_runtime_args(readiness):
 
 
 def build_youtube_extractor_args(url, po_token_provider=None,
-                                 default_provider_port=PO_TOKEN_PROVIDER_PORT):
-    """Build SABR and optional PO-token provider arguments for YouTube URLs."""
+                                 default_provider_port=None):
+    """Build the plugin-free YouTube extractor arguments.
+
+    The companion deliberately runs yt-dlp with ``--no-plugin-dirs``. Keep
+    that security boundary honest by never emitting the bgutil plugin
+    namespace, even when a stale process happens to answer on its port. The
+    token-exempt client chain is therefore deterministic for downloads,
+    format probes, and playlist probes alike. The provider parameters remain
+    accepted for source compatibility with older callers.
+    """
     if not is_youtube_url(url):
         return []
     args = ['--extractor-args', 'youtube:formats=duplicate']
-    # A stale provider (below BGUTIL_POT_MIN_VERSION) may mint tokens the
-    # current YouTube backend rejects; routing to it forfeits the token-exempt
-    # fallback below, so treat stale like absent.
-    if (po_token_provider and po_token_provider.get('ok')
-            and not po_token_provider.get('stale')):
-        port = po_token_provider.get('port') or default_provider_port
-        args += [
-            '--extractor-args',
-            f'youtubepot-bgutilhttp:base_url=http://127.0.0.1:{port}',
-        ]
-    else:
-        # No reachable PO-token provider: the default web/mweb clients now need
-        # GVS proof-of-origin tokens and otherwise return SABR-only formats or
-        # HTTP 403. Use only genuinely token-exempt clients: bare `web` is
-        # SABR-only without a GVS token (and yt-dlp has no SABR downloader),
-        # so it is dead weight, and android_vr is erratic in 2026
-        # (format-18-only drops, UNPLAYABLE on made-for-kids) so it rides
-        # last. yt-dlp merges these youtube extractor args with the
-        # formats=duplicate entry above. The provisioned nightly was last
-        # measured on 2026-08-08: visionos is the first viable token-exempt
-        # client, so keep it ahead of the older fallback chain while leaving
-        # the rest explicit for a deterministic no-provider path.
-        args += [
-            '--extractor-args',
-            'youtube:player_client=visionos,tv,web_embedded,android_vr',
-        ]
+    # The default web/mweb clients need GVS proof-of-origin tokens and
+    # otherwise return SABR-only formats or HTTP 403. Use only the client
+    # chain this plugin-free build has verified as token-exempt: bare `web` is
+    # SABR-only without a GVS token, while android_vr is erratic and rides
+    # last. yt-dlp merges this with formats=duplicate for a deterministic path.
+    args += [
+        '--extractor-args',
+        'youtube:player_client=visionos,tv,web_embedded,android_vr',
+    ]
     return args
 
 
@@ -535,78 +523,6 @@ class ExecutableVersionProbe:
             self._checked_at = self._clock() if checked_at is None else float(checked_at)
 
 
-class PoTokenProviderProbe:
-    """Cached liveness/version probe for an injected local PO-token provider."""
-
-    def __init__(self, *, http_get, clock=time.time, port=PO_TOKEN_PROVIDER_PORT,
-                 min_version=BGUTIL_POT_MIN_VERSION, ttl_seconds=30):
-        self._http_get = http_get
-        self._clock = clock
-        self._port = int(port)
-        self._min_version = str(min_version)
-        self._ttl_seconds = max(0, float(ttl_seconds))
-        self._value = None
-        self._checked_at = 0.0
-        self._has_checked = False
-        self._lock = threading.Lock()
-
-    def probe(self, force=False, timeout=1.0):
-        # Fast path under the lock; the network I/O below runs OUTSIDE it so a
-        # wedged listener on the provider port can't serialize /health
-        # handlers, the GUI readiness worker, and download workers behind one
-        # ~2s probe (they were all queueing on this lock).
-        with self._lock:
-            now = self._clock()
-            if (
-                not force
-                and self._has_checked
-                and (now - self._checked_at) < self._ttl_seconds
-            ):
-                return self._value
-        result = None
-        for path in ('/ping', '/'):
-            try:
-                response = self._http_get(
-                    f'http://127.0.0.1:{self._port}{path}',
-                    timeout=timeout,
-                )
-            except Exception:
-                continue
-            if not getattr(response, 'ok', False):
-                continue
-            try:
-                payload = response.json()
-            except (TypeError, ValueError):
-                payload = None
-            version = None
-            if isinstance(payload, dict):
-                raw = payload.get('version') or payload.get('plugin_version')
-                if raw is not None:
-                    version = str(raw)[:32]
-            stale = bool(
-                version and _compare_semver(version, self._min_version) < 0
-            )
-            result = {
-                'ok': True,
-                'port': self._port,
-                'version': version,
-                'stale': stale,
-                'minVersion': self._min_version,
-            }
-            break
-        with self._lock:
-            self._value = result
-            self._checked_at = now
-            self._has_checked = True
-            return self._value
-
-    def reset(self):
-        with self._lock:
-            self._value = None
-            self._checked_at = 0.0
-            self._has_checked = False
-
-
 class FfmpegCapabilitiesProbe:
     """Cached ffmpeg support-floor assessment over an injected version source."""
 
@@ -721,7 +637,6 @@ class FfmpegCapabilitiesProbe:
 
 
 _OWNED_EXPORTS = {
-    "PO_TOKEN_PROVIDER_PORT", "BGUTIL_POT_MIN_VERSION",
     "YTDLP_EXTERNAL_RUNTIME_CUTOFF", "DENO_MIN_VERSION", "NODE_MIN_VERSION",
     "is_youtube_url", "_compare_semver", "_parse_ytdlp_release_date",
     "evaluate_sabr_support", "SABR_NATIVE_MIN_VERSION",
@@ -733,7 +648,6 @@ _OWNED_EXPORTS = {
     "IMPERSONATE_TARGET_RE",
     "parse_ffmpeg_version_output",
     "probe_whisper_runtime",
-    "PoTokenProviderProbe",
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",
     "probe_javascript_execution", "evaluate_javascript_runtime",

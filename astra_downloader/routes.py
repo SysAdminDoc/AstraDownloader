@@ -371,10 +371,9 @@ def create_api(config, dl_manager, history, *, dependencies):
             # "yt-dlp 2026.04.01" in the repair panel + warn on stale binaries.
             "ytDlpVersion": get_ytdlp_version(),
             "ffmpegVersion": get_ffmpeg_version(),
-            # v1.4.0 (N1): surface bgutil-ytdlp-pot-provider health so the
-            # extension popup can render an amber "PO Token provider not
-            # detected" pill. null = not running / unreachable; an object
-            # with {ok, port, version} = running.
+            # v1.4.0 (N1): retain the field for extension wire compatibility.
+            # The companion disables yt-dlp plugin loading, so this remains
+            # null and is never reported as a usable download provider.
             "poTokenProvider": probe_po_token_provider(),
             # v1.4.0 (NX10): bundled ffmpeg freshness audit. The extension
             # popup can surface a "ffmpeg looks stale (X.x); update via

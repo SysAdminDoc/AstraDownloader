@@ -4239,25 +4239,20 @@ class PoTokenProviderNudgeTests(unittest.TestCase):
         ):
             self.assertEqual(self._classify(text), 'sign-in-required', text)
 
-    def test_advice_names_the_provider_only_when_none_is_running(self):
+    def test_advice_does_not_recommend_a_disabled_provider(self):
         nudge = ad.po_provider_nudge_advice
-        for code in sorted(ad.PO_PROVIDER_NUDGE_CODES):
-            with_provider = nudge('Base advice.', code, True)
-            without = nudge('Base advice.', code, False)
-            self.assertEqual(with_provider, 'Base advice.', code)
-            self.assertIn('bgutil-ytdlp-pot-provider', without, code)
-        # Unrelated failures are left alone even with no provider running.
+        self.assertEqual(ad.PO_PROVIDER_NUDGE_CODES, frozenset())
+        for code in ('sign-in-required', 'sabr-limited', 'po-token-required'):
+            self.assertEqual(nudge('Base advice.', code, False), 'Base advice.')
+            self.assertEqual(nudge('Base advice.', code, True), 'Base advice.')
         self.assertEqual(nudge('Base advice.', 'ffmpeg-missing-or-stale', False), 'Base advice.')
-        # The nudge is not appended twice on a re-classification.
-        once = nudge('Base advice.', 'sign-in-required', False)
-        self.assertEqual(nudge(once, 'sign-in-required', False), once)
 
-    def test_failure_classification_attaches_the_nudge_to_the_download(self):
+    def test_failure_classification_does_not_offer_a_disabled_provider(self):
         dl = ad.Download('dl_nudge', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
         ad.apply_download_failure_classification(
             dl, 'sign-in-required', provider_running=False,
         )
-        self.assertIn('bgutil-ytdlp-pot-provider', dl.error_advice)
+        self.assertNotIn('bgutil-ytdlp-pot-provider', dl.error_advice)
 
         running = ad.Download('dl_ok', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
         ad.apply_download_failure_classification(
@@ -4265,13 +4260,10 @@ class PoTokenProviderNudgeTests(unittest.TestCase):
         )
         self.assertNotIn('No PO-token provider is running', running.error_advice)
 
-    def test_download_path_reports_the_live_provider_state(self):
+    def test_download_path_does_not_probe_or_route_through_a_provider(self):
         source = inspect.getsource(ad.DownloadManagerCore._run_download)
-        self.assertIn("po_provider = self._dependencies['probe_po_token_provider']()", source)
-        self.assertEqual(
-            source.count('provider_running=bool(po_provider)'), 4,
-            'every failure classification in the download path must report provider state',
-        )
+        self.assertNotIn('probe_po_token_provider', source)
+        self.assertNotIn('provider_running=bool(', source)
 
 
 class DownloadFailureClassifierTests(unittest.TestCase):
@@ -4343,9 +4335,9 @@ class DownloadFailureClassifierTests(unittest.TestCase):
 
         self.assertEqual(payload['code'], 'po-token-required')
         self.assertEqual(payload['error_code'], 'po-token-required')
-        self.assertEqual(payload['next_action'], 'start-po-token-provider')
-        self.assertIn('PO token', payload['error'])
-        self.assertIn('127.0.0.1:4416', payload['advice'])
+        self.assertEqual(payload['next_action'], 'sign-in-and-retry')
+        self.assertIn('proof-of-origin token', payload['error'])
+        self.assertNotIn('bgutil', payload['advice'].lower())
 
     def test_download_to_dict_includes_failure_recovery_metadata(self):
         dl = ad.Download('dl_test', 'https://www.youtube.com/watch?v=abcdefghijk')
@@ -5625,33 +5617,6 @@ else:
             self.assertFalse(first.is_alive())
             self.assertFalse(second.is_alive())
             self.assertGreaterEqual(call_count, 2)
-
-    def test_po_token_probe_caches_injected_http_result_and_resets(self):
-        import health
-
-        calls = []
-
-        class Response:
-            ok = True
-
-            @staticmethod
-            def json():
-                return {"version": "1.2.0"}
-
-        probe = health.PoTokenProviderProbe(
-            http_get=lambda url, **kwargs: calls.append((url, kwargs)) or Response(),
-            clock=lambda: 0.0,
-            port=4416,
-            min_version="1.3.0",
-            ttl_seconds=30,
-        )
-        first = probe.probe()
-        self.assertTrue(first["stale"])
-        self.assertEqual(probe.probe(), first)
-        self.assertEqual(len(calls), 1)
-        probe.reset()
-        self.assertEqual(probe.probe(), first)
-        self.assertEqual(len(calls), 2)
 
     def test_ffmpeg_capability_probe_uses_injected_floor_and_cache(self):
         import health
@@ -7171,16 +7136,18 @@ class PoTokenProviderTests(unittest.TestCase):
                     a.startswith('youtubepot-bgutilhttp:') for a in args
                 ))
 
-    def test_build_youtube_extractor_args_routes_bgutil_when_provider_ok(self):
+    def test_build_youtube_extractor_args_ignores_a_reachable_provider(self):
         args = ad.build_youtube_extractor_args(
             "https://www.youtube.com/watch?v=abc",
             po_token_provider={'ok': True, 'port': 4416, 'version': '1.2.3'},
         )
         self.assertIn('--extractor-args', args)
-        bgutil = next((a for a in args if a.startswith('youtubepot-bgutilhttp:')), None)
-        self.assertIsNotNone(bgutil)
-        self.assertIn('http://127.0.0.1:4416', bgutil)
-        # SABR arg still present alongside provider routing.
+        self.assertFalse(any(a.startswith('youtubepot-bgutilhttp:') for a in args))
+        self.assertIn(
+            'youtube:player_client=visionos,tv,web_embedded,android_vr',
+            args,
+        )
+        # SABR arg remains alongside the deterministic token-exempt fallback.
         self.assertIn('youtube:formats=duplicate', args)
 
     def test_build_youtube_extractor_args_falls_back_to_token_exempt_clients(self):
@@ -7204,16 +7171,15 @@ class PoTokenProviderTests(unittest.TestCase):
         self.assertNotIn('web', clients)
         self.assertEqual(clients[0], 'visionos')
         self.assertEqual(clients[-1], 'android_vr')
-        # When the provider IS reachable the web client + PO token is preferred,
-        # so the exempt-client override must be omitted.
+        # A reachable bgutil process cannot change the argv while plugin
+        # loading is disabled, so the same fallback remains in force.
         ok_args = ad.build_youtube_extractor_args(
             "https://www.youtube.com/watch?v=abc",
             po_token_provider={'ok': True, 'port': 4416},
         )
-        self.assertNotIn(fallback, ok_args)
-        self.assertFalse(any(a.startswith('youtube:player_client=') for a in ok_args))
-        # A STALE provider may mint rejected tokens: treat it like absent so
-        # the token-exempt chain still applies instead of routing to bgutil.
+        self.assertIn(fallback, ok_args)
+        self.assertFalse(any(a.startswith('youtubepot-bgutilhttp:') for a in ok_args))
+        # A stale provider is equally unable to alter the plugin-free path.
         stale_args = ad.build_youtube_extractor_args(
             "https://www.youtube.com/watch?v=abc",
             po_token_provider={'ok': True, 'port': 4416, 'stale': True},
@@ -7223,99 +7189,16 @@ class PoTokenProviderTests(unittest.TestCase):
         # Non-YouTube URLs get no extractor args at all, fallback included.
         self.assertEqual(ad.build_youtube_extractor_args("https://example.com/x"), [])
 
-    def test_probe_caches_negative_result(self):
-        # The probe MUST cache None too — otherwise every download retries
-        # the probe over the network, blocking startup behind 1 s timeouts.
-        calls = []
+    def test_probe_never_claims_a_provider_is_usable(self):
         original_get = ad.http_requests.get
-
-        def fake_get(url, **kwargs):
-            calls.append(url)
-            raise Exception("not running")
-
-        ad.http_requests.get = fake_get
+        calls = []
+        ad.http_requests.get = lambda *args, **kwargs: calls.append(args) or None
         try:
             self.assertIsNone(ad.probe_po_token_provider(force=True))
             self.assertIsNone(ad.probe_po_token_provider())
-            # Two requests on the first force call (one per probe path), zero
-            # on the cached call.
-            self.assertGreater(len(calls), 0)
-            cached_count = len(calls)
-            ad.probe_po_token_provider()
-            self.assertEqual(len(calls), cached_count)
         finally:
             ad.http_requests.get = original_get
-
-    def test_probe_uses_ping_endpoint_first(self):
-        # /ping is the documented liveness check. The fallback to / exists
-        # only for older provider builds, so /ping must be tried first.
-        seen_paths = []
-        original_get = ad.http_requests.get
-
-        class FakeResp:
-            ok = True
-            headers = {'content-type': 'application/json'}
-            status_code = 200
-
-            def json(self):
-                return {'version': '2.0.0'}
-
-        def fake_get(url, **kwargs):
-            seen_paths.append(url)
-            return FakeResp()
-
-        ad.http_requests.get = fake_get
-        try:
-            result = ad.probe_po_token_provider(force=True)
-        finally:
-            ad.http_requests.get = original_get
-        self.assertIsNotNone(result)
-        self.assertEqual(result['port'], 4416)
-        self.assertEqual(result['version'], '2.0.0')
-        self.assertTrue(seen_paths[0].endswith('/ping'))
-
-    # stale-version notice.
-    def test_probe_flags_stale_when_provider_below_min_version(self):
-        """If the running provider reports a version < BGUTIL_POT_MIN_VERSION,
-        the probe result must set stale=True so the extension popup can
-        surface an 'update bgutil-pot' notice."""
-        original_get = ad.http_requests.get
-
-        class FakeResp:
-            ok = True
-            headers = {'content-type': 'application/json'}
-            status_code = 200
-            def json(self):
-                return {'version': '1.0.0'}  # well below 1.3.0
-
-        ad.http_requests.get = lambda url, **k: FakeResp()
-        try:
-            result = ad.probe_po_token_provider(force=True)
-        finally:
-            ad.http_requests.get = original_get
-        self.assertIsNotNone(result)
-        self.assertEqual(result['version'], '1.0.0')
-        self.assertTrue(result['stale'])
-        self.assertEqual(result['minVersion'], ad.BGUTIL_POT_MIN_VERSION)
-
-    def test_probe_does_not_flag_stale_when_version_meets_or_beats_min(self):
-        original_get = ad.http_requests.get
-
-        class FakeResp:
-            ok = True
-            headers = {'content-type': 'application/json'}
-            status_code = 200
-            def json(self):
-                return {'version': '1.3.1'}  # at/above 1.3.0
-
-        ad.http_requests.get = lambda url, **k: FakeResp()
-        try:
-            result = ad.probe_po_token_provider(force=True)
-        finally:
-            ad.http_requests.get = original_get
-        self.assertIsNotNone(result)
-        self.assertEqual(result['version'], '1.3.1')
-        self.assertFalse(result['stale'])
+        self.assertEqual(calls, [])
 
     def test_compare_semver_handles_unusual_inputs(self):
         # Pre-release suffix is truncated at first non-digit segment.

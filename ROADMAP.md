@@ -30,39 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P0 — Make the PO-token path real, or stop taking the branch that needs it
-  Why: The integration cannot work by construction, and the failure is
-  inverted — when the provider probe *succeeds*, YouTube downloads get worse.
-  Evidence: `build_youtube_extractor_args` (`health.py:285-296`) emits
-  `--extractor-args youtubepot-bgutilhttp:base_url=http://127.0.0.1:{port}`.
-  That namespace belongs to the bgutil-ytdlp-pot-provider **yt-dlp plugin**:
-  `bgutil` appears nowhere in the pinned `yt_dlp` package, and
-  `yt_dlp/extractor/youtube/pot/_builtin/` ships only cache providers
-  (`MemoryLRUPCP`, `WebPoPCSP`) — no token minter. Meanwhile
-  `validate_ytdlp_spawn_args` injects `--no-plugin-dirs` into every spawn
-  (`astra_downloader.py:564`, `:587-588`), so no provider plugin can ever load
-  and yt-dlp silently ignores the unknown namespace. The `else` arm of that same
-  function — the one that restricts the client list to genuinely token-exempt
-  clients — is skipped whenever the probe succeeds, so a running bgutil server
-  downgrades downloads to SABR-only formats and 403s while `/health` reports the
-  provider healthy. `BGUTIL_POT_MIN_VERSION` (`health.py:47`) is also
-  unsatisfiable in spirit: the newest released provider is 1.3.1 (2026-03-07) and
-  every released version currently mints tokens YouTube rejects
-  (bgutil-ytdlp-pot-provider #242, PR #243 open).
-  The plugin-free route that fits this architecture: have the companion
-  extension mint the token in a real YouTube page context, hand it back over the
-  loopback API, and pass `--extractor-args youtube:po_token=web.gvs+<TOKEN>`,
-  which needs no plugin at all. Tokens are bound per video ID, so the bridge
-  must mint per download.
-  Touches: `astra_downloader/health.py`, `astra_downloader/routes.py`,
-  `astra_downloader/download.py`
-  Acceptance: either the token arrives through a path that works with
-  `--no-plugin-dirs` in force, or the bgutil branch is removed so the
-  token-exempt fallback always applies; a test proves the emitted argv changes
-  the client list in the direction claimed; `/health` reports the provider as
-  usable only when it can actually affect a download.
-  Complexity: L
-
 - [ ] P0 — Free the forward-Tab focus chain
   Why: Forward Tab does nothing on all six pages — a WCAG 2.1.2 keyboard trap in
   an app that already invested in accessible names and focus rings.

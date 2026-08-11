@@ -116,19 +116,25 @@ DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
 DOWNLOAD_FAILURE_RECOVERY = {
     'po-token-required': {
         'error': (
-            'YouTube requires a PO token for this video. Start the PO-token '
-            'provider, then retry the download.'
+            'YouTube requires a proof-of-origin token for this video, and the '
+            'plugin-free client chain cannot supply one.'
         ),
-        'advice': 'Start bgutil-ytdlp-pot-provider on 127.0.0.1:4416 and retry.',
-        'next_action': 'start-po-token-provider',
+        'advice': (
+            'Retry with a stored site sign-in, or try again later if YouTube '
+            'makes a token-exempt format available.'
+        ),
+        'next_action': 'sign-in-and-retry',
     },
     'po-provider-stale': {
         'error': (
-            'The PO-token provider is reachable but looks stale or failed to '
-            'issue a usable token.'
+            'The YouTube proof-of-origin token path is unavailable for this '
+            'video.'
         ),
-        'advice': 'Update or restart bgutil-ytdlp-pot-provider, then retry.',
-        'next_action': 'update-po-token-provider',
+        'advice': (
+            'The plugin-based provider path is disabled. Retry with a stored '
+            'site sign-in or later.'
+        ),
+        'next_action': 'sign-in-and-retry',
     },
     'sabr-limited': {
         'error': (
@@ -2295,15 +2301,13 @@ def _classify_failure_text(text):
     return None
 
 
-# Failures a PO-token provider plausibly fixes. The token-exempt client chain
-# is a fallback, not full coverage, so these are exactly the cases where the
-# advice line should mention the provider.
-PO_PROVIDER_NUDGE_CODES = frozenset({
-    'sign-in-required', 'sabr-limited', 'po-token-required', 'po-provider-stale',
-})
+# The old provider nudge is retained as a compatibility export, but there is
+# no provider branch to recommend: plugin loading is disabled and every run
+# uses the token-exempt client chain.
+PO_PROVIDER_NUDGE_CODES = frozenset()
 PO_PROVIDER_NUDGE = (
-    'No PO-token provider is running; installing bgutil-ytdlp-pot-provider '
-    'restores age-gated, members-only, and full-quality formats.'
+    'This install uses the plugin-free token-exempt YouTube client chain; '
+    'age-gated or members-only videos may still require sign-in.'
 )
 
 
@@ -2569,7 +2573,6 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'normalize_playlist_items',
     'normalize_url',
     'probe_javascript_runtime',
-    'probe_po_token_provider',
     'probe_impersonate_targets',
     'probe_whisper_runtime',
     'normalize_impersonate_target',
@@ -4211,20 +4214,10 @@ class DownloadManagerCore:
             args += build_video_format_args(dl.format, dl.quality)
         args += build_format_sort_args(effective_config)
 
-        # v1.4.0 (N1): YouTube extractor-args — PO Token routing when the
-        # bgutil-ytdlp-pot-provider HTTP server is reachable. No-op on
-        # non-YouTube URLs; when the provider isn't running the builder falls
-        # back to the token-exempt tv/web_embedded/android_vr clients so extraction degrades
-        # instead of failing (the user-facing surface for that state is the
-        # popup health banner and the dashboard "PO provider: Fallback" row).
-        # Remembered for failure advice: the token-exempt client chain does not
-        # cover age-gated, members-only, or full-quality formats, so a failure
-        # with no provider running has one obvious fix worth naming.
-        po_provider = self._dependencies['probe_po_token_provider']()
-        args += self._dependencies['build_youtube_extractor_args'](
-            dl.url,
-            po_token_provider=po_provider,
-        )
+        # yt-dlp is spawned with --no-plugin-dirs. The extractor builder must
+        # therefore always use the plugin-free token-exempt client chain; a
+        # local process on the old bgutil port cannot change this argv.
+        args += self._dependencies['build_youtube_extractor_args'](dl.url)
         runtime = self._dependencies['probe_javascript_runtime'](
             configured_runtime=effective_config.get('JavaScriptRuntime', 'auto')
         )
@@ -4381,7 +4374,6 @@ class DownloadManagerCore:
                     if _failure_code:
                         apply_download_failure_classification(
                             dl, _failure_code, error=dl.error,
-                            provider_running=bool(po_provider),
                         )
                     combined = " ".join(last_lines).lower()
                     if 'live event has ended' in combined and dl.cookies_file:
@@ -4497,7 +4489,6 @@ class DownloadManagerCore:
                             apply_download_failure_classification(
                                 dl,
                                 classify_download_failure(dl.error, last_lines),
-                                provider_running=bool(po_provider),
                             )
                     elif 'live event has ended' in combined:
                         dl.error = (
@@ -4508,13 +4499,12 @@ class DownloadManagerCore:
                     elif ('sabr' in combined or 'no video formats' in combined
                             or 'requested format is not available' in combined):
                         apply_download_failure_classification(
-                            dl, 'sabr-limited', provider_running=bool(po_provider),
+                            dl, 'sabr-limited',
                         )
                     else:
                         apply_download_failure_classification(
                             dl,
                             classify_download_failure(dl.error, last_lines),
-                            provider_running=bool(po_provider),
                         )
             if dl.status == "complete" and dl.section:
                 if stop_watchdog is not None:
@@ -4956,9 +4946,7 @@ class DownloadManagerCore:
         ytdlp = str(self._dependencies['YTDLP_PATH']())
         args = [ytdlp, '--ignore-config', '--no-colors', '--no-warnings',
                 '--no-playlist', '-J', '--skip-download']
-        args += self._dependencies['build_youtube_extractor_args'](
-            url, po_token_provider=self._dependencies['probe_po_token_provider'](),
-        )
+        args += self._dependencies['build_youtube_extractor_args'](url)
         runtime = self._dependencies['probe_javascript_runtime'](
             configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
         )
@@ -5244,9 +5232,7 @@ class DownloadManagerCore:
             '--flat-playlist', '--dump-single-json', '--skip-download',
             '--playlist-end', str(PLAYLIST_PREVIEW_LIMIT + 1),
         ]
-        args += self._dependencies['build_youtube_extractor_args'](
-            url, po_token_provider=self._dependencies['probe_po_token_provider'](),
-        )
+        args += self._dependencies['build_youtube_extractor_args'](url)
         runtime = self._dependencies['probe_javascript_runtime'](
             configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
         )

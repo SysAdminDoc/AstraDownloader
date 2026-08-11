@@ -25,6 +25,10 @@ repository's git log.
   carries a marker, installed copies remain rooted in `%LOCALAPPDATA%`,
   one-folder builds refuse unsafe self-relocation, and portable instance
   control plus uninstall cleanup are isolated to their own data root.
+- **YouTube downloads no longer route through the unusable bgutil branch.**
+  Plugin loading stays disabled, every extraction uses the verified
+  token-exempt client chain, and `/health` no longer claims that a reachable
+  external provider can affect downloads.
 
 ## [2.6.0] - 2026-08-09
 

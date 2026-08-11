@@ -1827,8 +1827,8 @@ class MainWindowCore(QMainWindow):
         else:
             self._set_readiness(
                 "provider", "Fallback", "neutral",
-                "No proof-of-origin provider is running. Downloads fall back to "
-                "the token-exempt tv and android_vr clients.",
+                "Plugin-based proof-of-origin providers are disabled. Downloads "
+                "use the verified token-exempt YouTube client chain.",
             )
 
 

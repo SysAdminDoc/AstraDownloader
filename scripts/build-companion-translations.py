@@ -926,8 +926,8 @@ CATALOGS = {
             "Downloads verwenden den Webclient mit Proof-of-Origin-Tokens.",
         "Fallback":
             "Fallback",
-        "No proof-of-origin provider is running. Downloads fall back to the token-exempt tv and android_vr clients.":
-            "Kein Proof-of-Origin-Anbieter läuft. Downloads fallen auf die tokenfreien tv- und android_vr-Clients zurück.",
+        "Plugin-based proof-of-origin providers are disabled. Downloads use the verified token-exempt YouTube client chain.":
+            "Pluginbasierte Proof-of-Origin-Anbieter sind deaktiviert. Downloads verwenden die verifizierte tokenfreie YouTube-Clientkette.",
         "Run a bounded metadata-only sign-in test.":
             "Begrenzten Metadaten-Test der Anmeldung ausführen.",
         "Test passed":
@@ -1084,18 +1084,14 @@ CATALOGS = {
             "Dieser Host ist pausiert — erneut versuchen in {duration}.",
         "Host paused · retry in {duration}":
             "Host pausiert · erneut versuchen in {duration}",
-        "YouTube requires a PO token for this video. Start the PO-token provider, then retry the download.":
-            "YouTube benötigt für dieses Video ein PO-Token. Starten Sie den PO-Token-Anbieter und versuchen Sie den Download erneut.",
-        "Start bgutil-ytdlp-pot-provider on 127.0.0.1:4416 and retry.":
-            "Starten Sie bgutil-ytdlp-pot-provider auf 127.0.0.1:4416 und versuchen Sie es erneut.",
-        "start-po-token-provider":
-            "start-po-token-provider",
-        "The PO-token provider is reachable but looks stale or failed to issue a usable token.":
-            "Der PO-Token-Anbieter ist erreichbar, wirkt aber veraltet oder konnte kein nutzbares Token ausstellen.",
-        "Update or restart bgutil-ytdlp-pot-provider, then retry.":
-            "Aktualisieren oder starten Sie bgutil-ytdlp-pot-provider neu und versuchen Sie es erneut.",
-        "update-po-token-provider":
-            "update-po-token-provider",
+        "YouTube requires a proof-of-origin token for this video, and the plugin-free client chain cannot supply one.":
+            "YouTube benötigt für dieses Video ein Proof-of-Origin-Token, das die pluginfreie Clientkette nicht bereitstellen kann.",
+        "Retry with a stored site sign-in, or try again later if YouTube makes a token-exempt format available.":
+            "Versuchen Sie es mit einer gespeicherten Website-Anmeldung erneut oder später, falls YouTube ein tokenfreies Format bereitstellt.",
+        "The YouTube proof-of-origin token path is unavailable for this video.":
+            "Der Proof-of-Origin-Tokenpfad von YouTube ist für dieses Video nicht verfügbar.",
+        "The plugin-based provider path is disabled. Retry with a stored site sign-in or later.":
+            "Der pluginbasierte Anbieterpfad ist deaktiviert. Versuchen Sie es mit einer gespeicherten Website-Anmeldung oder später erneut.",
         "This video only exposes SABR-limited formats that this yt-dlp path cannot download yet.":
             "Dieses Video bietet nur SABR-beschränkte Formate, die dieser yt-dlp-Pfad noch nicht herunterladen kann.",
         "Clip ranges, the bandwidth cap and concurrent fragments do not apply to SABR streams and were ignored. Update yt-dlp when SABR support lands, or retry after YouTube exposes standard formats.":
