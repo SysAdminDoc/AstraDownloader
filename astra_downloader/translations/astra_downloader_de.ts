@@ -1155,6 +1155,18 @@
       <translation>Wie Videoordner</translation>
     </message>
     <message>
+      <source>History retention</source>
+      <translation>Verlaufsaufbewahrung</translation>
+    </message>
+    <message>
+      <source>Maximum number of download records to keep locally. Files are never deleted.</source>
+      <translation>Maximale Anzahl lokaler Downloadaufzeichnungen. Dateien werden nie gelöscht.</translation>
+    </message>
+    <message>
+      <source> entries</source>
+      <translation> Einträge</translation>
+    </message>
+    <message>
       <source>Filename template</source>
       <translation>Dateinamenvorlage</translation>
     </message>
@@ -2159,12 +2171,12 @@
       <translation>Downloadverlauf konnte nicht gelesen werden. Die unlesbare Datei wurde beiseitegelegt; stellen Sie sie aus dem Status-Hinweis wieder her oder prüfen Sie die Diagnose.</translation>
     </message>
     <message>
-      <source>{start}–{end} of {filtered} filtered · {total} retained</source>
-      <translation>{start}–{end} von {filtered} gefiltert · {total} behalten</translation>
+      <source>{start}–{end} of {filtered} filtered · {total} retained · limit {limit}</source>
+      <translation>{start}–{end} von {filtered} gefiltert · {total} behalten · Limit {limit}</translation>
     </message>
     <message>
-      <source>0 of {filtered} filtered · {total} retained</source>
-      <translation>0 von {filtered} gefiltert · {total} behalten</translation>
+      <source>0 of {filtered} filtered · {total} retained · limit {limit}</source>
+      <translation>0 von {filtered} gefiltert · {total} behalten · Limit {limit}</translation>
     </message>
     <message>
       <source>No downloads yet</source>
@@ -2617,6 +2629,10 @@
     <message>
       <source>Could not read download history: {error}</source>
       <translation>Downloadverlauf konnte nicht gelesen werden: {error}</translation>
+    </message>
+    <message>
+      <source>Subscription archive</source>
+      <translation>Abonnementarchiv</translation>
     </message>
     <message>
       <source>No current message</source>

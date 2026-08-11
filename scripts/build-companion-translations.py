@@ -1449,6 +1449,15 @@ CATALOGS["de"].update({
         "{start}–{end} von {filtered} gefiltert · {total} behalten",
     "0 of {filtered} filtered · {total} retained":
         "0 von {filtered} gefiltert · {total} behalten",
+    "{start}–{end} of {filtered} filtered · {total} retained · limit {limit}":
+        "{start}–{end} von {filtered} gefiltert · {total} behalten · Limit {limit}",
+    "0 of {filtered} filtered · {total} retained · limit {limit}":
+        "0 von {filtered} gefiltert · {total} behalten · Limit {limit}",
+    "History retention": "Verlaufsaufbewahrung",
+    "Maximum number of download records to keep locally. Files are never deleted.":
+        "Maximale Anzahl lokaler Downloadaufzeichnungen. Dateien werden nie gelöscht.",
+    " entries": " Einträge",
+    "Subscription archive": "Abonnementarchiv",
     "yt-dlp {version} is ready.": "yt-dlp {version} ist bereit.",
     "{quality}p": "{quality}p",
     "Video link staged. Open Downloads to review it before adding it to the queue.":

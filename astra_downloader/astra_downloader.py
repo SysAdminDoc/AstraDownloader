@@ -63,6 +63,7 @@ try:
     from .config import (
         DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION, ConfigStore, DOWNLOAD_REQUEST_ALLOWED_FIELDS,
         DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS,
+        HISTORY_RETENTION_DEFAULT, HISTORY_RETENTION_MIN, HISTORY_RETENTION_MAX,
         HistoryStore, PORT_FALLBACKS, SERVER_PORT,
         default_download_path,
         allowed_output_roots, atomic_write_json, backup_corrupt_file, clamp_int,
@@ -86,7 +87,7 @@ try:
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
         FORMAT_SORT_FRAME_RATES,
-        query_history_entries, sanitize_history_entries,
+        lookup_history_url, query_history_entries, sanitize_history_entries,
         quarantined_state_files, restore_quarantined_file,
         validate_download_request_body,
     )
@@ -192,6 +193,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
     from config import (
         DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION, ConfigStore, DOWNLOAD_REQUEST_ALLOWED_FIELDS,
         DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS,
+        HISTORY_RETENTION_DEFAULT, HISTORY_RETENTION_MIN, HISTORY_RETENTION_MAX,
         HistoryStore, PORT_FALLBACKS, SERVER_PORT,
         default_download_path,
         allowed_output_roots, atomic_write_json, backup_corrupt_file, clamp_int,
@@ -215,7 +217,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
         FORMAT_SORT_FRAME_RATES,
-        query_history_entries, sanitize_history_entries,
+        lookup_history_url, query_history_entries, sanitize_history_entries,
         quarantined_state_files, restore_quarantined_file,
         validate_download_request_body,
     )
@@ -4127,14 +4129,25 @@ class Config(ConfigStore):
 # HISTORY
 # ══════════════════════════════════════════════════════════════
 class History(HistoryStore):
-    def __init__(self):
+    def __init__(self, config=None):
+        def read_limit():
+            source = config.get("HistoryRetentionLimit", HISTORY_RETENTION_DEFAULT) \
+                if config is not None else HISTORY_RETENTION_DEFAULT
+            return clamp_int(
+                source,
+                HISTORY_RETENTION_DEFAULT,
+                HISTORY_RETENTION_MIN,
+                HISTORY_RETENTION_MAX,
+            )
+
         super().__init__(
             path=lambda: HISTORY_PATH,
             sanitizer=sanitize_history_entries,
             loader=load_json_file,
             writer=lambda path, data: atomic_write_json(path, data),
             logger=lambda message: write_persistent_log(message),
-            limit=500,
+            limit=HISTORY_RETENTION_DEFAULT,
+            limit_reader=read_limit,
         )
 
 
@@ -4336,6 +4349,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
         'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
         'TaskbarProgress': TaskbarProgress,
+        'lookup_history_url': lambda *args, **kwargs: lookup_history_url(*args, **kwargs),
         'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,
@@ -4679,6 +4693,9 @@ class MainWindow(MainWindowCore):
                 'APP_NAME': lambda: APP_NAME,
                 'APP_VERSION': lambda: APP_VERSION,
                 'DEFAULT_CONFIG': lambda: DEFAULT_CONFIG,
+                'HISTORY_RETENTION_DEFAULT': lambda: HISTORY_RETENTION_DEFAULT,
+                'HISTORY_RETENTION_MIN': lambda: HISTORY_RETENTION_MIN,
+                'HISTORY_RETENTION_MAX': lambda: HISTORY_RETENTION_MAX,
                 'DOWNLOAD_PENDING_STATES': lambda: DOWNLOAD_PENDING_STATES,
                 'DOWNLOAD_RETRYABLE_ERROR_CODES': lambda: DOWNLOAD_RETRYABLE_ERROR_CODES,
                 'DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES': lambda: DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
@@ -4763,6 +4780,7 @@ class MainWindow(MainWindowCore):
                 'normalize_subtitle_format': lambda *args, **kwargs: normalize_subtitle_format(*args, **kwargs),
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
+                'lookup_history_url': lambda *args, **kwargs: lookup_history_url(*args, **kwargs),
                 'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
                 'reset_deno_runtime_cache': lambda *args, **kwargs: reset_deno_runtime_cache(*args, **kwargs),
                 'restore_quarantined_file': lambda *args, **kwargs: restore_quarantined_file(*args, **kwargs),
@@ -5341,7 +5359,7 @@ def main():
     app._astra_translator = install_companion_translator(
         app, config.get("Language", "system")
     )
-    history = History()
+    history = History(config)
     dl_manager = DownloadManager(config, history, queue_path=DOWNLOAD_QUEUE_PATH)
     subscriptions = build_subscription_manager(config, dl_manager)
     dl_manager.download_completed.connect(subscriptions.handle_download_completed)

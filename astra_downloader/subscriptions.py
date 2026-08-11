@@ -1032,6 +1032,10 @@ class SubscriptionManager:
     def list_subscriptions(self):
         return self.store.list_subscriptions()
 
+    def archive_entries(self):
+        """Return the durable archive for unified history lookup."""
+        return self.store.archive_entries()
+
     def snapshot(self):
         with self._lock:
             scanning = sorted(self._scan_ids)

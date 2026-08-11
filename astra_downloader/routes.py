@@ -181,6 +181,7 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'probe_javascript_runtime',
     'probe_po_token_provider',
     'provision_deno',
+    'lookup_history_url',
     'query_history_entries',
     'read_update_recovery_status',
     'validate_download_request_body',
@@ -238,6 +239,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     probe_javascript_runtime = dependencies['probe_javascript_runtime']
     probe_po_token_provider = dependencies['probe_po_token_provider']
     provision_deno = dependencies['provision_deno']
+    lookup_history_url = dependencies['lookup_history_url']
     query_history_entries = dependencies['query_history_entries']
     read_update_recovery_status = dependencies['read_update_recovery_status']
     validate_download_request_body = dependencies['validate_download_request_body']
@@ -1018,9 +1020,20 @@ def create_api(config, dl_manager, history, *, dependencies):
                 "error": "History dateFrom cannot be after dateTo.",
                 "code": "invalid-date-range",
             }, 400)
+        history_entries = history.load()
+        archive_entries = None
+        if subscription_manager is not None:
+            archive_reader = getattr(subscription_manager, 'archive_entries', None)
+            if callable(archive_reader):
+                try:
+                    archive_entries = archive_reader()
+                except Exception:
+                    archive_entries = None
+        query_text = clean_text(request.args.get('q'), '', 200)
+        requested_url = clean_text(request.args.get('url'), '', 4096)
         result = query_history_entries(
-            history.load(),
-            query=clean_text(request.args.get('q'), '', 200),
+            history_entries,
+            query=query_text or requested_url,
             status=clean_text(request.args.get('status'), '', 32),
             fmt=clean_text(request.args.get('format'), '', 16),
             date_from=date_from,
@@ -1028,7 +1041,14 @@ def create_api(config, dl_manager, history, *, dependencies):
             sort=sort,
             offset=offset,
             limit=limit,
+            archive_entries=archive_entries,
         )
+        if requested_url:
+            result['lookup'] = lookup_history_url(
+                history_entries,
+                requested_url,
+                archive_entries=archive_entries,
+            )
         return cors_response(result)
 
     def _subscription_unavailable():
