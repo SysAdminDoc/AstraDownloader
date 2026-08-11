@@ -6185,7 +6185,24 @@ class MainWindowCore(QMainWindow):
             "subscriptionIds": added_subscription_ids,
         }
         self.btn_undo_settings_import.show()
-        parts = [f"Imported {len(changes['settings'])} changed settings"]
+        changed_labels = []
+        for key in changes["settings"]:
+            attribute = next(
+                (
+                    attribute for attribute, field_key, _kind
+                    in self._SETTINGS_FORM_FIELDS
+                    if field_key == key
+                ),
+                "",
+            )
+            widget = getattr(self, attribute, None)
+            changed_labels.append(
+                widget.accessibleName() if widget is not None else key
+            )
+        changed_summary = f"Imported {len(changes['settings'])} changed settings"
+        if changed_labels:
+            changed_summary += ": " + ", ".join(changed_labels)
+        parts = [changed_summary]
         if added or skipped:
             parts.append(f"{added} subscriptions added, {skipped} already present")
         if changes["siteLoginSites"]:

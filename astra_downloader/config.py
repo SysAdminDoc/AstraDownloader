@@ -1251,6 +1251,12 @@ SETTINGS_BUNDLE_VERSION = 1
 # startup, so exporting them would write a value the target machine is about
 # to overwrite anyway — an import that appears to do nothing is worse than
 # one that does not claim to.
+#
+# Proxy URLs may contain a username and password, and SiteProfiles can carry
+# the same credential-bearing proxy values. SourceAddress/Xff/GeoVerificationProxy
+# are machine- and route-specific network settings rather than portable
+# preferences. ExtraOutputRoots is an API write allow-list: importing it would
+# silently widen the directories the loopback service may write to.
 BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "ServerToken",
     "LegacyHealthTokenEcho",
@@ -1261,6 +1267,12 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "WindowMaximized",
     "LastPage",
     "FirstRunComplete",
+    "Proxy",
+    "GeoVerificationProxy",
+    "SourceAddress",
+    "Xff",
+    "SiteProfiles",
+    "ExtraOutputRoots",
 })
 
 # Subscription fields that describe one machine's scan history rather than

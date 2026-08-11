@@ -14552,6 +14552,48 @@ class SettingsBundleTests(unittest.TestCase):
         self.assertIn("NativeChromeExtensionIds", changes["excludedSettings"])
         self.assertIn("NativeFirefoxExtensionIds", changes["excludedSettings"])
 
+    def test_bundle_exclusions_are_pinned_to_known_local_or_sensitive_settings(self):
+        expected = {
+            "ServerToken", "LegacyHealthTokenEcho", "LegacyHealthTokenOrigins",
+            "NativeChromeExtensionIds", "NativeFirefoxExtensionIds",
+            "WindowGeometry", "WindowMaximized", "LastPage", "FirstRunComplete",
+            "Proxy", "GeoVerificationProxy", "SourceAddress", "Xff",
+            "SiteProfiles", "ExtraOutputRoots",
+        }
+        self.assertEqual(set(ad.BUNDLE_EXCLUDED_SETTINGS), expected)
+        self.assertTrue(
+            set(ad.BUNDLE_EXCLUDED_SETTINGS) <= set(ad.DEFAULT_CONFIG),
+            "every excluded bundle key must be a real setting",
+        )
+
+    def test_network_credentials_profiles_and_output_allowlist_stay_out_on_export_and_import(self):
+        sensitive = {
+            "Proxy": "https://user:secret@example.invalid:8443",
+            "GeoVerificationProxy": "https://geo:secret@example.invalid:9443",
+            "SourceAddress": "192.0.2.10",
+            "Xff": "US",
+            "SiteProfiles": [{
+                "Name": "private archive",
+                "Domain": "youtube.com",
+                "Proxy": "https://profile:secret@example.invalid:10443",
+            }],
+            "ExtraOutputRoots": [str(Path(tempfile.gettempdir()) / "wide")],
+        }
+        bundle = ad.build_settings_bundle(ad.sanitize_config(sensitive))
+        for key in sensitive:
+            with self.subTest(direction="export", key=key):
+                self.assertNotIn(key, bundle["settings"])
+                self.assertIn(key, bundle["excludedSettings"])
+        self.assertNotIn("secret", json.dumps(bundle))
+
+        planted = dict(bundle)
+        planted["settings"] = dict(bundle["settings"], **sensitive)
+        imported, error = ad.read_settings_bundle(planted)
+        self.assertIsNone(error)
+        for key in sensitive:
+            with self.subTest(direction="import", key=key):
+                self.assertNotIn(key, imported["settings"])
+
     def test_window_state_is_local_and_invalid_pages_fall_back_to_download(self):
         config = ad.sanitize_config({
             "WindowGeometry": "A" * 9000,
@@ -14788,6 +14830,43 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertEqual(window.cfg_proxy.text(), "")
         self.assertEqual(window.cfg_language.currentData(), "system")
         self.assertIn("Restored defaults", window.settings_status.text())
+
+    def test_settings_import_status_names_the_changed_fields(self):
+        class MutableConfig(FakeConfig):
+            def update(self, mapping):
+                self.data.update(mapping)
+                return True
+
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        config = MutableConfig(ad.sanitize_config({
+            "SubLangs": "en",
+            "EmbedSubs": False,
+        }))
+        window = self._window(config)
+        payload = {
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": ad.SETTINGS_BUNDLE_VERSION,
+            "settings": {"SubLangs": "de", "EmbedSubs": True},
+            "subscriptions": [],
+            "siteLoginSites": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "settings.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with mock.patch.object(
+                ad.QFileDialog,
+                "getOpenFileName",
+                return_value=(str(path), "JSON files (*.json)"),
+            ):
+                self.assertTrue(window._import_settings_bundle())
+        QApplication.processEvents()
+        status = window.settings_status.text()
+        self.assertIn(window.cfg_sublangs.accessibleName(), status)
+        self.assertIn(window.cfg_subs.accessibleName(), status)
+        self.assertEqual(config.get("SubLangs"), "de")
+        self.assertTrue(config.get("EmbedSubs"))
 
     def test_sign_in_browser_list_marks_chromium_entries_before_selection(self):
         from PyQt6.QtWidgets import QApplication
