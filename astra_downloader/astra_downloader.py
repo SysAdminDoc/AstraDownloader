@@ -485,7 +485,7 @@ WHISPER_MODEL_SHA256 = (
 # Keep the media tool on that floor and provision the small, CPU-only
 # whisper.cpp CLI separately instead. The release asset is pinned by both tag
 # and digest; the archive contains the CLI and its colocated DLLs.
-WHISPER_BIN_VERSION = '1.9.1'
+WHISPER_BIN_VERSION = '1.9.2'
 WHISPER_BIN_DIR = INSTALL_DIR / 'whisper'
 WHISPER_BIN_PATH = WHISPER_BIN_DIR / 'whisper-cli.exe'
 WHISPER_BIN_MIN_BYTES = 128 * 1024
@@ -494,7 +494,7 @@ WHISPER_BIN_URL = (
     f'v{WHISPER_BIN_VERSION}/whisper-bin-x64.zip'
 )
 WHISPER_BIN_SHA256 = (
-    '7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539'
+    '49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a'
 )
 ICON_PATH = INSTALL_DIR / 'AstraDownloader.ico'
 # Scheduled subscriptions keep their archive in the schema-checked

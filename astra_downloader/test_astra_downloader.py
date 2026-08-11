@@ -18209,11 +18209,28 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
         self.assertIsNone(ad.parse_whisper_progress("progress=end"))
 
     def test_whisper_invocation_requests_real_progress_output(self):
+        import download as download_module
+
+        with mock.patch.object(download_module.os, "cpu_count", return_value=12):
+            args = ad.build_whisper_transcription_args(
+                "whisper-cli.exe", "model.bin", "audio.wav", "captions"
+            )
+        self.assertEqual(args[args.index("-t") + 1], "12")
+        self.assertIn("-sow", args)
         args = ad.build_whisper_transcription_args(
-            "whisper-cli.exe", "model.bin", "audio.wav", "captions"
+            "whisper-cli.exe", "model.bin", "audio.wav", "captions",
+            threads=7,
         )
         self.assertIn("-pp", args)
         self.assertEqual(args[args.index("-pp") - 2], "-of")
+
+    def test_whisper_sidecar_pin_has_a_verified_release_digest(self):
+        self.assertEqual(ad.WHISPER_BIN_VERSION, "1.9.2")
+        self.assertEqual(
+            ad.WHISPER_BIN_SHA256,
+            "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+        )
+        self.assertIn("/v1.9.2/whisper-bin-x64.zip", ad.WHISPER_BIN_URL)
 
     def test_transcription_gate_is_independent_of_download_limit(self):
         manager = ad.DownloadManager(
