@@ -16826,8 +16826,8 @@ class SettingsBundleTests(unittest.TestCase):
             "ServerToken", "LegacyHealthTokenEcho", "LegacyHealthTokenOrigins",
             "NativeChromeExtensionIds", "NativeFirefoxExtensionIds",
             "WindowGeometry", "WindowMaximized", "LastPage", "FirstRunComplete",
-            "Proxy", "GeoVerificationProxy", "SourceAddress", "Xff",
-            "SiteProfiles", "ExtraOutputRoots",
+            "Proxy", "UseSystemProxy", "GeoVerificationProxy", "SourceAddress",
+            "Xff", "SiteProfiles", "ExtraOutputRoots",
         }
         self.assertEqual(set(ad.BUNDLE_EXCLUDED_SETTINGS), expected)
         self.assertTrue(
@@ -17035,6 +17035,8 @@ class SettingsFormReloadTests(unittest.TestCase):
             _retire_test_window(window)
         # Not a stored setting: it reports the session's bound port.
         built.discard("cfg_port_session_hint")
+        # Not a stored setting: it reports what Windows currently advertises.
+        built.discard("cfg_system_proxy_hint")
         # A dict of checkboxes, refreshed separately by name.
         built.discard("cfg_sb_categories")
         # ServerToken is read-only and never travels in a bundle, so an
@@ -19970,6 +19972,129 @@ class ButtonLabelCaseTests(unittest.TestCase):
             if capitals:
                 offenders.append((label, capitals))
         self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
+
+class SystemProxyTests(unittest.TestCase):
+    """Windows already knows the proxy; the user should not retype it.
+
+    Detection is deliberately split: the registry read lives in the composition
+    root, parsing and precedence live in config.py, so a malformed registry
+    value is refused by exactly the rules a typed proxy faces.
+    """
+
+    def test_a_bare_host_port_applies_to_every_protocol(self):
+        self.assertEqual(
+            ad.parse_wininet_proxy_server("proxy.corp:8080"),
+            "http://proxy.corp:8080",
+        )
+
+    def test_a_per_protocol_list_is_resolved_by_preference_not_by_order(self):
+        # WinINET stores an unordered list. Taking whichever entry came first
+        # would route through the ftp proxy on a machine that lists it first.
+        self.assertEqual(
+            ad.parse_wininet_proxy_server("ftp=f.corp:21;http=p.corp:8080;https=s.corp:8443"),
+            "http://s.corp:8443",
+        )
+        self.assertEqual(
+            ad.parse_wininet_proxy_server("ftp=f.corp:21;http=p.corp:8080"),
+            "http://p.corp:8080",
+        )
+
+    def test_a_socks_entry_keeps_its_scheme(self):
+        self.assertEqual(
+            ad.parse_wininet_proxy_server("socks=s.corp:1080"),
+            "socks5://s.corp:1080",
+        )
+
+    def test_a_malformed_registry_value_is_refused(self):
+        for value in ("", "   ", "ftp=f.corp:21", "=;;=", None, 12345):
+            with self.subTest(value=value):
+                self.assertEqual(ad.parse_wininet_proxy_server(value), "")
+
+    def test_a_typed_proxy_always_wins_over_the_detected_one(self):
+        config = FakeConfig({"Proxy": "http://typed:3128", "UseSystemProxy": True})
+        self.assertEqual(
+            ad.resolve_effective_proxy(config.get, "http://detected:8080"),
+            "http://typed:3128",
+        )
+
+    def test_the_detected_proxy_is_ignored_while_the_option_is_off(self):
+        config = FakeConfig({"Proxy": "", "UseSystemProxy": False})
+        self.assertEqual(
+            ad.resolve_effective_proxy(config.get, "http://detected:8080"), ""
+        )
+
+    def test_the_detected_proxy_is_used_when_opted_in_with_no_typed_value(self):
+        config = FakeConfig({"Proxy": "", "UseSystemProxy": True})
+        self.assertEqual(
+            ad.resolve_effective_proxy(config.get, "http://detected:8080"),
+            "http://detected:8080",
+        )
+
+    def test_a_disabled_system_proxy_is_not_read_from_a_stale_registry_value(self):
+        # ProxyEnable = 0 with a leftover ProxyServer string is the normal
+        # state of a machine whose proxy was turned off, not configuration.
+        calls = {}
+
+        class FakeKey:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        def fake_query(_key, name):
+            calls[name] = calls.get(name, 0) + 1
+            if name == "ProxyEnable":
+                return (0, 4)
+            return ("stale.corp:8080", 1)
+
+        winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER=object(),
+            OpenKey=lambda *_a, **_k: FakeKey(),
+            QueryValueEx=fake_query,
+            CloseKey=lambda _key: None,
+        )
+        with mock.patch.dict(sys.modules, {"winreg": winreg}), \
+                mock.patch.object(ad.sys, "platform", "win32"):
+            self.assertEqual(ad.detect_system_proxy(), "")
+        self.assertNotIn("ProxyServer", calls)
+
+    def test_an_enabled_system_proxy_is_parsed(self):
+        class FakeKey:
+            pass
+
+        def fake_query(_key, name):
+            return (1, 4) if name == "ProxyEnable" else ("proxy.corp:8080", 1)
+
+        winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER=object(),
+            OpenKey=lambda *_a, **_k: FakeKey(),
+            QueryValueEx=fake_query,
+            CloseKey=lambda _key: None,
+        )
+        with mock.patch.dict(sys.modules, {"winreg": winreg}), \
+                mock.patch.object(ad.sys, "platform", "win32"):
+            self.assertEqual(ad.detect_system_proxy(), "http://proxy.corp:8080")
+
+    def test_an_unreadable_key_reports_no_proxy_instead_of_raising(self):
+        def boom(*_args, **_kwargs):
+            raise OSError("access denied")
+
+        winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER=object(),
+            OpenKey=boom,
+            QueryValueEx=lambda *_a: None,
+            CloseKey=lambda _key: None,
+        )
+        with mock.patch.dict(sys.modules, {"winreg": winreg}), \
+                mock.patch.object(ad.sys, "platform", "win32"):
+            self.assertEqual(ad.detect_system_proxy(), "")
+
+    def test_the_setting_never_travels_in_a_settings_bundle(self):
+        # It describes one machine's network, exactly like Proxy itself: an
+        # import must not silently route another machine's traffic.
+        self.assertIn("UseSystemProxy", ad.BUNDLE_EXCLUDED_SETTINGS)
+
 
 class OutputNameTests(unittest.TestCase):
     """A per-download name is a file stem, never a path and never a template.

@@ -41,6 +41,7 @@ __all__ = (
     "normalize_url", "normalize_output_dir", "normalize_download_section",
     "normalize_playlist_items", "normalize_output_name",
     "MAX_OUTPUT_NAME_LENGTH",
+    "parse_wininet_proxy_server", "resolve_effective_proxy",
     "media_url_block_reason", "is_supported_media_url",
     "describe_media_url_block", "looks_like_media_link",
     "MEDIA_URL_BLOCK_MESSAGES", "MEDIA_HOST_HINTS",
@@ -85,6 +86,7 @@ _OWNED_EXPORTS = {
     "bound_output_template_fields",
     "normalize_output_template", "normalize_output_name",
     "MAX_OUTPUT_NAME_LENGTH",
+    "parse_wininet_proxy_server", "resolve_effective_proxy",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
     "media_url_block_reason", "is_supported_media_url",
     "describe_media_url_block", "looks_like_media_link",
@@ -317,6 +319,11 @@ DEFAULT_CONFIG = {
     "YtDlpUpdateChannel": "nightly",
     "RateLimit": "",
     "Proxy": "",
+    # Off by default: inheriting a machine's proxy is a routing decision the
+    # user should make, and a silent inherit would change where traffic goes
+    # on an upgrade. An explicitly typed Proxy always wins over the
+    # detected one.
+    "UseSystemProxy": False,
     # Network-path workarounds are opt-in. A whole-session proxy remains the
     # broad control; these target dual-stack routing and geo verification only
     # when a site or network actually needs them.
@@ -851,6 +858,70 @@ def normalize_output_template(value):
     if "%" in stripped:
         return ""
     return bound_output_template_fields(norm)
+
+
+def parse_wininet_proxy_server(raw, *, scheme="http"):
+    """Turn a WinINET ``ProxyServer`` value into one yt-dlp ``--proxy`` URL.
+
+    WinINET stores either a bare ``host:port`` that applies to every protocol,
+    or a per-protocol list like ``http=proxy:8080;https=proxy:8443;ftp=…``.
+    yt-dlp takes a single proxy, so the per-protocol form is resolved by
+    preference (https, then http, then socks) rather than by taking whichever
+    entry happened to be first.
+
+    Returns "" for anything that does not normalize to a proxy this app would
+    have accepted had the user typed it, so a malformed registry value cannot
+    reach the subprocess boundary.
+    """
+    text = clean_text(raw, "", 512).strip()
+    if not text:
+        return ""
+    entries = {}
+    bare = ""
+    for chunk in text.split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "=" in chunk:
+            protocol, _, value = chunk.partition("=")
+            entries[protocol.strip().lower()] = value.strip()
+        elif not bare:
+            bare = chunk
+    candidate = ""
+    for protocol in ("https", "http", "socks"):
+        if entries.get(protocol):
+            candidate = entries[protocol]
+            if protocol == "socks" and "://" not in candidate:
+                candidate = f"socks5://{candidate}"
+            break
+    if not candidate:
+        candidate = bare
+    if not candidate:
+        return ""
+    if "://" not in candidate:
+        # A proxy is host[:port]. `ProxyServer` read back as a REG_DWORD gives
+        # a bare integer, which would otherwise become the hostname
+        # `http://12345` and be accepted by normalize_proxy.
+        host = candidate.split("/", 1)[0]
+        if ":" not in host and "." not in host and host.lower() != "localhost":
+            return ""
+        candidate = f"{scheme}://{candidate}"
+    return normalize_proxy(candidate)
+
+
+def resolve_effective_proxy(config_get, detected=""):
+    """Return the proxy a download should use.
+
+    An explicitly typed proxy always wins: turning the system option on must
+    never silently override a value the user entered. The detected proxy is
+    only consulted when the option is on and no explicit proxy is set.
+    """
+    explicit = str(config_get("Proxy", "") or "").strip()
+    if explicit:
+        return explicit
+    if not coerce_bool(config_get("UseSystemProxy", False), False):
+        return ""
+    return str(detected or "").strip()
 
 
 MAX_OUTPUT_NAME_LENGTH = 180
@@ -1432,6 +1503,7 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "LastPage",
     "FirstRunComplete",
     "Proxy",
+    "UseSystemProxy",
     "GeoVerificationProxy",
     "SourceAddress",
     "Xff",
@@ -1603,6 +1675,7 @@ def sanitize_config(raw):
         "WindowsFilenames",
         "KeepIntermediateFiles", "VerifyFormats",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
+        "UseSystemProxy",
         "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",
         "FirstRunComplete", "LegacyHealthTokenEcho",
     ):

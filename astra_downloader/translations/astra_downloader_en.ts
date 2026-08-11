@@ -595,6 +595,22 @@
       <translation>Automatic matching is on; no profile matches this link.</translation>
     </message>
     <message>
+      <source>A proxy is typed above, so it is used and the system proxy is ignored.</source>
+      <translation>A proxy is typed above, so it is used and the system proxy is ignored.</translation>
+    </message>
+    <message>
+      <source>Downloads connect directly.</source>
+      <translation>Downloads connect directly.</translation>
+    </message>
+    <message>
+      <source>Windows reports {proxy}.</source>
+      <translation>Windows reports {proxy}.</translation>
+    </message>
+    <message>
+      <source>Windows reports no proxy, so downloads connect directly.</source>
+      <translation>Windows reports no proxy, so downloads connect directly.</translation>
+    </message>
+    <message>
       <source>That name cannot be used. Remove any folder separators, drive letters, %, or reserved device names such as CON.</source>
       <translation>That name cannot be used. Remove any folder separators, drive letters, %, or reserved device names such as CON.</translation>
     </message>
@@ -2657,6 +2673,22 @@
     <message>
       <source>Optional HTTP(S) or SOCKS proxy.</source>
       <translation>Optional HTTP(S) or SOCKS proxy.</translation>
+    </message>
+    <message>
+      <source>Use the proxy Windows is configured with</source>
+      <translation>Use the proxy Windows is configured with</translation>
+    </message>
+    <message>
+      <source>Use the system proxy</source>
+      <translation>Use the system proxy</translation>
+    </message>
+    <message>
+      <source>Reads the proxy from Windows Internet Settings. A proxy typed above always wins.</source>
+      <translation>Reads the proxy from Windows Internet Settings. A proxy typed above always wins.</translation>
+    </message>
+    <message>
+      <source>Detected system proxy</source>
+      <translation>Detected system proxy</translation>
     </message>
     <message>
       <source>Imitate a browser</source>

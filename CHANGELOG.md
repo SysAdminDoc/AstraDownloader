@@ -26,6 +26,12 @@ repository's git log.
 
 ### Fixed
 
+- **Downloads can inherit the proxy Windows is configured with.** A Settings
+  option, off by default, reads the per-user WinINET configuration and shows the
+  resolved value before you save it. A proxy typed by hand always wins, a
+  disabled proxy is never read from a stale registry value, and the option stays
+  out of settings bundles because it describes one machine's network.
+
 - **A download can carry its own file name.** "Save as" on the Download page,
   and `outputName` through the local API, name a single download's output; the
   extension is still added by yt-dlp. The name is a stem, never a path: folder

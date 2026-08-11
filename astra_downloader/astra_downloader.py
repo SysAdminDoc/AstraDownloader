@@ -73,6 +73,7 @@ try:
         media_url_block_reason,
         normalize_download_section, normalize_playlist_items, normalize_output_dir,
         normalize_output_name, MAX_OUTPUT_NAME_LENGTH,
+        parse_wininet_proxy_server, resolve_effective_proxy,
         normalize_output_template, normalize_proxy,
         output_template_preview,
         normalize_force_ip_version, normalize_source_address, normalize_xff,
@@ -210,6 +211,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         media_url_block_reason,
         normalize_download_section, normalize_playlist_items, normalize_output_dir,
         normalize_output_name, MAX_OUTPUT_NAME_LENGTH,
+        parse_wininet_proxy_server, resolve_effective_proxy,
         normalize_output_template, normalize_proxy,
         output_template_preview,
         normalize_force_ip_version, normalize_source_address, normalize_xff,
@@ -3347,6 +3349,56 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
 
 
 # ── v1.2.0: integrations stamp (idempotent shortcut/protocol/task registration) ──
+_SYSTEM_PROXY_INTERNET_SETTINGS_KEY = (
+    r'Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+)
+
+
+def detect_system_proxy():
+    """Return the machine's configured proxy as a yt-dlp `--proxy` URL, or "".
+
+    Read from the per-user WinINET configuration in HKCU, which is what the
+    Windows "Proxy" settings page writes and what most desktop applications
+    honour. HKCU keeps this unelevated and per-user, matching every other
+    integration this app touches.
+
+    `ProxyEnable` being 0 means the user turned the proxy off, so a stale
+    `ProxyServer` string left in the registry is deliberately ignored rather
+    than treated as configuration. Parsing and validation live in config.py so
+    a malformed registry value is refused by exactly the rules a typed proxy
+    would face.
+    """
+    if sys.platform != 'win32':
+        return ""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _SYSTEM_PROXY_INTERNET_SETTINGS_KEY
+        )
+        try:
+            try:
+                enabled, _ = winreg.QueryValueEx(key, 'ProxyEnable')
+            except FileNotFoundError:
+                return ""
+            if not int(enabled or 0):
+                return ""
+            try:
+                server, _ = winreg.QueryValueEx(key, 'ProxyServer')
+            except FileNotFoundError:
+                return ""
+        finally:
+            winreg.CloseKey(key)
+    except OSError as error:
+        # reason: an unreadable Internet Settings key means "no detectable
+        # proxy", which is the same answer as a disabled one. It must not stop
+        # a download or a settings page from rendering.
+        write_persistent_log(f'Could not read the system proxy configuration: {error}')
+        return ""
+    except (TypeError, ValueError):
+        return ""
+    return parse_wininet_proxy_server(server)
+
+
 def _get_integrations_stamp():
     if sys.platform != 'win32':
         return None
@@ -4456,6 +4508,8 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
+                'detect_system_proxy': lambda: detect_system_proxy(),
+                'resolve_effective_proxy': lambda *args, **kwargs: resolve_effective_proxy(*args, **kwargs),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_playlist_items': lambda *args, **kwargs: normalize_playlist_items(*args, **kwargs),
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
@@ -5002,6 +5056,7 @@ class MainWindow(MainWindowCore):
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
+                'detect_system_proxy': lambda: detect_system_proxy(),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'output_template_preview': lambda *args, **kwargs: output_template_preview(*args, **kwargs),
