@@ -17149,6 +17149,29 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             "auto",
         )
 
+    def test_whisper_progress_is_parsed_and_clamped(self):
+        self.assertEqual(ad.parse_whisper_progress("progress = 37%"), 37.0)
+        self.assertEqual(ad.parse_whisper_progress("progress: 120%"), 100.0)
+        self.assertIsNone(ad.parse_whisper_progress("progress=end"))
+
+    def test_whisper_invocation_requests_real_progress_output(self):
+        args = ad.build_whisper_transcription_args(
+            "whisper-cli.exe", "model.bin", "audio.wav", "captions"
+        )
+        self.assertIn("-pp", args)
+        self.assertEqual(args[args.index("-pp") - 2], "-of")
+
+    def test_transcription_gate_is_independent_of_download_limit(self):
+        manager = ad.DownloadManager(
+            FakeConfig({"MaxConcurrentDownloads": 10}), FakeHistory()
+        )
+        self.assertEqual(manager._max_concurrent(), 10)
+        self.assertTrue(manager._transcription_gate.acquire(blocking=False))
+        try:
+            self.assertFalse(manager._transcription_gate.acquire(blocking=False))
+        finally:
+            manager._transcription_gate.release()
+
     class _TranscriptProcess:
         def __init__(self, args, **_kwargs):
             self.args = list(args)
@@ -17211,6 +17234,112 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             self.assertIn("hello", output.read_text(encoding="utf-8"))
             self.assertEqual(download.status, "complete")
             self.assertEqual(download.progress, 100.0)
+
+    def test_whisper_watchdog_bounds_the_real_child_and_reports_progress(self):
+        import importlib
+
+        download_module = importlib.import_module("download")
+        terminated = []
+        stopped = threading.Event()
+        calls = []
+        progress_seen = []
+
+        class CompletedProcess:
+            def __init__(self, args):
+                self.args = list(args)
+                self.returncode = 0
+                self.stdout = io.StringIO("progress=end\n")
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+            def poll(self):
+                return self.returncode
+
+        class HangingProcess:
+            def __init__(self, args):
+                self.args = list(args)
+                self.returncode = None
+                self.stdout = self.BlockingStdout(self, stopped)
+
+            class BlockingStdout:
+                def __init__(self, proc, stop_event):
+                    self.proc = proc
+                    self.stop_event = stop_event
+                    self.progress_emitted = False
+
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    if not self.progress_emitted:
+                        self.progress_emitted = True
+                        return "progress = 37%\n"
+                    if not self.stop_event.wait(1):
+                        self.proc.returncode = 1
+                    raise StopIteration
+
+                def close(self):
+                    return None
+
+            def wait(self, timeout=None):
+                return self.returncode or 1
+
+            def poll(self):
+                return self.returncode
+
+        hanging = HangingProcess(["whisper-cli.exe"])
+
+        def spawn(args, **kwargs):
+            calls.append((list(args), dict(kwargs)))
+            return hanging if "-osrt" in args else CompletedProcess(args)
+
+        def terminate(proc):
+            terminated.append(proc)
+            stopped.set()
+            proc.returncode = 1
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
+            config, download = self._download(media)
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            manager.progress_updated.connect(
+                lambda: progress_seen.append(download.progress)
+            )
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
+                    mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
+                    mock.patch.object(ad, "spawn_media_process", side_effect=spawn), \
+                    mock.patch.object(ad, "terminate_process_tree", side_effect=terminate), \
+                    mock.patch.object(download_module, "LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS", 0), \
+                    mock.patch.object(download_module, "LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS", 0.01):
+                result = manager._run_local_subtitles(download, config)
+
+        self.assertFalse(result)
+        self.assertEqual(terminated, [hanging])
+        self.assertEqual(download.status, "complete")
+        self.assertEqual(download.error_code, "transcription-timeout")
+        self.assertIn("time limit", download.error)
+        self.assertIsNone(download.process)
+        self.assertTrue(
+            any(abs(value - 49.6) < 0.01 for value in progress_seen),
+            progress_seen,
+        )
+        self.assertIn("-pp", calls[1][0])
+        self.assertEqual(
+            calls[1][1]["creationflags"]
+            & download_module.TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS,
+            download_module.TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS,
+        )
 
     def test_cancelling_the_stage_does_not_leave_a_partial_srt(self):
         with tempfile.TemporaryDirectory() as tmpdir:

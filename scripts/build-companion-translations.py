@@ -1000,6 +1000,10 @@ CATALOGS = {
             "Prüfen Sie die Bereitschaftszeilen für ffmpeg und das lokale Transkriptionsmodell und wiederholen Sie den Download.",
         "The local transcription runtime is missing or cannot produce SRT output.":
             "Die lokale Transkriptionslaufzeit fehlt oder kann keine SRT-Ausgabe erzeugen.",
+        "Local subtitle generation exceeded its time limit.":
+            "Die lokale Untertitelerzeugung hat das Zeitlimit überschritten.",
+        "Retry subtitle generation on the completed media. If it times out again, use a shorter recording or a faster machine.":
+            "Versuchen Sie die Untertitelerzeugung für die abgeschlossenen Medien erneut. Wenn sie erneut das Zeitlimit überschreitet, verwenden Sie eine kürzere Aufnahme oder einen schnelleren Computer.",
         "Check the local transcription readiness rows, then retry subtitles without downloading the media again.":
             "Prüfen Sie die Bereitschaftszeilen für die lokale Transkription und versuchen Sie die Untertitel erneut, ohne die Medien erneut herunterzuladen.",
         "retry-subtitles":
