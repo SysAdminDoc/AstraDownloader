@@ -44,6 +44,7 @@ except ImportError:  # Flat source-path compatibility.
 __all__ = (
     "MainWindow", "SetupWorker", "FolderPickerService", "repolish",
     "make_label", "make_section_label", "make_divider", "make_card",
+    "tr_format",
     "make_stat", "make_empty_state", "STYLESHEET", "_folder_pick_q",
     "run_uninstall", "is_safe_install_dir_for_removal",
     "spawn_delayed_install_dir_removal", "check_single_instance", "main",
@@ -164,6 +165,11 @@ def tr(text):
     return QCoreApplication.translate("AstraDownloader", str(text))
 
 
+def tr_format(template, **values):
+    """Translate a format-string template before inserting runtime values."""
+    return tr(template).format(**values)
+
+
 # The languages worth a checkbox. The free-text field beside them still takes
 # any code yt-dlp accepts — these exist so picking Simplified Chinese does not
 # require knowing it is spelled zh-Hans.
@@ -222,17 +228,21 @@ def make_status_badge(text, tone="neutral"):
     badge.setProperty("tone", tone)
     badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
     badge.setMinimumHeight(22)
-    badge.setAccessibleName(f"{tr('Status')}: {translated}")
+    badge.setAccessibleName(
+        tr_format("{label}: {value}", label=tr("Status"), value=translated)
+    )
     return badge
 
 
 def make_state_label(text, tone="neutral"):
     translated = tr(text)
-    label = QLabel(f"\u25cf  {translated}")
+    label = QLabel(tr_format("●  {status}", status=translated))
     label.setTextFormat(Qt.TextFormat.PlainText)
     label.setProperty("class", "stateLabel")
     label.setProperty("tone", tone)
-    label.setAccessibleName(f"{tr('Status')}: {translated}")
+    label.setAccessibleName(
+        tr_format("{label}: {value}", label=tr("Status"), value=translated)
+    )
     return label
 
 
@@ -410,12 +420,18 @@ def describe_rejected_links(failures):
     for _url, reason in failures:
         if reason not in reasons:
             reasons.append(reason)
-    noun = "link" if len(failures) == 1 else "links"
+    noun = tr("link") if len(failures) == 1 else tr("links")
     if len(reasons) == 1:
-        return f"{len(failures)} {noun} rejected: {reasons[0]}"
-    return (
-        f"{len(failures)} {noun} rejected for {len(reasons)} different "
-        f"reasons. First: {reasons[0]}"
+        return tr_format(
+            "{count} {noun} rejected: {reason}",
+            count=len(failures), noun=noun, reason=reasons[0],
+        )
+    return tr_format(
+        "{count} {noun} rejected for {reasons} different reasons. First: {first}",
+        count=len(failures),
+        noun=noun,
+        reasons=len(reasons),
+        first=reasons[0],
     )
 
 
@@ -1396,10 +1412,22 @@ class MainWindowCore(QMainWindow):
             btn.setProperty("class", "nav")
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
-            btn.setAccessibleName(f"{translated_name} {tr('page')}")
+            btn.setAccessibleName(
+                tr_format(
+                    "{name} {page}",
+                    name=translated_name,
+                    page=tr("page"),
+                )
+            )
             set_line_icon(btn, name)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip(f"{tr('Open')} {translated_name}")
+            btn.setToolTip(
+                tr_format(
+                    "{open_label} {name}",
+                    open_label=tr("Open"),
+                    name=translated_name,
+                )
+            )
             btn.clicked.connect(lambda checked, n=name: self._nav_click(n))
             sidebar_layout.addWidget(btn)
             self.nav_buttons.append(btn)
@@ -1461,14 +1489,14 @@ class MainWindowCore(QMainWindow):
         else:
             self.tray.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon))
         tray_menu = QMenu()
-        show_action = tray_menu.addAction("Show Astra Downloader")
+        show_action = tray_menu.addAction(tr("Show Astra Downloader"))
         show_action.triggered.connect(self._show_from_tray)
-        self.tray_startstop = tray_menu.addAction("Stop server")
+        self.tray_startstop = tray_menu.addAction(tr("Stop server"))
         self.tray_startstop.triggered.connect(self._toggle_server)
-        folder_action = tray_menu.addAction("Open Downloads Folder")
+        folder_action = tray_menu.addAction(tr("Open Downloads Folder"))
         folder_action.triggered.connect(self._open_folder)
         tray_menu.addSeparator()
-        exit_action = tray_menu.addAction("Quit Astra Downloader")
+        exit_action = tray_menu.addAction(tr("Quit Astra Downloader"))
         exit_action.triggered.connect(self._force_close)
         self.tray.setContextMenu(tray_menu)
         self.tray.activated.connect(self._tray_activated)
@@ -1479,7 +1507,13 @@ class MainWindowCore(QMainWindow):
         # It fails soft: no taskbar bar is a missing nicety, not a broken app.
         self._taskbar_progress = self._dependencies['TaskbarProgress']()
         self._last_notified_file = ""
-        self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Running')}")
+        self.tray.setToolTip(
+            tr_format(
+                "{app} - {status}",
+                app=self._value("APP_NAME"),
+                status=tr("Running"),
+            )
+        )
         self.tray.show()
         self._clipboard = QApplication.clipboard()
         self._clipboard.dataChanged.connect(self._handle_clipboard_change)
@@ -1946,7 +1980,10 @@ class MainWindowCore(QMainWindow):
                 if combo.findData(target) < 0:
                     combo.addItem(target, target)
             if configured and combo.findData(configured) < 0:
-                combo.addItem(f"{configured} (unavailable)", configured)
+                combo.addItem(
+                    tr_format("{target} (unavailable)", target=configured),
+                    configured,
+                )
             restored = combo.findData(configured)
             combo.setCurrentIndex(restored if restored >= 0 else 0)
         finally:
@@ -2169,7 +2206,7 @@ class MainWindowCore(QMainWindow):
         self._restore_log_view()
         layout.addWidget(self.log_text, 1)
 
-        self.tabs.addTab(page, "Browser extension")
+        self.tabs.addTab(page, tr("Browser extension"))
 
     def _build_download(self):
         page = QWidget()
@@ -2525,7 +2562,7 @@ class MainWindowCore(QMainWindow):
         page_scroll.setWidgetResizable(True)
         page_scroll.setWidget(page)
         self.download_page_scroll = page_scroll
-        self.tabs.addTab(page_scroll, "Download")
+        self.tabs.addTab(page_scroll, tr("Download"))
 
     @staticmethod
     def _split_sublangs(text):
@@ -2579,16 +2616,21 @@ class MainWindowCore(QMainWindow):
             self.config.get("SubLangs", "en")
         )
         kind = {
-            "manual": "creator subtitles only",
-            "auto": "auto-generated subtitles only",
-        }.get(mode, "creator subtitles, falling back to auto-generated")
+            "manual": tr("creator subtitles only"),
+            "auto": tr("auto-generated subtitles only"),
+        }.get(mode, tr("creator subtitles, falling back to auto-generated"))
         fmt = self._dependencies['normalize_subtitle_format'](
             self.config.get("SubtitleFormat")
         )
-        as_format = f" as {fmt.upper()}" if fmt else ""
-        return (
-            f"Downloads {kind} in {langs}{as_format}, without the video. "
-            "Change this under Settings, Post-processing."
+        as_format = (
+            tr_format("as {format}", format=fmt.upper()) if fmt else ""
+        )
+        return tr_format(
+            "Downloads {kind} in {languages}{format}, without the video. "
+            "Change this under Settings, Post-processing.",
+            kind=kind,
+            languages=langs,
+            format=(" " + as_format if as_format else ""),
         )
 
     def _site_profiles(self):
@@ -2688,7 +2730,7 @@ class MainWindowCore(QMainWindow):
         self.quick_download_format.blockSignals(True)
         self.quick_download_format.clear()
         for label, value in values:
-            self.quick_download_format.addItem(label, value)
+            self.quick_download_format.addItem(tr(label), value)
         restored = self.quick_download_format.findData(current)
         if restored >= 0:
             self.quick_download_format.setCurrentIndex(restored)
@@ -2824,13 +2866,22 @@ class MainWindowCore(QMainWindow):
 
         if queued:
             if len(queued) == 1:
-                message = f"Queued {queued[0]}" + (
-                    " for an accurate ffmpeg clip." if section else "."
+                message = tr_format(
+                    "Queued {id}{suffix}.",
+                    id=queued[0],
+                    suffix=(
+                        " " + tr("for an accurate ffmpeg clip")
+                        if section else ""
+                    ),
                 )
             else:
-                message = f"Queued {len(queued)} downloads."
+                message = tr_format(
+                    "Queued {count} downloads.", count=len(queued)
+                )
             if self._quick_download_dir:
-                message += f" Saving to {self._quick_download_dir}."
+                message += " " + tr_format(
+                    "Saving to {path}.", path=self._quick_download_dir
+                )
             if failures:
                 message += " " + describe_rejected_links(failures)
             self._set_quick_download_status(
@@ -2932,7 +2983,7 @@ class MainWindowCore(QMainWindow):
             str(Path.home()),
         )
         chosen = QFileDialog.getExistingDirectory(
-            self, "Save this download to", str(current))
+            self, tr("Save this download to"), str(current))
         if chosen:
             self._set_quick_download_dir(chosen)
 
@@ -2946,7 +2997,12 @@ class MainWindowCore(QMainWindow):
                 .format(path=self._quick_download_dir)
             )
             self.btn_quick_download_dest.setAccessibleName(
-                f"{tr('Save to')}: {self._quick_download_dir}")
+                tr_format(
+                    "{label}: {path}",
+                    label=tr("Save to"),
+                    path=self._quick_download_dir,
+                )
+            )
         else:
             self.btn_quick_download_dest.setText(tr("Save to"))
             self.btn_quick_download_dest.setToolTip(
@@ -2955,7 +3011,7 @@ class MainWindowCore(QMainWindow):
             self.btn_quick_download_dest.setAccessibleName(tr("Save to"))
 
     def _set_quick_download_status(self, message, state):
-        self.quick_download_status.setText(message)
+        self.quick_download_status.setText(tr(message))
         self.quick_download_status.setProperty("state", state)
         self.quick_download_status.show()
         repolish(self.quick_download_status)
@@ -2992,7 +3048,7 @@ class MainWindowCore(QMainWindow):
         filters.setSpacing(8)
         self.history_search = QLineEdit()
         self.history_search.setAccessibleName(tr("Search download history"))
-        self.history_search.setPlaceholderText("Search title or filename")
+        self.history_search.setPlaceholderText(tr("Search title or filename"))
         self.history_search.setClearButtonEnabled(True)
         filters.addWidget(self.history_search, 2)
         self.history_status = QComboBox()
@@ -3088,7 +3144,7 @@ class MainWindowCore(QMainWindow):
         self.history_container.setSpacing(10)
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
-        self.tabs.addTab(page, "History")
+        self.tabs.addTab(page, tr("History"))
 
     def _subscription_manager(self):
         value = self._dependencies.get('subscription_manager')
@@ -3119,7 +3175,9 @@ class MainWindowCore(QMainWindow):
         self.subscription_url.setAccessibleName(
             tr("Subscription channel or playlist URL")
         )
-        self.subscription_url.setPlaceholderText("https://www.youtube.com/@channel or playlist URL")
+        self.subscription_url.setPlaceholderText(
+            tr("https://www.youtube.com/@channel or playlist URL")
+        )
         url_row.addWidget(self.subscription_url, 1)
         interval_label = make_label("Every", "fieldHint")
         url_row.addWidget(interval_label)
@@ -3180,7 +3238,7 @@ class MainWindowCore(QMainWindow):
         self.subscription_container.setSpacing(10)
         self.subscription_scroll.setWidget(content)
         layout.addWidget(self.subscription_scroll, 1)
-        self.tabs.addTab(page, "Subscriptions")
+        self.tabs.addTab(page, tr("Subscriptions"))
         self._refresh_subscriptions(force=True)
 
     def _refresh_subscriptions(self, force=False):
@@ -3263,8 +3321,12 @@ class MainWindowCore(QMainWindow):
                 )
             )
         self.subscription_status.setText(
-            f"{len(records)} configured · {archive.get('complete', 0)} archived · "
-            f"{archive.get('queued', 0)} queued"
+            tr_format(
+                "{total} configured · {archived} archived · {queued} queued",
+                total=len(records),
+                archived=archive.get("complete", 0),
+                queued=archive.get("queued", 0),
+            )
         )
         self.subscription_status.setProperty("state", "neutral")
         repolish(self.subscription_status)
@@ -3291,7 +3353,11 @@ class MainWindowCore(QMainWindow):
             enabled = QCheckBox()
             enabled.setChecked(bool(record.get("enabled", True)))
             enabled.setAccessibleName(
-                f"{tr('Enable subscription')} {record.get('title') or record.get('url')}"
+                tr_format(
+                    "{label} {title}",
+                    label=tr("Enable subscription"),
+                    title=record.get("title") or record.get("url"),
+                )
             )
             enabled.toggled.connect(
                 lambda checked, sub_id=record.get("id"): self._set_subscription_enabled(sub_id, checked)
@@ -3315,11 +3381,13 @@ class MainWindowCore(QMainWindow):
                     minutes=record.get("intervalMinutes", 60)
                 )
             else:
-                detail = (
-                    f"Every {record.get('intervalMinutes', 60)} min · next scan {next_text}"
+                detail = tr_format(
+                    "Every {minutes} min · next scan {next_scan}",
+                    minutes=record.get("intervalMinutes", 60),
+                    next_scan=next_text,
                 )
             if record.get("lastError"):
-                detail += f" · {record['lastError']}"
+                detail += " · " + str(record["lastError"])
             copy_layout.addWidget(make_label(detail, "toolbarMeta", word_wrap=True))
             row_layout.addLayout(copy_layout, 1)
             row_target = str(record.get("title") or record.get("url") or "")
@@ -3398,7 +3466,11 @@ class MainWindowCore(QMainWindow):
             label = browser.title()
             warning = self._dependencies['describe_browser_cookie_readiness'](browser)
             if warning:
-                label += f" — {tr('likely unreadable on Windows 127+') }"
+                label = tr_format(
+                    "{browser} — {warning}",
+                    browser=label,
+                    warning=tr("likely unreadable on Windows 127+"),
+                )
             self.site_login_browser.addItem(label, browser)
         # Firefox is the one browser whose cookie store can still be read from
         # outside on Windows, so it is the default rather than whichever name
@@ -3475,7 +3547,7 @@ class MainWindowCore(QMainWindow):
         self.site_login_container.setSpacing(10)
         self.site_login_scroll.setWidget(content)
         layout.addWidget(self.site_login_scroll, 1)
-        self.tabs.addTab(page, "Sign-ins")
+        self.tabs.addTab(page, tr("Sign-ins"))
         self._refresh_site_logins(force=True)
 
     def _site_login_store(self):
@@ -3502,7 +3574,9 @@ class MainWindowCore(QMainWindow):
             try:
                 entries = store.entries()
             except Exception as error:  # noqa: BLE001
-                load_error = f"Could not read stored sign-ins: {error}"
+                load_error = tr_format(
+                    "Could not read stored sign-ins: {error}", error=error
+                )
         signature = json.dumps(
             {"entries": entries, "error": load_error},
             sort_keys=True,
@@ -3564,7 +3638,7 @@ class MainWindowCore(QMainWindow):
             if credentialed:
                 state = tr("Username/password — stored securely")
                 if entry.get("expired") and count:
-                    state += f" · {tr('cookie session expired')}"
+                    state += " · " + tr("cookie session expired")
             elif entry.get("expired"):
                 state = tr("Expired — sign in again to refresh it")
             elif not entry.get("stored"):
@@ -3576,12 +3650,16 @@ class MainWindowCore(QMainWindow):
                     )
                 except (TypeError, ValueError, OverflowError, OSError):
                     expires = tr("unknown")
-                state = f"{tr('First cookie expires')} {expires}"
+                state = tr_format(
+                    "{label} {date}",
+                    label=tr("First cookie expires"),
+                    date=expires,
+                )
             else:
                 state = tr("Session cookies — valid until the site signs you out")
             test_state = self._site_login_test_states.get(entry.get("site"))
             if test_state:
-                state += f" · {test_state.get('message', '')}"
+                state += " · " + str(test_state.get("message", ""))
             if credentialed and count:
                 auth_label = tr("cookies + username/password")
             elif credentialed:
@@ -3591,8 +3669,14 @@ class MainWindowCore(QMainWindow):
                     tr("cookie") if count == 1 else tr("cookies")
                 )
             copy_layout.addWidget(make_label(
-                f"{count} {auth_label} · "
-                f"{tr('from')} {entry.get('source', 'import')} · {state}",
+                tr_format(
+                    "{count} {auth} · {from_label} {source} · {state}",
+                    count=count,
+                    auth=auth_label,
+                    from_label=tr("from"),
+                    source=entry.get("source", "import"),
+                    state=state,
+                ),
                 "toolbarMeta",
                 word_wrap=True,
             ))
@@ -3620,14 +3704,14 @@ class MainWindowCore(QMainWindow):
 
     def _show_history_status(self, message, state="neutral"):
         """Report a History action on the History page, and in the log."""
-        self.history_page_status.setText(message)
+        self.history_page_status.setText(tr(message))
         self.history_page_status.setProperty("state", state)
         self.history_page_status.show()
         repolish(self.history_page_status)
         self._append_log(message)
 
     def _show_site_login_status(self, message, state="neutral"):
-        self.site_login_status.setText(message)
+        self.site_login_status.setText(tr(message))
         self.site_login_status.setProperty("state", state)
         self.site_login_status.show()
         repolish(self.site_login_status)
@@ -3639,9 +3723,19 @@ class MainWindowCore(QMainWindow):
         site = (result or {}).get("site", "")
         count = (result or {}).get("cookies", 0)
         skipped = (result or {}).get("skipped", 0)
-        message = f"{tr('Signed in to')} {site} — {count} {tr('cookies stored')}."
+        message = tr_format(
+            "{signed_in} {site} — {count} {stored}.",
+            signed_in=tr("Signed in to"),
+            site=site,
+            count=count,
+            stored=tr("cookies stored"),
+        )
         if skipped:
-            message += f" {skipped} {tr('cookies for other sites were discarded.')}"
+            message += " " + tr_format(
+                "{count} {discarded}",
+                count=skipped,
+                discarded=tr("cookies for other sites were discarded."),
+            )
         self._show_site_login_status(message, "success")
         self._append_log(f"Stored a site sign-in for {site} ({count} cookies).")
         self._discard_site_login_undo()
@@ -3668,7 +3762,12 @@ class MainWindowCore(QMainWindow):
             return False
         site = (result or {}).get("site", "")
         self._show_site_login_status(
-            f"{tr('Signed in to')} {site} — {tr('username/password stored securely.')}",
+            tr_format(
+                "{signed_in} {site} — {stored}",
+                signed_in=tr("Signed in to"),
+                site=site,
+                stored=tr("username/password stored securely."),
+            ),
             "success",
         )
         self._append_log(f"Stored a username/password sign-in for {site}.")
@@ -3729,7 +3828,7 @@ class MainWindowCore(QMainWindow):
             return
         path, _filter = QFileDialog.getOpenFileName(
             self,
-            "Select the exported cookies.txt",
+            tr("Select the exported cookies.txt"),
             str(Path.home()),
             "Cookie files (*.txt);;All files (*.*)",
         )
@@ -3743,17 +3842,24 @@ class MainWindowCore(QMainWindow):
         try:
             size = Path(path).stat().st_size
         except OSError as error:
-            self._show_site_login_status(f"Could not read that file: {error}", "error")
+            self._show_site_login_status(
+                tr_format("Could not read that file: {error}", error=error),
+                "error",
+            )
             return
         if size > limit:
             self._show_site_login_status(
-                "That cookie file is too large to be a browser export.", "error"
+                tr("That cookie file is too large to be a browser export."),
+                "error",
             )
             return
         try:
             text = Path(path).read_text(encoding="utf-8", errors="replace")
         except OSError as error:
-            self._show_site_login_status(f"Could not read that file: {error}", "error")
+            self._show_site_login_status(
+                tr_format("Could not read that file: {error}", error=error),
+                "error",
+            )
             return
         result, error = store.import_netscape_text(
             self.site_login_url.text(), text, source="cookies.txt"
@@ -3795,7 +3901,12 @@ class MainWindowCore(QMainWindow):
             if undo and hasattr(self, "btn_undo_site_login"):
                 self.btn_undo_site_login.show()
             self._show_site_login_status(
-                f"{tr('Removed the stored sign-in for')} {site}.", "neutral"
+                tr_format(
+                    "{removed} {site}.",
+                    removed=tr("Removed the stored sign-in for"),
+                    site=site,
+                ),
+                "neutral",
             )
             self._append_log(f"Removed the stored site sign-in for {site}.")
         self._refresh_site_logins(force=True)
@@ -3853,7 +3964,11 @@ class MainWindowCore(QMainWindow):
         if error:
             self._site_login_test_states[site] = {
                 "ok": False,
-                "message": f"{tr('Test failed')}: {error[:200]}",
+                "message": tr_format(
+                    "{label}: {error}",
+                    label=tr("Test failed"),
+                    error=error[:200],
+                ),
             }
             self._show_site_login_status(error, "error")
         else:
@@ -3871,7 +3986,9 @@ class MainWindowCore(QMainWindow):
     def _add_subscription(self):
         manager = self._subscription_manager()
         if manager is None:
-            self.subscription_status.setText("Start the local companion before adding a subscription.")
+            self.subscription_status.setText(
+                tr("Start the local companion before adding a subscription.")
+            )
             return
         record, error = manager.add_subscription(
             self.subscription_url.text(),
@@ -3882,7 +3999,10 @@ class MainWindowCore(QMainWindow):
             return
         self.subscription_url.clear()
         self.subscription_status.setText(
-            f"Added {record.get('title') or record.get('url')}. The first scan is scheduled now."
+            tr_format(
+                "Added {title}. The first scan is scheduled now.",
+                title=record.get("title") or record.get("url"),
+            )
         )
         self._refresh_subscriptions(force=True)
 
@@ -4219,7 +4339,7 @@ class MainWindowCore(QMainWindow):
         row2.setSpacing(8)
         self.cfg_audio_path = QLineEdit(self.config.get("AudioDownloadPath", ""))
         self.cfg_audio_path.setAccessibleName(tr("Audio download folder"))
-        self.cfg_audio_path.setPlaceholderText("Same as video folder")
+        self.cfg_audio_path.setPlaceholderText(tr("Same as video folder"))
         row2.addWidget(self.cfg_audio_path, 1)
         btn2 = self._make_tool_button("Browse")
         btn2.clicked.connect(lambda: self._browse(self.cfg_audio_path))
@@ -4394,7 +4514,13 @@ class MainWindowCore(QMainWindow):
                 lang_row.addSpacing(28)
                 pp_l.addLayout(lang_row)
             box = QCheckBox(tr(label))
-            box.setAccessibleName(f"{tr('Subtitle language')} {tr(label)}")
+            box.setAccessibleName(
+                tr_format(
+                    "{label}: {language}",
+                    label=tr("Subtitle language"),
+                    language=tr(label),
+                )
+            )
             box.toggled.connect(self._sublang_box_toggled)
             box._sublang_code = code
             self._sublang_boxes.append(box)
@@ -4630,7 +4756,7 @@ class MainWindowCore(QMainWindow):
         rate_row.addLayout(rate_copy, 1)
         self.cfg_ratelimit = QLineEdit(self.config.get("RateLimit", ""))
         self.cfg_ratelimit.setAccessibleName(tr("Rate limit"))
-        self.cfg_ratelimit.setPlaceholderText("No limit")
+        self.cfg_ratelimit.setPlaceholderText(tr("No limit"))
         self.cfg_ratelimit.setFixedWidth(120)
         rate_row.addWidget(self.cfg_ratelimit)
         perf_l.addLayout(rate_row)
@@ -4647,7 +4773,7 @@ class MainWindowCore(QMainWindow):
         throttle_row.addLayout(throttle_copy, 1)
         self.cfg_throttled = QLineEdit(self.config.get("ThrottledRate", ""))
         self.cfg_throttled.setAccessibleName(tr("Throttle floor"))
-        self.cfg_throttled.setPlaceholderText("Off")
+        self.cfg_throttled.setPlaceholderText(tr("Off"))
         self.cfg_throttled.setFixedWidth(120)
         throttle_row.addWidget(self.cfg_throttled)
         perf_l.addLayout(throttle_row)
@@ -4844,9 +4970,9 @@ class MainWindowCore(QMainWindow):
         self.cfg_js_runtime = QComboBox()
         self.cfg_js_runtime.setAccessibleName(tr("JavaScript runtime"))
         self.cfg_js_runtime.addItem(tr("Auto"), "auto")
-        self.cfg_js_runtime.addItem("Deno", "deno")
-        self.cfg_js_runtime.addItem("Node 22+", "node")
-        self.cfg_js_runtime.addItem("QuickJS", "quickjs")
+        self.cfg_js_runtime.addItem(tr("Deno"), "deno")
+        self.cfg_js_runtime.addItem(tr("Node 22+"), "node")
+        self.cfg_js_runtime.addItem(tr("QuickJS"), "quickjs")
         selected_runtime = self.config.get("JavaScriptRuntime", "auto")
         self.cfg_js_runtime.setCurrentIndex(max(0, self.cfg_js_runtime.findData(selected_runtime)))
         runtime_row.addWidget(self.cfg_js_runtime)
@@ -5056,7 +5182,7 @@ class MainWindowCore(QMainWindow):
             signal.connect(self._mark_settings_dirty)
         self._filter_settings("")
 
-        self.tabs.addTab(scroll, "Settings")
+        self.tabs.addTab(scroll, tr("Settings"))
 
     # ── Navigation ──
     def _nav_click(self, name):
@@ -5089,15 +5215,21 @@ class MainWindowCore(QMainWindow):
         entry = pending[0]
         name = Path(entry['path']).name
         extra = (
-            " Your server token was regenerated, so the browser extension "
-            "needs pairing again."
-            if name == 'config.json' else ""
+            tr(
+                "Your server token was regenerated, so the browser extension "
+                "needs pairing again."
+            )
+            if name == "config.json" else ""
         )
-        self.quarantine_notice.setText(
-            f"{name} could not be read and was set aside as "
-            f"{Path(entry['backup']).name}.{extra} Restore puts the original "
-            "back and reloads it."
+        message = tr_format(
+            "{label} could not be read and was set aside as {backup}. "
+            "Restore puts the original back and reloads it.",
+            label=name,
+            backup=Path(entry["backup"]).name,
         )
+        if extra:
+            message += " " + extra
+        self.quarantine_notice.setText(message)
         self.quarantine_panel.show()
 
     def _restore_quarantined_state(self):
@@ -5111,8 +5243,11 @@ class MainWindowCore(QMainWindow):
         if not restored:
             self._append_log(f"Could not restore {Path(entry['path']).name}.")
             self.quarantine_notice.setText(
-                f"{Path(entry['path']).name} could not be restored. Its backup "
-                f"is at {entry['backup']}."
+                tr_format(
+                    "{label} could not be restored. Its backup is at {backup}.",
+                    label=Path(entry["path"]).name,
+                    backup=entry["backup"],
+                )
             )
             return
         reload_config = getattr(self.config, 'reload', None)
@@ -5150,12 +5285,15 @@ class MainWindowCore(QMainWindow):
         if confirmed:
             path = self.config.get("DownloadPath", self.first_run_destination.text())
             self.first_run_status.setText(
-                f"Destination confirmed: {path}. Setup can continue in the background."
+                tr_format(
+                    "Destination confirmed: {folder}. Setup can continue in the background.",
+                    folder=path,
+                )
             )
             self.first_run_status.setProperty("state", "success")
         else:
             self.first_run_status.setText(
-                "Confirm a folder before your first download."
+                tr("Confirm a folder before your first download.")
             )
             self.first_run_status.setProperty("state", "warning")
         repolish(self.first_run_status)
@@ -5166,7 +5304,10 @@ class MainWindowCore(QMainWindow):
         normalize = self._dependencies.get("normalize_output_dir")
         if not callable(normalize):
             self.first_run_status.setText(
-                "The download folder validator is unavailable. Check the log and retry."
+                tr(
+                    "The download folder validator is unavailable. "
+                    "Check the log and retry."
+                )
             )
             self.first_run_status.setProperty("state", "error")
             repolish(self.first_run_status)
@@ -5187,7 +5328,10 @@ class MainWindowCore(QMainWindow):
             "FirstRunComplete": True,
         }):
             self.first_run_status.setText(
-                "Could not save the download folder. Check disk permissions and retry."
+                tr(
+                    "Could not save the download folder. "
+                    "Check disk permissions and retry."
+                )
             )
             self.first_run_status.setProperty("state", "error")
             repolish(self.first_run_status)
@@ -5489,7 +5633,13 @@ class MainWindowCore(QMainWindow):
             self.btn_startstop.setEnabled(False)
             self.tray_startstop.setText(tr("Starting server…"))
             self.tray_startstop.setEnabled(False)
-            self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Starting')}")
+            self.tray.setToolTip(
+                tr_format(
+                    "{app} - {status}",
+                    app=self._value("APP_NAME"),
+                    status=tr("Starting"),
+                )
+            )
             self._set_readiness("server", "Starting", "neutral")
         elif self.server_running:
             self.status_dot.setProperty("tone", "success")
@@ -5509,7 +5659,13 @@ class MainWindowCore(QMainWindow):
             self.btn_startstop.setEnabled(True)
             self.tray_startstop.setText(tr("Stop server"))
             self.tray_startstop.setEnabled(True)
-            self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Running')}")
+            self.tray.setToolTip(
+                tr_format(
+                    "{app} - {status}",
+                    app=self._value("APP_NAME"),
+                    status=tr("Running"),
+                )
+            )
             self._set_readiness("server", "Running", "success")
         else:
             self.status_dot.setProperty("tone", "neutral")
@@ -5529,7 +5685,13 @@ class MainWindowCore(QMainWindow):
             self.btn_startstop.setEnabled(True)
             self.tray_startstop.setText(tr("Start server"))
             self.tray_startstop.setEnabled(True)
-            self.tray.setToolTip(f"{self._value('APP_NAME')} - {tr('Stopped')}")
+            self.tray.setToolTip(
+                tr_format(
+                    "{app} - {status}",
+                    app=self._value("APP_NAME"),
+                    status=tr("Stopped"),
+                )
+            )
             self._set_readiness("server", "Stopped", "neutral")
         repolish(self.btn_startstop)
         repolish(self.server_badge)
@@ -5577,13 +5739,18 @@ class MainWindowCore(QMainWindow):
             seconds = self._download_host_backoff_seconds(dl)
             if seconds:
                 recovery_text = (
-                    f"{recovery_text}\n"
+                    recovery_text
+                    + "\n"
                     + tr("This host is paused — retry in {duration}.").format(
                         duration=format_duration(seconds)
                     )
                 )
         if dl.error_action:
-            recovery_text = f"{recovery_text}\nNext: {tr(dl.error_action)}"
+            recovery_text = (
+                recovery_text
+                + "\n"
+                + tr_format("Next: {action}", action=tr(dl.error_action))
+            )
         return recovery_text
 
     def _download_card_structure(self, dl, recent=False):
@@ -5627,7 +5794,7 @@ class MainWindowCore(QMainWindow):
         if dl.speed:
             meta_parts.append(dl.speed)
         if dl.eta:
-            meta_parts.append(f"ETA {dl.eta}")
+            meta_parts.append(tr_format("ETA {eta}", eta=dl.eta))
         if dl.format:
             meta_parts.append(dl.format.upper())
         if dl.quality:
@@ -5658,11 +5825,13 @@ class MainWindowCore(QMainWindow):
 
         refs["title"].setText(
             dl.title if dl.title and dl.title != "Unknown"
-            else "Preparing download"
+            else tr("Preparing download")
         )
         state_label = refs["state"]
         translated_status = tr(human_status(dl.status))
-        state_label.setText(f"\u25cf  {translated_status}")
+        state_label.setText(
+            tr_format("●  {status}", status=translated_status)
+        )
         state_label.setAccessibleName(
             tr("{title} status: {status}").format(
                 title=dl.title or tr("Download"), status=translated_status
@@ -5942,10 +6111,10 @@ class MainWindowCore(QMainWindow):
                 title = (getattr(d, 'title', '') or '').strip() or 'Your download is finished.'
                 skipped = d.status == 'skipped'
                 if skipped:
-                    heading = "Nothing downloaded"
+                    heading = tr("Nothing downloaded")
                     body = (getattr(d, 'error', '') or '').strip() or title
                 else:
-                    heading = "Download complete"
+                    heading = tr("Download complete")
                     body = title
                 try:
                     self.tray.showMessage(
@@ -6017,7 +6186,11 @@ class MainWindowCore(QMainWindow):
                 self._append_log(notice)
         capacity = self.dl_manager.capacity()
         self.queue_capacity_badge.setText(
-            f"{capacity['total']} / {capacity['totalLimit']} jobs"
+            tr_format(
+                "{total} / {limit} jobs",
+                total=capacity["total"],
+                limit=capacity["totalLimit"],
+            )
         )
         self.btn_queue_pause.setText(
             "Resume queue" if capacity['intakePaused'] else "Pause intake"
@@ -6466,7 +6639,7 @@ class MainWindowCore(QMainWindow):
             self.config.get("DownloadPath", str(Path.home()))
         ) / "astra-downloader-settings.json"
         path, _selected = QFileDialog.getSaveFileName(
-            self, "Export Settings", str(suggested), "JSON files (*.json)"
+            self, tr("Export Settings"), str(suggested), "JSON files (*.json)"
         )
         if not path:
             return False
@@ -6475,18 +6648,22 @@ class MainWindowCore(QMainWindow):
                 json.dump(bundle, output, indent=2, ensure_ascii=False)
         except OSError as error:
             self._show_settings_status(
-                f"Could not write the bundle: {error}", "danger")
+                tr_format("Could not write the bundle: {error}", error=error),
+                "danger",
+            )
             return False
-        summary = (
-            f"Exported {len(bundle['settings'])} settings and "
-            f"{len(bundle['subscriptions'])} subscriptions."
+        summary = tr_format(
+            "Exported {settings} settings and {subscriptions} subscriptions.",
+            settings=len(bundle["settings"]),
+            subscriptions=len(bundle["subscriptions"]),
         )
         if bundle["siteLoginSites"]:
             # Say it plainly rather than letting the user discover it on the
             # other machine: this file will not sign them back in.
-            summary += (
-                f" {len(bundle['siteLoginSites'])} stored sign-ins are listed "
-                "by site only — add them again after importing."
+            summary += " " + tr_format(
+                "{count} stored sign-ins are listed by site only — "
+                "add them again after importing.",
+                count=len(bundle["siteLoginSites"]),
             )
         self._show_settings_status(summary, "success")
         self._append_log(f"Settings bundle written to {path}")
@@ -6495,7 +6672,7 @@ class MainWindowCore(QMainWindow):
     def _import_settings_bundle(self):
         """Apply a bundle, then say what it actually changed."""
         path, _selected = QFileDialog.getOpenFileName(
-            self, "Import Settings",
+            self, tr("Import Settings"),
             str(Path(self.config.get("DownloadPath", str(Path.home())))),
             "JSON files (*.json)",
         )
@@ -6506,7 +6683,9 @@ class MainWindowCore(QMainWindow):
                 payload = json.load(handle)
         except (OSError, ValueError) as error:
             self._show_settings_status(
-                f"Could not read that bundle: {error}", "danger")
+                tr_format("Could not read that bundle: {error}", error=error),
+                "danger",
+            )
             return False
         bundle, error = self._dependencies['read_settings_bundle'](payload)
         if error:
@@ -6616,21 +6795,32 @@ class MainWindowCore(QMainWindow):
             changed_labels.append(
                 widget.accessibleName() if widget is not None else key
             )
-        changed_summary = f"Imported {len(changes['settings'])} changed settings"
+        changed_summary = tr_format(
+            "Imported {count} changed settings",
+            count=len(changes["settings"]),
+        )
         if changed_labels:
             changed_summary += ": " + ", ".join(changed_labels)
         parts = [changed_summary]
         if added or skipped:
-            parts.append(f"{added} subscriptions added, {skipped} already present")
+            parts.append(
+                tr_format(
+                    "{added} subscriptions added, {skipped} already present",
+                    added=added,
+                    skipped=skipped,
+                )
+            )
         if changes["siteLoginSites"]:
             parts.append(
-                "sign-ins still needed for "
-                + ", ".join(changes["siteLoginSites"][:5])
+                tr_format(
+                    "sign-ins still needed for {sites}",
+                    sites=", ".join(changes["siteLoginSites"][:5]),
+                )
             )
         excluded = changes.get("excludedSettings") or []
         if excluded:
             parts.append(
-                "not carried: " + ", ".join(excluded)
+                tr_format("not carried: {settings}", settings=", ".join(excluded))
             )
         if import_undo_warning:
             parts.append(
@@ -6729,7 +6919,7 @@ class MainWindowCore(QMainWindow):
         suggested = default_path / "astra-download-history.csv"
         path, _selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Export Download History",
+            tr("Export Download History"),
             str(suggested),
             "CSV files (*.csv)",
         )
@@ -6755,10 +6945,20 @@ class MainWindowCore(QMainWindow):
                 )
         except OSError as error:
             self._show_history_status(
-                f"Could not export download history: {error}", "error")
+                tr_format(
+                    "Could not export download history: {error}", error=error
+                ),
+                "error",
+            )
             return
         self._show_history_status(
-            f"Exported {len(rows)} filtered history row(s) to {path}", "success")
+            tr_format(
+                "Exported {count} filtered history row(s) to {path}",
+                count=len(rows),
+                path=path,
+            ),
+            "success",
+        )
 
     def _refresh_history(self):
         self.history_meta.setText(tr("Loading history…"))
@@ -6809,9 +7009,19 @@ class MainWindowCore(QMainWindow):
         start = result["offset"] + 1 if rows else 0
         end = result["offset"] + len(rows)
         self.history_meta.setText(
-            f"{start}–{end} of {filtered_total} filtered · {result['total']} retained"
+            tr_format(
+                "{start}–{end} of {filtered} filtered · {total} retained",
+                start=start,
+                end=end,
+                filtered=filtered_total,
+                total=result["total"],
+            )
             if rows else
-            f"0 of {filtered_total} filtered · {result['total']} retained"
+            tr_format(
+                "0 of {filtered} filtered · {total} retained",
+                filtered=filtered_total,
+                total=result["total"],
+            )
         )
         self.btn_history_prev.setEnabled(result["offset"] > 0)
         self.btn_history_next.setEnabled(result["hasMore"])
@@ -6924,8 +7134,12 @@ class MainWindowCore(QMainWindow):
             self._cleared_history_snapshot = []
             self.btn_undo_clear_history.hide()
         self._refresh_history()
-        message = (
-            f"Restored {restored} download history entr{'y' if restored == 1 else 'ies'}."
+        message = tr_format(
+            "Restored {count} download history {entry_label}.",
+            count=restored,
+            entry_label=(
+                tr("entry") if restored == 1 else tr("entries")
+            ),
         )
         if not journal_cleared:
             message += " The Undo record is still available; clear it from disk before closing."
@@ -6940,7 +7154,9 @@ class MainWindowCore(QMainWindow):
             self._append_log(f"Retry failed: {err}")
             return
         label = dl.title if dl.title != 'Unknown' else dl.url
-        self._set_quick_download_status(f"Retry queued: {label}", "success")
+        self._set_quick_download_status(
+            tr_format("Retry queued: {title}", title=label), "success"
+        )
         self._append_log(f"Retry queued: {label}")
         self._nav_click("Download")
 
@@ -7120,7 +7336,7 @@ class MainWindowCore(QMainWindow):
         # post-save 3.2s timer) never wipes a NEWER message — e.g. the
         # "Unsaved changes" indicator from an edit made right after saving.
         self._settings_status_generation = getattr(self, "_settings_status_generation", 0) + 1
-        self.settings_status.setText(message)
+        self.settings_status.setText(tr(message))
         self.settings_status.setProperty("tone", tone if tone in {
             "neutral", "success", "warning", "danger"
         } else "neutral")
@@ -7139,7 +7355,7 @@ class MainWindowCore(QMainWindow):
         if not hasattr(self, "settings_status") or not hasattr(self, "btn_save"):
             return
         self._show_settings_status("Unsaved changes", "warning")
-        self.btn_save.setText("Save changes")
+        self.btn_save.setText(tr("Save changes"))
 
     def _sync_connection_ui(self):
         clamp_int = self._dependencies['clamp_int']
@@ -7153,16 +7369,18 @@ class MainWindowCore(QMainWindow):
         if hint is None:
             return
         if port != configured:
-            message = (
-                f"Port {configured} was unavailable at startup; bound to "
-                f"fallback port {port} for this session. Restart to retry {configured}."
+            message = tr_format(
+                "Port {configured} was unavailable at startup; bound to fallback port "
+                "{port} for this session. Restart to retry {configured}.",
+                configured=configured,
+                port=port,
             )
             hint.setText(message)
             self._set_settings_filter_hidden(hint, False)
             self.cfg_port.setAccessibleDescription(
                 tr(
-                    "Port {configured} was unavailable at startup; bound to fallback "
-                    "port {port} for this session. Restart to retry {configured}."
+                    "Port {configured} was unavailable at startup; bound to fallback port "
+                    "{port} for this session. Restart to retry {configured}."
                 ).format(configured=configured, port=port)
             )
         else:
@@ -7174,7 +7392,11 @@ class MainWindowCore(QMainWindow):
     def _tools_status_text(self):
         ytv = self._dependencies['get_ytdlp_version']() or "not installed"
         ffv = self._dependencies['get_ffmpeg_version']() or "not installed"
-        return f"yt-dlp {ytv}    •    ffmpeg {ffv}"
+        return tr_format(
+            "yt-dlp {yt}    •    ffmpeg {ffmpeg}",
+            yt=ytv,
+            ffmpeg=ffv,
+        )
 
     def _set_tools_status_text(self, text):
         try:
@@ -7214,7 +7436,7 @@ class MainWindowCore(QMainWindow):
             return
         self._append_log("Forcing yt-dlp self-update…")
         self.btn_check_updates.setEnabled(False)
-        self.btn_check_updates.setText("Checking…")
+        self.btn_check_updates.setText(tr("Checking…"))
         self._show_settings_status(
             "Checking yt-dlp. The verified current copy stays available until the update passes.",
             "warning",
@@ -7238,13 +7460,16 @@ class MainWindowCore(QMainWindow):
 
     def _finish_ytdlp_update(self, result):
         self.btn_check_updates.setEnabled(True)
-        self.btn_check_updates.setText("Check yt-dlp Update")
+        self.btn_check_updates.setText(tr("Check yt-dlp Update"))
         self._refresh_tools_status()
         if result.get('ok'):
             version = result.get('version_after') or 'current'
             rollback = result.get('rollback_version') or 'not retained yet'
             self._append_log(f"yt-dlp active {version}; rollback {rollback}.")
-            self._show_settings_status(f"yt-dlp {version} is ready.", "success")
+            self._show_settings_status(
+                tr_format("yt-dlp {version} is ready.", version=version),
+                "success",
+            )
             return
         recovery = (
             f" Restored {result.get('version_after')}."
@@ -7576,7 +7801,7 @@ class MainWindowCore(QMainWindow):
             ),
         })
         if not saved:
-            self.btn_save.setText("Save changes")
+            self.btn_save.setText(tr("Save changes"))
             self._show_settings_status(
                 "Could not save settings. Nothing changed; check disk permissions and retry.",
                 "danger",
@@ -7640,7 +7865,9 @@ class MainWindowCore(QMainWindow):
         QTimer.singleShot(3200, lambda: self._clear_settings_status_if_current(status_generation))
 
     def _browse(self, line_edit):
-        path = QFileDialog.getExistingDirectory(self, "Select Folder", line_edit.text())
+        path = QFileDialog.getExistingDirectory(
+            self, tr("Select Folder"), line_edit.text()
+        )
         if path:
             line_edit.setText(path)
 
@@ -7666,7 +7893,9 @@ class MainWindowCore(QMainWindow):
         combo.clear()
         combo.addItem(tr("Best"), "best")
         for value in values:
-            combo.addItem(f"{value}p", str(value))
+            combo.addItem(
+                tr_format("{quality}p", quality=value), str(value)
+            )
         restored = combo.findData(current)
         combo.setCurrentIndex(restored if restored >= 0 else 0)
         combo.blockSignals(False)
@@ -7828,7 +8057,9 @@ class MainWindowCore(QMainWindow):
         self._clipboard_staged_url = url
         self.quick_download_url.setText(url)
         self.quick_download_status.setText(
-            "Copied video link staged. Review the options, then choose Add to queue."
+            tr(
+                "Copied video link staged. Review the options, then choose Add to queue."
+            )
         )
         self.quick_download_status.setProperty("state", "success")
         self.quick_download_status.show()
@@ -7837,7 +8068,9 @@ class MainWindowCore(QMainWindow):
         if hasattr(self, "tray"):
             self.tray.showMessage(
                 self._value('APP_NAME'),
-                "Video link staged. Open Downloads to review it before adding it to the queue.",
+                tr(
+                    "Video link staged. Open Downloads to review it before adding it to the queue."
+                ),
                 QSystemTrayIcon.MessageIcon.Information,
                 5000,
             )
@@ -7846,7 +8079,7 @@ class MainWindowCore(QMainWindow):
         QApplication.clipboard().setText(self.dash_endpoint.text())
         self._append_log("Endpoint copied to clipboard")
         old = self.dash_hint.text()
-        self.dash_hint.setText("Endpoint copied.")
+        self.dash_hint.setText(tr("Endpoint copied."))
         QTimer.singleShot(1600, lambda: self.dash_hint.setText(old))
 
     def _copy_token(self):
@@ -7868,7 +8101,7 @@ class MainWindowCore(QMainWindow):
         text = self._diagnostics_text()
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("Review Diagnostics")
+        dialog.setWindowTitle(tr("Review Diagnostics"))
         dialog.setModal(True)
         dialog.resize(720, 520)
         layout = QVBoxLayout(dialog)
@@ -7886,9 +8119,13 @@ class MainWindowCore(QMainWindow):
         preview.setPlainText(text)
         preview.setAccessibleName(tr("Redacted diagnostics preview"))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        save_button = buttons.addButton("Save diagnostics", QDialogButtonBox.ButtonRole.ActionRole)
+        save_button = buttons.addButton(
+            tr("Save diagnostics"), QDialogButtonBox.ButtonRole.ActionRole
+        )
         save_button.clicked.connect(lambda: self._save_diagnostics_text(text))
-        copy_button = buttons.addButton("Copy to Clipboard", QDialogButtonBox.ButtonRole.AcceptRole)
+        copy_button = buttons.addButton(
+            tr("Copy to Clipboard"), QDialogButtonBox.ButtonRole.AcceptRole
+        )
         copy_button.setDefault(True)
         copy_button.clicked.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -7915,7 +8152,7 @@ class MainWindowCore(QMainWindow):
     def _save_diagnostics_text(self, text):
         target, _filter = QFileDialog.getSaveFileName(
             self,
-            "Save diagnostics",
+            tr("Save diagnostics"),
             str(Path.home() / "astra-diagnostics.json"),
             "JSON files (*.json);;All files (*)",
         )
@@ -8017,7 +8254,7 @@ class MainWindowCore(QMainWindow):
             if self.tray.isVisible():
                 self.tray.showMessage(
                     "Astra Downloader",
-                    "Server failed to start. Check the log for details.",
+                    tr("Server failed to start. Check the log for details."),
                     QSystemTrayIcon.MessageIcon.Warning,
                     6000,
                 )
@@ -8190,7 +8427,9 @@ class MainWindowCore(QMainWindow):
             if not self._tray_hint_shown and self.tray.isVisible():
                 self.tray.showMessage(
                     self._value('APP_NAME'),
-                    "Still running in the tray so Astra Deck can keep sending downloads.",
+                    tr(
+                        "Still running in the tray so Astra Deck can keep sending downloads."
+                    ),
                     QSystemTrayIcon.MessageIcon.Information,
                     3000,
                 )
@@ -8295,9 +8534,14 @@ class MainWindowCore(QMainWindow):
         ffmpeg_refresh = bool(getattr(getattr(self, 'setup_worker', None), 'force_ffmpeg', False))
         self._setup_running = False
         self.btn_startstop.setEnabled(True)
-        self.btn_startstop.setText("Stop Server" if self.server_running else "Start Server")
+        self.btn_startstop.setText(
+            tr("Stop server") if self.server_running else tr("Start server")
+        )
         self.setup_progress.setValue(100)
-        self.setup_status.setText("ffmpeg refresh complete." if ffmpeg_refresh else "Setup complete.")
+        self.setup_status.setText(
+            tr("ffmpeg refresh complete.")
+            if ffmpeg_refresh else tr("Setup complete.")
+        )
         self._append_log("ffmpeg refresh complete." if ffmpeg_refresh else "Setup complete. Starting server...")
         if ffmpeg_refresh:
             self._value('_ffmpeg_version_probe').reset()
@@ -8320,11 +8564,13 @@ class MainWindowCore(QMainWindow):
         ffmpeg_refresh = bool(getattr(getattr(self, 'setup_worker', None), 'force_ffmpeg', False))
         self._setup_running = False
         self.btn_startstop.setEnabled(True)
-        self.btn_startstop.setText("Stop Server" if self.server_running else "Start Server")
+        self.btn_startstop.setText(
+            tr("Stop server") if self.server_running else tr("Start server")
+        )
         self.setup_status.setText(
-            "ffmpeg refresh failed. The previous copy is still installed."
+            tr("ffmpeg refresh failed. The previous copy is still installed.")
             if ffmpeg_refresh else
-            "Setup failed. Check the log for details."
+            tr("Setup failed. Check the log for details.")
         )
         self.setup_progress.hide()
         self._append_log(f"Setup error: {error}")
@@ -8333,7 +8579,7 @@ MainWindow = MainWindowCore
 
 
 _OWNED_EXPORTS = {
-    "repolish", "make_label", "make_section_label", "make_divider",
+    "repolish", "tr_format", "make_label", "make_section_label", "make_divider",
     "make_card", "make_status_badge", "download_status_tone",
     "human_status", "format_duration", "make_empty_state", "make_stat",
     "ReadinessProbe",

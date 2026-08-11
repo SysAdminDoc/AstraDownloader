@@ -21,9 +21,11 @@ into a known translating position becomes a translating call itself, at that
 parameter's position.
 
 `self` is dropped from the offsets, because a bound call site does not pass
-it. f-strings and names are skipped: a string assembled at runtime cannot be
-a catalogue key, and pretending otherwise fills the catalogue with entries no
-lookup can ever match.
+it. f-strings are skipped: a string assembled at runtime cannot be a
+catalogue key, and pretending otherwise fills the catalogue with entries no
+lookup can ever match. Simple names used as loop labels are resolved back to
+their literal tuple/list values, so a picker built from a constant sequence is
+still visible to the catalogue gate.
 """
 
 import ast
@@ -45,12 +47,24 @@ GUI_SOURCES = SOURCE_FILES
 ROOT_TRANSLATING_CALLS = {
     "tr": (0,),
     "make_label": (0,),
+    "tr_format": (0,),
     # These Qt methods are translated at their call sites below. Listing them
     # here lets the fixpoint follow an accessible name or tooltip passed
     # through a helper such as `_add_settings_number`.
     "setAccessibleName": (0,),
     "setAccessibleDescription": (0,),
     "setToolTip": (0,),
+    "setText": (0,),
+    "setWindowTitle": (0,),
+    "setPlaceholderText": (0,),
+    "addAction": (0,),
+    "addButton": (0,),
+    "addItem": (0,),
+    "addTab": (1,),
+    "showMessage": (1,),
+    "getExistingDirectory": (1,),
+    "getOpenFileName": (1,),
+    "getSaveFileName": (1,),
 }
 
 RUNTIME_TEXT_ASSIGNMENTS = {
@@ -71,6 +85,19 @@ NOT_TRANSLATABLE = {
     # translator a bullet to render invites one that breaks the layout.
     "•",
     "●",
+    # Input examples and syntax are data, not translatable prose.
+    "0:00",
+    "1:30",
+    "YYYY-MM-DD",
+    "https://www.youtube.com/@channel or playlist URL",
+    "192.0.2.10",
+    "US or 203.0.113.0/24",
+    "https://proxy.example:8080",
+    "%(title)s.%(ext)s",
+    "en,es",
+    "today-30days",
+    "--",
+    "A",
 }
 
 
@@ -161,10 +188,106 @@ def _runtime_literals(tree):
     return found
 
 
+def _static_assignments(tree):
+    """Collect simple constant assignments for loop-label resolution."""
+    assignments = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                assignments.setdefault(target.id, []).append(node.value)
+    return assignments
+
+
+def _static_sequence(node, assignments, seen=None):
+    """Return literal sequence elements represented by a simple expression."""
+    seen = set() if seen is None else seen
+    if isinstance(node, ast.Name):
+        if node.id in seen:
+            return []
+        seen.add(node.id)
+        elements = []
+        for value in assignments.get(node.id, ()):
+            elements.extend(_static_sequence(value, assignments, seen.copy()))
+        return elements
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return list(node.elts)
+    if isinstance(node, ast.IfExp):
+        return (
+            _static_sequence(node.body, assignments, seen.copy())
+            + _static_sequence(node.orelse, assignments, seen.copy())
+        )
+    return []
+
+
+def _static_string_values(node, assignments, seen=None):
+    """Resolve strings from a literal or a name bound to literals."""
+    seen = set() if seen is None else seen
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.Name):
+        if node.id in seen:
+            return []
+        seen.add(node.id)
+        values = []
+        for value in assignments.get(node.id, ()):
+            values.extend(_static_string_values(value, assignments, seen.copy()))
+        return values
+    if isinstance(node, ast.IfExp):
+        return (
+            _static_string_values(node.body, assignments, seen.copy())
+            + _static_string_values(node.orelse, assignments, seen.copy())
+        )
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        values = []
+        for child in node.elts:
+            values.extend(_static_string_values(child, assignments, seen.copy()))
+        return values
+    return []
+
+
+def _loop_string_bindings(tree, assignments):
+    """Map simple ``for`` target names to their constant string choices."""
+    bindings = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.For, ast.AsyncFor)):
+            continue
+        elements = _static_sequence(node.iter, assignments)
+        target = node.target
+        if isinstance(target, ast.Name):
+            values = []
+            for element in elements:
+                values.extend(_static_string_values(element, assignments))
+            if values:
+                bindings.setdefault(target.id, []).extend(values)
+            continue
+        if not isinstance(target, (ast.Tuple, ast.List)):
+            continue
+        for index, child in enumerate(target.elts):
+            if not isinstance(child, ast.Name):
+                continue
+            values = []
+            for element in elements:
+                if isinstance(element, (ast.Tuple, ast.List)) and index < len(element.elts):
+                    values.extend(
+                        _static_string_values(element.elts[index], assignments)
+                    )
+            if values:
+                bindings.setdefault(child.id, []).extend(values)
+    return bindings
+
+
 def extract_from_source(text):
     """Return the translatable literals in one Python source file, in order."""
     tree = ast.parse(text)
     table = discover_translating_calls(tree)
+    assignments = _static_assignments(tree)
+    loop_bindings = _loop_string_bindings(tree, assignments)
     found = _runtime_literals(tree)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -175,9 +298,17 @@ def extract_from_source(text):
         for position in positions:
             if position >= len(node.args):
                 continue
-            value = _literal(node.args[position])
-            if value and value.strip() and value not in NOT_TRANSLATABLE:
-                found.append(value)
+            argument = node.args[position]
+            values = []
+            value = _literal(argument)
+            if value is not None:
+                values.append(value)
+            if isinstance(argument, ast.Name):
+                values.extend(loop_bindings.get(argument.id, ()))
+            for candidate in values:
+                if (candidate and candidate.strip()
+                        and candidate not in NOT_TRANSLATABLE):
+                    found.append(candidate)
     return found
 
 

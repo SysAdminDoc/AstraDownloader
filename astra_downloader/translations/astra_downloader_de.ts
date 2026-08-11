@@ -3,6 +3,46 @@
   <context>
     <name>AstraDownloader</name>
     <message>
+      <source>Format</source>
+      <translation>Format</translation>
+    </message>
+    <message>
+      <source>Quality</source>
+      <translation>Qualität</translation>
+    </message>
+    <message>
+      <source>Duration</source>
+      <translation>Dauer</translation>
+    </message>
+    <message>
+      <source>Saved</source>
+      <translation>Gespeichert</translation>
+    </message>
+    <message>
+      <source>{count} {noun} rejected for {reasons} different reasons. First: {first}</source>
+      <translation>{count} {noun} aus {reasons} verschiedenen Gründen abgelehnt. Zuerst: {first}</translation>
+    </message>
+    <message>
+      <source>{label}: {value}</source>
+      <translation>{label}: {value}</translation>
+    </message>
+    <message>
+      <source>●  {status}</source>
+      <translation>●  {status}</translation>
+    </message>
+    <message>
+      <source>link</source>
+      <translation>Link</translation>
+    </message>
+    <message>
+      <source>links</source>
+      <translation>Links</translation>
+    </message>
+    <message>
+      <source>{count} {noun} rejected: {reason}</source>
+      <translation>{count} {noun} abgelehnt: {reason}</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Erweiterungsserver</translation>
     </message>
@@ -119,6 +159,10 @@
       <translation>Annahme pausieren</translation>
     </message>
     <message>
+      <source>Downloads {kind} in {languages}{format}, without the video. Change this under Settings, Post-processing.</source>
+      <translation>Lädt {kind} in {languages}{format} ohne Video herunter. Ändern Sie das unter Einstellungen, Nachbearbeitung.</translation>
+    </message>
+    <message>
       <source>Clear history</source>
       <translation>Verlauf löschen</translation>
     </message>
@@ -173,6 +217,10 @@
     <message>
       <source>Import cookies.txt</source>
       <translation>cookies.txt importieren</translation>
+    </message>
+    <message>
+      <source>{signed_in} {site} — {count} {stored}.</source>
+      <translation>{signed_in} {site} — {count} {stored}.</translation>
     </message>
     <message>
       <source>The subscription was restored.</source>
@@ -323,12 +371,48 @@
       <translation>Standards rückgängig</translation>
     </message>
     <message>
+      <source>{label} could not be read and was set aside as {backup}. Restore puts the original back and reloads it.</source>
+      <translation>{label} konnte nicht gelesen werden und wurde als {backup} beiseitegelegt. Die Wiederherstellung legt das Original zurück und lädt es neu.</translation>
+    </message>
+    <message>
       <source>Settings from before Restore defaults were restored.</source>
       <translation>Die Einstellungen vor dem Zurücksetzen auf Standards wurden wiederhergestellt.</translation>
     </message>
     <message>
+      <source>Exported {settings} settings and {subscriptions} subscriptions.</source>
+      <translation>{settings} Einstellungen und {subscriptions} Abonnements exportiert.</translation>
+    </message>
+    <message>
+      <source>Imported {count} changed settings</source>
+      <translation>{count} geänderte Einstellungen importiert</translation>
+    </message>
+    <message>
+      <source>Download history cleared. Downloaded files were not removed.</source>
+      <translation>Downloadverlauf gelöscht. Heruntergeladene Dateien wurden nicht entfernt.</translation>
+    </message>
+    <message>
+      <source>Restored {count} download history {entry_label}.</source>
+      <translation>{count} Einträge des Downloadverlaufs wiederhergestellt.</translation>
+    </message>
+    <message>
+      <source>Link copied.</source>
+      <translation>Link kopiert.</translation>
+    </message>
+    <message>
+      <source>Error copied.</source>
+      <translation>Fehler kopiert.</translation>
+    </message>
+    <message>
+      <source>Link ready. Check the options, then choose Download.</source>
+      <translation>Link bereit. Prüfen Sie die Optionen und wählen Sie dann Herunterladen.</translation>
+    </message>
+    <message>
       <source>Unsaved changes</source>
       <translation>Ungespeicherte Änderungen</translation>
+    </message>
+    <message>
+      <source>yt-dlp {yt}    •    ffmpeg {ffmpeg}</source>
+      <translation>yt-dlp {yt}    •    ffmpeg {ffmpeg}</translation>
     </message>
     <message>
       <source>Checking yt-dlp. The verified current copy stays available until the update passes.</source>
@@ -369,6 +453,130 @@
     <message>
       <source>Companion pages</source>
       <translation>Companion-Seiten</translation>
+    </message>
+    <message>
+      <source>Show Astra Downloader</source>
+      <translation>Astra Downloader anzeigen</translation>
+    </message>
+    <message>
+      <source>Stop server</source>
+      <translation>Server stoppen</translation>
+    </message>
+    <message>
+      <source>Open Downloads Folder</source>
+      <translation>Downloads-Ordner öffnen</translation>
+    </message>
+    <message>
+      <source>Quit Astra Downloader</source>
+      <translation>Astra Downloader beenden</translation>
+    </message>
+    <message>
+      <source>{app} - {status}</source>
+      <translation>{app} – {status}</translation>
+    </message>
+    <message>
+      <source>MP3</source>
+      <translation>MP3</translation>
+    </message>
+    <message>
+      <source>M4A</source>
+      <translation>M4A</translation>
+    </message>
+    <message>
+      <source>Opus</source>
+      <translation>Opus</translation>
+    </message>
+    <message>
+      <source>FLAC</source>
+      <translation>FLAC</translation>
+    </message>
+    <message>
+      <source>WAV</source>
+      <translation>WAV</translation>
+    </message>
+    <message>
+      <source>MP4</source>
+      <translation>MP4</translation>
+    </message>
+    <message>
+      <source>MKV</source>
+      <translation>MKV</translation>
+    </message>
+    <message>
+      <source>WebM</source>
+      <translation>WebM</translation>
+    </message>
+    <message>
+      <source>Failed</source>
+      <translation>Fehlgeschlagen</translation>
+    </message>
+    <message>
+      <source>Cancelled</source>
+      <translation>Abgebrochen</translation>
+    </message>
+    <message>
+      <source>Nothing downloaded</source>
+      <translation>Nichts heruntergeladen</translation>
+    </message>
+    <message>
+      <source>All subscriptions</source>
+      <translation>Alle Abonnements</translation>
+    </message>
+    <message>
+      <source>Disabled</source>
+      <translation>Deaktiviert</translation>
+    </message>
+    <message>
+      <source>Needs attention</source>
+      <translation>Aufmerksamkeit erforderlich</translation>
+    </message>
+    <message>
+      <source>All sign-ins</source>
+      <translation>Alle Anmeldungen</translation>
+    </message>
+    <message>
+      <source>Stored and valid</source>
+      <translation>Gespeichert und gültig</translation>
+    </message>
+    <message>
+      <source>Expired</source>
+      <translation>Abgelaufen</translation>
+    </message>
+    <message>
+      <source>Missing on disk</source>
+      <translation>Auf Datenträger nicht vorhanden</translation>
+    </message>
+    <message>
+      <source>Creator, else auto-generated</source>
+      <translation>Vom Ersteller, sonst automatisch erzeugt</translation>
+    </message>
+    <message>
+      <source>Creator only</source>
+      <translation>Nur vom Ersteller</translation>
+    </message>
+    <message>
+      <source>Auto-generated only</source>
+      <translation>Nur automatisch erzeugt</translation>
+    </message>
+    <message>
+      <source>Same as source</source>
+      <translation>Wie Quelle</translation>
+    </message>
+    <message>
+      <source>SRT</source>
+      <translation>SRT</translation>
+    </message>
+    <message>
+      <source>WebVTT</source>
+      <translation>WebVTT</translation>
+    </message>
+    <message>
+      <source>ASS</source>
+      <translation>ASS</translation>
+    </message>
+    <message>
+      <source>LRC</source>
+      <translation>LRC</translation>
     </message>
     <message>
       <source>Missing</source>
@@ -579,12 +787,32 @@
       <translation>Starten ausstehender Downloads pausieren. Bereits laufende Downloads werden fortgesetzt.</translation>
     </message>
     <message>
+      <source>creator subtitles, falling back to auto-generated</source>
+      <translation>Untertitel vom Ersteller, sonst automatisch erzeugte</translation>
+    </message>
+    <message>
+      <source>as {format}</source>
+      <translation>als {format}</translation>
+    </message>
+    <message>
       <source>No profile (one-off)</source>
       <translation>Kein Profil (einmalig)</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
       <translation>Kein Site-Profil für diesen Download.</translation>
+    </message>
+    <message>
+      <source>Confirm your download folder before adding a download.</source>
+      <translation>Bestätigen Sie den Downloadordner, bevor Sie einen Download hinzufügen.</translation>
+    </message>
+    <message>
+      <source>Paste a video link first.</source>
+      <translation>Fügen Sie zuerst einen Videolink ein.</translation>
+    </message>
+    <message>
+      <source>Save this download to</source>
+      <translation>Diesen Download speichern unter</translation>
     </message>
     <message>
       <source>History</source>
@@ -605,6 +833,10 @@
     <message>
       <source>Search download history</source>
       <translation>Downloadverlauf durchsuchen</translation>
+    </message>
+    <message>
+      <source>Search title or filename</source>
+      <translation>Titel oder Dateiname suchen</translation>
     </message>
     <message>
       <source>History status</source>
@@ -699,6 +931,10 @@
       <translation>Abonnements sind in dieser Sitzung nicht verfügbar.</translation>
     </message>
     <message>
+      <source>{total} configured · {archived} archived · {queued} queued</source>
+      <translation>{total} konfiguriert · {archived} archiviert · {queued} eingereiht</translation>
+    </message>
+    <message>
       <source>Scan now</source>
       <translation>Jetzt prüfen</translation>
     </message>
@@ -783,8 +1019,16 @@
       <translation>Test</translation>
     </message>
     <message>
+      <source>{signed_in} {site} — {stored}</source>
+      <translation>{signed_in} {site} — {stored}</translation>
+    </message>
+    <message>
       <source>Reading cookies from the browser…</source>
       <translation>Cookies werden aus dem Browser gelesen…</translation>
+    </message>
+    <message>
+      <source>Select the exported cookies.txt</source>
+      <translation>Exportierte cookies.txt auswählen</translation>
     </message>
     <message>
       <source>The sign-in was restored.</source>
@@ -793,6 +1037,10 @@
     <message>
       <source>Testing the stored sign-in…</source>
       <translation>Gespeicherte Anmeldung wird getestet…</translation>
+    </message>
+    <message>
+      <source>Added {title}. The first scan is scheduled now.</source>
+      <translation>{title} hinzugefügt. Der erste Scan ist jetzt geplant.</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -901,6 +1149,10 @@
     <message>
       <source>Leave blank to use the video folder.</source>
       <translation>Leer lassen, um den Videoordner zu verwenden.</translation>
+    </message>
+    <message>
+      <source>Same as video folder</source>
+      <translation>Wie Videoordner</translation>
     </message>
     <message>
       <source>Filename template</source>
@@ -1099,6 +1351,10 @@
       <translation>Optional, etwa 500K oder 2M.</translation>
     </message>
     <message>
+      <source>No limit</source>
+      <translation>Keine Begrenzung</translation>
+    </message>
+    <message>
       <source>Throttle floor</source>
       <translation>Drosselungsschwelle</translation>
     </message>
@@ -1195,10 +1451,6 @@
       <translation>Maximale Dateigröße in Megabyte</translation>
     </message>
     <message>
-      <source>No limit</source>
-      <translation>Keine Begrenzung</translation>
-    </message>
-    <message>
       <source>Proxy</source>
       <translation>Proxy</translation>
     </message>
@@ -1229,6 +1481,18 @@
     <message>
       <source>Auto</source>
       <translation>Automatisch</translation>
+    </message>
+    <message>
+      <source>Deno</source>
+      <translation>Deno</translation>
+    </message>
+    <message>
+      <source>Node 22+</source>
+      <translation>Node 22+</translation>
+    </message>
+    <message>
+      <source>QuickJS</source>
+      <translation>QuickJS</translation>
     </message>
     <message>
       <source>yt-dlp update channel</source>
@@ -1355,12 +1619,28 @@
       <translation>Die Einstellungen vor dem Zurücksetzen auf Standards wiederherstellen.</translation>
     </message>
     <message>
+      <source>Your server token was regenerated, so the browser extension needs pairing again.</source>
+      <translation>Ihr Servertoken wurde neu erzeugt. Die Browsererweiterung muss erneut gekoppelt werden.</translation>
+    </message>
+    <message>
       <source>Starting</source>
       <translation>Wird gestartet</translation>
     </message>
     <message>
       <source>Cancel</source>
       <translation>Abbrechen</translation>
+    </message>
+    <message>
+      <source>{total} / {limit} jobs</source>
+      <translation>{total} / {limit} Aufträge</translation>
+    </message>
+    <message>
+      <source>Export Settings</source>
+      <translation>Einstellungen exportieren</translation>
+    </message>
+    <message>
+      <source>Import Settings</source>
+      <translation>Einstellungen importieren</translation>
     </message>
     <message>
       <source>Could not save the imported settings. Check disk space and permissions, then retry.</source>
@@ -1375,8 +1655,48 @@
       <translation>Einstellungen-Import rückgängig gemacht.</translation>
     </message>
     <message>
+      <source>No filtered history rows are available to export.</source>
+      <translation>Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.</translation>
+    </message>
+    <message>
+      <source>Export Download History</source>
+      <translation>Downloadverlauf exportieren</translation>
+    </message>
+    <message>
+      <source>Exported {count} filtered history row(s) to {path}</source>
+      <translation>{count} gefilterte Verlaufseinträge nach {path} exportiert</translation>
+    </message>
+    <message>
       <source>Loading history…</source>
       <translation>Verlauf wird geladen…</translation>
+    </message>
+    <message>
+      <source>Download history is already clear.</source>
+      <translation>Der Downloadverlauf ist bereits leer.</translation>
+    </message>
+    <message>
+      <source>Could not prepare the history undo snapshot. The existing history was preserved; check disk permissions and retry.</source>
+      <translation>Der Rückgängig-Schnappschuss für den Verlauf konnte nicht vorbereitet werden. Der vorhandene Verlauf blieb erhalten. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Could not clear download history. The existing history was preserved; check disk permissions and retry.</source>
+      <translation>Der Downloadverlauf konnte nicht gelöscht werden. Der vorhandene Verlauf blieb erhalten. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>No cleared history entries to restore.</source>
+      <translation>Keine gelöschten Verlaufseinträge zum Wiederherstellen vorhanden.</translation>
+    </message>
+    <message>
+      <source>Could not restore download history. The Undo snapshot is still available; check disk permissions and retry.</source>
+      <translation>Der Downloadverlauf konnte nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist noch verfügbar. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Retry queued: {title}</source>
+      <translation>Erneuter Versuch eingereiht: {title}</translation>
+    </message>
+    <message>
+      <source>Download resumed.</source>
+      <translation>Download fortgesetzt.</translation>
     </message>
     <message>
       <source>Play</source>
@@ -1399,12 +1719,24 @@
       <translation>Erneut herunterladen</translation>
     </message>
     <message>
+      <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
+      <translation>Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.</translation>
+    </message>
+    <message>
       <source>Install yt-dlp before checking for updates.</source>
       <translation>Installieren Sie yt-dlp, bevor Sie nach Updates suchen.</translation>
     </message>
     <message>
       <source>Wait for active downloads to finish before updating yt-dlp.</source>
       <translation>Warten Sie, bis aktive Downloads abgeschlossen sind, bevor Sie yt-dlp aktualisieren.</translation>
+    </message>
+    <message>
+      <source>Checking…</source>
+      <translation>Wird geprüft …</translation>
+    </message>
+    <message>
+      <source>Check yt-dlp Update</source>
+      <translation>yt-dlp-Update prüfen</translation>
     </message>
     <message>
       <source>Setup is already running.</source>
@@ -1467,8 +1799,8 @@
       <translation>Einstellungen gespeichert und Server neu gestartet.</translation>
     </message>
     <message>
-      <source>Saved</source>
-      <translation>Gespeichert</translation>
+      <source>Select Folder</source>
+      <translation>Ordner auswählen</translation>
     </message>
     <message>
       <source>Best</source>
@@ -1479,12 +1811,32 @@
       <translation>Verfügbare Formate werden gesucht…</translation>
     </message>
     <message>
+      <source>Copied video link staged. Review the options, then choose Add to queue.</source>
+      <translation>Kopierter Videolink vorgemerkt. Prüfen Sie die Optionen und wählen Sie Zur Warteschlange hinzufügen.</translation>
+    </message>
+    <message>
+      <source>Endpoint copied.</source>
+      <translation>Endpunkt kopiert.</translation>
+    </message>
+    <message>
       <source>Copied token cleared from the clipboard.</source>
       <translation>Kopiertes Token wurde aus der Zwischenablage entfernt.</translation>
     </message>
     <message>
+      <source>Review Diagnostics</source>
+      <translation>Diagnose prüfen</translation>
+    </message>
+    <message>
       <source>Redacted diagnostics preview</source>
       <translation>Vorschau der redigierten Diagnosedaten</translation>
+    </message>
+    <message>
+      <source>Save diagnostics</source>
+      <translation>Diagnose speichern</translation>
+    </message>
+    <message>
+      <source>Copy to Clipboard</source>
+      <translation>In Zwischenablage kopieren</translation>
     </message>
     <message>
       <source>Installing required download tools...</source>
@@ -1497,6 +1849,14 @@
     <message>
       <source>Status</source>
       <translation>Status</translation>
+    </message>
+    <message>
+      <source>{name} {page}</source>
+      <translation>{name} {page}</translation>
+    </message>
+    <message>
+      <source>{open_label} {name}</source>
+      <translation>{open_label} {name}</translation>
     </message>
     <message>
       <source>Unavailable</source>
@@ -1535,6 +1895,22 @@
       <translation>Videopasswörter sind nur für einen einzelnen Link verfügbar.</translation>
     </message>
     <message>
+      <source>Clip ranges apply to a single link. Remove the extra links or clear the clip range.</source>
+      <translation>Clipbereiche gelten für einen einzelnen Link. Entfernen Sie die zusätzlichen Links oder löschen Sie den Clipbereich.</translation>
+    </message>
+    <message>
+      <source>Queued {id}{suffix}.</source>
+      <translation>{id}{suffix} eingereiht.</translation>
+    </message>
+    <message>
+      <source>Queued {count} downloads.</source>
+      <translation>{count} Downloads eingereiht.</translation>
+    </message>
+    <message>
+      <source>{label}: {path}</source>
+      <translation>{label}: {path}</translation>
+    </message>
+    <message>
       <source>Subscriptions unavailable</source>
       <translation>Abonnements nicht verfügbar</translation>
     </message>
@@ -1551,12 +1927,24 @@
       <translation>Fügen Sie oben einen YouTube-Kanal oder eine Playlist hinzu. Neue Uploads werden im eingestellten Intervall eingereiht.</translation>
     </message>
     <message>
+      <source>{label} {title}</source>
+      <translation>{label} {title}</translation>
+    </message>
+    <message>
+      <source>Every {minutes} min · next scan {next_scan}</source>
+      <translation>Alle {minutes} Min. · nächster Scan {next_scan}</translation>
+    </message>
+    <message>
       <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
       <translation>Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.</translation>
     </message>
     <message>
       <source>Read from</source>
       <translation>Lesen aus</translation>
+    </message>
+    <message>
+      <source>{browser} — {warning}</source>
+      <translation>{browser} — {warning}</translation>
     </message>
     <message>
       <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
@@ -1583,12 +1971,28 @@
       <translation>Cookies gespeichert</translation>
     </message>
     <message>
+      <source>{count} {discarded}</source>
+      <translation>{count} {discarded}</translation>
+    </message>
+    <message>
+      <source>That cookie file is too large to be a browser export.</source>
+      <translation>Diese Cookie-Datei ist zu groß für einen Browserexport.</translation>
+    </message>
+    <message>
       <source>No sign-in removal is available to undo.</source>
       <translation>Keine entfernte Anmeldung zum Wiederherstellen verfügbar.</translation>
     </message>
     <message>
+      <source>{label}: {error}</source>
+      <translation>{label}: {error}</translation>
+    </message>
+    <message>
       <source>Test passed</source>
       <translation>Test bestanden</translation>
+    </message>
+    <message>
+      <source>Start the local companion before adding a subscription.</source>
+      <translation>Starten Sie den lokalen Begleiter, bevor Sie ein Abonnement hinzufügen.</translation>
     </message>
     <message>
       <source>Subscription scan started. This row will update when it finishes.</source>
@@ -1597,6 +2001,30 @@
     <message>
       <source>No subscription removal is available to undo.</source>
       <translation>Kein entferntes Abonnement zum Wiederherstellen verfügbar.</translation>
+    </message>
+    <message>
+      <source>{label}: {language}</source>
+      <translation>{label}: {language}</translation>
+    </message>
+    <message>
+      <source>{label} could not be restored. Its backup is at {backup}.</source>
+      <translation>{label} konnte nicht wiederhergestellt werden. Die Sicherung befindet sich unter {backup}.</translation>
+    </message>
+    <message>
+      <source>Destination confirmed: {folder}. Setup can continue in the background.</source>
+      <translation>Ziel bestätigt: {folder}. Die Einrichtung kann im Hintergrund fortgesetzt werden.</translation>
+    </message>
+    <message>
+      <source>Confirm a folder before your first download.</source>
+      <translation>Bestätigen Sie vor dem ersten Download einen Ordner.</translation>
+    </message>
+    <message>
+      <source>The download folder validator is unavailable. Check the log and retry.</source>
+      <translation>Die Prüfung des Downloadordners ist nicht verfügbar. Prüfen Sie das Protokoll und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Could not save the download folder. Check disk permissions and retry.</source>
+      <translation>Der Downloadordner konnte nicht gespeichert werden. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
     </message>
     <message>
       <source>Server status indicator: Starting</source>
@@ -1625,6 +2053,18 @@
     <message>
       <source>Running</source>
       <translation>Läuft</translation>
+    </message>
+    <message>
+      <source>Next: {action}</source>
+      <translation>Nächster Schritt: {action}</translation>
+    </message>
+    <message>
+      <source>ETA {eta}</source>
+      <translation>Restzeit {eta}</translation>
+    </message>
+    <message>
+      <source>Preparing download</source>
+      <translation>Download wird vorbereitet</translation>
     </message>
     <message>
       <source>Up</source>
@@ -1675,8 +2115,24 @@
       <translation>Der Rückgängig-Eintrag ist weiterhin verfügbar; löschen Sie ihn vor dem Schließen.</translation>
     </message>
     <message>
+      <source>{count} stored sign-ins are listed by site only — add them again after importing.</source>
+      <translation>{count} gespeicherte Anmeldungen sind nur nach Website aufgeführt — fügen Sie sie nach dem Import erneut hinzu.</translation>
+    </message>
+    <message>
       <source>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</source>
       <translation>Der Rückgängig-Schnappschuss für den Import konnte nicht vorbereitet werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>{added} subscriptions added, {skipped} already present</source>
+      <translation>{added} Abonnements hinzugefügt, {skipped} bereits vorhanden</translation>
+    </message>
+    <message>
+      <source>sign-ins still needed for {sites}</source>
+      <translation>Anmeldungen weiterhin erforderlich für {sites}</translation>
+    </message>
+    <message>
+      <source>not carried: {settings}</source>
+      <translation>nicht übernommen: {settings}</translation>
     </message>
     <message>
       <source>The import stopped before all subscriptions were added.</source>
@@ -1701,6 +2157,14 @@
     <message>
       <source>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</source>
       <translation>Downloadverlauf konnte nicht gelesen werden. Die unlesbare Datei wurde beiseitegelegt; stellen Sie sie aus dem Status-Hinweis wieder her oder prüfen Sie die Diagnose.</translation>
+    </message>
+    <message>
+      <source>{start}–{end} of {filtered} filtered · {total} retained</source>
+      <translation>{start}–{end} von {filtered} gefiltert · {total} behalten</translation>
+    </message>
+    <message>
+      <source>0 of {filtered} filtered · {total} retained</source>
+      <translation>0 von {filtered} gefiltert · {total} behalten</translation>
     </message>
     <message>
       <source>No downloads yet</source>
@@ -1731,6 +2195,10 @@
       <translation>Wiederholen</translation>
     </message>
     <message>
+      <source>yt-dlp {version} is ready.</source>
+      <translation>yt-dlp {version} ist bereit.</translation>
+    </message>
+    <message>
       <source>Preview unavailable until the template is valid.</source>
       <translation>Die Vorschau ist verfügbar, sobald die Vorlage gültig ist.</translation>
     </message>
@@ -1749,6 +2217,14 @@
     <message>
       <source>Settings saved.</source>
       <translation>Einstellungen gespeichert.</translation>
+    </message>
+    <message>
+      <source>{quality}p</source>
+      <translation>{quality}p</translation>
+    </message>
+    <message>
+      <source>Video link staged. Open Downloads to review it before adding it to the queue.</source>
+      <translation>Videolink vorgemerkt. Öffnen Sie Downloads, um ihn vor dem Einreihen zu prüfen.</translation>
     </message>
     <message>
       <source>Hide</source>
@@ -1783,12 +2259,68 @@
       <translation>yt-dlp wird installiert…</translation>
     </message>
     <message>
+      <source>ffmpeg refresh complete.</source>
+      <translation>ffmpeg-Aktualisierung abgeschlossen.</translation>
+    </message>
+    <message>
+      <source>Setup complete.</source>
+      <translation>Einrichtung abgeschlossen.</translation>
+    </message>
+    <message>
+      <source>ffmpeg refresh failed. The previous copy is still installed.</source>
+      <translation>Die ffmpeg-Aktualisierung ist fehlgeschlagen. Die vorherige Version ist weiterhin installiert.</translation>
+    </message>
+    <message>
+      <source>Setup failed. Check the log for details.</source>
+      <translation>Die Einrichtung ist fehlgeschlagen. Details finden Sie im Protokoll.</translation>
+    </message>
+    <message>
       <source>{label} status indicator: {value}</source>
       <translation>{label} Statusindikator: {value}</translation>
     </message>
     <message>
       <source>{label} status: {value}</source>
       <translation>{label} Status: {value}</translation>
+    </message>
+    <message>
+      <source>mp3</source>
+      <translation>mp3</translation>
+    </message>
+    <message>
+      <source>m4a</source>
+      <translation>m4a</translation>
+    </message>
+    <message>
+      <source>opus</source>
+      <translation>opus</translation>
+    </message>
+    <message>
+      <source>flac</source>
+      <translation>flac</translation>
+    </message>
+    <message>
+      <source>wav</source>
+      <translation>wav</translation>
+    </message>
+    <message>
+      <source>mp4</source>
+      <translation>mp4</translation>
+    </message>
+    <message>
+      <source>mkv</source>
+      <translation>mkv</translation>
+    </message>
+    <message>
+      <source>webm</source>
+      <translation>webm</translation>
+    </message>
+    <message>
+      <source>—</source>
+      <translation>—</translation>
+    </message>
+    <message>
+      <source>{target} (unavailable)</source>
+      <translation>{target} (nicht verfügbar)</translation>
     </message>
     <message>
       <source>Repair needed</source>
@@ -1807,12 +2339,28 @@
       <translation>Erforderlich</translation>
     </message>
     <message>
+      <source>creator subtitles only</source>
+      <translation>nur Untertitel vom Ersteller</translation>
+    </message>
+    <message>
+      <source>auto-generated subtitles only</source>
+      <translation>nur automatisch erzeugte Untertitel</translation>
+    </message>
+    <message>
+      <source>Saving to {path}.</source>
+      <translation>Speichern unter {path}.</translation>
+    </message>
+    <message>
       <source>No subscriptions match these filters</source>
       <translation>Keine Abonnements entsprechen diesen Filtern</translation>
     </message>
     <message>
       <source>Try a different search or choose All subscriptions.</source>
       <translation>Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Abonnements“.</translation>
+    </message>
+    <message>
+      <source>Could not read stored sign-ins: {error}</source>
+      <translation>Gespeicherte Anmeldungen konnten nicht gelesen werden: {error}</translation>
     </message>
     <message>
       <source>No stored sign-ins</source>
@@ -1839,12 +2387,20 @@
       <translation>Benutzername/Passwort</translation>
     </message>
     <message>
-      <source>cookies for other sites were discarded.</source>
-      <translation>Cookies anderer Websites wurden verworfen.</translation>
+      <source>{count} {auth} · {from_label} {source} · {state}</source>
+      <translation>{count} {auth} · {from_label} {source} · {state}</translation>
     </message>
     <message>
       <source>username/password stored securely.</source>
       <translation>Benutzername/Passwort sicher gespeichert.</translation>
+    </message>
+    <message>
+      <source>Could not read that file: {error}</source>
+      <translation>Datei konnte nicht gelesen werden: {error}</translation>
+    </message>
+    <message>
+      <source>{removed} {site}.</source>
+      <translation>{removed} {site}.</translation>
     </message>
     <message>
       <source>Could not restore the stored sign-in.</source>
@@ -1887,10 +2443,6 @@
       <translation>Indikator für Erweiterungsserverstatus: Online</translation>
     </message>
     <message>
-      <source>Stop server</source>
-      <translation>Server stoppen</translation>
-    </message>
-    <message>
       <source>Local only · start before downloading</source>
       <translation>Nur lokal · vor dem Download starten</translation>
     </message>
@@ -1927,12 +2479,28 @@
       <translation>Link einfügen</translation>
     </message>
     <message>
+      <source>Download complete</source>
+      <translation>Download abgeschlossen</translation>
+    </message>
+    <message>
       <source>SponsorBlock categories</source>
       <translation>SponsorBlock-Kategorien</translation>
     </message>
     <message>
       <source>Settings restored and server restarted.</source>
       <translation>Einstellungen wiederhergestellt und Server neu gestartet.</translation>
+    </message>
+    <message>
+      <source>Could not write the bundle: {error}</source>
+      <translation>Das Paket konnte nicht geschrieben werden: {error}</translation>
+    </message>
+    <message>
+      <source>Could not read that bundle: {error}</source>
+      <translation>Das Paket konnte nicht gelesen werden: {error}</translation>
+    </message>
+    <message>
+      <source>Could not export download history: {error}</source>
+      <translation>Downloadverlauf konnte nicht exportiert werden: {error}</translation>
     </message>
     <message>
       <source>History could not be read</source>
@@ -1947,12 +2515,24 @@
       <translation>Diagnose öffnen</translation>
     </message>
     <message>
+      <source>entry</source>
+      <translation>Eintrag</translation>
+    </message>
+    <message>
+      <source>entries</source>
+      <translation>Einträge</translation>
+    </message>
+    <message>
       <source>Settings status: {message}</source>
       <translation>Einstellungsstatus: {message}</translation>
     </message>
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>Dieser Link bietet höchstens {height}p.</translation>
+    </message>
+    <message>
+      <source>Still running in the tray so Astra Deck can keep sending downloads.</source>
+      <translation>Läuft weiterhin im Infobereich, damit Astra Deck Downloads senden kann.</translation>
     </message>
     <message>
       <source>Installing ffmpeg...</source>
@@ -1991,6 +2571,10 @@
       <translation>unter Windows 127+ wahrscheinlich nicht lesbar</translation>
     </message>
     <message>
+      <source>cookie session expired</source>
+      <translation>Cookie-Sitzung abgelaufen</translation>
+    </message>
+    <message>
       <source>Missing on disk — import it again</source>
       <translation>Auf dem Datenträger nicht gefunden — erneut importieren</translation>
     </message>
@@ -2001,6 +2585,10 @@
     <message>
       <source>cookies</source>
       <translation>Cookies</translation>
+    </message>
+    <message>
+      <source>cookies for other sites were discarded.</source>
+      <translation>Cookies anderer Websites wurden verworfen.</translation>
     </message>
     <message>
       <source>Test failed</source>
@@ -2035,10 +2623,6 @@
       <translation>Keine aktuelle Meldung</translation>
     </message>
     <message>
-      <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
-      <translation>Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.</translation>
-    </message>
-    <message>
       <source>Reserved Windows name in preview: {name}.</source>
       <translation>Reservierter Windows-Name in der Vorschau: {name}.</translation>
     </message>
@@ -2059,8 +2643,8 @@
       <translation>Transkriptionsmodell wird vorbereitet…</translation>
     </message>
     <message>
-      <source>cookie session expired</source>
-      <translation>Cookie-Sitzung abgelaufen</translation>
+      <source>{label} {date}</source>
+      <translation>{label} {date}</translation>
     </message>
     <message>
       <source>Session cookies — valid until the site signs you out</source>
@@ -2097,6 +2681,10 @@
     <message>
       <source>Finishing setup...</source>
       <translation>Einrichtung wird abgeschlossen…</translation>
+    </message>
+    <message>
+      <source>for an accurate ffmpeg clip</source>
+      <translation>für einen präzisen ffmpeg-Clip</translation>
     </message>
     <message>
       <source>unknown</source>

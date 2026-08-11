@@ -14,6 +14,10 @@ repository's git log.
 
 ### Fixed
 
+- **Companion translation extraction now follows the UI boundary.** Qt setter
+  roots, constant picker loops, tray/dialog copy, and dynamic status templates
+  are catalogued together; the shipped German catalogue remains complete and
+  the translation gate now covers 734 companion strings.
 - **The language picker now advertises only usable translations.** English and
   German clear the 80% coverage floor; partial catalogues remain available for
   legacy configurations and RTL compatibility, but are no longer presented as
