@@ -17,6 +17,9 @@ repository's git log.
 - **The companion UI render harness now covers focus, DPI, locales, and recovery states.**
   It renders the bundled locale set, 1x/1.25x/2x scale fixtures, genuine empty
   states, filters, pagination, queue recovery, format probing, and invalid settings.
+- **The default pytest command now preserves its own result summary.** Tests
+  use an ignored project-local base directory, so stale account-wide temp
+  permissions cannot replace a green run with a teardown traceback.
 - **Companion translation extraction now follows the UI boundary.** Qt setter
   roots, constant picker loops, tray/dialog copy, and dynamic status templates
   are catalogued together; the shipped German catalogue remains complete and
