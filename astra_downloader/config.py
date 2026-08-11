@@ -31,6 +31,7 @@ __all__ = (
     "APP_NAME", "APP_VERSION", "SERVICE_ID", "SERVICE_API_VERSION",
     "SERVER_PORT", "PORT_FALLBACKS", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "DEFAULT_CONFIG", "INSTALL_DIR", "CONFIG_PATH", "HISTORY_PATH",
+    "CONFIG_SCHEMA_VERSION",
     "default_download_path",
     "CORS_MAX_AGE_SECONDS", "RATE_LIMIT_DOWNLOAD_MAX",
     "RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", "MAX_REQUEST_BYTES",
@@ -86,6 +87,7 @@ _OWNED_EXPORTS = {
     "validate_download_request_body",
     "normalize_output_dir", "allowed_output_roots",
     "DEFAULT_CONFIG", "sanitize_config",
+    "CONFIG_SCHEMA_VERSION",
     "default_download_path",
     "ConfigStore", "HistoryStore", "atomic_write_json", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries",
@@ -137,6 +139,11 @@ JAVASCRIPT_RUNTIME_CHOICES = frozenset({"auto", "deno", "node", "quickjs"})
 FORMAT_SORT_VIDEO_CODECS = frozenset({"auto", "h264", "vp9", "av1"})
 FORMAT_SORT_AUDIO_CODECS = frozenset({"auto", "aac", "opus"})
 FORMAT_SORT_FRAME_RATES = (0, 30, 60)
+
+# The on-disk config is intentionally versioned separately from the settings
+# bundle. Unknown top-level keys are retained so an older build can be opened
+# after a newer build without erasing settings it does not understand.
+CONFIG_SCHEMA_VERSION = 1
 
 
 def _known_folder_path_windows():
@@ -1794,7 +1801,7 @@ class ConfigStore:
     """Transactional config persistence with explicit filesystem dependencies."""
 
     def __init__(self, *, install_dir, path, sanitizer, loader, writer, logger,
-                 read_only=False):
+                 read_only=False, schema_version=None):
         self._install_dir = install_dir
         self._path = path
         self._sanitizer = sanitizer
@@ -1802,6 +1809,11 @@ class ConfigStore:
         self._writer = writer
         self._logger = logger
         self._read_only = bool(read_only)
+        self._schema_version_current = (
+            int(schema_version) if schema_version is not None else None
+        )
+        self._stored_schema_version = self._schema_version_current
+        self._unknown_data = {}
         self._lock = threading.RLock()
         # Session-only overrides (e.g. a fallback ServerPort after a bind
         # conflict): visible through get()/data so the running process uses
@@ -1820,14 +1832,47 @@ class ConfigStore:
     def _load_and_sanitize(self):
         path = self._resolve(self._path)
         raw = self._loader(path, {})
+        if not isinstance(raw, dict):
+            raw = {}
+        quarantined = False
         try:
-            return self._sanitizer(raw)
+            data = self._sanitizer(raw)
         except Exception as error:  # noqa: BLE001
             saved = backup_corrupt_file(Path(path))
             if saved:
                 record_quarantined_file(path, saved)
             self._logger(f"Config file was quarantined: {error}")
-            return self._sanitizer({})
+            raw = {}
+            quarantined = True
+            data = self._sanitizer(raw)
+        if self._schema_version_current is not None:
+            version = raw.get("schemaVersion")
+            if isinstance(version, bool):
+                version = None
+            try:
+                version = int(version)
+            except (TypeError, ValueError, OverflowError):
+                version = self._schema_version_current
+            self._stored_schema_version = max(
+                self._schema_version_current, version
+            )
+            if version > self._schema_version_current:
+                self._logger(
+                    "Config was written by a newer version "
+                    f"(schema {version}); preserving unknown settings."
+                )
+        else:
+            self._stored_schema_version = None
+        self._unknown_data = (
+            {
+                key: value
+                for key, value in raw.items()
+                if key != "schemaVersion" and key not in data
+            }
+            if not quarantined and isinstance(data, dict)
+            else {}
+        )
+        return data
 
     def get(self, key, default=None):
         with self._lock:
@@ -1884,14 +1929,23 @@ class ConfigStore:
 
     def _save_candidate_unlocked(self, candidate):
         candidate = self._sanitizer(candidate)
+        payload = dict(self._unknown_data)
+        payload.update(candidate)
+        if self._schema_version_current is not None:
+            payload["schemaVersion"] = self._stored_schema_version
         try:
-            self._writer(self._resolve(self._path), candidate)
+            self._writer(self._resolve(self._path), payload)
         except Exception as error:
             self._data = dict(self._persisted_data)
             self._logger(f"Config save failed: {error}")
             return False
         self._data = candidate
         self._persisted_data = dict(candidate)
+        self._unknown_data = {
+            key: value
+            for key, value in payload.items()
+            if key != "schemaVersion" and key not in candidate
+        }
         return True
 
     @property
