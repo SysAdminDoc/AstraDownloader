@@ -1196,6 +1196,32 @@ CATALOGS = {
             "Dieser Link bietet nur SABR-Streams. {options} gelten für sie nicht und werden ignoriert.",
         "Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.":
             "Antivirensoftware hat die Datei möglicherweise entfernt oder gekürzt. Fügen Sie eine Ausnahme für {path} hinzu und lassen Sie die Einrichtung sie erneut abrufen.",
+        "Could not prepare the defaults undo snapshot. Nothing changed; check disk permissions and retry.":
+            "Der Rückgängig-Schnappschuss für die Standards konnte nicht vorbereitet werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+        "Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.":
+            "Der Rückgängig-Schnappschuss für den Import konnte nicht vorbereitet werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+        "Could not restore the previous settings. The Undo snapshot is still available; check disk permissions and retry.":
+            "Die vorherigen Einstellungen konnten nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist weiterhin verfügbar; prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+        "No Restore defaults action is available to undo.":
+            "Keine Aktion zum Wiederherstellen der Standards verfügbar.",
+        "Restore the settings from before Restore defaults was used.":
+            "Die Einstellungen vor dem Zurücksetzen auf Standards wiederherstellen.",
+        "Restore the sign-in removed by the last action.":
+            "Die durch die letzte Aktion entfernte Anmeldung wiederherstellen.",
+        "Restore the subscription removed by the last action.":
+            "Das durch die letzte Aktion entfernte Abonnement wiederherstellen.",
+        "Settings from before Restore defaults were restored.":
+            "Die Einstellungen vor dem Zurücksetzen auf Standards wurden wiederhergestellt.",
+        "Settings were restored, but the Undo record could not be updated on disk.":
+            "Die Einstellungen wurden wiederhergestellt, aber der Rückgängig-Eintrag konnte nicht auf der Festplatte aktualisiert werden.",
+        "The Undo record is still available; clear it before closing.":
+            "Der Rückgängig-Eintrag ist weiterhin verfügbar; löschen Sie ihn vor dem Schließen.",
+        "The import stopped before all subscriptions were added.":
+            "Der Import wurde beendet, bevor alle Abonnements hinzugefügt wurden.",
+        "The import was only partly applied because its Undo snapshot could not be saved.":
+            "Der Import wurde nur teilweise angewendet, weil sein Rückgängig-Schnappschuss nicht gespeichert werden konnte.",
+        "Undo defaults":
+            "Standards rückgängig",
     },
     "en": {},
     "es": {

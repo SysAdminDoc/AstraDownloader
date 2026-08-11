@@ -62,7 +62,7 @@ __all__ = (
     "verify_file_sha256", "fetch_expected_sha256", "cleanup_stale_cookie_jars",
     "write_cookies_netscape", "RateLimiter", "Config", "History",
     "DOWNLOAD_REQUEST_ALLOWED_FIELDS", "DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS",
-    "ConfigStore", "HistoryStore",
+    "ConfigStore", "HistoryStore", "DurableUndoStore",
 )
 
 _OWNED_EXPORTS = {
@@ -89,7 +89,7 @@ _OWNED_EXPORTS = {
     "DEFAULT_CONFIG", "sanitize_config",
     "CONFIG_SCHEMA_VERSION",
     "default_download_path",
-    "ConfigStore", "HistoryStore", "atomic_write_json", "load_json_file",
+    "ConfigStore", "HistoryStore", "DurableUndoStore", "atomic_write_json", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries",
     "quarantined_state_files", "restore_quarantined_file",
     "record_quarantined_file", "forget_quarantined_file",
@@ -1801,7 +1801,7 @@ class ConfigStore:
     """Transactional config persistence with explicit filesystem dependencies."""
 
     def __init__(self, *, install_dir, path, sanitizer, loader, writer, logger,
-                 read_only=False, schema_version=None):
+                 read_only=False, schema_version=None, undo_path=None):
         self._install_dir = install_dir
         self._path = path
         self._sanitizer = sanitizer
@@ -1815,6 +1815,16 @@ class ConfigStore:
         self._stored_schema_version = self._schema_version_current
         self._unknown_data = {}
         self._lock = threading.RLock()
+        self._undo = DurableUndoStore(
+            path=undo_path or (
+                lambda: Path(self._resolve(self._path)).with_name(
+                    f".{Path(self._resolve(self._path)).name}.undo"
+                )
+            ),
+            loader=loader,
+            writer=writer,
+            logger=logger,
+        )
         # Session-only overrides (e.g. a fallback ServerPort after a bind
         # conflict): visible through get()/data so the running process uses
         # them, but never serialized — save()/update() persist _data only.
@@ -1907,6 +1917,15 @@ class ConfigStore:
         with self._lock:
             self._session_overrides[key] = value
 
+    def load_undo(self, key):
+        return self._undo.get(key)
+
+    def save_undo(self, key, value):
+        return self._undo.set(key, value)
+
+    def clear_undo(self, key):
+        return self._undo.clear(key)
+
     def update(self, mapping):
         with self._lock:
             if self._read_only:
@@ -1956,10 +1975,101 @@ class ConfigStore:
             return merged
 
 
+class DurableUndoStore:
+    """Small adjacent journal for one-step recovery snapshots.
+
+    The journal is intentionally separate from the state document it protects:
+    a failed or interrupted undo never makes the primary config, history, or
+    subscription file unreadable. Values are JSON-shaped by contract, and the
+    injected writer gives application stores the same atomic replacement path
+    as their primary documents.
+    """
+
+    SCHEMA_VERSION = 1
+
+    def __init__(self, *, path, loader, writer, logger):
+        self._path = path
+        self._loader = loader
+        self._writer = writer
+        self._logger = logger
+        self._lock = threading.RLock()
+
+    def _resolve_path(self):
+        return Path(self._path() if callable(self._path) else self._path)
+
+    @staticmethod
+    def _clone(value):
+        try:
+            return json.loads(json.dumps(value, ensure_ascii=False))
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    def _read_unlocked(self):
+        try:
+            raw = self._loader(self._resolve_path(), {})
+        except Exception as error:  # noqa: BLE001
+            self._logger(f"Undo journal read failed: {error}")
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        version = raw.get("schemaVersion")
+        try:
+            version = int(version)
+        except (TypeError, ValueError, OverflowError):
+            version = self.SCHEMA_VERSION
+        if version > self.SCHEMA_VERSION:
+            self._logger(
+                f"Undo journal schema {version} is newer than this build; ignoring it."
+            )
+            return {}
+        records = raw.get("records")
+        return dict(records) if isinstance(records, dict) else {}
+
+    def _write_unlocked(self, records):
+        payload = {
+            "schemaVersion": self.SCHEMA_VERSION,
+            "records": records,
+        }
+        try:
+            result = self._writer(self._resolve_path(), payload)
+            if result is False:
+                raise OSError("undo journal writer reported failure")
+            return True
+        except Exception as error:  # noqa: BLE001
+            self._logger(f"Undo journal save failed: {error}")
+            return False
+
+    def get(self, key, default=None):
+        with self._lock:
+            records = self._read_unlocked()
+            if key not in records:
+                return default
+            value = self._clone(records[key])
+            return default if value is None else value
+
+    def set(self, key, value):
+        value = self._clone(value)
+        if value is None:
+            return False
+        with self._lock:
+            records = self._read_unlocked()
+            records[str(key)] = value
+            return self._write_unlocked(records)
+
+    def clear(self, key):
+        with self._lock:
+            records = self._read_unlocked()
+            if str(key) not in records:
+                return True
+            records.pop(str(key), None)
+            return self._write_unlocked(records)
+
+
 class HistoryStore:
     """Bounded history persistence with explicit serialization dependencies."""
 
-    def __init__(self, *, path, sanitizer, loader, writer, logger, limit=500):
+    def __init__(self, *, path, sanitizer, loader, writer, logger, limit=500,
+                 undo_path=None):
         self._path = path
         self._sanitizer = sanitizer
         self._loader = loader
@@ -1967,6 +2077,16 @@ class HistoryStore:
         self._logger = logger
         self._limit = max(1, int(limit))
         self._lock = threading.Lock()
+        self._undo = DurableUndoStore(
+            path=undo_path or (
+                lambda: Path(self._resolve_path()).with_name(
+                    f".{Path(self._resolve_path()).name}.undo"
+                )
+            ),
+            loader=loader,
+            writer=writer,
+            logger=logger,
+        )
         if not self._resolve_path().exists():
             self._write([])
 
@@ -1976,6 +2096,15 @@ class HistoryStore:
     def load(self):
         with self._lock:
             return self._sanitizer(self._loader(self._resolve_path(), []))
+
+    def load_undo(self, key):
+        return self._undo.get(key)
+
+    def save_undo(self, key, value):
+        return self._undo.set(key, value)
+
+    def clear_undo(self, key):
+        return self._undo.clear(key)
 
     def add(self, entry):
         with self._lock:

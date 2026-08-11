@@ -793,6 +793,25 @@ class PersistenceTests(unittest.TestCase):
             finally:
                 ad.HISTORY_PATH = original
 
+    def test_history_undo_snapshot_survives_a_new_store_instance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = ad.HISTORY_PATH
+            try:
+                ad.HISTORY_PATH = Path(tmp) / "history.json"
+                history = ad.History()
+                snapshot = [{
+                    "id": "durable",
+                    "url": "https://example.com/durable",
+                    "title": "Durable",
+                }]
+                self.assertTrue(history.save_undo("clearHistory", snapshot))
+                reopened = ad.History()
+                self.assertEqual(reopened.load_undo("clearHistory"), snapshot)
+                self.assertTrue(reopened.clear_undo("clearHistory"))
+                self.assertIsNone(reopened.load_undo("clearHistory"))
+            finally:
+                ad.HISTORY_PATH = original
+
     def test_config_update_failure_rolls_back_memory_and_preserves_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = ad.CONFIG_PATH
@@ -808,6 +827,23 @@ class PersistenceTests(unittest.TestCase):
                 self.assertFalse(saved)
                 self.assertEqual(config.get("ServerPort"), old_port)
                 self.assertEqual(ad.CONFIG_PATH.read_text(encoding="utf-8"), old_file)
+            finally:
+                ad.CONFIG_PATH = original
+
+    def test_config_undo_snapshot_survives_a_new_store_instance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = ad.CONFIG_PATH
+            try:
+                ad.CONFIG_PATH = Path(tmp) / "config.json"
+                config = ad.Config()
+                snapshot = {"settings": {"Proxy": "https://proxy.example.test"}}
+                self.assertTrue(config.save_undo("restoreDefaults", snapshot))
+                reopened = ad.Config()
+                self.assertEqual(
+                    reopened.load_undo("restoreDefaults"), snapshot
+                )
+                self.assertTrue(reopened.clear_undo("restoreDefaults"))
+                self.assertIsNone(reopened.load_undo("restoreDefaults"))
             finally:
                 ad.CONFIG_PATH = original
 
@@ -1327,6 +1363,30 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(restored["url"], record["url"])
             self.assertFalse(restored["enabled"])
             self.assertEqual(store.get_subscription(record["id"])["title"], "Astra channel")
+
+    def test_subscription_removal_undo_survives_a_new_store_instance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "undo.json"
+            store = self._store(path)
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel",
+                interval_minutes=30,
+                title="Astra channel",
+            )
+            self.assertIsNone(error)
+            removed, error = store.remove_subscription_with_undo(record["id"])
+            self.assertIsNone(error)
+            self.assertEqual(removed["id"], record["id"])
+            self.assertEqual(store.list_subscriptions(), [])
+
+            reopened = self._store(path)
+            snapshot = reopened.load_removal_undo()
+            self.assertEqual(snapshot["id"], record["id"])
+            restored, error = reopened.restore_subscription(snapshot)
+            self.assertIsNone(error)
+            self.assertEqual(restored["id"], record["id"])
+            self.assertTrue(reopened.clear_removal_undo())
+            self.assertIsNone(reopened.load_removal_undo())
 
     def test_failed_archive_claims_back_off_and_stop_after_three_attempts(self):
         subs = subscriptions_module()
@@ -14654,7 +14714,7 @@ class SiteLoginStoreTests(unittest.TestCase):
             ).read_text(encoding="utf-8"))
             self.assertEqual(store.entries()[0]["site"], "x.com")
 
-    def test_new_store_cleans_an_orphaned_site_login_undo_backup(self):
+    def test_new_store_preserves_a_referenced_site_login_undo_backup(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self._store(tmp)
             store.import_netscape_text("x.com", self.MIXED_EXPORT)
@@ -14663,8 +14723,36 @@ class SiteLoginStoreTests(unittest.TestCase):
             backup = Path(tmp) / ad.SITE_LOGIN_DIRNAME / f".undo-{undo['token']}.txt"
             self.assertTrue(backup.exists())
             reopened = self._store(tmp)
-            self.assertFalse(backup.exists())
-            self.assertEqual(reopened.entries(), [])
+            self.assertTrue(backup.exists())
+            self.assertEqual(reopened.load_removed_undo()["token"], undo["token"])
+            restored, error = reopened.restore_removed(reopened.load_removed_undo())
+            self.assertTrue(restored)
+            self.assertIsNone(error)
+            self.assertIn(
+                "X-SECRET",
+                (Path(tmp) / ad.SITE_LOGIN_DIRNAME / "x.com.txt").read_text(
+                    encoding="utf-8"
+                ),
+            )
+            self.assertEqual(reopened.entries()[0]["site"], "x.com")
+
+    def test_new_store_removes_an_unreferenced_site_login_undo_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            store.import_netscape_text("x.com", self.MIXED_EXPORT)
+            undo, error = store.remove_with_undo("x.com")
+            self.assertIsNone(error)
+            orphan = Path(tmp) / ad.SITE_LOGIN_DIRNAME / (
+                ".undo-" + "a" * 32 + ".txt"
+            )
+            orphan.write_text("orphan", encoding="utf-8")
+            self.assertTrue(orphan.exists())
+            reopened = self._store(tmp)
+            self.assertTrue(
+                (Path(tmp) / ad.SITE_LOGIN_DIRNAME / f".undo-{undo['token']}.txt").exists()
+            )
+            self.assertFalse(orphan.exists())
+            self.assertEqual(reopened.load_removed_undo()["site"], "x.com")
 
     def test_export_skips_expired_cookies_and_unknown_sites(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -16122,8 +16210,20 @@ class SettingsNavigationTests(unittest.TestCase):
 
     def test_restore_defaults_reports_changes_and_refreshes_the_form(self):
         class MutableConfig(FakeConfig):
+            def __init__(self, data=None):
+                super().__init__(data)
+                self.undo = {}
+
             def update(self, mapping):
                 self.data.update(mapping)
+                return True
+
+            def save_undo(self, key, value):
+                self.undo[key] = json.loads(json.dumps(value))
+                return True
+
+            def clear_undo(self, key):
+                self.undo.pop(key, None)
                 return True
 
         from PyQt6.QtWidgets import QApplication
@@ -16149,11 +16249,30 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertEqual(window.cfg_proxy.text(), "")
         self.assertEqual(window.cfg_language.currentData(), "system")
         self.assertIn("Restored defaults", window.settings_status.text())
+        self.assertFalse(window.btn_undo_restore_defaults.isHidden())
+        self.assertTrue(window._undo_restore_defaults())
+        QApplication.processEvents()
+        self.assertEqual(config.get("Proxy"), "https://proxy.example.test:8443")
+        self.assertEqual(config.get("Language"), "de")
+        self.assertTrue(window.btn_undo_restore_defaults.isHidden())
+        self.assertNotIn("restoreDefaults", config.undo)
 
     def test_settings_import_status_names_the_changed_fields(self):
         class MutableConfig(FakeConfig):
+            def __init__(self, data=None):
+                super().__init__(data)
+                self.undo = {}
+
             def update(self, mapping):
                 self.data.update(mapping)
+                return True
+
+            def save_undo(self, key, value):
+                self.undo[key] = json.loads(json.dumps(value))
+                return True
+
+            def clear_undo(self, key):
+                self.undo.pop(key, None)
                 return True
 
         from PyQt6.QtWidgets import QApplication
@@ -16186,6 +16305,11 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertIn(window.cfg_subs.accessibleName(), status)
         self.assertEqual(config.get("SubLangs"), "de")
         self.assertTrue(config.get("EmbedSubs"))
+        self.assertIn("settingsImport", config.undo)
+        self.assertTrue(window._undo_settings_import() is None)
+        self.assertEqual(config.get("SubLangs"), "en")
+        self.assertFalse(config.get("EmbedSubs"))
+        self.assertNotIn("settingsImport", config.undo)
 
     def test_sign_in_browser_list_marks_chromium_entries_before_selection(self):
         from PyQt6.QtWidgets import QApplication

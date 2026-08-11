@@ -1215,6 +1215,7 @@ class MainWindowCore(QMainWindow):
         self._site_login_undo = None
         self._subscription_undo = None
         self._settings_import_undo = None
+        self._restore_defaults_undo = None
         self._restoring_window_state = False
         self.log_message.connect(self._append_log)
         self.instance_command.connect(self._handle_instance_command)
@@ -1371,6 +1372,7 @@ class MainWindowCore(QMainWindow):
         self._build_subscriptions()
         self._build_extension()
         self._build_settings()
+        self._load_durable_undo_state()
 
         self._restore_window_state(start_minimized)
 
@@ -1632,6 +1634,81 @@ class MainWindowCore(QMainWindow):
         """Keep a control's own hidden state outside search filtering."""
         widget.setProperty("settingsFilterHidden", bool(hidden))
         widget.setVisible(not hidden)
+
+    def _load_durable_undo_state(self):
+        """Restore one-step undo affordances after every store is constructed."""
+        load_history = getattr(self.history_mgr, "load_undo", None)
+        if callable(load_history):
+            try:
+                snapshot = load_history("clearHistory")
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not read history undo state: {error}")
+                snapshot = None
+            if isinstance(snapshot, list) and snapshot:
+                self._cleared_history_snapshot = snapshot
+                self.btn_undo_clear_history.show()
+
+        store = self._site_login_store()
+        load_site_login = getattr(store, "load_removed_undo", None) if store else None
+        if callable(load_site_login):
+            try:
+                self._site_login_undo = load_site_login()
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not read sign-in undo state: {error}")
+                self._site_login_undo = None
+            if self._site_login_undo:
+                self.btn_undo_site_login.show()
+
+        manager = self._subscription_manager()
+        load_subscription = getattr(manager, "load_removal_undo", None) if manager else None
+        if callable(load_subscription):
+            try:
+                self._subscription_undo = load_subscription()
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not read subscription undo state: {error}")
+                self._subscription_undo = None
+            if self._subscription_undo:
+                self.btn_undo_subscription.show()
+
+        load_config = getattr(self.config, "load_undo", None)
+        if callable(load_config):
+            try:
+                self._settings_import_undo = load_config("settingsImport")
+                self._restore_defaults_undo = load_config("restoreDefaults")
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not read settings undo state: {error}")
+                self._settings_import_undo = None
+                self._restore_defaults_undo = None
+        self._set_settings_filter_hidden(
+            self.btn_undo_settings_import, not bool(self._settings_import_undo)
+        )
+        self._set_settings_filter_hidden(
+            self.btn_undo_restore_defaults, not bool(self._restore_defaults_undo)
+        )
+
+    def _save_config_undo(self, key, snapshot):
+        """Persist a settings recovery snapshot when the store supports it."""
+        save = getattr(self.config, "save_undo", None)
+        if not callable(save):
+            # Small test doubles and older embedders retain the original
+            # in-memory behavior until they adopt the adjacent journal API.
+            return True
+        try:
+            return bool(save(key, snapshot))
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not save {key} undo state: {error}")
+            return False
+
+    def _clear_config_undo(self, key):
+        """Clear a settings recovery snapshot and report persistence failure."""
+        clear = getattr(self.config, "clear_undo", None)
+        if not callable(clear):
+            return True
+        try:
+            return bool(clear(key))
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not clear {key} undo state: {error}")
+            return False
 
     def _filter_settings(self, query):
         """Show only matching settings rows while keeping their group visible."""
@@ -2952,7 +3029,7 @@ class MainWindowCore(QMainWindow):
         ), 1)
         self.btn_undo_subscription = self._make_tool_button("Undo remove", "ghost")
         self.btn_undo_subscription.setToolTip(
-            tr("Restore the subscription removed in this session.")
+            tr("Restore the subscription removed by the last action.")
         )
         self.btn_undo_subscription.clicked.connect(self._undo_subscription)
         self.btn_undo_subscription.hide()
@@ -3197,7 +3274,7 @@ class MainWindowCore(QMainWindow):
         ), 1)
         self.btn_undo_site_login = self._make_tool_button("Undo remove", "ghost")
         self.btn_undo_site_login.setToolTip(
-            tr("Restore the sign-in removed in this session.")
+            tr("Restore the sign-in removed by the last action.")
         )
         self.btn_undo_site_login.clicked.connect(self._undo_site_login)
         self.btn_undo_site_login.hide()
@@ -3790,10 +3867,17 @@ class MainWindowCore(QMainWindow):
         if manager is None:
             return
         record = None
+        remove_with_undo = getattr(manager, "remove_subscription_with_undo", None)
+        if callable(remove_with_undo):
+            record, error = remove_with_undo(sub_id)
+            removed = bool(record)
+        else:
+            error = None
+            removed = None
         getter = getattr(manager, "get_subscription", None)
-        if callable(getter):
+        if removed is None and callable(getter):
             record = getter(sub_id)
-        if record is None:
+        if removed is None and record is None:
             try:
                 record = next(
                     (
@@ -3806,10 +3890,11 @@ class MainWindowCore(QMainWindow):
                 record = None
         self._subscription_scan_pending.discard(str(sub_id))
         self._subscription_scan_seen.discard(str(sub_id))
-        _removed, error = manager.remove_subscription(sub_id)
+        if removed is None:
+            removed, error = manager.remove_subscription(sub_id)
         if error:
             self.subscription_status.setText(error)
-        else:
+        elif removed:
             self._subscription_undo = record
             if record and hasattr(self, "btn_undo_subscription"):
                 self.btn_undo_subscription.show()
@@ -3835,9 +3920,15 @@ class MainWindowCore(QMainWindow):
                 error or tr("Could not restore the subscription.")
             )
             return
-        self._subscription_undo = None
-        self.btn_undo_subscription.hide()
-        self.subscription_status.setText(tr("The subscription was restored."))
+        clear_undo = getattr(manager, "clear_removal_undo", None)
+        journal_cleared = not callable(clear_undo) or clear_undo()
+        if journal_cleared:
+            self._subscription_undo = None
+            self.btn_undo_subscription.hide()
+        message = tr("The subscription was restored.")
+        if not journal_cleared:
+            message += " The Undo record is still available; clear it before closing."
+        self.subscription_status.setText(message)
         self._refresh_subscriptions(force=True)
 
     def _build_settings(self):
@@ -4862,6 +4953,17 @@ class MainWindowCore(QMainWindow):
         ))
         self.btn_restore_defaults.clicked.connect(self._restore_default_settings)
         save_row.addWidget(self.btn_restore_defaults)
+        self.btn_undo_restore_defaults = self._make_tool_button(
+            "Undo defaults", "ghost"
+        )
+        self.btn_undo_restore_defaults.setToolTip(tr(
+            "Restore the settings from before Restore defaults was used."
+        ))
+        self.btn_undo_restore_defaults.clicked.connect(
+            self._undo_restore_defaults
+        )
+        self._set_settings_filter_hidden(self.btn_undo_restore_defaults, True)
+        save_row.addWidget(self.btn_undo_restore_defaults)
         layout.addLayout(save_row)
         layout.addStretch()
 
@@ -6055,8 +6157,9 @@ class MainWindowCore(QMainWindow):
         keys = [key for _attribute, key, _kind in self._SETTINGS_FORM_FIELDS]
         keys.append("SponsorBlockCategories")
         values = {key: defaults.get(key) for key in dict.fromkeys(keys)}
+        persisted_get = getattr(self.config, "get_persisted", self.config.get)
         current = {
-            key: self.config.get(key, defaults.get(key))
+            key: persisted_get(key, defaults.get(key))
             for key in values
         }
         changed = [key for key in values if current.get(key) != values[key]]
@@ -6066,7 +6169,16 @@ class MainWindowCore(QMainWindow):
             )
             return False
 
-        persisted_get = getattr(self.config, "get_persisted", self.config.get)
+        undo_snapshot = {"settings": current}
+        if not self._save_config_undo("restoreDefaults", undo_snapshot):
+            self._show_settings_status(
+                tr(
+                    "Could not prepare the defaults undo snapshot. Nothing changed; "
+                    "check disk permissions and retry."
+                ),
+                "danger",
+            )
+            return False
         old_port = self._dependencies["clamp_int"](
             persisted_get("ServerPort", self._value("SERVER_PORT")),
             self._value("SERVER_PORT"), 1024, 65535,
@@ -6089,6 +6201,7 @@ class MainWindowCore(QMainWindow):
             self._append_log(f"Could not restore settings defaults: {error}")
             saved = False
         if not saved:
+            self._clear_config_undo("restoreDefaults")
             self._show_settings_status(
                 tr("Could not restore defaults. Nothing changed; check disk permissions and retry."),
                 "danger",
@@ -6136,10 +6249,95 @@ class MainWindowCore(QMainWindow):
             summary = tr(
                 "Settings restored. Restart Astra Downloader to apply the language."
             ) + " " + summary
+        self._restore_defaults_undo = undo_snapshot
+        self._set_settings_filter_hidden(self.btn_undo_restore_defaults, False)
         self._show_settings_status(summary, "success")
         self._append_log(
             "Restored Settings defaults: " + ", ".join(changed)
         )
+        return True
+
+    def _undo_restore_defaults(self):
+        """Restore the settings that preceded the last Restore defaults action."""
+        snapshot = self._restore_defaults_undo
+        settings = snapshot.get("settings") if isinstance(snapshot, dict) else None
+        if not isinstance(settings, dict) or not settings:
+            self._set_settings_filter_hidden(self.btn_undo_restore_defaults, True)
+            self._show_settings_status(
+                tr("No Restore defaults action is available to undo."), "warning"
+            )
+            return False
+
+        persisted_get = getattr(self.config, "get_persisted", self.config.get)
+        old_port = self._dependencies["clamp_int"](
+            persisted_get("ServerPort", self._value("SERVER_PORT")),
+            self._value("SERVER_PORT"), 1024, 65535,
+        )
+        old_effective_port = self._dependencies["clamp_int"](
+            self.config.get("ServerPort", self._value("SERVER_PORT")),
+            self._value("SERVER_PORT"), 1024, 65535,
+        )
+        old_language = self.config.get("Language", "system")
+        update = getattr(self.config, "update", None)
+        if not callable(update):
+            self._show_settings_status(
+                tr(
+                    "Could not restore the previous settings. The Undo snapshot is "
+                    "still available; check disk permissions and retry."
+                ),
+                "danger",
+            )
+            return False
+        try:
+            restored = bool(update(settings))
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not undo Restore defaults: {error}")
+            restored = False
+        if not restored:
+            self._show_settings_status(
+                tr(
+                    "Could not restore the previous settings. The Undo snapshot is "
+                    "still available; check disk permissions and retry."
+                ),
+                "danger",
+            )
+            return False
+
+        self._reload_settings_form()
+        self._dependencies["reset_deno_runtime_cache"]()
+        self._start_readiness_probe()
+        new_port = self._dependencies["clamp_int"](
+            settings.get("ServerPort"), self._value("SERVER_PORT"), 1024, 65535,
+        )
+        port_changed = (
+            new_port != old_port or new_port != old_effective_port
+        )
+        restarted_server = bool(port_changed and self.server_running)
+        if restarted_server:
+            self._stop_server()
+            self._start_server()
+        else:
+            self._sync_connection_ui()
+
+        journal_cleared = self._clear_config_undo("restoreDefaults")
+        if journal_cleared:
+            self._restore_defaults_undo = None
+            self._set_settings_filter_hidden(self.btn_undo_restore_defaults, True)
+        message = tr("Settings from before Restore defaults were restored.")
+        if restarted_server:
+            message = tr("Settings restored and server restarted.") + " " + message
+        elif old_language != settings.get("Language"):
+            message = tr(
+                "Settings restored. Restart Astra Downloader to apply the language."
+            ) + " " + message
+        if not journal_cleared:
+            message += " " + tr(
+                "The Undo record is still available; clear it before closing."
+            )
+        self._show_settings_status(
+            message, "success" if journal_cleared else "warning"
+        )
+        self._append_log("Undid Restore defaults")
         return True
 
     def _export_settings_bundle(self):
@@ -6213,16 +6411,35 @@ class MainWindowCore(QMainWindow):
             return False
         changes = self._dependencies['describe_bundle_changes'](
             self.config, bundle)
-        # Capture the incoming keys before the write. This is the same
-        # session-scoped, one-step model as history undo, and it deliberately
-        # excludes secrets because the bundle boundary already excludes them.
+        # Capture the incoming keys before the write. The bundle boundary has
+        # already excluded secrets, and the adjacent config journal makes this
+        # recovery survive a restart instead of living only on the window.
+        persisted_get = getattr(self.config, "get_persisted", self.config.get)
         previous_settings = {
-            key: self.config.get(
+            key: persisted_get(
                 key, self._value('DEFAULT_CONFIG').get(key)
             )
             for key in bundle["settings"]
         }
+        self._settings_import_undo = {
+            "settings": previous_settings,
+            "subscriptionIds": [],
+        }
+        if not self._save_config_undo(
+            "settingsImport", self._settings_import_undo
+        ):
+            self._settings_import_undo = None
+            self._show_settings_status(
+                tr(
+                    "Could not prepare the import undo snapshot. Nothing changed; "
+                    "check disk permissions and retry."
+                ),
+                "danger",
+            )
+            return False
         if not self.config.update(bundle["settings"]):
+            self._clear_config_undo("settingsImport")
+            self._settings_import_undo = None
             self._show_settings_status(
                 "Could not save the imported settings. Check disk space and "
                 "permissions, then retry.",
@@ -6232,6 +6449,7 @@ class MainWindowCore(QMainWindow):
         manager = self._subscription_manager()
         added, skipped = 0, 0
         added_subscription_ids = []
+        import_undo_warning = False
         for record in bundle["subscriptions"]:
             if manager is None:
                 break
@@ -6249,10 +6467,37 @@ class MainWindowCore(QMainWindow):
                 added += 1
                 if isinstance(created, dict) and created.get("id"):
                     added_subscription_ids.append(str(created["id"]))
-        self._settings_import_undo = {
-            "settings": previous_settings,
-            "subscriptionIds": added_subscription_ids,
-        }
+                    self._settings_import_undo["subscriptionIds"] = list(
+                        added_subscription_ids
+                    )
+                    if not self._save_config_undo(
+                        "settingsImport", self._settings_import_undo
+                    ):
+                        # Keep the already-persisted prefix recoverable and
+                        # avoid leaving the newest subscription without a
+                        # durable undo record when the journal becomes
+                        # unwritable mid-import.
+                        removed, _remove_error = manager.remove_subscription(
+                            str(created["id"])
+                        )
+                        if removed:
+                            added -= 1
+                            added_subscription_ids.pop()
+                            self._settings_import_undo["subscriptionIds"] = list(
+                                added_subscription_ids
+                            )
+                        self._show_settings_status(
+                            tr(
+                                "The import was only partly applied because its "
+                                "Undo snapshot could not be saved."
+                            ),
+                            "danger",
+                        )
+                        import_undo_warning = True
+                        break
+        self._settings_import_undo["subscriptionIds"] = list(
+            added_subscription_ids
+        )
         self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
         changed_labels = []
         for key in changes["settings"]:
@@ -6284,7 +6529,14 @@ class MainWindowCore(QMainWindow):
             parts.append(
                 "not carried: " + ", ".join(excluded)
             )
-        self._show_settings_status(". ".join(parts) + ".", "success")
+        if import_undo_warning:
+            parts.append(
+                tr("The import stopped before all subscriptions were added.")
+            )
+        self._show_settings_status(
+            ". ".join(parts) + ".",
+            "warning" if import_undo_warning else "success",
+        )
         self._append_log(
             f"Imported settings bundle from {path}: "
             f"{', '.join(changes['settings']) or 'no setting changes'}"
@@ -6313,8 +6565,13 @@ class MainWindowCore(QMainWindow):
                 removed, error = False, str(exc)
             if not removed or error:
                 remaining.append(sub_id)
-        restored = self.config.update(snapshot.get("settings", {}))
         snapshot["subscriptionIds"] = remaining
+        journal_updated = self._save_config_undo("settingsImport", snapshot)
+        try:
+            restored = bool(self.config.update(snapshot.get("settings", {})))
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not undo settings import: {error}")
+            restored = False
         if not restored:
             self._show_settings_status(
                 "Could not restore the imported settings. The Undo snapshot is "
@@ -6324,15 +6581,37 @@ class MainWindowCore(QMainWindow):
             self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
             return
         if remaining:
+            self._settings_import_undo = snapshot
             self._show_settings_status(
                 tr("Settings were restored, but some imported subscriptions remain."),
                 "warning",
             )
             self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
         else:
-            self._settings_import_undo = None
-            self._set_settings_filter_hidden(self.btn_undo_settings_import, True)
-            self._show_settings_status(tr("Settings import undone."), "success")
+            journal_cleared = self._clear_config_undo("settingsImport")
+            if journal_cleared:
+                self._settings_import_undo = None
+                self._set_settings_filter_hidden(self.btn_undo_settings_import, True)
+            else:
+                self._settings_import_undo = snapshot
+                self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
+            message = tr("Settings import undone.")
+            if not journal_cleared:
+                message += " " + tr(
+                    "The Undo record is still available; clear it before closing."
+                )
+            self._show_settings_status(
+                message,
+                "success" if journal_cleared else "warning",
+            )
+        if not journal_updated:
+            self._show_settings_status(
+                tr(
+                    "Settings were restored, but the Undo record could not be "
+                    "updated on disk."
+                ),
+                "warning",
+            )
         self._reload_settings_form()
         self._refresh_subscriptions(force=True)
 
@@ -6497,7 +6776,18 @@ class MainWindowCore(QMainWindow):
             self._refresh_history()
             self._show_history_status("Download history is already clear.", "neutral")
             return
+        save_undo = getattr(self.history_mgr, "save_undo", None)
+        clear_undo = getattr(self.history_mgr, "clear_undo", None)
+        if callable(save_undo) and not save_undo("clearHistory", snapshot):
+            self._show_history_status(
+                "Could not prepare the history undo snapshot. The existing "
+                "history was preserved; check disk permissions and retry.",
+                "error",
+            )
+            return
         if not self.history_mgr.clear():
+            if callable(clear_undo):
+                clear_undo("clearHistory")
             self._show_history_status(
                 "Could not clear download history. The existing history was preserved; "
                 "check disk permissions and retry.",
@@ -6523,13 +6813,20 @@ class MainWindowCore(QMainWindow):
             )
             return
         restored = len(self._cleared_history_snapshot)
-        self._cleared_history_snapshot = []
-        self.btn_undo_clear_history.hide()
-        self._refresh_history()
-        self._show_history_status(
-            f"Restored {restored} download history entr{'y' if restored == 1 else 'ies'}.",
-            "success",
+        clear_undo = getattr(self.history_mgr, "clear_undo", None)
+        journal_cleared = (
+            not callable(clear_undo) or clear_undo("clearHistory")
         )
+        if journal_cleared:
+            self._cleared_history_snapshot = []
+            self.btn_undo_clear_history.hide()
+        self._refresh_history()
+        message = (
+            f"Restored {restored} download history entr{'y' if restored == 1 else 'ies'}."
+        )
+        if not journal_cleared:
+            message += " The Undo record is still available; clear it from disk before closing."
+        self._show_history_status(message, "success" if journal_cleared else "warning")
 
     def _retry_download(self, dl):
         ok, err = self.dl_manager.retry(dl.id)

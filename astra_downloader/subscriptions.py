@@ -18,6 +18,11 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
+try:
+    from .config import DurableUndoStore
+except ImportError:  # Flat source-path compatibility.
+    from config import DurableUndoStore
+
 
 __all__ = (
     "SUBSCRIPTION_SCHEMA_VERSION",
@@ -274,6 +279,12 @@ class SubscriptionStore:
         self._lock = threading.RLock()
         self._compatible = True
         self._persistence_error = ""
+        self._undo = DurableUndoStore(
+            path=self.path.with_name(f".{self.path.name}.undo"),
+            loader=self._reader,
+            writer=self._writer,
+            logger=self._logger,
+        )
         self._data = self._load()
 
     @staticmethod
@@ -548,6 +559,40 @@ class SubscriptionStore:
         with self._lock:
             item = self._find_locked(str(sub_id))
             return _copy(item) if item else None
+
+    def load_removal_undo(self):
+        record = self._undo.get("removeSubscription")
+        return _copy(record) if isinstance(record, dict) else None
+
+    def clear_removal_undo(self):
+        return self._undo.clear("removeSubscription")
+
+    def remove_subscription_with_undo(self, sub_id):
+        """Remove a subscription only after its restart-safe snapshot lands."""
+        with self._lock:
+            if not self._compatible:
+                return None, self._save_failure_message()
+            index = next(
+                (
+                    index for index, item in enumerate(self._data["subscriptions"])
+                    if item["id"] == str(sub_id)
+                ),
+                None,
+            )
+            if index is None:
+                return None, "Subscription no longer exists."
+            removed = _copy(self._data["subscriptions"][index])
+            if not self._undo.set("removeSubscription", removed):
+                return None, (
+                    "Could not prepare the subscription undo snapshot. "
+                    "Nothing was removed; check disk space and permissions."
+                )
+            self._data["subscriptions"].pop(index)
+            if not self._save_locked():
+                self._data["subscriptions"].insert(index, removed)
+                self._undo.clear("removeSubscription")
+                return None, self._save_failure_message()
+            return removed, None
 
     def restore_subscription(self, raw):
         """Restore one previously removed subscription record.
@@ -1011,6 +1056,15 @@ class SubscriptionManager:
 
     def restore_subscription(self, record):
         return self.store.restore_subscription(record)
+
+    def load_removal_undo(self):
+        return self.store.load_removal_undo()
+
+    def clear_removal_undo(self):
+        return self.store.clear_removal_undo()
+
+    def remove_subscription_with_undo(self, sub_id):
+        return self.store.remove_subscription_with_undo(str(sub_id))
 
     def update_subscription(self, sub_id, **fields):
         allowed = {"url", "interval_minutes", "enabled", "title"}
