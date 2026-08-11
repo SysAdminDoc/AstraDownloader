@@ -1231,6 +1231,14 @@
       <translation>Write info JSON sidecar</translation>
     </message>
     <message>
+      <source>Write media-server NFO sidecar</source>
+      <translation>Write media-server NFO sidecar</translation>
+    </message>
+    <message>
+      <source>Write Kodi/Jellyfin-compatible NFO metadata beside downloaded media and create tvshow.nfo and season.nfo for channel folders.</source>
+      <translation>Write Kodi/Jellyfin-compatible NFO metadata beside downloaded media and create tvshow.nfo and season.nfo for channel folders.</translation>
+    </message>
+    <message>
       <source>Write description sidecar</source>
       <translation>Write description sidecar</translation>
     </message>

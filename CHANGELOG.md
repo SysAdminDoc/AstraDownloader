@@ -18,6 +18,9 @@ repository's git log.
   retention cap, the History page shows the active limit and searches URLs,
   subscription archive rows appear without duplicate URLs, and `/history?url=`
   reports an exact cross-store lookup.
+- **Media-server sidecars are opt-in.** Completed downloads can convert
+  yt-dlp metadata into Kodi/Jellyfin-compatible item NFO files and channel
+  `tvshow.nfo`/`season.nfo` files with stable provider IDs.
 - **The companion UI render harness now covers focus, DPI, locales, and recovery states.**
   It renders the bundled locale set, 1x/1.25x/2x scale fixtures, genuine empty
   states, filters, pagination, queue recovery, format probing, and invalid settings.
@@ -27,7 +30,7 @@ repository's git log.
 - **Companion translation extraction now follows the UI boundary.** Qt setter
   roots, constant picker loops, tray/dialog copy, and dynamic status templates
   are catalogued together; the shipped German catalogue remains complete and
-  the translation gate now covers 738 companion strings.
+  the translation gate now covers 740 companion strings.
 - **The language picker now advertises only usable translations.** English and
   German clear the 80% coverage floor; partial catalogues remain available for
   legacy configurations and RTL compatibility, but are no longer presented as

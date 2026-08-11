@@ -4446,6 +4446,12 @@ class MainWindowCore(QMainWindow):
             self.config.get("KeepIntermediateFiles", False))
         self.cfg_write_info = QCheckBox(tr("Write info JSON sidecar"))
         self.cfg_write_info.setChecked(self.config.get("WriteInfoJson", False))
+        self.cfg_write_nfo = QCheckBox(tr("Write media-server NFO sidecar"))
+        self.cfg_write_nfo.setToolTip(tr(
+            "Write Kodi/Jellyfin-compatible NFO metadata beside downloaded "
+            "media and create tvshow.nfo and season.nfo for channel folders."
+        ))
+        self.cfg_write_nfo.setChecked(self.config.get("WriteNfo", False))
         self.cfg_write_description = QCheckBox(tr("Write description sidecar"))
         self.cfg_write_description.setChecked(
             self.config.get("WriteDescription", False)
@@ -4567,7 +4573,7 @@ class MainWindowCore(QMainWindow):
             "fieldHint", word_wrap=True,
         ))
         for w in (
-            self.cfg_write_info, self.cfg_write_description,
+            self.cfg_write_info, self.cfg_write_nfo, self.cfg_write_description,
             self.cfg_write_thumbnail, self.cfg_split_chapters,
             self.cfg_live_from_start,
         ):
@@ -6353,6 +6359,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_generate_subtitles", "GenerateSubtitles", "check"),
         ("cfg_keep_intermediates", "KeepIntermediateFiles", "check"),
         ("cfg_write_info", "WriteInfoJson", "check"),
+        ("cfg_write_nfo", "WriteNfo", "check"),
         ("cfg_write_description", "WriteDescription", "check"),
         ("cfg_write_thumbnail", "WriteThumbnail", "check"),
         ("cfg_split_chapters", "SplitChapters", "check"),
@@ -7790,6 +7797,7 @@ class MainWindowCore(QMainWindow):
             ),
             "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
             "WriteInfoJson": checked_setting("cfg_write_info", "WriteInfoJson"),
+            "WriteNfo": checked_setting("cfg_write_nfo", "WriteNfo"),
             "WriteDescription": checked_setting(
                 "cfg_write_description", "WriteDescription"
             ),

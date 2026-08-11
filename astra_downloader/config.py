@@ -227,6 +227,7 @@ DEFAULT_CONFIG = {
     # the finished media and deliberately do not alter the existing embed
     # switches above.
     "WriteInfoJson": False,
+    "WriteNfo": False,
     "WriteDescription": False,
     "WriteThumbnail": False,
     "SplitChapters": False,
@@ -1473,7 +1474,7 @@ def sanitize_config(raw):
     for key in (
         "EmbedMetadata", "EmbedThumbnail", "EmbedChapters", "EmbedSubs",
         "GenerateSubtitles",
-        "WriteInfoJson", "WriteDescription", "WriteThumbnail",
+        "WriteInfoJson", "WriteNfo", "WriteDescription", "WriteThumbnail",
         "SplitChapters", "LiveFromStart",
         "WindowsFilenames",
         "KeepIntermediateFiles", "VerifyFormats",

@@ -17,6 +17,7 @@ import zipfile
 from datetime import datetime, timedelta
 from unittest import mock
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import astra_downloader as ad
 
@@ -159,6 +160,7 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(jitter_cfg["PacingJitterPercent"], 100)
         archive_cfg = ad.sanitize_config({
             "WriteInfoJson": "yes",
+            "WriteNfo": "yes",
             "WriteDescription": "yes",
             "WriteThumbnail": True,
             "SplitChapters": "true",
@@ -166,7 +168,7 @@ class NormalizationTests(unittest.TestCase):
             "WaitForVideoSeconds": 9999,
         })
         for key in (
-            "WriteInfoJson", "WriteDescription", "WriteThumbnail",
+            "WriteInfoJson", "WriteNfo", "WriteDescription", "WriteThumbnail",
             "SplitChapters", "LiveFromStart",
         ):
             self.assertTrue(archive_cfg[key], key)
@@ -372,6 +374,97 @@ class NormalizationTests(unittest.TestCase):
                 items, err = ad.normalize_playlist_items(value)
                 self.assertIsNone(items)
                 self.assertTrue(err)
+
+
+class MediaServerSidecarTests(unittest.TestCase):
+    """NFO output stays valid, bounded, and in the media folder."""
+
+    def test_item_nfo_uses_provider_ids_and_escapes_fetched_metadata(self):
+        payload = ad.build_media_server_nfo({
+            "id": "video-123",
+            "title": "A & <clip>",
+            "description": "Plot with > and < characters",
+            "duration": 181,
+            "upload_date": "20260811",
+            "extractor_key": "Youtube",
+            "channel": "Channel & Co",
+            "categories": ["News"],
+            "tags": ["one", "two"],
+            "thumbnail": "https://cdn.example/thumb.jpg",
+            "webpage_url": "https://www.youtube.com/watch?v=video-123",
+        })
+        root = ET.fromstring(payload)
+
+        self.assertEqual(root.tag, "movie")
+        self.assertEqual(root.findtext("title"), "A & <clip>")
+        self.assertEqual(root.findtext("plot"), "Plot with > and < characters")
+        self.assertEqual(root.findtext("runtime"), "3")
+        self.assertEqual(root.findtext("premiered"), "2026-08-11")
+        self.assertEqual(root.findtext("youtubeid"), "video-123")
+        uniqueid = root.find("uniqueid")
+        self.assertIsNotNone(uniqueid)
+        self.assertEqual(uniqueid.attrib, {"type": "youtube", "default": "true"})
+        self.assertEqual(uniqueid.text, "video-123")
+        self.assertEqual([item.text for item in root.findall("genre")], ["News"])
+        self.assertEqual([item.text for item in root.findall("tag")], ["one", "two"])
+
+    def test_channel_download_writes_item_show_and_season_nfo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "Channel & Co"
+            season = root / "Season 01"
+            season.mkdir(parents=True)
+            records = []
+            for index in (1, 2):
+                media = season / f"Episode {index}.mp4"
+                media.write_bytes(b"media")
+                metadata = {
+                    "id": f"video-{index}",
+                    "title": f"Episode {index}",
+                    "playlist_title": "Channel & Co",
+                    "playlist_id": "channel-123",
+                    "playlist_index": index,
+                    "extractor_key": "Youtube",
+                    "channel": "Channel & Co",
+                }
+                info = Path(f"{media}.info.json")
+                info.write_text(json.dumps(metadata), encoding="utf-8")
+                records.append((media, info))
+
+            written = ad.write_media_server_sidecars(root)
+
+            self.assertEqual(
+                {path.name for path in written},
+                {"Episode 1.nfo", "Episode 2.nfo", "tvshow.nfo", "season.nfo"},
+            )
+            item_root = ET.parse(records[0][0].with_suffix(".nfo")).getroot()
+            self.assertEqual(item_root.tag, "episodedetails")
+            self.assertEqual(item_root.findtext("showtitle"), "Channel & Co")
+            self.assertEqual(item_root.findtext("season"), "1")
+            self.assertEqual(item_root.findtext("episode"), "1")
+            show_root = ET.parse(root / "tvshow.nfo").getroot()
+            self.assertEqual(show_root.tag, "tvshow")
+            self.assertEqual(show_root.findtext("title"), "Channel & Co")
+            self.assertEqual(show_root.findtext("youtubeid"), "channel-123")
+            season_root = ET.parse(season / "season.nfo").getroot()
+            self.assertEqual(season_root.tag, "season")
+            self.assertEqual(season_root.findtext("seasonnumber"), "1")
+            self.assertEqual(season_root.findtext("showtitle"), "Channel & Co")
+            self.assertEqual(list(root.glob(".*.tmp")), [])
+
+    def test_nfo_writer_rejects_metadata_paths_and_bounds_untrusted_text(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            with self.assertRaises(ValueError):
+                ad.write_media_server_nfo({}, root / "clip.info.json")
+            payload = ad.build_media_server_nfo({
+                "title": "\x00" + ("x" * (ad.NFO_MAX_TEXT_CHARS + 50)),
+                "id": "safe-id",
+            })
+            parsed = ET.fromstring(payload)
+            self.assertLessEqual(len(parsed.findtext("title")), ad.NFO_MAX_TEXT_CHARS)
+            self.assertNotIn("\x00", payload.decode("utf-8"))
 
 
 class CompanionListFilterTests(unittest.TestCase):
@@ -12984,6 +13077,58 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             self.assertIn(flag, argv)
         self.assertIn("--windows-filenames", argv)
         self.assertEqual(argv[argv.index("--wait-for-video") + 1], "45")
+
+    def test_nfo_archiving_fetches_metadata_json_without_duplicate_flags(self):
+        argv = self._argv_for(
+            "https://example.com/video",
+            config_overrides={"WriteNfo": True},
+            with_cookies=False,
+        )
+        self.assertEqual(argv.count("--write-info-json"), 1)
+
+    def test_completed_download_converts_yt_dlp_metadata_into_an_nfo(self):
+        with tempfile.TemporaryDirectory() as output_dir, \
+                tempfile.TemporaryDirectory() as install_dir, \
+                mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+            final = Path(output_dir) / "Clip.mp4"
+            metadata = {
+                "id": "clip-123",
+                "title": "Clip",
+                "extractor_key": "Youtube",
+                "webpage_url": "https://youtube.com/watch?v=clip-123",
+            }
+
+            def popen(args, **_kwargs):
+                if '--ignore-config' not in args:
+                    return self._FakeProc([], 0)
+                final.write_bytes(b"finished")
+                Path(f"{final}.info.json").write_text(
+                    json.dumps(metadata), encoding="utf-8"
+                )
+                return self._FakeProc(
+                    [f'MDLP_FILEPATH {json.dumps(str(final))}'], 0
+                )
+
+            config = FakeConfig({
+                "DownloadPath": output_dir,
+                "AudioDownloadPath": output_dir,
+                "WriteNfo": True,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            download = ad.Download(
+                "dl_nfo", "https://youtube.com/watch?v=clip-123",
+                output_dir=output_dir,
+            )
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                    mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                    mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                manager._run_download(download)
+
+            self.assertEqual(download.status, "complete")
+            nfo = final.with_suffix(".nfo")
+            self.assertTrue(nfo.exists())
+            self.assertEqual(ET.parse(nfo).getroot().findtext("youtubeid"), "clip-123")
 
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",
