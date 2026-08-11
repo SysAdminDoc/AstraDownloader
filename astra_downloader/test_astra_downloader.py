@@ -16667,7 +16667,7 @@ class SettingsFormReloadTests(unittest.TestCase):
 
 
 class SettingsNavigationTests(unittest.TestCase):
-    def _window(self, config):
+    def _window(self, config, subscriptions=None):
         manager = ad.DownloadManager(config, FakeHistory())
         patches = [
             mock.patch.object(ad.MainWindow, "_start_instance_command_listener"),
@@ -16677,7 +16677,12 @@ class SettingsNavigationTests(unittest.TestCase):
         for patcher in patches:
             patcher.start()
             self.addCleanup(patcher.stop)
-        window = ad.MainWindow(config, manager, FakeHistory())
+        window = ad.MainWindow(
+            config,
+            manager,
+            FakeHistory(),
+            subscriptions=subscriptions,
+        )
         self.addCleanup(_retire_test_window, window)
         return window
 
@@ -16754,6 +16759,44 @@ class SettingsNavigationTests(unittest.TestCase):
             ).accessibleName(),
             "Browse: Audio download folder",
         )
+
+    def test_empty_states_offer_recovery_actions_and_log_has_a_real_empty_state(self):
+        from PyQt6.QtWidgets import QPushButton
+
+        _get_qapp_or_skip(self)
+        subscriptions = types.SimpleNamespace(snapshot=lambda: {
+            "subscriptions": [],
+            "archive": {},
+            "scanning": [],
+        }, stop=lambda: None)
+        window = self._window(FakeConfig(), subscriptions=subscriptions)
+        window.dl_manager.site_logins = types.SimpleNamespace(entries=lambda: [])
+        window._refresh_site_logins(force=True)
+        window._refresh_history()
+        window._clear_log()
+
+        def empty_actions(container_layout):
+            empty = container_layout.itemAt(0).widget()
+            return [button.text() for button in empty.findChildren(QPushButton)]
+
+        self.assertIn(
+            "Add subscription", empty_actions(window.subscription_container)
+        )
+        self.assertIn(
+            "Add a site sign-in", empty_actions(window.site_login_container)
+        )
+        self.assertIn(
+            "View download queue", empty_actions(window.history_container)
+        )
+        self.assertFalse(window.log_empty_state.isHidden())
+        self.assertTrue(window.log_text.isHidden())
+
+        window._append_log("empty-state fixture")
+        self.assertTrue(window.log_empty_state.isHidden())
+        self.assertFalse(window.log_text.isHidden())
+        window._clear_log()
+        self.assertFalse(window.log_empty_state.isHidden())
+        self.assertTrue(window.log_text.isHidden())
 
     def test_live_wait_setting_is_labeled_as_a_retry_interval(self):
         from PyQt6.QtWidgets import QApplication, QLabel

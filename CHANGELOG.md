@@ -45,6 +45,9 @@ repository's git log.
 - **SponsorBlock now carries visible attribution.** The optional Settings
   control links to SponsorBlock and identifies its CC BY-NC-SA 4.0 data/API
   alongside Astra Downloader's MIT licence.
+- **Empty pages now explain the next action.** History, subscriptions,
+  sign-ins, and the browser-extension log offer a useful recovery or setup
+  action instead of leaving a blank panel.
 - **The companion UI render harness now covers focus, DPI, locales, and recovery states.**
   It renders the bundled locale set, 1x/1.25x/2x scale fixtures, genuine empty
   states, filters, pagination, queue recovery, format probing, and invalid settings.
