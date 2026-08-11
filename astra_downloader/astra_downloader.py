@@ -4212,6 +4212,54 @@ class SetupWorker(SetupWorkerCore):
 # ══════════════════════════════════════════════════════════════
 # UNINSTALL
 # ══════════════════════════════════════════════════════════════
+def _portable_state_paths(root=None):
+    """Return the root entries owned by this portable companion instance."""
+    root = Path(INSTALL_DIR if root is None else root)
+    root_file_names = {
+        Path(path).name for path in (
+            CONFIG_PATH, HISTORY_PATH, DOWNLOAD_QUEUE_PATH, SUBSCRIPTIONS_PATH,
+            LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH,
+            WHISPER_MODEL_PATH, ICON_PATH,
+        )
+    }
+    root_dir_names = {
+        Path(path).name for path in (
+            WHISPER_BIN_DIR, DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
+        )
+    }
+    root_dir_names.update({
+        'site-logins', 'download-temp',
+    })
+    exact = {root / name for name in root_file_names | root_dir_names}
+    exact.update({
+        root / name for name in (
+            'archive.txt',
+            YTDLP_ROLLBACK_FILENAME,
+            COMPANION_ROLLBACK_FILENAME,
+            Path(_ytdlp_update_state_path()).name,
+            Path(_companion_update_state_path()).name,
+        )
+    })
+    return exact, root_file_names
+
+
+def _portable_state_child_matches(name, state_names):
+    """Recognize crash leftovers for known app-owned root files."""
+    name = str(name)
+    if name.startswith(('.AstraDownloader.', '.yt-dlp.update.')):
+        return True
+    if name.startswith('.cookies.') and name.endswith('.txt'):
+        return True
+    if name.startswith('.whisper.') and name.endswith('.zip'):
+        return True
+    return any(
+        name.startswith(f'{base}.corrupt-')
+        or name.startswith(f'.{base}.') and name.endswith('.tmp')
+        or name == f'{base}.1'
+        for base in state_names
+    )
+
+
 def remove_portable_state():
     """Remove app-owned portable state while preserving the executable/media."""
     root = Path(INSTALL_DIR)
@@ -4219,19 +4267,8 @@ def remove_portable_state():
         current = current_executable_path().resolve()
     except (OSError, RuntimeError):
         current = None
-    known_paths = {
-        Path(path).resolve()
-        for path in (
-            CONFIG_PATH, HISTORY_PATH, DOWNLOAD_QUEUE_PATH, SUBSCRIPTIONS_PATH,
-            LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH, ICON_PATH,
-            WHISPER_MODEL_PATH,
-            WHISPER_BIN_DIR, DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
-            INSTALL_DIR / 'site-logins', INSTALL_DIR / 'download-temp',
-            _ytdlp_update_state_path(), _companion_update_state_path(),
-            INSTALL_DIR / YTDLP_ROLLBACK_FILENAME,
-            INSTALL_DIR / COMPANION_ROLLBACK_FILENAME,
-        )
-    }
+    known_paths, state_names = _portable_state_paths(root)
+    known_paths = {path.resolve() for path in known_paths}
     try:
         children = list(root.iterdir())
     except OSError:
@@ -4243,13 +4280,14 @@ def remove_portable_state():
             continue
         if current is not None and resolved == current:
             continue
-        if resolved not in known_paths and not (
-            child.name.startswith(".AstraDownloader.")
-            or child.name.startswith(".yt-dlp.update.")
+        if resolved not in known_paths and not _portable_state_child_matches(
+            child.name, state_names
         ):
             continue
         try:
-            if child.is_dir():
+            if child.is_symlink():
+                child.unlink(missing_ok=True)
+            elif child.is_dir():
                 shutil.rmtree(child, ignore_errors=False)
             else:
                 child.unlink(missing_ok=True)
