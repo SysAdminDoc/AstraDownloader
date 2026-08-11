@@ -4107,7 +4107,7 @@ class MainWindowCore(QMainWindow):
             self.config.get("LiveFromStart", False)
         )
         self.cfg_wait_for_video = QSpinBox()
-        self.cfg_wait_for_video.setAccessibleName(tr("Wait for live video"))
+        self.cfg_wait_for_video.setAccessibleName(tr("Live-video retry interval"))
         self.cfg_wait_for_video.setRange(0, 3600)
         self.cfg_wait_for_video.setSuffix(tr(" seconds"))
         self.cfg_wait_for_video.setValue(
@@ -4213,10 +4213,10 @@ class MainWindowCore(QMainWindow):
         wait_row = QHBoxLayout()
         wait_row.setSpacing(8)
         wait_row.addSpacing(28)
-        wait_row.addWidget(make_label("Wait for live video", "fieldHint"))
+        wait_row.addWidget(make_label("Live-video retry interval", "fieldHint"))
         wait_row.addWidget(self.cfg_wait_for_video)
         wait_row.addWidget(make_label(
-            "0 disables waiting; use this when a scheduled live event has not started.",
+            "0 disables live-event retries; otherwise yt-dlp retries at this interval within a bounded wait window.",
             "fieldHint", word_wrap=True,
         ), 1)
         pp_l.addLayout(wait_row)

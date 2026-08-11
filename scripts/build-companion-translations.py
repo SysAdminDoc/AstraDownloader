@@ -226,16 +226,16 @@ CATALOGS = {
             "Kapitel in einzelne Dateien aufteilen",
         "Start live streams from the beginning":
             "Livestreams von Anfang an starten",
-        "Wait for live video":
-            "Auf Live-Video warten",
+        "Live-video retry interval":
+            "Intervall für Live-Video-Wiederholungen",
         " seconds":
             " Sekunden",
         "Archive output":
             "Archiv-Ausgabe",
         "Optional sidecars, chapter splitting and live-event controls. These do not change the existing embed options.":
             "Optionale Begleitdateien, Kapitelaufteilung und Live-Ereignissteuerung. Die bestehenden Einbettungsoptionen bleiben unverändert.",
-        "0 disables waiting; use this when a scheduled live event has not started.":
-            "0 deaktiviert das Warten; verwenden Sie dies, wenn ein geplanter Livestream noch nicht begonnen hat.",
+        "0 disables live-event retries; otherwise yt-dlp retries at this interval within a bounded wait window.":
+            "0 deaktiviert Wiederholungen für Live-Ereignisse; andernfalls versucht yt-dlp innerhalb eines begrenzten Wartefensters in diesem Intervall erneut.",
         "Preview unavailable until the template is valid.":
             "Die Vorschau ist verfügbar, sobald die Vorlage gültig ist.",
         "The template preview uses a reserved Windows name.":
@@ -1152,6 +1152,12 @@ CATALOGS = {
             "Prüfen Sie Netzwerk, VPN, Firewall und den Anbieterprozess und versuchen Sie es erneut.",
         "check-network-and-retry":
             "check-network-and-retry",
+        "The live video did not start within the allowed wait window.":
+            "Das Live-Video hat innerhalb des zulässigen Wartefensters nicht begonnen.",
+        "Retry when the scheduled event is expected to start, or choose a shorter retry interval for live-event waiting.":
+            "Versuchen Sie es erneut, wenn das geplante Ereignis beginnen soll, oder wählen Sie ein kürzeres Wiederholungsintervall für das Warten auf Live-Ereignisse.",
+        "retry-live-video":
+            "retry-live-video",
         "Astra Downloader could not create a protected YouTube cookie jar.":
             "Astra Downloader konnte kein geschütztes YouTube-Cookie-Archiv erstellen.",
         "Retry from Astra Deck so fresh cookies can be supplied.":

@@ -9074,6 +9074,90 @@ class EndToEndDownloadTests(unittest.TestCase):
         self.assertIn("Download stalled", download.error)
         self.assertEqual(download.error_code, "network-unreachable")
 
+    def test_live_wait_watchdog_bounds_a_never_started_event(self):
+        import importlib
+
+        download_module = importlib.import_module("download")
+        terminated = []
+        stopped = threading.Event()
+        spawned_args = []
+
+        class FakeProc:
+            def __init__(self):
+                self.returncode = None
+                self.stdout = self.BlockingStdout(self, stopped)
+
+            class BlockingStdout:
+                def __init__(self, proc, stop_event):
+                    self.proc = proc
+                    self.stop_event = stop_event
+                    self.wait_line_emitted = False
+
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    if not self.wait_line_emitted:
+                        self.wait_line_emitted = True
+                        return "[wait] Waiting for the live event to begin...\n"
+                    if not self.stop_event.wait(1):
+                        # A missing overall live-wait deadline must not make
+                        # this regression test hang indefinitely.
+                        self.proc.returncode = 1
+                    raise StopIteration
+
+                def close(self):
+                    return None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self):
+                return self.returncode or 1
+
+        process = FakeProc()
+
+        def spawn(args, **_kwargs):
+            spawned_args.append(list(args))
+            return process
+
+        def terminate(proc):
+            terminated.append(proc)
+            stopped.set()
+            proc.returncode = 1
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({
+                    "DownloadPath": tmpdir,
+                    "AudioDownloadPath": tmpdir,
+                    "WaitForVideoSeconds": 45,
+                }),
+                FakeHistory(),
+            )
+            manager._dependencies["spawn_ytdlp"] = spawn
+            manager._dependencies["terminate_process_tree"] = terminate
+            manager._dependencies["probe_po_token_provider"] = lambda: None
+            manager._dependencies["probe_javascript_runtime"] = lambda **_kwargs: {}
+            manager._dependencies["build_javascript_runtime_args"] = lambda *_args, **_kwargs: []
+            manager._dependencies["build_youtube_extractor_args"] = lambda *_args, **_kwargs: []
+            download = ad.Download(
+                "dl_live_wait_watchdog",
+                "https://example.com/scheduled-live",
+                output_dir=tmpdir,
+            )
+            download.status = "queued"
+            with mock.patch.object(download_module, "DOWNLOAD_LIVE_WAIT_MAX_SECONDS", 0), \
+                 mock.patch.object(download_module, "DOWNLOAD_WATCHDOG_POLL_SECONDS", 0.01):
+                manager._run_download(download)
+
+        self.assertEqual(terminated, [process])
+        self.assertIn("--wait-for-video", spawned_args[0])
+        self.assertEqual(spawned_args[0][spawned_args[0].index("--wait-for-video") + 1], "45")
+        self.assertEqual(download.status, "failed")
+        self.assertIn("Live video did not start", download.error)
+        self.assertEqual(download.error_code, "live-wait-timeout")
+
     def test_retry_watchdog_terminates_the_retried_hung_download(self):
         import importlib
 
@@ -9141,7 +9225,11 @@ class EndToEndDownloadTests(unittest.TestCase):
             proc.returncode = 1
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
+            config = FakeConfig({
+                "DownloadPath": tmpdir,
+                "AudioDownloadPath": tmpdir,
+                "WaitForVideoSeconds": 45,
+            })
             manager = ad.DownloadManager(config, FakeHistory())
             manager._dependencies["spawn_ytdlp"] = spawn
             manager._dependencies["terminate_process_tree"] = terminate
@@ -9158,14 +9246,15 @@ class EndToEndDownloadTests(unittest.TestCase):
             )
             download.status = "queued"
             download.cookies_file = str(cookie_jar)
-            with mock.patch.object(download_module, "DOWNLOAD_STALL_TIMEOUT_SECONDS", 0), \
+            with mock.patch.object(download_module, "DOWNLOAD_LIVE_WAIT_MAX_SECONDS", 0), \
+                 mock.patch.object(download_module, "DOWNLOAD_STALL_TIMEOUT_SECONDS", 60), \
                  mock.patch.object(download_module, "DOWNLOAD_WATCHDOG_POLL_SECONDS", 0.01):
                 manager._run_download(download)
 
         self.assertEqual(terminated, [retry])
         self.assertEqual(download.status, "failed")
-        self.assertIn("Download stalled", download.error)
-        self.assertEqual(download.error_code, "network-unreachable")
+        self.assertIn("Live video did not start", download.error)
+        self.assertEqual(download.error_code, "live-wait-timeout")
 
     def test_shared_output_parser_never_resurrects_a_cancelled_download(self):
         # The retry's cloned loop lacked the original's cancelled guard, so a
@@ -15961,6 +16050,25 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.cfg_language.isHidden())
         self.assertFalse(groups["Language"].isHidden())
         self.assertTrue(groups["Tray behavior"].isHidden())
+
+    def test_live_wait_setting_is_labeled_as_a_retry_interval(self):
+        from PyQt6.QtWidgets import QApplication, QLabel
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        self.assertEqual(
+            window.cfg_wait_for_video.accessibleName(),
+            "Live-video retry interval",
+        )
+        self.assertIn(
+            "Live-video retry interval",
+            [label.text() for label in window.findChildren(QLabel)],
+        )
+        self.assertTrue(any(
+            "bounded wait window" in label.text()
+            for label in window.findChildren(QLabel)
+        ))
 
     def test_settings_filter_preserves_controls_hidden_by_their_own_state(self):
         _get_qapp_or_skip(self)

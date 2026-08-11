@@ -49,6 +49,10 @@ repository's git log.
   download staging, rotated logs, quarantine copies, cookie probes, legacy
   archive data, and interrupted update/setup artifacts are removed while the
   executable, marker, and downloaded media remain.
+- **Live-event waiting is now bounded.** The Settings control describes
+  yt-dlp's value as a retry interval, while a never-started event is stopped
+  after the overall wait window and can be retried without holding a worker
+  slot indefinitely.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
