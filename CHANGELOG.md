@@ -26,6 +26,19 @@ repository's git log.
 
 ### Fixed
 
+- **`npm run check` reports every gate.** The `&&` chain meant the first red
+  gate hid the six behind it; a runner now executes all of them, prints a
+  per-gate PASS/FAIL summary, and treats a gate that cannot be spawned as a
+  failure rather than a skip.
+- **Five dependency licences resolved from their embedded texts.** `blinker`
+  (MIT), `colorama`, `itsdangerous`, `jinja2` (BSD-3-Clause) and `packaging`
+  (Apache-2.0 branch of its dual licence) declared their licence only through a
+  trove classifier, which the resolver deliberately refuses to guess from. Each
+  now carries a reviewed policy entry citing the wheel's own licence file.
+- **The version gate fails when a version was never tagged.** Five version
+  sources agreeing with each other said nothing about whether that version ever
+  reached a user.
+
 - **History is now a durable, visible record.** Settings controls its local
   retention cap, the History page shows the active limit and searches URLs,
   subscription archive rows appear without duplicate URLs, and `/history?url=`

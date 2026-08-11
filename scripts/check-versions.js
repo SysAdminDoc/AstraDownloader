@@ -9,6 +9,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const failures = [];
@@ -131,6 +132,26 @@ if (appVersion) {
     const pinName = `test_app_version_bumped_to_${appVersion.value.replace(/\./g, '_')}`;
     if (!read('astra_downloader/test_astra_downloader.py').includes(pinName)) {
         failures.push(`the APP_VERSION pin test must be named ${pinName}`);
+    }
+}
+
+// Agreeing with itself is not the same as having shipped. Six versions were
+// cut with every version source in agreement and no tag or release behind any
+// of them, so the updater's `releases/latest` feed and the extension's
+// installer link both resolved to a build from six versions earlier. The tag
+// is checked rather than the release because this must work offline and
+// because a tag is the thing a release is cut from.
+if (appVersion) {
+    const tag = `v${appVersion.value}`;
+    const listed = spawnSync('git', ['tag', '--list', tag], { cwd: ROOT, encoding: 'utf8' });
+    if (listed.error || listed.status !== 0) {
+        failures.push(`could not list git tags to confirm ${tag} exists`);
+    } else if (listed.stdout.trim() !== tag) {
+        failures.push(
+            `APP_VERSION is ${appVersion.value} but no ${tag} tag exists — ` +
+            'the self-update feed and the extension installer link both resolve to the newest ' +
+            'published release, so an untagged version has not shipped to anyone'
+        );
     }
 }
 

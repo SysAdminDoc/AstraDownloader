@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "npm test && npm run check:companion-ports && npm run check:catch-reasons && npm run check:companion-inventory && npm run check:translations && npm run check:versions && npm run audit:python",
+    "check": "node scripts/run-checks.js",
     "check:companion-ports": "node scripts/check-companion-port-catalogue.js",
     "check:catch-reasons": "node scripts/check-python-catch-reasons.js",
     "check:companion-inventory": "node scripts/check-companion-inventory.js",
