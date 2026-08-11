@@ -152,6 +152,20 @@ class NormalizationTests(unittest.TestCase):
             self.assertTrue(archive_cfg[key], key)
         self.assertEqual(archive_cfg["WaitForVideoSeconds"], 3600)
 
+    def test_nonfinite_integer_values_fall_back_to_safe_defaults(self):
+        for value in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    ad.clamp_int(value, 4, 1, 32),
+                    4,
+                )
+                self.assertEqual(
+                    ad.sanitize_config({"ConcurrentFragments": value})[
+                        "ConcurrentFragments"
+                    ],
+                    4,
+                )
+
     def test_first_run_marker_defaults_for_existing_installs_and_is_boolean(self):
         self.assertTrue(ad.DEFAULT_CONFIG["FirstRunComplete"])
         self.assertTrue(ad.sanitize_config({})["FirstRunComplete"])
@@ -471,6 +485,79 @@ class PersistenceTests(unittest.TestCase):
             self.assertFalse(store.update({"value": 3}))
 
         self.assertEqual(writes, [])
+
+    def test_nonfinite_config_values_fall_back_before_defaults_are_saved(self):
+        import importlib
+
+        config_module = importlib.import_module("config")
+        with tempfile.TemporaryDirectory() as tmp:
+            for index, literal in enumerate(("1e999", "-1e999", "NaN")):
+                with self.subTest(literal=literal):
+                    path = Path(tmp) / f"config-{index}.json"
+                    path.write_text(
+                        '{"ConcurrentFragments": ' + literal + '}',
+                        encoding="utf-8",
+                    )
+                    errors = []
+                    store = config_module.ConfigStore(
+                        install_dir=Path(tmp),
+                        path=path,
+                        sanitizer=config_module.sanitize_config,
+                        loader=config_module.load_json_file,
+                        writer=config_module.atomic_write_json,
+                        logger=errors.append,
+                    )
+
+                    self.assertEqual(store.get("ConcurrentFragments"), 4)
+                    self.assertEqual(
+                        json.loads(path.read_text(encoding="utf-8"))[
+                            "ConcurrentFragments"
+                        ],
+                        4,
+                    )
+                    self.assertEqual(errors, [])
+
+    def test_config_store_quarantines_when_sanitization_rejects_a_document(self):
+        import importlib
+
+        config_module = importlib.import_module("config")
+        original_records = list(config_module.quarantined_state_files())
+        self.addCleanup(
+            lambda: config_module._quarantined_state_files.__setitem__(
+                slice(None), original_records
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text('{"mode": "reject"}', encoding="utf-8")
+
+            def sanitizer(data):
+                if data.get("mode") == "reject":
+                    raise ValueError("unsupported configuration document")
+                return dict(data)
+
+            errors = []
+            store = config_module.ConfigStore(
+                install_dir=Path(tmp),
+                path=path,
+                sanitizer=sanitizer,
+                loader=config_module.load_json_file,
+                writer=config_module.atomic_write_json,
+                logger=errors.append,
+            )
+
+            self.assertEqual(store.data, {})
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {})
+            record = next(
+                record
+                for record in config_module.quarantined_state_files()
+                if record["path"] == str(path)
+            )
+            self.assertEqual(
+                Path(record["backup"]).read_text(encoding="utf-8"),
+                '{"mode": "reject"}',
+            )
+            self.assertTrue(errors)
 
     def test_session_override_is_never_persisted_by_later_saves(self):
         # Session-only port fallback regression: a bind conflict overrides
@@ -14955,6 +15042,19 @@ class SettingsBundleTests(unittest.TestCase):
         self.assertLessEqual(bundle["settings"]["MaxConcurrentDownloads"], 10)
         self.assertEqual(bundle["settings"]["JavaScriptRuntime"], "auto")
         self.assertEqual(bundle["settings"]["SubtitleMode"], "prefer-manual")
+
+    def test_nonfinite_bundle_values_are_rejected_with_an_error(self):
+        for literal in ("1e999", "-1e999", "NaN"):
+            with self.subTest(literal=literal):
+                payload = self._bundle()
+                payload["settings"] = dict(
+                    payload["settings"],
+                    ConcurrentFragments=json.loads(literal),
+                )
+                imported, error = ad.read_settings_bundle(payload)
+
+                self.assertIsNone(imported)
+                self.assertIn("non-finite", error)
 
     def test_a_token_planted_in_a_bundle_is_not_imported(self):
         # The exclusion has to hold on the way in too — otherwise a

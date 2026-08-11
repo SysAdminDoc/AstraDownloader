@@ -369,10 +369,26 @@ def coerce_bool(value, default=False):
 
 def clamp_int(value, default, minimum, maximum):
     try:
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("non-finite integer")
         parsed = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _contains_nonfinite_number(value):
+    """Return True when a decoded JSON value contains NaN or infinity."""
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    if isinstance(value, dict):
+        return any(
+            _contains_nonfinite_number(key) or _contains_nonfinite_number(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_nonfinite_number(item) for item in value)
+    return False
 
 
 def normalize_rate_limit(value):
@@ -1337,11 +1353,13 @@ def read_settings_bundle(payload):
     """
     if not isinstance(payload, dict):
         return None, "That file is not an Astra Downloader settings bundle."
+    if _contains_nonfinite_number(payload):
+        return None, "That bundle contains a non-finite number."
     if payload.get("schema") != SETTINGS_BUNDLE_SCHEMA:
         return None, "That file is not an Astra Downloader settings bundle."
     try:
         version = int(payload.get("schemaVersion"))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None, "That bundle does not declare a version."
     if version > SETTINGS_BUNDLE_VERSION:
         return None, (
@@ -1790,7 +1808,7 @@ class ConfigStore:
         # them, but never serialized — save()/update() persist _data only.
         self._session_overrides = {}
         self._resolve(self._install_dir).mkdir(parents=True, exist_ok=True)
-        self._data = self._sanitizer(self._loader(self._resolve(self._path), {}))
+        self._data = self._load_and_sanitize()
         self._persisted_data = dict(self._data)
         if not self._read_only:
             self.save()
@@ -1798,6 +1816,18 @@ class ConfigStore:
     @staticmethod
     def _resolve(value):
         return value() if callable(value) else value
+
+    def _load_and_sanitize(self):
+        path = self._resolve(self._path)
+        raw = self._loader(path, {})
+        try:
+            return self._sanitizer(raw)
+        except Exception as error:  # noqa: BLE001
+            saved = backup_corrupt_file(Path(path))
+            if saved:
+                record_quarantined_file(path, saved)
+            self._logger(f"Config file was quarantined: {error}")
+            return self._sanitizer({})
 
     def get(self, key, default=None):
         with self._lock:
@@ -1813,7 +1843,7 @@ class ConfigStore:
         written with a fresh server token.
         """
         with self._lock:
-            self._data = self._sanitizer(self._loader(self._resolve(self._path), {}))
+            self._data = self._load_and_sanitize()
             self._persisted_data = dict(self._data)
             self._session_overrides.clear()
             return True

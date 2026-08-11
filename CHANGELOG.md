@@ -52,6 +52,10 @@ repository's git log.
   updater sees live scans and other yt-dlp probes through the shared activity
   view, and startup removes fresh probe/import cookie jars left by an abrupt
   exit.
+- **Config recovery now handles non-finite JSON numbers safely.** Invalid
+  numeric settings fall back to bounded defaults, malformed bundles return a
+  validation error, and documents rejected by sanitization are quarantined
+  before a clean config is saved.
 
 ## [2.6.0] - 2026-08-09
 
