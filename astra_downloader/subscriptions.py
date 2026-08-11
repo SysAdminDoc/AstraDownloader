@@ -1069,7 +1069,7 @@ class SubscriptionManager:
     def request_scan(self, sub_id):
         sub_id = str(sub_id)
         if not self.store.get_subscription(sub_id):
-            return None, "Subscription no longer exists."
+            return None, self.store.persistence_error() or "Subscription no longer exists."
         with self._lock:
             if sub_id in self._scan_ids:
                 return {"id": sub_id, "scheduled": False, "scanning": True}, None
