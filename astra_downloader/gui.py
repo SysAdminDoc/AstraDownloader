@@ -2939,14 +2939,16 @@ class MainWindowCore(QMainWindow):
         if manager is None:
             records = []
             payload = {}
+            load_error = tr("Subscriptions are unavailable in this session.")
         else:
+            load_error = None
             try:
                 payload = manager.snapshot()
                 records = payload.get("subscriptions", []) if isinstance(payload, dict) else []
             except Exception as error:  # noqa: BLE001
                 payload = {}
                 records = []
-                self.subscription_status.setText(f"Could not read subscriptions: {error}")
+                load_error = f"Could not read subscriptions: {error}"
         manager_scanning = {
             str(sub_id) for sub_id in (payload.get("scanning", []) or [])
         } if isinstance(payload, dict) else set()
@@ -2962,7 +2964,11 @@ class MainWindowCore(QMainWindow):
                 seen.discard(sub_id)
         scanning = manager_scanning | {str(sub_id) for sub_id in pending}
         signature = json.dumps(
-            {"records": records, "scanning": sorted(scanning)},
+            {
+                "records": records,
+                "scanning": sorted(scanning),
+                "error": load_error,
+            },
             sort_keys=True,
             default=str,
         )
@@ -2971,9 +2977,26 @@ class MainWindowCore(QMainWindow):
         self._subscriptions_signature = signature
         self._clear_layout(self.subscription_container)
         if manager is None:
+            self.subscription_status.setText(load_error)
+            self.subscription_status.setProperty("state", "error")
+            repolish(self.subscription_status)
             self.subscription_container.addWidget(make_empty_state(
                 "Subscriptions unavailable",
                 "Start the Astra Downloader companion to manage scheduled channel scans.",
+                "Reveal log file",
+                self._reveal_log_file,
+            ))
+            self.subscription_container.addStretch()
+            return
+        if load_error:
+            self.subscription_status.setText(load_error)
+            self.subscription_status.setProperty("state", "error")
+            repolish(self.subscription_status)
+            self.subscription_container.addWidget(make_empty_state(
+                "Subscriptions unavailable",
+                load_error,
+                "Reveal log file",
+                self._reveal_log_file,
             ))
             self.subscription_container.addStretch()
             return
@@ -2994,6 +3017,8 @@ class MainWindowCore(QMainWindow):
             f"{len(records)} configured · {archive.get('complete', 0)} archived · "
             f"{archive.get('queued', 0)} queued"
         )
+        self.subscription_status.setProperty("state", "neutral")
+        repolish(self.subscription_status)
         if not records:
             self.subscription_container.addWidget(make_empty_state(
                 "No scheduled subscriptions",
@@ -3221,18 +3246,33 @@ class MainWindowCore(QMainWindow):
     def _refresh_site_logins(self, force=False):
         store = self._site_login_store()
         entries = []
-        if store is not None:
+        load_error = None
+        if store is None:
+            load_error = tr("Site sign-ins are unavailable in this session.")
+        else:
             try:
                 entries = store.entries()
             except Exception as error:  # noqa: BLE001
-                self._show_site_login_status(
-                    f"Could not read stored sign-ins: {error}", "error"
-                )
-        signature = json.dumps(entries, sort_keys=True, default=str)
+                load_error = f"Could not read stored sign-ins: {error}"
+        signature = json.dumps(
+            {"entries": entries, "error": load_error},
+            sort_keys=True,
+            default=str,
+        )
         if not force and signature == getattr(self, "_site_logins_signature", None):
             return
         self._site_logins_signature = signature
         self._clear_layout(self.site_login_container)
+        if load_error:
+            self._show_site_login_status(load_error, "error")
+            self.site_login_container.addWidget(make_empty_state(
+                "Site sign-ins are unavailable in this session.",
+                load_error,
+                "Reveal log file",
+                self._reveal_log_file,
+            ))
+            self.site_login_container.addStretch()
+            return
         visible_entries = filter_site_login_entries(
             entries,
             self.site_login_search.text() if hasattr(self, "site_login_search") else "",

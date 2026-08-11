@@ -683,6 +683,10 @@
       <translation>Abonnementstatus</translation>
     </message>
     <message>
+      <source>Subscriptions are unavailable in this session.</source>
+      <translation>Abonnements sind in dieser Sitzung nicht verfügbar.</translation>
+    </message>
+    <message>
       <source>Scan now</source>
       <translation>Jetzt prüfen</translation>
     </message>
@@ -757,6 +761,10 @@
     <message>
       <source>Import this site's cookies or store its username/password to unblock the download waiting on it.</source>
       <translation>Importieren Sie die Cookies dieser Website oder speichern Sie Benutzername/Passwort, um den wartenden Download freizugeben.</translation>
+    </message>
+    <message>
+      <source>Site sign-ins are unavailable in this session.</source>
+      <translation>Website-Anmeldungen sind in dieser Sitzung nicht verfügbar.</translation>
     </message>
     <message>
       <source>Test</source>
@@ -1537,10 +1545,6 @@
     <message>
       <source>cookies stored</source>
       <translation>Cookies gespeichert</translation>
-    </message>
-    <message>
-      <source>Site sign-ins are unavailable in this session.</source>
-      <translation>Website-Anmeldungen sind in dieser Sitzung nicht verfügbar.</translation>
     </message>
     <message>
       <source>No sign-in removal is available to undo.</source>

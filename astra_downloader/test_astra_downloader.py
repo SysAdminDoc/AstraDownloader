@@ -14053,8 +14053,8 @@ window.close()
 
             ok, error = manager.retry("dl_skip")
             self.assertTrue(ok, error)
-            self.assertEqual(manager.downloads["dl_skip"].status, "pending")
-            self.assertEqual(manager.downloads["dl_skip"].error, "")
+        self.assertEqual(manager.downloads["dl_skip"].status, "pending")
+        self.assertEqual(manager.downloads["dl_skip"].error, "")
 
     def test_non_terminal_downloads_still_cannot_be_retried(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -14068,6 +14068,104 @@ window.close()
             ok, error = manager.retry("dl_pending")
             self.assertFalse(ok)
             self.assertIn("retried", error)
+
+
+class StoreErrorSurfaceTests(unittest.TestCase):
+    """Unreadable stores must never masquerade as empty stores."""
+
+    def test_subscription_and_sign_in_store_errors_offer_log_recovery(self):
+        script = r'''
+import os
+import sys
+import tempfile
+
+temp_dir = tempfile.mkdtemp(prefix="astra-store-error-")
+os.environ["LOCALAPPDATA"] = temp_dir
+os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
+
+from astra_downloader import astra_downloader as app
+from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
+
+class RaisingSubscriptions:
+    def snapshot(self):
+        raise RuntimeError("subscription archive unreadable")
+
+    def stop(self):
+        pass
+
+class RaisingSiteLogins:
+    def entries(self):
+        raise RuntimeError("sign-in index unreadable")
+
+qt_app = QApplication(["store-error-pin"])
+app.MainWindow._start_instance_command_listener = lambda self: None
+app.MainWindow._stop_instance_command_listener = lambda self: None
+app.MainWindow._start_readiness_probe = lambda self: None
+app.MainWindow._refresh_tools_status = lambda self: None
+
+config = app.Config()
+config.update({
+    "CloseToTray": False,
+    "StartMinimized": False,
+    "DownloadPath": temp_dir,
+    "AudioDownloadPath": temp_dir,
+})
+manager = app.DownloadManager(config, app.History())
+manager.site_logins = RaisingSiteLogins()
+window = app.MainWindow(
+    config, manager, app.History(), subscriptions=RaisingSubscriptions()
+)
+window._animate_page = lambda: None
+window.update_timer.stop()
+window.cleanup_timer.stop()
+window.tools_status_timer.stop()
+window.show()
+qt_app.processEvents()
+
+def recovery_buttons(container):
+    return [
+        button for button in container.findChildren(QPushButton)
+        if button.isVisible() and button.text() == "Reveal log file"
+    ]
+
+window._nav_click("Subscriptions")
+qt_app.processEvents()
+assert "subscription archive unreadable" in window.subscription_status.text(), window.subscription_status.text()
+assert recovery_buttons(window.subscription_scroll), [
+    button.text() for button in window.subscription_scroll.findChildren(QPushButton)
+]
+subscription_text = " | ".join(
+    label.text() for label in window.subscription_scroll.findChildren(QLabel)
+    if label.isVisible() and label.text()
+)
+assert "No scheduled subscriptions" not in subscription_text, subscription_text
+
+window._nav_click("Sign-ins")
+qt_app.processEvents()
+assert "sign-in index unreadable" in window.site_login_status.text(), window.site_login_status.text()
+assert recovery_buttons(window.site_login_scroll), [
+    button.text() for button in window.site_login_scroll.findChildren(QPushButton)
+]
+visible_text = " | ".join(
+    label.text() for label in window.site_login_scroll.findChildren(QLabel)
+    if label.isVisible() and label.text()
+)
+assert "No stored sign-ins" not in visible_text, visible_text
+window.tray.hide()
+window._force_exit = True
+window.close()
+'''
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(ad.__file__).resolve().parent.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class FocusVisibilityTests(unittest.TestCase):
