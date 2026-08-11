@@ -4817,57 +4817,7 @@ class MainWindowCore(QMainWindow):
         layout.addLayout(save_row)
         layout.addStretch()
 
-        for signal in (
-            self.cfg_port.valueChanged,
-            self.cfg_token.textChanged,
-            self.cfg_dl_path.textChanged,
-            self.cfg_audio_path.textChanged,
-            self.cfg_outtmpl.textChanged,
-            self.cfg_metadata.toggled,
-            self.cfg_thumbnail.toggled,
-            self.cfg_chapters.toggled,
-            self.cfg_subs.toggled,
-            self.cfg_generate_subtitles.toggled,
-            self.cfg_sublangs.textChanged,
-            self.cfg_subtitle_mode.currentIndexChanged,
-            self.cfg_subtitle_format.currentIndexChanged,
-            self.cfg_sponsorblock.toggled,
-            self.cfg_sb_action.currentIndexChanged,
-            self.cfg_fragments.valueChanged,
-            self.cfg_maxconcurrent.valueChanged,
-            self.cfg_retries.valueChanged,
-            self.cfg_maxsize.valueChanged,
-            self.cfg_ratelimit.textChanged,
-            self.cfg_throttled.textChanged,
-            self.cfg_socket_timeout.valueChanged,
-            self.cfg_extractor_retries.valueChanged,
-            self.cfg_verify_formats.toggled,
-            self.cfg_video_codec.currentIndexChanged,
-            self.cfg_audio_codec.currentIndexChanged,
-            self.cfg_frame_rate.currentIndexChanged,
-            self.cfg_playlist_max.valueChanged,
-            self.cfg_playlist_dateafter.textChanged,
-            self.cfg_playlist_min_duration.valueChanged,
-            self.cfg_playlist_max_duration.valueChanged,
-            self.cfg_impersonate.currentIndexChanged,
-            self.cfg_sleep_interval.valueChanged,
-            self.cfg_sleep_max.valueChanged,
-            self.cfg_pacing_jitter.valueChanged,
-            self.cfg_sleep_requests.valueChanged,
-            self.cfg_proxy.textChanged,
-            self.cfg_force_ip_version.currentIndexChanged,
-            self.cfg_source_address.textChanged,
-            self.cfg_xff.textChanged,
-            self.cfg_geo_verification_proxy.textChanged,
-            self.cfg_js_runtime.currentIndexChanged,
-            self.cfg_ytdlp_channel.currentIndexChanged,
-            self.cfg_language.currentIndexChanged,
-            self.cfg_autoupdate.toggled,
-            self.cfg_closetotray.toggled,
-            self.cfg_startmin.toggled,
-            self.cfg_notify.toggled,
-        self.cfg_clipboard.toggled,
-        ):
+        for signal in self._settings_change_signals():
             signal.connect(self._mark_settings_dirty)
         self._filter_settings("")
 
@@ -5976,6 +5926,30 @@ class MainWindowCore(QMainWindow):
         ("cfg_subtitle_format", "SubtitleFormat", "combo"),
         ("cfg_language", "Language", "combo"),
     )
+
+    def _settings_change_signals(self):
+        """Yield the change signals for every editable settings control.
+
+        The form registry is the source of truth for settings controls. A
+        hand-maintained signal tuple used to drift whenever a new field was
+        added, leaving changes silently discardable. SponsorBlock categories
+        are the one compound field: their individual checkboxes are wired
+        after the registry entries so they share the same dirty-state path.
+        """
+        signal_names = {
+            "text": "textChanged",
+            "check": "toggled",
+            "number": "valueChanged",
+            "combo": "currentIndexChanged",
+        }
+        for attribute, _key, kind in self._SETTINGS_FORM_FIELDS:
+            widget = getattr(self, attribute, None)
+            signal_name = signal_names.get(kind)
+            signal = getattr(widget, signal_name, None) if signal_name else None
+            if signal is not None:
+                yield signal
+        for widget in getattr(self, "cfg_sb_categories", {}).values():
+            yield widget.toggled
 
     def _reload_settings_form(self):
         """Redraw the settings form from the stored config."""
@@ -7538,6 +7512,7 @@ class MainWindowCore(QMainWindow):
     def _regenerate_token(self):
         self.cfg_token.setText(uuid.uuid4().hex)
         self._append_log("New server token generated. Save settings to apply it.")
+        self._mark_settings_dirty()
         self._show_settings_status("New token ready. Save settings to apply it.", "warning")
 
     def _open_folder(self):
