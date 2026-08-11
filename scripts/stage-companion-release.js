@@ -9,6 +9,30 @@ const {
     COMPANION_BUILD_METADATA_NAME,
     validateResolutionMetadata
 } = require('./companion-license-inventory');
+const {
+    LOCK_NAME,
+    SBOM_NAME,
+    sbomDescribesArtifact
+} = require('./write-release-provenance');
+
+function readReleaseArtifact(name) {
+    // No existence check: opening the file is the check, and a separate
+    // exists-then-read pair is a race the staging path must not carry.
+    try {
+        return fs.readFileSync(path.join(BUILD_DIR, name), 'utf8');
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            throw new Error(
+                `missing build/${name}; run \`npm run release:provenance\` after building`
+            );
+        }
+        throw error;
+    }
+}
+
+function readReleaseArtifactJson(name) {
+    return JSON.parse(readReleaseArtifact(name));
+}
 
 const REPO_ROOT = path.join(__dirname, '..');
 const BUILD_DIR = path.join(REPO_ROOT, 'build');
@@ -371,7 +395,25 @@ function stageCompanionRelease(
     ) {
         throw new Error('staged companion artifacts and SHA-256 sidecars do not match');
     }
+    // Provenance must describe THIS binary. A release that ships last build's
+    // SBOM is worse than one that ships none: it reads as a verified inventory
+    // while naming components that were never in the artifact.
+    const stagedArtifactSha256 = crypto.createHash('sha256').update(companionExe).digest('hex');
+    if (!sbomDescribesArtifact(readReleaseArtifactJson(SBOM_NAME), stagedArtifactSha256)) {
+        throw new Error(
+            `build/${SBOM_NAME} does not describe the staged AstraDownloader.exe; ` +
+            'regenerate it with `npm run release:provenance`'
+        );
+    }
+    // Read rather than probed: the lock must exist and be non-empty, and an
+    // existence check would only tell us it was there a moment ago.
+    if (!readReleaseArtifact(LOCK_NAME).trim()) {
+        throw new Error(`build/${LOCK_NAME} is empty; regenerate it with \`npm run release:provenance\``);
+    }
+
     console.log(`Staged companion EXE: build/AstraDownloader.exe (${companionExe.length} bytes)`);
+    console.log(`Staged release SBOM: build/${SBOM_NAME}`);
+    console.log(`Staged release lock: build/${LOCK_NAME}`);
     console.log(`Staged companion inventory input: build/${COMPANION_BUILD_METADATA_NAME}`);
     console.log('Staged companion SHA-256 sidecar: build/AstraDownloader.exe.sha256');
     console.log(`Staged one-folder archive: build/${onedirName} (${onedirArchive.length} bytes)`);

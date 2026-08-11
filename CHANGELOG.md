@@ -26,6 +26,13 @@ repository's git log.
 
 ### Fixed
 
+- **A release carries a lock file and an SBOM.** `npm run release:provenance`
+  writes a CycloneDX 1.6 document carrying the fields CISA's 2026 minimum
+  elements require, and a PEP 751 `pylock.toml` resolved against PyPI with a
+  SHA-256 for every wheel and sdist. Staging now refuses to proceed when either
+  is missing or when the SBOM describes a different binary, so a release cannot
+  ship last build's inventory beside a fresh executable.
+
 - **Downloads can inherit the proxy Windows is configured with.** A Settings
   option, off by default, reads the per-user WinINET configuration and shows the
   resolved value before you save it. A proxy typed by hand always wins, a
