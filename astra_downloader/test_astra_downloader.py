@@ -17673,6 +17673,26 @@ Edge-101        Windows-10   curl_cffi
             satisfied, _missing = manager.recovery_precondition(dl)
             self.assertTrue(satisfied)
 
+    def test_geo_profile_workaround_satisfies_retry_precondition(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = {
+                "DownloadPath": tmpdir,
+                "AudioDownloadPath": tmpdir,
+                "SiteProfiles": [{
+                    "Name": "Example geo",
+                    "Domain": "example.com",
+                    "Xff": "US",
+                }],
+            }
+            manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
+            dl = ad.Download("dl_profile_geo", "https://example.com/video")
+            dl.status = "failed"
+            dl.error_code = "geo-restricted"
+
+            satisfied, missing = manager.recovery_precondition(dl)
+
+        self.assertTrue(satisfied, missing)
+
     # ── Against the real binary ──────────────────────────────────────────
 
     def test_the_installed_binary_reports_targets_this_parser_understands(self):

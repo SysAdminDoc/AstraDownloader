@@ -5763,8 +5763,13 @@ class DownloadManagerCore:
         requirement = self._RECOVERABLE_PRECONDITIONS.get(dl.error_code)
         if requirement is None:
             return False, 'This failure needs its recovery action before it can be retried.'
-        cache_key = (requirement, dl.url if requirement == 'sign-in' else '',
-                     bool(dl.requires_auth))
+        cache_key = (
+            requirement,
+            dl.url if requirement in {'sign-in', 'impersonate', 'geo'} else '',
+            getattr(dl, 'profile_name', None)
+            if requirement in {'impersonate', 'geo'} else '',
+            bool(dl.requires_auth),
+        )
         now = time.time()
         with self._precondition_cache_lock:
             cached = self._precondition_cache.get(cache_key)
@@ -5811,10 +5816,13 @@ class DownloadManagerCore:
                 return True, None
             return False, 'FFmpeg is still missing. Refresh it from Settings, then retry.'
         if requirement == 'impersonate':
-            if str(self.config.get('ForceIPVersion', '') or '').strip().lower() == 'ipv4':
+            effective_config = self._effective_config_for_url(
+                dl.url, getattr(dl, 'profile_name', None)
+            )
+            if str(effective_config.get('ForceIPVersion', '') or '').strip().lower() == 'ipv4':
                 return True, None
             target = self._dependencies['normalize_impersonate_target'](
-                self.config.get('ImpersonateTarget', '')
+                effective_config.get('ImpersonateTarget', '')
             )
             if not target:
                 return False, (
@@ -5835,7 +5843,10 @@ class DownloadManagerCore:
                 'different browser in Settings, then retry.'
             )
         if requirement == 'geo':
-            workaround_args = build_network_workaround_args(self.config)
+            effective_config = self._effective_config_for_url(
+                dl.url, getattr(dl, 'profile_name', None)
+            )
+            workaround_args = build_network_workaround_args(effective_config)
             if '--xff' in workaround_args or '--geo-verification-proxy' in workaround_args:
                 return True, None
             return False, (
