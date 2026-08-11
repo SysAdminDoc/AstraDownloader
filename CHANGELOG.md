@@ -53,6 +53,10 @@ repository's git log.
   yt-dlp's value as a retry interval, while a never-started event is stopped
   after the overall wait window and can be retried without holding a worker
   slot indefinitely.
+- **Local transcription is bounded and low priority.** whisper.cpp runs under
+  an independent single-job gate with a shared timeout, an exact-child
+  watchdog, below-normal process priority, and real `-pp` progress; a timeout
+  leaves the downloaded media complete and subtitle retryable.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the

@@ -2259,16 +2259,24 @@
       <translation>The local transcription runtime is missing or cannot produce SRT output.</translation>
     </message>
     <message>
+      <source>Local subtitle generation exceeded its time limit.</source>
+      <translation>Local subtitle generation exceeded its time limit.</translation>
+    </message>
+    <message>
+      <source>Retry subtitle generation on the completed media. If it times out again, use a shorter recording or a faster machine.</source>
+      <translation>Retry subtitle generation on the completed media. If it times out again, use a shorter recording or a faster machine.</translation>
+    </message>
+    <message>
+      <source>retry-subtitles</source>
+      <translation>retry-subtitles</translation>
+    </message>
+    <message>
       <source>Local subtitle generation failed after the media downloaded.</source>
       <translation>Local subtitle generation failed after the media downloaded.</translation>
     </message>
     <message>
       <source>Check the local transcription readiness rows, then retry subtitles without downloading the media again.</source>
       <translation>Check the local transcription readiness rows, then retry subtitles without downloading the media again.</translation>
-    </message>
-    <message>
-      <source>retry-subtitles</source>
-      <translation>retry-subtitles</translation>
     </message>
     <message>
       <source>This link only offers SABR streams. {options} do not apply to them and will be ignored.</source>

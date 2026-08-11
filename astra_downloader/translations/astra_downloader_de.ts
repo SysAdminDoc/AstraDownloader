@@ -2259,16 +2259,24 @@
       <translation>Die lokale Transkriptionslaufzeit fehlt oder kann keine SRT-Ausgabe erzeugen.</translation>
     </message>
     <message>
+      <source>Local subtitle generation exceeded its time limit.</source>
+      <translation>Die lokale Untertitelerzeugung hat das Zeitlimit überschritten.</translation>
+    </message>
+    <message>
+      <source>Retry subtitle generation on the completed media. If it times out again, use a shorter recording or a faster machine.</source>
+      <translation>Versuchen Sie die Untertitelerzeugung für die abgeschlossenen Medien erneut. Wenn sie erneut das Zeitlimit überschreitet, verwenden Sie eine kürzere Aufnahme oder einen schnelleren Computer.</translation>
+    </message>
+    <message>
+      <source>retry-subtitles</source>
+      <translation>Untertitel erneut erzeugen</translation>
+    </message>
+    <message>
       <source>Local subtitle generation failed after the media downloaded.</source>
       <translation>Die lokale Untertitelerzeugung ist nach dem Mediendownload fehlgeschlagen.</translation>
     </message>
     <message>
       <source>Check the local transcription readiness rows, then retry subtitles without downloading the media again.</source>
       <translation>Prüfen Sie die Bereitschaftszeilen für die lokale Transkription und versuchen Sie die Untertitel erneut, ohne die Medien erneut herunterzuladen.</translation>
-    </message>
-    <message>
-      <source>retry-subtitles</source>
-      <translation>Untertitel erneut erzeugen</translation>
     </message>
     <message>
       <source>This link only offers SABR streams. {options} do not apply to them and will be ignored.</source>

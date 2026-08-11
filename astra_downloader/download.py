@@ -55,6 +55,9 @@ __all__ = (
     "snapshot_download_fields", "restore_download_fields",
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_LIVE_WAIT_MAX_SECONDS",
     "DOWNLOAD_WATCHDOG_POLL_SECONDS",
+    "MAX_CONCURRENT_TRANSCRIPTIONS", "LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS",
+    "LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS",
+    "TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS", "parse_whisper_progress",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
     "estimate_download_bytes", "check_download_disk_space",
@@ -88,6 +91,19 @@ DOWNLOAD_STALL_TIMEOUT_SECONDS = 1800
 # when yt-dlp emits a fresh [wait] line for every retry.
 DOWNLOAD_LIVE_WAIT_MAX_SECONDS = 30 * 60
 DOWNLOAD_WATCHDOG_POLL_SECONDS = 15
+# Whisper is CPU-bound and should not compete with every download slot. Keep
+# one transcription active at a time until a separate user setting exists.
+MAX_CONCURRENT_TRANSCRIPTIONS = 1
+# A long recording is still useful to transcribe, but a broken CLI or locked
+# pipe must not retain a worker forever. The deadline covers audio extraction
+# and whisper.cpp together.
+LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS = 2 * 60 * 60
+LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS = 5
+TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS = getattr(
+    subprocess,
+    'BELOW_NORMAL_PRIORITY_CLASS',
+    0x00004000 if os.name == 'nt' else 0,
+)
 DOWNLOAD_QUEUE_SCHEMA_VERSION = 1
 DOWNLOAD_INTERMEDIATE_DIRNAME = 'download-temp'
 PLAYLIST_PREVIEW_LIMIT = 200
@@ -110,11 +126,13 @@ DOWNLOAD_RETRYABLE_ERROR_CODES = {
     'worker-start-failed',
     'live-wait-timeout',
     'transcription-model-missing',
+    'transcription-timeout',
     'transcription-failed',
 }
 DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES = frozenset({
     'transcription-model-missing',
     'transcription-runtime-missing',
+    'transcription-timeout',
     'transcription-failed',
 })
 
@@ -286,6 +304,14 @@ DOWNLOAD_FAILURE_RECOVERY = {
             'generation on this completed media.'
         ),
         'next_action': 'run-setup-and-retry-subtitles',
+    },
+    'transcription-timeout': {
+        'error': 'Local subtitle generation exceeded its time limit.',
+        'advice': (
+            'Retry subtitle generation on the completed media. If it times out '
+            'again, use a shorter recording or a faster machine.'
+        ),
+        'next_action': 'retry-subtitles',
     },
     'transcription-failed': {
         'error': 'Local subtitle generation failed after the media downloaded.',
@@ -1844,8 +1870,25 @@ def build_whisper_transcription_args(whisper_path, model_path, audio_path,
     return [
         str(whisper_path), '-m', str(model_path), '-f', str(audio_path),
         '-l', language, '-t', str(threads), '-ml', str(max_len),
-        '-osrt', '-of', str(output_base), '-ng',
+        '-osrt', '-of', str(output_base), '-pp', '-ng',
     ]
+
+
+_WHISPER_PROGRESS_RE = re.compile(
+    r'(?:^|\s)progress\s*[:=]\s*(\d+(?:\.\d+)?)\s*%',
+    re.IGNORECASE,
+)
+
+
+def parse_whisper_progress(line):
+    """Return whisper.cpp's printed percentage, clamped to 0..100."""
+    match = _WHISPER_PROGRESS_RE.search(str(line or ''))
+    if not match:
+        return None
+    try:
+        return max(0.0, min(100.0, float(match.group(1))))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def should_generate_local_subtitles(config, download):
@@ -2758,6 +2801,12 @@ class DownloadManagerCore:
         # waitress worker thread for up to 60s, and the pool only has 8 —
         # unbounded probes could starve /health, /status and /download.
         self._formats_gate = threading.Semaphore(self.FORMATS_PROBE_LIMIT)
+        # Keep CPU-bound local subtitle generation independent from the
+        # configured download count. A worker waits cancellably here before
+        # spawning any media helper, so the gate never oversubscribes the CPU.
+        self._transcription_gate = threading.BoundedSemaphore(
+            MAX_CONCURRENT_TRANSCRIPTIONS
+        )
         self._queue_path = Path(queue_path) if queue_path else None
         self._queue_store = (
             DownloadQueueStore(
@@ -3968,6 +4017,24 @@ class DownloadManagerCore:
         apply_download_failure_classification(dl, error_code, error=error)
 
     def _run_local_subtitles(self, dl, effective_config):
+        """Run optional local subtitles under the independent CPU gate."""
+        if not should_generate_local_subtitles(effective_config, dl):
+            return True
+        if dl.status == 'cancelled':
+            return False
+        # Mark the job active while it waits for the one transcription slot so
+        # cancel_all() can see and stop it even before whisper-cli is spawned.
+        dl.status = 'transcribing'
+        self.progress_updated.emit()
+        while not self._transcription_gate.acquire(timeout=0.25):
+            if dl.status == 'cancelled':
+                return False
+        try:
+            return self._run_local_subtitles_impl(dl, effective_config)
+        finally:
+            self._transcription_gate.release()
+
+    def _run_local_subtitles_impl(self, dl, effective_config):
         """Transcribe a successful video into an atomic SRT sidecar.
 
         FFmpeg only prepares the PCM input. The transcription capability is
@@ -4021,30 +4088,95 @@ class DownloadManagerCore:
         dl.status = 'transcribing'
         dl.speed = 'local transcription'
         dl.eta = ''
-        dl.progress = min(99.0, max(0.0, float(dl.progress or 0.0)))
+        dl.progress = 0.0
         self.progress_updated.emit()
         output_lines = []
+        transcription_deadline = (
+            time.monotonic() + max(0, LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS)
+        )
 
-        def run_process(args):
-            proc = self._dependencies['spawn_media_process'](
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                creationflags=(
-                    self._dependencies['CREATE_NO_WINDOW']
-                    | self._dependencies['CREATE_NEW_PROCESS_GROUP']
-                ),
-                env=self._dependencies['_build_subprocess_env'](),
+        def _mark_transcription_timeout(stage):
+            phase = 'preparing audio' if stage == 'audio' else 'generating subtitles'
+            self._mark_transcription_failure(
+                dl,
+                'transcription-timeout',
+                'Local subtitle generation exceeded the '
+                f'{LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS // 60}-minute time limit while {phase}.',
             )
-            dl.process = proc
+
+        def run_process(args, stage):
+            proc = None
+            stop_watchdog = None
+            watchdog_thread = None
+            watchdog_reason = {'value': None}
             try:
+                proc = self._dependencies['spawn_media_process'](
+                    args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    creationflags=(
+                        self._dependencies['CREATE_NO_WINDOW']
+                        | self._dependencies['CREATE_NEW_PROCESS_GROUP']
+                        | TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS
+                    ),
+                    env=self._dependencies['_build_subprocess_env'](),
+                )
+                dl.process = proc
                 with self._lock:
                     cancelled_pre_spawn = dl.status == 'cancelled'
                 if cancelled_pre_spawn:
+                    watchdog_reason['value'] = 'cancelled'
                     self._dependencies['terminate_process_tree'](proc)
+                else:
+                    stop_watchdog = threading.Event()
+                    watchdog_poll = max(
+                        0.01, float(LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS)
+                    )
+
+                    def _transcription_watchdog(
+                        ev=stop_watchdog, watched_proc=proc,
+                    ):
+                        while not ev.wait(watchdog_poll):
+                            if dl.status == 'cancelled':
+                                if watched_proc.poll() is None:
+                                    watchdog_reason['value'] = 'cancelled'
+                                    try:
+                                        self._dependencies['terminate_process_tree'](
+                                            watched_proc
+                                        )
+                                    except Exception as error:
+                                        self._dependencies['write_persistent_log'](
+                                            'WARNING: cancelled local subtitle '
+                                            f'termination failed: {error}'
+                                        )
+                                return
+                            # The watcher belongs to this exact child. Do not
+                            # attribute a later timeout to a process that has
+                            # already exited while wait()/cleanup is running.
+                            if watched_proc.poll() is not None:
+                                return
+                            if time.monotonic() >= transcription_deadline:
+                                watchdog_reason['value'] = 'timeout'
+                                try:
+                                    self._dependencies['terminate_process_tree'](
+                                        watched_proc
+                                    )
+                                except Exception as error:
+                                    self._dependencies['write_persistent_log'](
+                                        'WARNING: local subtitle watchdog '
+                                        f'termination failed: {error}'
+                                    )
+                                return
+
+                    watchdog_thread = threading.Thread(
+                        target=_transcription_watchdog,
+                        name=f'local-subtitle-watchdog-{stage}',
+                        daemon=True,
+                    )
+                    watchdog_thread.start()
                 for raw_line in getattr(proc, 'stdout', ()):
                     line = str(raw_line or '').strip()
                     if not line:
@@ -4052,20 +4184,39 @@ class DownloadManagerCore:
                     output_lines.append(line)
                     if len(output_lines) > 40:
                         del output_lines[:-40]
-                    if line.startswith('out_time_ms='):
-                        dl.progress = max(1.0, min(99.0, float(dl.progress or 0.0)))
+                    progress = parse_whisper_progress(line)
+                    if progress is not None:
+                        if stage == 'whisper':
+                            # Audio extraction is the first 20% of this
+                            # optional stage; whisper.cpp reports the real
+                            # remaining percentage via -pp.
+                            dl.progress = 20.0 + (progress * 0.8)
+                        else:
+                            dl.progress = progress * 0.2
                         self.progress_updated.emit()
-                proc.wait()
-                return proc.returncode
+                waited = proc.wait()
+                returncode = proc.returncode
+                if returncode is None:
+                    returncode = waited
+                return returncode, watchdog_reason['value']
             finally:
+                if stop_watchdog is not None:
+                    stop_watchdog.set()
+                if watchdog_thread is not None:
+                    watchdog_thread.join(
+                        timeout=max(
+                            1.0,
+                            float(LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS) + 1.0,
+                        )
+                    )
                 dl.process = None
                 try:
-                    if getattr(proc, 'stdout', None) is not None:
+                    if proc is not None and getattr(proc, 'stdout', None) is not None:
                         proc.stdout.close()
                 except Exception:
                     # reason: cleanup must not replace a completed transcription
                     pass
-                if proc.poll() is None:
+                if proc is not None and proc.poll() is None:
                     try:
                         self._dependencies['terminate_process_tree'](proc)
                     except Exception as error:
@@ -4074,7 +4225,13 @@ class DownloadManagerCore:
                         )
 
         try:
-            if run_process(ffmpeg_args) != 0:
+            ffmpeg_returncode, ffmpeg_reason = run_process(ffmpeg_args, 'audio')
+            if ffmpeg_reason == 'timeout':
+                _mark_transcription_timeout('audio')
+                return False
+            if ffmpeg_reason == 'cancelled' or dl.status == 'cancelled':
+                return False
+            if ffmpeg_returncode != 0:
                 if dl.status == 'cancelled':
                     return False
                 detail = ' '.join(
@@ -4091,9 +4248,15 @@ class DownloadManagerCore:
                 return False
             if dl.status == 'cancelled':
                 return False
-            dl.progress = max(50.0, min(80.0, float(dl.progress or 0.0)))
+            dl.progress = 20.0
             self.progress_updated.emit()
-            if run_process(whisper_args) != 0:
+            whisper_returncode, whisper_reason = run_process(whisper_args, 'whisper')
+            if whisper_reason == 'timeout':
+                _mark_transcription_timeout('whisper')
+                return False
+            if whisper_reason == 'cancelled' or dl.status == 'cancelled':
+                return False
+            if whisper_returncode != 0:
                 if dl.status == 'cancelled':
                     return False
                 detail = ' '.join(
@@ -6008,6 +6171,9 @@ _OWNED_EXPORTS = {
     "DOWNLOAD_RETRYABLE_ERROR_CODES", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_LIVE_WAIT_MAX_SECONDS",
     "DOWNLOAD_WATCHDOG_POLL_SECONDS",
+    "MAX_CONCURRENT_TRANSCRIPTIONS", "LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS",
+    "LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS",
+    "TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS", "parse_whisper_progress",
     "write_cookies_netscape", "cleanup_stale_cookie_jars",
     "terminate_process_tree", "build_subprocess_env", "ALLOWED_COOKIE_DOMAINS",
     "DownloadQueueStore", "DownloadManager", "DownloadManagerCore",
