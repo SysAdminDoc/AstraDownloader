@@ -2534,8 +2534,15 @@ class MainWindowCore(QMainWindow):
                         if kind == "audio" and self.config.get("AudioDownloadPath")
                         else self.config.get("DownloadPath")
                     )
+                    staging_path = None
+                    if not self.config.get("KeepIntermediateFiles", False):
+                        install_value = self._dependencies.get("INSTALL_DIR")
+                        staging_path = (
+                            install_value() if callable(install_value)
+                            else install_value
+                        )
                     space_failure = self._dependencies['check_download_disk_space'](
-                        output_dir, estimate
+                        output_dir, estimate, staging_path=staging_path
                     )
                     if space_failure:
                         self._set_quick_download_status(
@@ -4028,7 +4035,7 @@ class MainWindowCore(QMainWindow):
         self.cfg_keep_intermediates.setToolTip(tr(
             "Put .part, .f### and .ytdl files beside the output and keep them "
             "for diagnosis. Off by default: they use a private temporary "
-            "folder and are removed after a successful download."
+            "folder and are removed after the download reaches a terminal state."
         ))
         self.cfg_keep_intermediates.setChecked(
             self.config.get("KeepIntermediateFiles", False))

@@ -3397,14 +3397,22 @@ class IntermediateFileSweepTests(unittest.TestCase):
             for path in leftovers:
                 self.assertTrue(path.exists(), f"{path.name} must be kept")
 
-    def test_a_failed_download_keeps_its_partial_file(self):
-        # The .part file is what a resume continues from, so a run that did
-        # not succeed must never be swept.
+    def test_a_failed_download_sweeps_its_private_staging_directory(self):
         class FailingProc:
             returncode = 1
 
-            def __init__(self, *_args, **_kwargs):
+            def __init__(self, args, **_kwargs):
                 self.stdout = iter(["ERROR: unable to download video data\n"])
+                temp_arg = next(
+                    value for index, value in enumerate(args[:-1])
+                    if args[index] == '--paths'
+                    and value.startswith('temp:')
+                )
+                staging = Path(temp_arg[len('temp:'):])
+                staging.mkdir(parents=True)
+                (staging / "failed.mp4.part").write_text(
+                    "partial", encoding="utf-8"
+                )
 
             def wait(self):
                 return 1
@@ -3421,23 +3429,71 @@ class IntermediateFileSweepTests(unittest.TestCase):
                 pass
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            leftovers, _bystander = self._litter(tmpdir)
-            manager = ad.DownloadManager(
-                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
-                FakeHistory(),
+            with tempfile.TemporaryDirectory() as install_dir, \
+                    mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+                manager = ad.DownloadManager(
+                    FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                    FakeHistory(),
+                )
+                download = ad.Download(
+                    "dl_failed_sweep", "https://example.com/video", output_dir=tmpdir)
+                download.status = "queued"
+
+                with mock.patch.object(ad.subprocess, "Popen", FailingProc), \
+                     mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
+                     mock.patch.object(ad, "write_persistent_log", return_value=None):
+                    manager._run_download(download)
+
+                self.assertEqual(download.status, "failed")
+                self.assertFalse(manager._download_intermediate_dir(download).exists())
+
+    def test_cancelled_download_sweeps_staging_without_touching_other_jobs(self):
+        with tempfile.TemporaryDirectory() as install_dir:
+            with mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+                manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+                cancelled = ad.Download("cancelled", "https://example.com/video")
+                other = ad.Download("other", "https://example.com/other")
+                manager.downloads[cancelled.id] = cancelled
+                manager.downloads[other.id] = other
+                cancelled_dir = manager._download_intermediate_dir(cancelled)
+                other_dir = manager._download_intermediate_dir(other)
+                cancelled_dir.mkdir(parents=True)
+                other_dir.mkdir(parents=True)
+                (cancelled_dir / "clip.part").write_text("partial", encoding="utf-8")
+                (other_dir / "keep.part").write_text("partial", encoding="utf-8")
+
+                self.assertTrue(manager.cancel(cancelled.id))
+
+                self.assertFalse(cancelled_dir.exists())
+                self.assertTrue(other_dir.exists())
+
+    def test_startup_sweeps_orphaned_staging_but_keeps_restored_queue_ids(self):
+        with tempfile.TemporaryDirectory() as install_dir, \
+                tempfile.TemporaryDirectory() as output_dir, \
+                mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+            config = FakeConfig({
+                "DownloadPath": output_dir,
+                "AudioDownloadPath": output_dir,
+            })
+            queue_path = Path(install_dir) / "download-queue.json"
+            first = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            self.assertTrue(first.pause_intake())
+            download_id, error = first.start_download("https://example.com/video")
+            self.assertIsNone(error)
+            restored_dir = first._download_intermediate_dir(
+                first.downloads[download_id]
             )
-            download = ad.Download(
-                "dl_failed_sweep", "https://example.com/video", output_dir=tmpdir)
-            download.status = "queued"
+            restored_dir.mkdir(parents=True)
+            (restored_dir / "resume.part").write_text("partial", encoding="utf-8")
+            orphan_dir = restored_dir.parent / "orphan"
+            orphan_dir.mkdir(parents=True)
+            (orphan_dir / "stale.part").write_text("stale", encoding="utf-8")
 
-            with mock.patch.object(ad.subprocess, "Popen", FailingProc), \
-                 mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
-                 mock.patch.object(ad, "write_persistent_log", return_value=None):
-                manager._run_download(download)
+            restored = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
 
-            self.assertNotEqual(download.status, "complete")
-            for path in leftovers:
-                self.assertTrue(path.exists(), f"{path.name} must survive a failure")
+            self.assertIn(download_id, restored.downloads)
+            self.assertTrue(restored_dir.exists())
+            self.assertFalse(orphan_dir.exists())
 
 
 class UiRefreshCoalescingTests(unittest.TestCase):
@@ -12765,6 +12821,61 @@ class DiskSpacePreflightTests(unittest.TestCase):
         self.assertEqual(failure["error_code"], "insufficient-disk-space")
         self.assertIn("short by", failure["error"])
         self.assertIn("free-disk-space-and-retry", failure["next_action"])
+
+    def test_disk_space_check_names_the_short_output_or_staging_volume(self):
+        with tempfile.TemporaryDirectory() as output_dir, \
+                tempfile.TemporaryDirectory() as staging_dir:
+            with mock.patch.object(
+                ad.shutil,
+                "disk_usage",
+                side_effect=[
+                    types.SimpleNamespace(free=100),
+                    types.SimpleNamespace(free=10),
+                ],
+            ):
+                failure = ad.check_download_disk_space(
+                    output_dir,
+                    60,
+                    reserve_bytes=20,
+                    staging_path=staging_dir,
+                )
+
+        self.assertIn("staging volume", failure["error"])
+        self.assertNotIn("output volume", failure["error"])
+
+    def test_quick_download_preflight_passes_the_install_volume(self):
+        window, calls = QuickDownloadBatchTests()._window(
+            "https://vimeo.com/1", [("dl_1", None)]
+        )
+        with tempfile.TemporaryDirectory() as output_dir, \
+                tempfile.TemporaryDirectory() as install_dir:
+            window.config = FakeConfig({"DownloadPath": output_dir})
+            window._format_probe_summary_url = "https://vimeo.com/1"
+            window._format_probe_summary = {
+                "formats": [{
+                    "has_video": True,
+                    "has_audio": True,
+                    "height": 1080,
+                    "filesize": 500,
+                }],
+            }
+            received = {}
+
+            def check(_output, _required, **kwargs):
+                received.update(kwargs)
+                return None
+
+            window._dependencies.update({
+                "normalize_url": ad.normalize_url,
+                "estimate_download_bytes": ad.estimate_download_bytes,
+                "check_download_disk_space": check,
+                "INSTALL_DIR": lambda: Path(install_dir),
+            })
+            with mock.patch.object(gui_module_for_tests(), "repolish"):
+                ad.MainWindow._start_quick_download(window)
+
+        self.assertEqual(received["staging_path"], Path(install_dir))
+        self.assertEqual(len(calls), 1)
 
     def test_setup_source_checks_space_before_opening_the_ffmpeg_stream(self):
         source = inspect.getsource(gui_module_for_tests().SetupWorkerCore.run)

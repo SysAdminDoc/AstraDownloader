@@ -30,25 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P1 — Preflight the volume the download actually writes to, and sweep staging on every terminal state
-  Why: The disk check passes while the system drive fills, and every non-complete
-  download leaks a full-size staging directory that nothing ever removes.
-  Evidence: staging defaults to `INSTALL_DIR/download-temp/<id>`
-  (`download.py:3655-3679`, `KeepIntermediateFiles` defaults False at
-  `config.py:219`) and is passed as `--paths temp:` (`download.py:3910`), but the
-  only preflight is `check_download_disk_space(output_dir, estimate)`
-  (`gui.py:2491-2498`). With `DownloadPath` on D: and `INSTALL_DIR` on C:, a 40 GB
-  job passes and fills C:; the final `temp:`→`home:` move is then cross-volume,
-  so it is a copy, not a rename. `_sweep_download_intermediates` is called only
-  when `dl.status == "complete"` (`download.py:4432`), with no startup sweep, no
-  age policy and no cap.
-  Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`
-  Acceptance: the preflight checks both the staging and output volumes and names
-  which one is short; staging is swept on cancel and failure and on startup for
-  ids no longer in the queue; a test covers a cancelled download leaving nothing
-  behind.
-  Complexity: M
-
 - [ ] P1 — Give the companion updater a backoff, a rate limit, and a startup sweep
   Why: Each call re-downloads ~47 MB before it can discover it was unnecessary,
   nothing bounds the repeat rate, the scratch files are never cleaned, and a

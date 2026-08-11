@@ -828,8 +828,8 @@ CATALOGS = {
             "Privates Token anzeigen",
         "Fetch subtitle tracks and embed them in the file. The Subtitles download type fetches them without the video.":
             "Untertitelspuren abrufen und in die Datei einbetten. Der Downloadtyp „Untertitel“ ruft sie ohne das Video ab.",
-        "Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.":
-            "Die .part-, .f###- und .ytdl-Dateien neben der Ausgabe ablegen und zur Diagnose behalten. Standardmäßig deaktiviert: Sie werden in einem privaten temporären Ordner verwendet und nach erfolgreichem Download entfernt.",
+        "Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after the download reaches a terminal state.":
+            "Die .part-, .f###- und .ytdl-Dateien neben der Ausgabe ablegen und zur Diagnose behalten. Standardmäßig deaktiviert: Sie werden in einem privaten temporären Ordner verwendet und entfernt, sobald der Download einen Endstatus erreicht.",
         "Subtitle tracks":
             "Untertitelspuren",
         "Subtitle format":
