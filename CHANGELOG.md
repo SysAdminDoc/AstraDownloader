@@ -90,6 +90,9 @@ repository's git log.
   the pinned CLI and sibling DLLs, probes the SRT capability, and reports a
   missing runtime before a job starts; successful media stays complete when
   subtitle generation fails, with a retry that regenerates only the SRT.
+- **Local transcription follows the current whisper.cpp release.** The pinned
+  v1.9.2 sidecar is checksum-verified, SRT output splits on words, and the
+  CLI thread count follows the host CPU count within a safe bound.
 - **Windows subtitle filter paths are escaped at both parser levels.** The
   legacy FFmpeg argument builder now emits the doubled escaping required for
   drive letters and filter punctuation.

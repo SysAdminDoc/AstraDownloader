@@ -2357,17 +2357,33 @@ def build_whisper_audio_args(ffmpeg_path, media_path, output_path):
     ]
 
 
+def whisper_thread_count(cpu_count=None):
+    """Choose a bounded whisper.cpp CPU thread count for this host."""
+    if cpu_count is None:
+        try:
+            cpu_count = os.cpu_count()
+        except (OSError, TypeError):
+            cpu_count = None
+    try:
+        return max(1, min(32, int(cpu_count or 1)))
+    except (TypeError, ValueError, OverflowError):
+        return 1
+
+
 def build_whisper_transcription_args(whisper_path, model_path, audio_path,
                                      output_base, language='auto',
-                                     threads=4, max_len=42):
-    """Build a deterministic whisper.cpp SRT invocation."""
+                                     threads=None, max_len=42):
+    """Build a word-aligned whisper.cpp SRT invocation."""
     language = str(language or 'auto').strip().lower()
     if not re.fullmatch(r'[a-z]{2,3}', language) and language != 'auto':
         language = 'auto'
-    try:
-        threads = max(1, min(32, int(threads)))
-    except (TypeError, ValueError, OverflowError):
-        threads = 4
+    if threads is None:
+        threads = whisper_thread_count()
+    else:
+        try:
+            threads = max(1, min(32, int(threads)))
+        except (TypeError, ValueError, OverflowError):
+            threads = whisper_thread_count()
     try:
         max_len = max(0, min(200, int(max_len)))
     except (TypeError, ValueError, OverflowError):
@@ -2375,7 +2391,7 @@ def build_whisper_transcription_args(whisper_path, model_path, audio_path,
     return [
         str(whisper_path), '-m', str(model_path), '-f', str(audio_path),
         '-l', language, '-t', str(threads), '-ml', str(max_len),
-        '-osrt', '-of', str(output_base), '-pp', '-ng',
+        '-sow', '-osrt', '-of', str(output_base), '-pp', '-ng',
     ]
 
 
