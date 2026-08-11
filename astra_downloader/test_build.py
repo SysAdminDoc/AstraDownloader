@@ -31,7 +31,7 @@ class ReleaseConstraintsTests(unittest.TestCase):
 
     def test_reviewed_constraints_are_exact_and_cover_release_roots(self):
         constraints = build.parse_release_constraints()
-        self.assertGreaterEqual(len(constraints), 30)
+        self.assertGreaterEqual(len(constraints), 28)
         for required in ('pyinstaller', 'pyqt6', 'flask', 'requests', 'waitress', 'yt-dlp'):
             self.assertIn(required, constraints)
             self.assertTrue(constraints[required]['version'])

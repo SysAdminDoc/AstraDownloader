@@ -293,6 +293,8 @@ function runPipAudit(options = {}) {
         '--vulnerability-service', 'osv',
         '--timeout', '30'
     ];
+    if (options.disablePip) auditArgs.push('--disable-pip');
+    if (options.noDeps) auditArgs.push('--no-deps');
     const errors = [];
     for (const candidate of auditCandidates(options.env || process.env)) {
         const args = [...candidate.prefixArgs, ...auditArgs];
@@ -376,7 +378,12 @@ function combineAuditReports(declared, minimum, options = {}, release = null) {
 function runPythonDependencyAudits(options = {}) {
     const requirementsPath = options.requirementsPath || REQUIREMENTS_PATH;
     const declared = runPipAudit({ ...options, requirementsPath });
-    const release = runPipAudit({ ...options, requirementsPath: RELEASE_CONSTRAINTS_PATH });
+    const release = runPipAudit({
+        ...options,
+        requirementsPath: RELEASE_CONSTRAINTS_PATH,
+        disablePip: true,
+        noDeps: true,
+    });
     release.requirements = repoRelative(RELEASE_CONSTRAINTS_PATH);
     const minimumText = minimumRequirementsFor(fs.readFileSync(requirementsPath, 'utf8'));
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-downloader-audit-'));

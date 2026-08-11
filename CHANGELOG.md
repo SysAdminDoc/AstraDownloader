@@ -12,6 +12,13 @@ repository's git log.
 
 ## [Unreleased] - 2026-08-10
 
+### Changed
+
+- **Release dependencies now follow the current secure graph.** PyInstaller,
+  curl_cffi, certifi, PyQt6_sip, cffi, and packaging are refreshed; curl_cffi's
+  CLI-only Rich stack is no longer carried by the release environment, while
+  Qt 6.11.1 and setuptools 83 remain deliberately held.
+
 ### Fixed
 
 - **History is now a durable, visible record.** Settings controls its local
