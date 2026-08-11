@@ -4831,7 +4831,32 @@ class MainWindowCore(QMainWindow):
         pp_l.addWidget(make_divider())
         self.cfg_sponsorblock = QCheckBox(tr("Use SponsorBlock segments"))
         self.cfg_sponsorblock.setChecked(self.config.get("SponsorBlock", False))
-        pp_l.addWidget(self.cfg_sponsorblock)
+        sponsor_row = QHBoxLayout()
+        sponsor_row.setSpacing(8)
+        sponsor_row.addWidget(self.cfg_sponsorblock)
+        self.sponsorblock_attribution = make_label(
+            f'<a href="https://sponsor.ajay.app/">{tr("(Using SponsorBlock)")}</a>',
+            "fieldHint",
+        )
+        self.sponsorblock_attribution.setTextFormat(Qt.TextFormat.RichText)
+        self.sponsorblock_attribution.setOpenExternalLinks(True)
+        self.sponsorblock_attribution.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self.sponsorblock_attribution.setAccessibleName(
+            tr("(Using SponsorBlock)")
+        )
+        sponsor_row.addWidget(self.sponsorblock_attribution)
+        sponsor_row.addStretch()
+        pp_l.addLayout(sponsor_row)
+        pp_l.addWidget(make_label(
+            tr(
+                "SponsorBlock data and API are licensed CC BY-NC-SA 4.0; "
+                "Astra Downloader is MIT."
+            ),
+            "fieldHint", word_wrap=True,
+        ))
         sb_row = QHBoxLayout()
         sb_row.setSpacing(8)
         sb_row.addSpacing(28)

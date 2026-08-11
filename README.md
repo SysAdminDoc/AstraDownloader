@@ -54,6 +54,9 @@ pasting a link never needs it.
 - **Preview Windows-safe names.** Settings renders an example output path,
   flags reserved names and overlong paths before saving, and enables yt-dlp's
   Windows filename sanitization by default.
+- **SponsorBlock attribution is visible.** Optional segment removal links to
+  [SponsorBlock](https://sponsor.ajay.app/) in the Settings UI. Its data and
+  API are CC BY-NC-SA 4.0; Astra Downloader itself is MIT-licensed.
 - **Browser pairing stays scoped.** Native messaging is registered for the
   installed Chromium-family browsers and Firefox only after browser-specific
   extension IDs pass validation.

@@ -7618,6 +7618,8 @@ class CookieThreatModelDocTests(unittest.TestCase):
             "CVE-2023-35934",
             "GHSA-v8mc-9377-rwjj",
             "2023.07.06",
+            "Astra Downloader 2.6.0",
+            "Astra Deck browser extension",
             "yt-dlp==2026.6.9",
             "ALLOWED_COOKIE_DOMAINS",
             ".youtube.com",
@@ -7629,6 +7631,8 @@ class CookieThreatModelDocTests(unittest.TestCase):
             "127.0.0.1",
         ]:
             self.assertIn(needle, body)
+        self.assertNotIn("Companion v1.8.0", body)
+        self.assertNotIn("Companion v1.9.0", body)
 
 
 class ApiRateLimitTests(unittest.TestCase):
@@ -16768,6 +16772,18 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertTrue(any(
             "bounded wait window" in label.text()
             for label in window.findChildren(QLabel)
+        ))
+
+    def test_sponsorblock_attribution_is_visible_and_linked(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        attribution = window.sponsorblock_attribution
+        self.assertIn("(Using SponsorBlock)", attribution.text())
+        self.assertIn("https://sponsor.ajay.app/", attribution.text())
+        self.assertTrue(attribution.openExternalLinks())
+        self.assertIn("CC BY-NC-SA 4.0", " ".join(
+            label.text() for label in window.findChildren(type(attribution))
         ))
 
     def test_settings_filter_preserves_controls_hidden_by_their_own_state(self):

@@ -152,6 +152,10 @@ CATALOGS = {
             "Standards konnten nicht wiederhergestellt werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
         "SponsorBlock categories":
             "SponsorBlock-Kategorien",
+        "(Using SponsorBlock)":
+            "(Using SponsorBlock)",
+        "SponsorBlock data and API are licensed CC BY-NC-SA 4.0; Astra Downloader is MIT.":
+            "Daten und API von SponsorBlock stehen unter CC BY-NC-SA 4.0; Astra Downloader steht unter MIT.",
         "Restored defaults for {count} settings: {names}.":
             "Standards für {count} Einstellungen wiederhergestellt: {names}.",
         "Settings restored and server restarted.":
