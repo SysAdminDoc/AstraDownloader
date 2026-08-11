@@ -5077,7 +5077,7 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(trusted_resp.get_json()["token"], "a" * 32)
 
         background_resp = client.get("/health", headers={"X-MDL-Client": "MediaDL"})
-        self.assertEqual(background_resp.get_json()["token"], "a" * 32)
+        self.assertNotIn("token", background_resp.get_json())
 
         native_resp = client.get("/health", headers={
             "X-MDL-Client": "MediaDL",

@@ -68,6 +68,9 @@ repository's git log.
 - **Recovery checks no longer probe from the GUI or queue lock.** Runtime and
   browser-impersonation results are published by the background readiness
   worker, while retry/status refreshes consume the cached snapshot.
+- **Legacy health-token echo requires an extension origin.** Compatibility
+  responses no longer reveal the bearer token to origin-less local callers;
+  only normalized origins in the configured allowlist can receive it.
 
 ## [2.6.0] - 2026-08-09
 

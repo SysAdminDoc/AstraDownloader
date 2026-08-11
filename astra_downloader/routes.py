@@ -484,7 +484,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             legacy_health_token_echo
             and token_source != "native"
             and request.headers.get("X-MDL-Client") == "MediaDL"
-            and (not origin or is_allowed_extension_origin(origin))
+            and is_allowed_extension_origin(origin)
         ):
             resp["token"] = token
         return cors_response(resp)
