@@ -15905,6 +15905,15 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(groups["Language"].isHidden())
         self.assertTrue(groups["Tray behavior"].isHidden())
 
+    def test_settings_filter_preserves_controls_hidden_by_their_own_state(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        self.assertTrue(window.btn_undo_settings_import.isHidden())
+        window._filter_settings("proxy")
+        window._filter_settings("")
+        self.assertTrue(window.btn_undo_settings_import.isHidden())
+
     def test_every_registered_settings_control_marks_the_form_dirty(self):
         from PyQt6.QtWidgets import QApplication
 
