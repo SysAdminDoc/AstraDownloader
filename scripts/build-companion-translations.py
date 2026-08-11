@@ -592,6 +592,8 @@ CATALOGS = {
             "Status",
         "Subscriptions unavailable":
             "Abonnements nicht verfügbar",
+        "Subscriptions are unavailable in this session.":
+            "Abonnements sind in dieser Sitzung nicht verfügbar.",
         "Start the Astra Downloader companion to manage scheduled channel scans.":
             "Starten Sie Astra Downloader, um geplante Kanalprüfungen zu verwalten.",
         "No scheduled subscriptions":
