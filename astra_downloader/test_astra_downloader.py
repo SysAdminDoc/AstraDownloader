@@ -132,6 +132,22 @@ class NormalizationTests(unittest.TestCase):
         self.assertFalse(cfg["LegacyHealthTokenEcho"])
         self.assertEqual(cfg["SubLangs"], "en,esbad")
         self.assertGreaterEqual(len(cfg["ServerToken"]), 16)
+        self.assertEqual(
+            ad.sanitize_config({})["HistoryRetentionLimit"],
+            ad.HISTORY_RETENTION_DEFAULT,
+        )
+        self.assertEqual(
+            ad.sanitize_config({"HistoryRetentionLimit": 1})[
+                "HistoryRetentionLimit"
+            ],
+            ad.HISTORY_RETENTION_MIN,
+        )
+        self.assertEqual(
+            ad.sanitize_config({"HistoryRetentionLimit": 999999})[
+                "HistoryRetentionLimit"
+            ],
+            ad.HISTORY_RETENTION_MAX,
+        )
 
         self.assertEqual(cfg["Theme"], "system")
         self.assertEqual(ad.sanitize_config({"Theme": "LIGHT"})["Theme"], "light")
@@ -722,6 +738,32 @@ class PersistenceTests(unittest.TestCase):
                 self.assertTrue(store.add({"value": value}))
             self.assertEqual(store.load(), [{"value": 2}, {"value": 3}])
             self.assertEqual(Path(config_module.__file__).name, "config.py")
+
+    def test_history_retention_reads_updated_config_without_restarting_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = ad.HISTORY_PATH
+            ad.HISTORY_PATH = Path(tmp) / "history.json"
+            config = FakeConfig({"HistoryRetentionLimit": 100})
+            try:
+                history = ad.History(config)
+                history.replace([
+                    {"id": f"old-{index}", "title": str(index)}
+                    for index in range(100)
+                ])
+                self.assertEqual(history.retention_limit(), 100)
+                config.set("HistoryRetentionLimit", 102)
+                self.assertEqual(history.retention_limit(), 102)
+                for index in range(3):
+                    history.add({"id": f"new-{index}", "title": str(index)})
+                retained = history.load()
+                self.assertEqual(
+                    len(retained),
+                    102,
+                )
+                self.assertEqual(retained[0]["id"], "old-1")
+                self.assertEqual(retained[-1]["id"], "new-2")
+            finally:
+                ad.HISTORY_PATH = old_path
 
     def test_history_load_backs_up_corrupt_json(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -6153,6 +6195,49 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertFalse(result["hasMore"])
         self.assertEqual(entries[0]["status"], "complete")
 
+    def test_history_lookup_includes_subscription_archive_and_searches_url(self):
+        url = "https://www.youtube.com/watch?v=archive-only"
+        archive = {
+            "sha256:archive-only": {
+                "url": url,
+                "title": "Scheduled archive item",
+                "subscriptionId": "sub-1",
+                "status": "complete",
+                "completedAt": 1_754_000_000,
+            },
+        }
+
+        result = ad.query_history_entries(
+            [], query=url, archive_entries=archive,
+        )
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["filteredTotal"], 1)
+        self.assertEqual(result["history"][0]["source"], "subscription")
+        self.assertEqual(result["history"][0]["url"], url)
+        lookup = ad.lookup_history_url([], url, archive_entries=archive)
+        self.assertEqual(lookup["count"], 1)
+        self.assertTrue(lookup["found"])
+
+    def test_history_archive_row_is_deduplicated_when_download_history_has_url(self):
+        url = "https://example.com/watch?v=same"
+        entries = ad.sanitize_history_entries([{
+            "id": "download-1", "url": url, "title": "Downloaded copy",
+        }])
+        result = ad.query_history_entries(
+            entries,
+            query=url,
+            archive_entries={
+                "archive-key": {
+                    "url": url,
+                    "title": "Scheduled copy",
+                    "status": "complete",
+                },
+            },
+        )
+        self.assertEqual(result["total"], 1)
+        self.assertEqual([row["id"] for row in result["history"]], ["download-1"])
+
     def test_history_preserves_terminal_diagnostics_and_filters_statuses(self):
         entries = ad.sanitize_history_entries([
             {
@@ -6217,6 +6302,35 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(body["filteredTotal"], 3)
         self.assertTrue(body["hasMore"])
         self.assertEqual(body["sort"], "oldest")
+
+    def test_history_route_reports_exact_url_lookup_from_subscription_archive(self):
+        token = "e" * 32
+        url = "https://www.youtube.com/watch?v=scheduled"
+        history = FakeHistory()
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, history)
+        subscriptions = types.SimpleNamespace(archive_entries=lambda: {
+            "archive-key": {
+                "url": url,
+                "title": "Scheduled item",
+                "status": "queued",
+                "updatedAt": 1_754_000_000,
+            },
+        })
+        client = ad.create_api(
+            config, manager, history, subscriptions=subscriptions,
+        ).test_client()
+
+        response = client.get(
+            "/history?url=" + url,
+            headers={"X-Auth-Token": token},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body["lookup"]["found"])
+        self.assertEqual(body["lookup"]["count"], 1)
+        self.assertEqual(body["history"][0]["source"], "subscription")
 
     def test_history_rejects_malformed_limit(self):
         token = "d" * 32

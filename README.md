@@ -39,6 +39,9 @@ pasting a link never needs it.
   cookies and credentials remain in the separate sign-in store.
 - **Durable queue.** Downloads survive a restart. Pause intake, retry a
   failure, cancel a run.
+- **History you can keep and search.** Choose the local retention cap in
+  Settings, search by title, filename, or URL, and see subscription-archive
+  records alongside ordinary downloads without duplicating the same URL.
 - **Keeps output folders clean.** Partial and merge files use a private,
   per-download staging folder and only the finished file is moved into the
   destination. The Settings page can put intermediates beside the output for
@@ -170,7 +173,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 910 tests; scratch state stays under build/pytest
+py -3.12 -m pytest          # 914 tests; scratch state stays under build/pytest
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

@@ -12,6 +12,7 @@ import json
 import math
 import re
 import threading
+import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -31,7 +32,8 @@ __all__ = (
     "APP_NAME", "APP_VERSION", "SERVICE_ID", "SERVICE_API_VERSION",
     "SERVER_PORT", "PORT_FALLBACKS", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "DEFAULT_CONFIG", "INSTALL_DIR", "CONFIG_PATH", "HISTORY_PATH",
-    "CONFIG_SCHEMA_VERSION",
+    "CONFIG_SCHEMA_VERSION", "HISTORY_RETENTION_DEFAULT",
+    "HISTORY_RETENTION_MIN", "HISTORY_RETENTION_MAX",
     "default_download_path",
     "CORS_MAX_AGE_SECONDS", "RATE_LIMIT_DOWNLOAD_MAX",
     "RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", "MAX_REQUEST_BYTES",
@@ -57,6 +59,7 @@ __all__ = (
     "write_persistent_log", "get_recent_log_entries", "log_crash",
     "atomic_write_json", "download_file_atomic", "load_json_file",
     "backup_corrupt_file", "sanitize_history_entries", "query_history_entries",
+    "lookup_history_url",
     "quarantined_state_files", "restore_quarantined_file",
     "record_quarantined_file", "forget_quarantined_file",
     "verify_file_sha256", "fetch_expected_sha256", "cleanup_stale_cookie_jars",
@@ -88,9 +91,10 @@ _OWNED_EXPORTS = {
     "normalize_output_dir", "allowed_output_roots",
     "DEFAULT_CONFIG", "sanitize_config",
     "CONFIG_SCHEMA_VERSION",
+    "HISTORY_RETENTION_DEFAULT", "HISTORY_RETENTION_MIN", "HISTORY_RETENTION_MAX",
     "default_download_path",
     "ConfigStore", "HistoryStore", "DurableUndoStore", "atomic_write_json", "load_json_file",
-    "backup_corrupt_file", "sanitize_history_entries",
+    "backup_corrupt_file", "sanitize_history_entries", "lookup_history_url",
     "quarantined_state_files", "restore_quarantined_file",
     "record_quarantined_file", "forget_quarantined_file",
     "DOWNLOAD_REQUEST_ALLOWED_FIELDS", "DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS",
@@ -103,6 +107,13 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 _MAX_TEXT_FIELD = 500
 _MAX_PATH_FIELD = 2048
 MAX_LOCAL_JSON_BYTES = 16 * 1024 * 1024
+
+# History is a durable user-facing record, not a small UI cache. Keep a
+# bounded fallback for malformed or runaway settings, but make the bound
+# large enough that ordinary users do not silently lose older downloads.
+HISTORY_RETENTION_DEFAULT = 5000
+HISTORY_RETENTION_MIN = 100
+HISTORY_RETENTION_MAX = 100000
 DOWNLOAD_REQUEST_ALLOWED_FIELDS = frozenset({
     "url", "audioOnly", "format", "quality", "outputDir", "title",
     "referer", "cookies", "section", "playlistItems", "videoPassword",
@@ -200,6 +211,7 @@ def default_download_path():
 DEFAULT_CONFIG = {
     "DownloadPath": default_download_path(),
     "AudioDownloadPath": "",
+    "HistoryRetentionLimit": HISTORY_RETENTION_DEFAULT,
     "ServerPort": SERVER_PORT,
     "ServerToken": "",
     "LegacyHealthTokenEcho": _env_bool("ASTRA_LEGACY_HEALTH_TOKEN_ECHO", False),
@@ -1449,6 +1461,12 @@ def sanitize_config(raw):
     }
     data["DownloadPath"] = clean_path_text(data.get("DownloadPath")) or DEFAULT_CONFIG["DownloadPath"]
     data["AudioDownloadPath"] = clean_path_text(data.get("AudioDownloadPath"))
+    data["HistoryRetentionLimit"] = clamp_int(
+        data.get("HistoryRetentionLimit"),
+        HISTORY_RETENTION_DEFAULT,
+        HISTORY_RETENTION_MIN,
+        HISTORY_RETENTION_MAX,
+    )
     data["ServerPort"] = clamp_int(data.get("ServerPort"), SERVER_PORT, 1024, 65535)
     token = clean_text(data.get("ServerToken"), "", 128)
     data["ServerToken"] = token if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", token) else uuid.uuid4().hex
@@ -1741,10 +1759,119 @@ def sanitize_history_entries(raw, limit=500):
     return entries
 
 
+def _history_url_key(value):
+    """Compare stored URLs without changing path or query semantics."""
+    raw = clean_text(value, "", 4096)
+    if not raw:
+        return ""
+    try:
+        parsed = urlparse(raw)
+        return parsed._replace(
+            scheme=parsed.scheme.lower(),
+            netloc=parsed.netloc.lower(),
+        ).geturl()
+    except (AttributeError, TypeError, ValueError):
+        return raw
+
+
+def _archive_entry_date(entry):
+    for field in ("completedAt", "updatedAt", "createdAt"):
+        try:
+            timestamp = float(entry.get(field))
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            continue
+        if not math.isfinite(timestamp) or timestamp <= 0:
+            continue
+        try:
+            return time.strftime("%Y-%m-%d", time.gmtime(timestamp))
+        except (OverflowError, OSError, ValueError):
+            continue
+    return ""
+
+
+def _subscription_history_entries(archive_entries):
+    """Project subscription archive records into the History row shape."""
+    if not isinstance(archive_entries, dict):
+        return []
+    rows = []
+    for raw_key, raw_entry in archive_entries.items():
+        if not isinstance(raw_entry, dict):
+            continue
+        url = clean_text(raw_entry.get("url"), "", 4096)
+        if not url:
+            continue
+        archive_key = clean_text(raw_key, "", 430)
+        status = clean_text(raw_entry.get("status"), "failed", 16).lower()
+        if status == "reserved":
+            status = "queued"
+        if status not in {"queued", "complete", "failed"}:
+            status = "failed"
+        row_id = clean_text(
+            f"subscription:{archive_key}" if archive_key else f"subscription:{url}",
+            "subscription",
+            120,
+        )
+        rows.append({
+            "id": row_id,
+            "url": url,
+            "title": clean_text(raw_entry.get("title"), "(untitled)", 500) or "(untitled)",
+            "filename": "",
+            "format": "",
+            "quality": "",
+            "audioOnly": False,
+            "date": _archive_entry_date(raw_entry),
+            "duration": 0,
+            "status": status,
+            "errorCode": "subscription-scan" if status == "failed" else "",
+            "error": clean_text(raw_entry.get("lastError"), "", 1000),
+            "source": "subscription",
+            "subscriptionId": clean_text(raw_entry.get("subscriptionId"), "", 120),
+            "archiveKey": archive_key,
+        })
+    return rows
+
+
+def _history_entries_with_archive(entries, archive_entries=None):
+    combined = list(entries) if isinstance(entries, list) else []
+    if not isinstance(archive_entries, dict):
+        return combined
+    history_urls = {
+        _history_url_key(entry.get("url"))
+        for entry in combined
+        if isinstance(entry, dict) and _history_url_key(entry.get("url"))
+    }
+    for archive_entry in _subscription_history_entries(archive_entries):
+        key = _history_url_key(archive_entry.get("url"))
+        if key and key in history_urls:
+            continue
+        combined.append(archive_entry)
+        if key:
+            history_urls.add(key)
+    return combined
+
+
+def lookup_history_url(entries, url, *, archive_entries=None):
+    """Return whether a URL exists in downloads or the subscription archive."""
+    target = clean_text(url, "", 4096)
+    target_key = _history_url_key(target)
+    matches = [
+        entry for entry in _history_entries_with_archive(entries, archive_entries)
+        if isinstance(entry, dict) and target_key
+        and _history_url_key(entry.get("url")) == target_key
+    ]
+    return {
+        "url": target,
+        "found": bool(matches),
+        "count": len(matches),
+        "matches": matches,
+    }
+
+
 def query_history_entries(entries, *, query="", status="", fmt="",
                           date_from="", date_to="", sort="newest",
-                          offset=0, limit=50):
+                          offset=0, limit=50, archive_entries=None):
     """Filter, sort, and page a bounded sanitized history collection."""
+    entries = _history_entries_with_archive(entries, archive_entries)
     query = str(query or "").strip().casefold()
     status = str(status or "").strip().casefold()
     fmt = str(fmt or "").strip().casefold()
@@ -1772,6 +1899,7 @@ def query_history_entries(entries, *, query="", status="", fmt="",
         haystack = "\n".join((
             str(entry.get("title") or ""),
             str(entry.get("filename") or ""),
+            str(entry.get("url") or ""),
         )).casefold()
         if query and query not in haystack:
             continue
@@ -1794,7 +1922,7 @@ def query_history_entries(entries, *, query="", status="", fmt="",
     return {
         "history": page,
         "count": len(page),
-        "total": len(entries) if isinstance(entries, list) else 0,
+        "total": len(entries),
         "filteredTotal": filtered_total,
         "offset": offset,
         "limit": limit,
@@ -2075,13 +2203,14 @@ class HistoryStore:
     """Bounded history persistence with explicit serialization dependencies."""
 
     def __init__(self, *, path, sanitizer, loader, writer, logger, limit=500,
-                 undo_path=None):
+                 limit_reader=None, undo_path=None):
         self._path = path
         self._sanitizer = sanitizer
         self._loader = loader
         self._writer = writer
         self._logger = logger
         self._limit = max(1, int(limit))
+        self._limit_reader = limit_reader
         self._lock = threading.Lock()
         self._undo = DurableUndoStore(
             path=undo_path or (
@@ -2099,9 +2228,28 @@ class HistoryStore:
     def _resolve_path(self):
         return self._path() if callable(self._path) else self._path
 
+    def retention_limit(self):
+        """Return the current effective cap, including live config changes."""
+        value = self._limit
+        if callable(self._limit_reader):
+            try:
+                value = self._limit_reader()
+            except Exception as error:  # noqa: BLE001
+                self._logger(f"History retention setting could not be read: {error}")
+                value = self._limit
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError, OverflowError):
+            return self._limit
+
+    def _sanitize(self, data):
+        if self._limit_reader is not None:
+            return self._sanitizer(data, limit=self.retention_limit())
+        return self._sanitizer(data)
+
     def load(self):
         with self._lock:
-            return self._sanitizer(self._loader(self._resolve_path(), []))
+            return self._sanitize(self._loader(self._resolve_path(), []))
 
     def load_undo(self, key):
         return self._undo.get(key)
@@ -2114,9 +2262,9 @@ class HistoryStore:
 
     def add(self, entry):
         with self._lock:
-            data = self._sanitizer(self._loader(self._resolve_path(), []))
+            data = self._sanitize(self._loader(self._resolve_path(), []))
             data.append(entry)
-            return self._write_unlocked(data[-self._limit:])
+            return self._write_unlocked(data[-self.retention_limit():])
 
     def clear(self):
         with self._lock:
@@ -2132,7 +2280,7 @@ class HistoryStore:
 
     def _write_unlocked(self, data):
         try:
-            self._writer(self._resolve_path(), self._sanitizer(data))
+            self._writer(self._resolve_path(), self._sanitize(data)[-self.retention_limit():])
             return True
         except Exception as error:
             self._logger(f"History save failed: {error}")

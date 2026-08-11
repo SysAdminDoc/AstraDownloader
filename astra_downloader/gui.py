@@ -1194,6 +1194,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'APP_NAME',
     'APP_VERSION',
     'DEFAULT_CONFIG',
+    'HISTORY_RETENTION_DEFAULT',
+    'HISTORY_RETENTION_MIN',
+    'HISTORY_RETENTION_MAX',
     'DOWNLOAD_PENDING_STATES',
     'DOWNLOAD_RETRYABLE_ERROR_CODES',
     'DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES',
@@ -4346,6 +4349,32 @@ class MainWindowCore(QMainWindow):
         row2.addWidget(btn2)
         paths_l.addLayout(row2)
         paths_l.addWidget(make_divider())
+        retention_row = QHBoxLayout()
+        retention_copy = QVBoxLayout()
+        retention_copy.setSpacing(2)
+        retention_copy.addWidget(make_label("History retention", "fieldLabel"))
+        retention_copy.addWidget(make_label(
+            "Maximum number of download records to keep locally. Files are never deleted.",
+            "fieldHint", word_wrap=True,
+        ))
+        retention_row.addLayout(retention_copy, 1)
+        self.cfg_history_retention = QSpinBox()
+        self.cfg_history_retention.setAccessibleName(tr("History retention"))
+        self.cfg_history_retention.setRange(
+            self._value('HISTORY_RETENTION_MIN'),
+            self._value('HISTORY_RETENTION_MAX'),
+        )
+        self.cfg_history_retention.setSuffix(tr(" entries"))
+        self.cfg_history_retention.setValue(self._dependencies['clamp_int'](
+            self.config.get("HistoryRetentionLimit"),
+            self._value('HISTORY_RETENTION_DEFAULT'),
+            self._value('HISTORY_RETENTION_MIN'),
+            self._value('HISTORY_RETENTION_MAX'),
+        ))
+        self.cfg_history_retention.setFixedWidth(130)
+        retention_row.addWidget(self.cfg_history_retention)
+        paths_l.addLayout(retention_row)
+        paths_l.addWidget(make_divider())
         paths_l.addWidget(make_label("Filename template", "fieldLabel"))
         paths_l.addWidget(make_label(
             "Optional yt-dlp output template, relative to the folder above "
@@ -6220,6 +6249,16 @@ class MainWindowCore(QMainWindow):
         self._reconcile_download_list(active, pending, recent)
 
     def _history_query(self, *, entries=None, offset=None, limit=None):
+        archive_entries = None
+        manager = self._subscription_manager()
+        archive_reader = getattr(manager, "archive_entries", None) if manager else None
+        if callable(archive_reader):
+            try:
+                archive_entries = archive_reader()
+            except Exception:
+                # A broken subscription state must not turn an otherwise
+                # readable download history into an empty error page.
+                archive_entries = None
         return self._dependencies['query_history_entries'](
             self.history_mgr.load() if entries is None else entries,
             query=self.history_search.text(),
@@ -6230,6 +6269,22 @@ class MainWindowCore(QMainWindow):
             sort=self.history_sort.currentData() or "newest",
             offset=self._history_offset if offset is None else offset,
             limit=self._history_page_size if limit is None else limit,
+            archive_entries=archive_entries,
+        )
+
+    def _history_retention_limit(self):
+        reader = getattr(self.history_mgr, "retention_limit", None)
+        if callable(reader):
+            try:
+                return int(reader())
+            except (TypeError, ValueError, OverflowError):
+                # reason: a malformed live value falls back to the sanitized config below
+                pass
+        return self._dependencies['clamp_int'](
+            self.config.get("HistoryRetentionLimit"),
+            self._value('HISTORY_RETENTION_DEFAULT'),
+            self._value('HISTORY_RETENTION_MIN'),
+            self._value('HISTORY_RETENTION_MAX'),
         )
 
     def _history_is_quarantined(self):
@@ -6280,6 +6335,7 @@ class MainWindowCore(QMainWindow):
         ("cfg_site_profiles", "SiteProfiles", "text"),
         ("cfg_dl_path", "DownloadPath", "text"),
         ("cfg_audio_path", "AudioDownloadPath", "text"),
+        ("cfg_history_retention", "HistoryRetentionLimit", "number"),
         ("cfg_outtmpl", "OutputTemplate", "text"),
         ("cfg_windows_filenames", "WindowsFilenames", "check"),
         ("cfg_sublangs", "SubLangs", "text"),
@@ -7008,25 +7064,28 @@ class MainWindowCore(QMainWindow):
         rows = result["history"]
         start = result["offset"] + 1 if rows else 0
         end = result["offset"] + len(rows)
+        retention_limit = self._history_retention_limit()
         self.history_meta.setText(
             tr_format(
-                "{start}–{end} of {filtered} filtered · {total} retained",
+                "{start}–{end} of {filtered} filtered · {total} retained · limit {limit}",
                 start=start,
                 end=end,
                 filtered=filtered_total,
                 total=result["total"],
+                limit=retention_limit,
             )
             if rows else
             tr_format(
-                "0 of {filtered} filtered · {total} retained",
+                "0 of {filtered} filtered · {total} retained · limit {limit}",
                 filtered=filtered_total,
                 total=result["total"],
+                limit=retention_limit,
             )
         )
         self.btn_history_prev.setEnabled(result["offset"] > 0)
         self.btn_history_next.setEnabled(result["hasMore"])
         self.btn_export_history.setEnabled(filtered_total > 0)
-        if not data:
+        if not data and result["total"] == 0:
             self.history_container.addWidget(make_empty_state(
                 "No downloads yet",
                 "Completed downloads will appear here.",
@@ -7058,6 +7117,8 @@ class MainWindowCore(QMainWindow):
             file_copy.addWidget(
                 make_state_label(human_status(status), download_status_tone(status))
             )
+            if h.get("source") == "subscription":
+                file_copy.addWidget(make_label(tr("Subscription archive"), "fieldHint"))
             if h.get("error"):
                 file_copy.addWidget(
                     make_label(str(h["error"]), "errorCallout", word_wrap=True)
@@ -7713,6 +7774,9 @@ class MainWindowCore(QMainWindow):
             "ServerToken": new_token,
             "DownloadPath": dl_path,
             "AudioDownloadPath": audio_path,
+            "HistoryRetentionLimit": numeric_setting(
+                "cfg_history_retention", "HistoryRetentionLimit"
+            ),
             "OutputTemplate": outtmpl,
             "WindowsFilenames": checked_setting(
                 "cfg_windows_filenames", "WindowsFilenames"

@@ -1155,6 +1155,18 @@
       <translation>Same as video folder</translation>
     </message>
     <message>
+      <source>History retention</source>
+      <translation>History retention</translation>
+    </message>
+    <message>
+      <source>Maximum number of download records to keep locally. Files are never deleted.</source>
+      <translation>Maximum number of download records to keep locally. Files are never deleted.</translation>
+    </message>
+    <message>
+      <source> entries</source>
+      <translation> entries</translation>
+    </message>
+    <message>
       <source>Filename template</source>
       <translation>Filename template</translation>
     </message>
@@ -2159,12 +2171,12 @@
       <translation>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</translation>
     </message>
     <message>
-      <source>{start}–{end} of {filtered} filtered · {total} retained</source>
-      <translation>{start}–{end} of {filtered} filtered · {total} retained</translation>
+      <source>{start}–{end} of {filtered} filtered · {total} retained · limit {limit}</source>
+      <translation>{start}–{end} of {filtered} filtered · {total} retained · limit {limit}</translation>
     </message>
     <message>
-      <source>0 of {filtered} filtered · {total} retained</source>
-      <translation>0 of {filtered} filtered · {total} retained</translation>
+      <source>0 of {filtered} filtered · {total} retained · limit {limit}</source>
+      <translation>0 of {filtered} filtered · {total} retained · limit {limit}</translation>
     </message>
     <message>
       <source>No downloads yet</source>
@@ -2617,6 +2629,10 @@
     <message>
       <source>Could not read download history: {error}</source>
       <translation>Could not read download history: {error}</translation>
+    </message>
+    <message>
+      <source>Subscription archive</source>
+      <translation>Subscription archive</translation>
     </message>
     <message>
       <source>No current message</source>
