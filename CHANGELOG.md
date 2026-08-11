@@ -14,6 +14,10 @@ repository's git log.
 
 ### Fixed
 
+- **The companion now follows light and dark system themes.** The new Theme
+  setting supports system, light, and dark modes; native title bars, controls,
+  inline status colors, generated icons, and the hidden render harness all
+  track the selected scheme.
 - **Undo snapshots survive restarts.** History clears, sign-in and subscription
   removals, settings imports, and Restore defaults now persist adjacent recovery
   journals; the companion restores their affordances on launch and cleans up

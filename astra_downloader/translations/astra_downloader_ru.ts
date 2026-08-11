@@ -1247,6 +1247,26 @@
       <translation>Stable</translation>
     </message>
     <message>
+      <source>Theme</source>
+      <translation>Theme</translation>
+    </message>
+    <message>
+      <source>System default</source>
+      <translation>System default</translation>
+    </message>
+    <message>
+      <source>Dark</source>
+      <translation>Dark</translation>
+    </message>
+    <message>
+      <source>Light</source>
+      <translation>Light</translation>
+    </message>
+    <message>
+      <source>System default follows the operating system appearance.</source>
+      <translation>System default follows the operating system appearance.</translation>
+    </message>
+    <message>
       <source>Companion language</source>
       <translation>Companion language</translation>
     </message>

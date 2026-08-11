@@ -180,7 +180,8 @@ try:
         SetupWorkerCore,
         download_status_tone, format_duration, human_status, make_card,
         make_divider, make_empty_state, make_label, make_line_icon,
-        make_section_label, make_stat, make_status_badge, repolish,
+        make_section_label, make_stat, make_status_badge, refresh_line_icons,
+        set_gui_theme, set_line_icon, repolish,
     )
 except ImportError:  # Direct script / flat source-path compatibility.
     from routes import (
@@ -307,7 +308,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         SetupWorkerCore,
         download_status_tone, format_duration, human_status, make_card,
         make_divider, make_empty_state, make_label, make_line_icon,
-        make_section_label, make_stat, make_status_badge, repolish,
+        make_section_label, make_stat, make_status_badge, refresh_line_icons,
+        set_gui_theme, set_line_icon, repolish,
     )
 
 # ══════════════════════════════════════════════════════════════
@@ -3698,6 +3700,25 @@ QMainWindow, QWidget {
     font-size: 13px;
 }
 QLabel { color: #f2f0ed; background: transparent; }
+QLabel[class="brandFallback"] {
+    background: #ff6552;
+    color: #170806;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: 800;
+}
+QLabel[class="brandTitle"] {
+    color: #fff8f4;
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: .35px;
+}
+QLabel[class="brandVersion"] { color: #8d97a4; font-size: 11px; }
+QLabel[class="settingsStatus"] { font-size: 12px; }
+QLabel[class="settingsStatus"][tone="neutral"] { color: #9ca5b0; }
+QLabel[class="settingsStatus"][tone="success"] { color: #75dcb1; }
+QLabel[class="settingsStatus"][tone="warning"] { color: #edbd76; }
+QLabel[class="settingsStatus"][tone="danger"] { color: #ff8d82; }
 QLabel[class="title"] { font-size: 28px; font-weight: 700; color: #fbf8f5; }
 QLabel[class="subtitle"] { color: #9da6b2; font-size: 13px; }
 QLabel[class="muted"] { color: #8d97a4; }
@@ -3909,6 +3930,180 @@ QMenu::item { padding: 7px 22px 7px 10px; border-radius: 4px; }
 QMenu::item:selected { background: #242b35; }
 QToolTip { background: #11161d; color: #f0eeeb; border: 1px solid #607080; padding: 6px 8px; }
 """
+
+# Qt stylesheets do not have variables. Keeping the authored dark sheet as
+# the source of truth and deriving its light counterpart from a complete
+# token map prevents one-off controls from quietly retaining the old dark
+# surface when the user changes schemes.
+_LIGHT_THEME_COLOR_REPLACEMENTS = {
+    "#080b0f": "#e8edf3",
+    "#0a0d12": "#f6f8fb",
+    "#0d1218": "#ffffff",
+    "#0e1319": "#eef2f6",
+    "#11161d": "#ffffff",
+    "#151113": "#fff0ee",
+    "#151a21": "#e9eef4",
+    "#151b22": "#e6ebf1",
+    "#151b23": "#f2f5f8",
+    "#170806": "#2c0d08",
+    "#171d25": "#edf1f5",
+    "#1a1214": "#fff1ef",
+    "#1c1315": "#fff1ef",
+    "#202630": "#dce5ee",
+    "#242b35": "#d2dce6",
+    "#252c35": "#cbd5df",
+    "#252d37": "#d2dce6",
+    "#29313b": "#c2ccd6",
+    "#2a323c": "#cbd5df",
+    "#2b333d": "#c5d0da",
+    "#394350": "#718092",
+    "#3f8b70": "#2f8a68",
+    "#55d69f": "#087f55",
+    "#606a77": "#697785",
+    "#607080": "#738294",
+    "#687381": "#697785",
+    "#697482": "#526272",
+    "#718092": "#526272",
+    "#747f8d": "#5c6c7b",
+    "#75dcb1": "#087f55",
+    "#788391": "#5c6c7b",
+    "#85bee8": "#1769aa",
+    "#8d97a4": "#536273",
+    "#98a1ad": "#536273",
+    "#9ca5b0": "#536273",
+    "#9da6b2": "#445466",
+    "#a6afba": "#445466",
+    "#aab2bd": "#445466",
+    "#aeb6c1": "#445466",
+    "#b4bcc6": "#445466",
+    "#b65a53": "#a83930",
+    "#b8c0ca": "#344251",
+    "#c5cbd3": "#344251",
+    "#c9675f": "#a83930",
+    "#d7dce2": "#253343",
+    "#d8dde3": "#253343",
+    "#d9dde2": "#253343",
+    "#edbd76": "#8a5700",
+    "#ef9b93": "#a83930",
+    "#f0eeeb": "#18212b",
+    "#f1b45e": "#8a5700",
+    "#f1eeea": "#18212b",
+    "#f2f0ed": "#18212b",
+    "#f4f1ee": "#18212b",
+    "#f8f5f1": "#18212b",
+    "#faf7f3": "#18212b",
+    "#fbf8f5": "#18212b",
+    "#ff6552": "#d94c3b",
+    "#ff6a57": "#c43f2e",
+    "#ff7568": "#b52f25",
+    "#ff7664": "#a83b30",
+    "#ff7867": "#e05b49",
+    "#ff8d82": "#b52f25",
+    "#ffb2a5": "#8f251e",
+    "#ffb7b0": "#a83930",
+    "#fff8f4": "#18212b",
+    "#fffaf6": "#18212b",
+}
+LIGHT_STYLESHEET = STYLESHEET
+for _dark_colour, _light_colour in _LIGHT_THEME_COLOR_REPLACEMENTS.items():
+    LIGHT_STYLESHEET = LIGHT_STYLESHEET.replace(_dark_colour, _light_colour)
+
+
+def stylesheet_for_theme(theme):
+    """Return the authored stylesheet for an already-resolved scheme."""
+    return LIGHT_STYLESHEET if str(theme or "").strip().lower() == "light" else STYLESHEET
+
+
+def resolve_theme(theme="system", color_scheme=None):
+    """Resolve a stored theme preference to ``light`` or ``dark``."""
+    normalized = str(theme or "system").strip().lower()
+    if normalized in {"light", "dark"}:
+        return normalized
+    if color_scheme is None:
+        application = QApplication.instance()
+        if application is not None:
+            try:
+                color_scheme = QApplication.styleHints().colorScheme()
+            except Exception:
+                color_scheme = None
+    schemes = getattr(Qt, "ColorScheme", None)
+    if schemes is not None and color_scheme == getattr(schemes, "Light", object()):
+        return "light"
+    return "dark"
+
+
+def set_window_title_bar_theme(window, theme):
+    """Ask Windows' DWM to use the same scheme as the client area."""
+    if window is None or os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        value = ctypes.c_int(1 if str(theme).strip().lower() == "dark" else 0)
+        hwnd = int(window.winId())
+        dwm = ctypes.windll.dwmapi
+        # Attribute 20 is the current name; 19 is used by older Windows 10
+        # builds. Trying both keeps packaged installs aligned across systems.
+        for attribute in (20, 19):
+            result = dwm.DwmSetWindowAttribute(
+                hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)
+            )
+            if result == 0:
+                return True
+    except Exception:
+        # The title bar is cosmetic and DWM is unavailable on non-Desktop
+        # Windows hosts. The stylesheet remains the reliable fallback.
+        return False
+    return False
+
+
+def apply_application_theme(theme="system", *, windows=None):
+    """Apply a stored theme preference to the live Qt application."""
+    application = QApplication.instance()
+    normalized = str(theme or "system").strip().lower()
+    if normalized not in {"system", "light", "dark"}:
+        normalized = "system"
+    if application is None:
+        return resolve_theme(normalized, color_scheme=Qt.ColorScheme.Dark)
+
+    if getattr(application, "_astra_theme_applying", False):
+        return resolve_theme(normalized)
+    application._astra_theme_applying = True
+    application._astra_theme_setting = normalized
+    try:
+        hints = QApplication.styleHints()
+        if not getattr(application, "_astra_system_theme_connected", False):
+            signal = getattr(hints, "colorSchemeChanged", None)
+            if signal is not None:
+                def _system_theme_changed(*_args):
+                    if getattr(application, "_astra_theme_setting", "system") == "system":
+                        apply_application_theme("system")
+                try:
+                    signal.connect(_system_theme_changed)
+                    application._astra_system_theme_connected = True
+                except Exception:
+                    # Older Qt builds expose no connectable color-scheme
+                    # signal; startup resolution still works there.
+                    # reason: the stylesheet can still resolve the initial scheme
+                    pass
+        set_scheme = getattr(hints, "setColorScheme", None)
+        unset_scheme = getattr(hints, "unsetColorScheme", None)
+        schemes = getattr(Qt, "ColorScheme", None)
+        if normalized == "system":
+            if callable(unset_scheme):
+                unset_scheme()
+        elif callable(set_scheme) and schemes is not None:
+            set_scheme(getattr(schemes, normalized.capitalize()))
+        resolved = resolve_theme(normalized)
+        application.setStyleSheet(stylesheet_for_theme(resolved))
+        set_gui_theme(resolved)
+        refresh_line_icons(application)
+        targets = list(windows) if windows is not None else application.topLevelWidgets()
+        for window in targets:
+            set_window_title_bar_theme(window, resolved)
+        return resolved
+    finally:
+        application._astra_theme_applying = False
 
 # ══════════════════════════════════════════════════════════════
 # CONFIG
@@ -4571,6 +4766,7 @@ class MainWindow(MainWindowCore):
                 'reset_ffmpeg_capabilities_cache': lambda *args, **kwargs: reset_ffmpeg_capabilities_cache(*args, **kwargs),
                 'subscription_manager': subscriptions,
                 'write_persistent_log': lambda *args, **kwargs: write_persistent_log(*args, **kwargs),
+                'apply_theme': lambda theme: apply_application_theme(theme),
             },
         )
 
@@ -5121,7 +5317,6 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setFont(QFont("Segoe UI", 9))
-    app.setStyleSheet(STYLESHEET)
     if ICON_PATH.exists():
         app.setWindowIcon(QIcon(str(ICON_PATH)))
 
@@ -5134,6 +5329,7 @@ def main():
         write_persistent_log(
             "Could not persist the first-run marker; onboarding will remain visible this session."
         )
+    apply_application_theme(config.get("Theme", "system"))
     first_run = first_launch or not bool(
         config.get("FirstRunComplete", True)
     )
@@ -5173,6 +5369,9 @@ def main():
         subscriptions=subscriptions,
         first_run=first_run,
     )
+    # The application palette is selected before construction; apply the DWM
+    # title-bar attribute again now that the top-level window has a handle.
+    apply_application_theme(config.get("Theme", "system"), windows=(window,))
     # An exception escaping a slot used to abort the process with nothing
     # written anywhere. Route it to the crash log and to the window's log
     # panel, which is where a user already looks when something misbehaves.

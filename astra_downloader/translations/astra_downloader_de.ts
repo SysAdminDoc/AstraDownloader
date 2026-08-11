@@ -1247,6 +1247,26 @@
       <translation>Stabil</translation>
     </message>
     <message>
+      <source>Theme</source>
+      <translation>Erscheinungsbild</translation>
+    </message>
+    <message>
+      <source>System default</source>
+      <translation>Systemstandard</translation>
+    </message>
+    <message>
+      <source>Dark</source>
+      <translation>Dunkel</translation>
+    </message>
+    <message>
+      <source>Light</source>
+      <translation>Hell</translation>
+    </message>
+    <message>
+      <source>System default follows the operating system appearance.</source>
+      <translation>Der Systemstandard folgt dem Erscheinungsbild des Betriebssystems.</translation>
+    </message>
+    <message>
       <source>Companion language</source>
       <translation>Sprache der Anwendung</translation>
     </message>

@@ -133,6 +133,10 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(cfg["SubLangs"], "en,esbad")
         self.assertGreaterEqual(len(cfg["ServerToken"]), 16)
 
+        self.assertEqual(cfg["Theme"], "system")
+        self.assertEqual(ad.sanitize_config({"Theme": "LIGHT"})["Theme"], "light")
+        self.assertEqual(ad.sanitize_config({"Theme": "neon"})["Theme"], "system")
+
         node_cfg = ad.sanitize_config({"JavaScriptRuntime": "NODE"})
         self.assertEqual(node_cfg["JavaScriptRuntime"], "node")
         jitter_cfg = ad.sanitize_config({"PacingJitterPercent": 999})
@@ -2139,7 +2143,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn("btn.setCheckable(True)", source)
         self.assertIn("btn.setAutoExclusive(True)", source)
         self.assertIn('self._show_settings_status("Unsaved changes", "warning")', source)
-        self.assertIn('make_line_icon("Download" if "Queue" in title else "History", size=36)', gui_source)
+        self.assertIn('set_line_icon(glyph, "Download" if "Queue" in title else "History", size=36)', gui_source)
         self.assertIn('QFrame[class="settingsGroup"]', ad.STYLESHEET)
         self.assertIn('QLabel[class="stateLabel"]', ad.STYLESHEET)
         self.assertIn("window.grab().toImage()", renderer_source)
@@ -2211,6 +2215,28 @@ class CompanionGuiPolicyTests(unittest.TestCase):
 
         for color in colors.values():
             self.assertIn(color, ad.STYLESHEET)
+
+    def test_companion_theme_switch_resolves_palette_and_icon_scheme(self):
+        from PyQt6.QtCore import Qt
+        import gui as gui_module
+
+        self.assertEqual(ad.resolve_theme("system", Qt.ColorScheme.Light), "light")
+        self.assertEqual(ad.resolve_theme("system", Qt.ColorScheme.Dark), "dark")
+        self.assertEqual(ad.stylesheet_for_theme("dark"), ad.STYLESHEET)
+        self.assertIn("#f6f8fb", ad.LIGHT_STYLESHEET)
+        self.assertNotIn("#0a0d12", ad.LIGHT_STYLESHEET)
+        self.assertIn("#445466", ad.LIGHT_STYLESHEET)
+
+        original = gui_module._ICON_THEME
+        try:
+            gui_module.set_gui_theme("light")
+            self.assertEqual(gui_module._ICON_THEME, "light")
+            self.assertEqual(
+                gui_module.GUI_ACCESSIBILITY_COLORS["surface"],
+                "#f6f8fb",
+            )
+        finally:
+            gui_module.set_gui_theme(original)
 
     def test_failed_settings_write_keeps_server_running_and_form_dirty(self):
         class TextField:

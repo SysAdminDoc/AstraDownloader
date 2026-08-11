@@ -128,6 +128,16 @@ CATALOGS = {
             "Keine Einstellungen entsprechen dieser Suche.",
         "Language":
             "Sprache",
+        "Theme":
+            "Erscheinungsbild",
+        "System default":
+            "Systemstandard",
+        "Dark":
+            "Dunkel",
+        "Light":
+            "Hell",
+        "System default follows the operating system appearance.":
+            "Der Systemstandard folgt dem Erscheinungsbild des Betriebssystems.",
         "Language changes apply after restarting Astra Downloader.":
             "Sprachänderungen werden nach einem Neustart von Astra Downloader angewendet.",
         "Import and export":
