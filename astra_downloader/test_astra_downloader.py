@@ -2063,6 +2063,14 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertEqual(i18n_module.normalize_companion_locale("de-DE"), "de")
         self.assertEqual(i18n_module.normalize_companion_locale("pt-BR"), "pt_BR")
         self.assertEqual(i18n_module.normalize_companion_locale("xx-YY"), "en")
+        self.assertEqual(
+            i18n_module.normalize_companion_locale("system", "fr-FR"),
+            "en",
+        )
+        self.assertEqual(
+            i18n_module.normalize_companion_locale("system", "de-DE"),
+            "de",
+        )
 
         translator = QTranslator()
         catalog = (
@@ -2073,6 +2081,18 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertEqual(
             translator.translate("AstraDownloader", "Browser extension"),
             "Browser-Erweiterung",
+        )
+
+    def test_language_picker_advertises_only_locales_above_translation_floor(self):
+        import i18n as i18n_module
+
+        self.assertEqual(i18n_module.ADVERTISED_LOCALES, ("de", "en"))
+        self.assertGreaterEqual(
+            i18n_module.COMPANION_LOCALE_MIN_COVERAGE, 0.8
+        )
+        self.assertTrue(
+            set(i18n_module.ADVERTISED_LOCALES)
+            <= set(i18n_module.SUPPORTED_LOCALES)
         )
 
     def test_companion_build_packages_qm_catalogues_and_gui_uses_translation(self):
@@ -13344,6 +13364,46 @@ class TranslationCoverageTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def _checker(self):
+        import importlib.util
+        root = Path(ad.__file__).parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "check_companion_translations",
+            root / "scripts" / "check-companion-translations.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_advertised_locales_clear_the_non_fallback_translation_floor(self):
+        import i18n as i18n_module
+
+        checker = self._checker()
+        self.assertEqual(
+            checker.ADVERTISED_LOCALES,
+            i18n_module.ADVERTISED_LOCALES,
+        )
+        self.assertEqual(
+            checker.COMPANION_LOCALE_MIN_COVERAGE,
+            i18n_module.COMPANION_LOCALE_MIN_COVERAGE,
+        )
+        expected = set(self._builder().SOURCE_STRINGS)
+        for locale in i18n_module.ADVERTISED_LOCALES:
+            if locale == "en":
+                continue
+            translated, total = checker.translated_coverage(
+                Path(ad.__file__).parents[1]
+                / "astra_downloader"
+                / "translations"
+                / f"astra_downloader_{locale}.ts",
+                expected,
+            )
+            self.assertGreaterEqual(
+                translated / total,
+                i18n_module.COMPANION_LOCALE_MIN_COVERAGE,
+                f"{locale} is below the picker floor",
+            )
+
     def test_german_is_complete(self):
         # The one locale the product actually ships. If it regresses, the
         # German smoke scenario is asserting against a catalogue that lost
@@ -16167,6 +16227,16 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.cfg_language.isHidden())
         self.assertFalse(groups["Language"].isHidden())
         self.assertTrue(groups["Tray behavior"].isHidden())
+
+    def test_language_picker_hides_partial_catalogues(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+
+        self.assertEqual(
+            [window.cfg_language.itemData(index)
+             for index in range(window.cfg_language.count())],
+            ["system", "de", "en"],
+        )
 
     def test_live_wait_setting_is_labeled_as_a_retry_interval(self):
         from PyQt6.QtWidgets import QApplication, QLabel

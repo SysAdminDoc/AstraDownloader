@@ -21,11 +21,19 @@ SUPPORTED_LOCALES = (
     "zh_CN",
 )
 
+# Catalogues below this floor remain shipped so an older configuration can
+# still load its requested locale, but they are not presented as finished
+# choices to new users. English is the reference locale and therefore does
+# not need a translated catalogue to qualify.
+COMPANION_LOCALE_MIN_COVERAGE = 0.80
+ADVERTISED_LOCALES = ("de", "en")
+
 
 def normalize_companion_locale(value, system_locale=None):
     """Resolve a configured/system locale onto a bundled catalogue."""
     requested = str(value or "system").strip().replace("-", "_")
-    if requested.lower() == "system":
+    follows_system = requested.lower() == "system"
+    if follows_system:
         requested = str(
             system_locale
             or os.environ.get("ASTRA_COMPANION_LANGUAGE")
@@ -36,9 +44,9 @@ def normalize_companion_locale(value, system_locale=None):
         None,
     )
     if exact:
-        return exact
+        return exact if not follows_system or exact in ADVERTISED_LOCALES else "en"
     language = requested.split("_", 1)[0].lower()
-    return next(
+    resolved = next(
         (
             locale
             for locale in SUPPORTED_LOCALES
@@ -46,6 +54,7 @@ def normalize_companion_locale(value, system_locale=None):
         ),
         "en",
     )
+    return resolved if not follows_system or resolved in ADVERTISED_LOCALES else "en"
 
 
 def companion_translations_dir():
@@ -77,6 +86,8 @@ def install_companion_translator(app, configured_locale="system"):
 
 __all__ = (
     "SUPPORTED_LOCALES",
+    "COMPANION_LOCALE_MIN_COVERAGE",
+    "ADVERTISED_LOCALES",
     "companion_translations_dir",
     "install_companion_translator",
     "normalize_companion_locale",
