@@ -5842,7 +5842,7 @@ else:
             self.assertEqual(probe.get(force=True), "1.2.3")
             self.assertEqual(len(calls), 2)
 
-    def test_health_version_probe_does_not_hold_cache_lock_during_runner(self):
+    def test_health_version_probe_coalesces_concurrent_runner_calls(self):
         import health
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -5853,6 +5853,7 @@ else:
             second_finished = threading.Event()
             call_lock = threading.Lock()
             call_count = 0
+            results = []
 
             def run(_args):
                 nonlocal call_count
@@ -5872,24 +5873,52 @@ else:
                 clock=lambda: 100.0,
                 ttl_seconds=60,
             )
-            first = threading.Thread(target=probe.get, daemon=True)
+            first = threading.Thread(
+                target=lambda: results.append(probe.get()), daemon=True
+            )
             second = threading.Thread(
-                target=lambda: (probe.get(), second_finished.set()),
+                target=lambda: (results.append(probe.get()), second_finished.set()),
                 daemon=True,
             )
             first.start()
             self.assertTrue(first_started.wait(timeout=1))
             second.start()
-            self.assertTrue(
-                second_finished.wait(timeout=1),
-                "a second version probe must not wait on the first subprocess",
+            self.assertFalse(
+                second_finished.wait(timeout=0.1),
+                "a concurrent cache miss must wait on the in-flight probe",
             )
             release_first.set()
             first.join(timeout=2)
             second.join(timeout=2)
             self.assertFalse(first.is_alive())
             self.assertFalse(second.is_alive())
-            self.assertGreaterEqual(call_count, 2)
+            self.assertEqual(call_count, 1)
+            self.assertEqual(results, ["1.2.3", "1.2.3"])
+
+    def test_health_version_probe_caches_negative_results_for_the_ttl(self):
+        import health
+
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "tool.exe"
+            executable.touch()
+            calls = []
+            current_time = [100.0]
+            probe = health.ExecutableVersionProbe(
+                path=executable,
+                args=("--version",),
+                parser=lambda _output: None,
+                runner=lambda args: calls.append(args) or "",
+                clock=lambda: current_time[0],
+                ttl_seconds=60,
+            )
+
+            self.assertIsNone(probe.get())
+            current_time[0] += 30
+            self.assertIsNone(probe.get())
+            self.assertEqual(len(calls), 1)
+            current_time[0] += 31
+            self.assertIsNone(probe.get())
+            self.assertEqual(len(calls), 2)
 
     def test_ffmpeg_capability_probe_uses_injected_floor_and_cache(self):
         import health
@@ -6744,6 +6773,25 @@ class ApiRateLimitTests(unittest.TestCase):
                 break
         self.assertTrue(saw_429, "rate limiter should reject eventually")
 
+    def test_health_endpoint_returns_429_after_burst(self):
+        config = FakeConfig({"ServerToken": "f" * 32})
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        client = api.test_client()
+        with mock.patch.object(ad, "probe_javascript_runtime", return_value={}), \
+                mock.patch.object(ad, "get_ytdlp_version", return_value=None), \
+                mock.patch.object(ad, "get_ffmpeg_version", return_value=None), \
+                mock.patch.object(ad, "check_ffmpeg_capabilities", return_value={}), \
+                mock.patch.object(ad, "probe_po_token_provider", return_value=None):
+            responses = [
+                client.get("/health", headers={"X-MDL-Client": "MediaDL"})
+                for _ in range(ad.RATE_LIMIT_HEALTH_MAX + 1)
+            ]
+
+        limited = next((response for response in responses if response.status_code == 429), None)
+        self.assertIsNotNone(limited, "health rate limiter should reject eventually")
+        self.assertIn("Retry-After", limited.headers)
+
 
 class CorsHeaderTests(unittest.TestCase):
     def test_response_advertises_max_age(self):
@@ -6828,6 +6876,8 @@ class HealthAdditionsTests(unittest.TestCase):
         self.assertIn("rateLimit", body)
         self.assertEqual(body["rateLimit"]["downloadMaxPerWindow"], ad.RATE_LIMIT_DOWNLOAD_MAX)
         self.assertEqual(body["rateLimit"]["downloadWindowSeconds"], ad.RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS)
+        self.assertEqual(body["rateLimit"]["healthMaxPerWindow"], ad.RATE_LIMIT_HEALTH_MAX)
+        self.assertEqual(body["rateLimit"]["healthWindowSeconds"], ad.RATE_LIMIT_HEALTH_WINDOW_SECONDS)
         # ytDlpVersion / ffmpegVersion are present but may be None in CI; the
         # wire contract is "key exists, value is string or null" — assert both.
         self.assertIn("ytDlpVersion", body)
