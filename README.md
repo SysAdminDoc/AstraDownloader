@@ -28,6 +28,8 @@ pasting a link never needs it.
   really has, so the quality list stops offering 2160p on a 720p video.
 - **Bound a playlist.** Cap how many items a pasted playlist queues, and
   filter it by upload date or item duration.
+- **Name the file.** Give a single download a name in the paste area and it is
+  saved under that name; leave it empty and the video title is used as before.
 - **Clip a range.** Give a start and end timestamp for an accurate ffmpeg-cut
   section, or use **From link** for a pasted `?t=` timestamp and **Last 30 s**
   for a yt-dlp-native tail clip.

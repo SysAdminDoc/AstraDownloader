@@ -257,6 +257,31 @@ class DownloadPageMixin:
         clip_row.addWidget(self.btn_quick_clip_last_30)
         clip_row.addStretch(1)
         options_layout.addWidget(clip_row_widget)
+
+        # Its own row rather than an extra field on the clip row: a QLineEdit
+        # with a label enforces its text as a minimum width, and the last time
+        # a control joined an existing single-line row the 900x620 layout
+        # regressed into overlapping, truncated controls.
+        name_row_widget = QWidget(self.quick_download_options_container)
+        name_row = QHBoxLayout(name_row_widget)
+        name_row.setContentsMargins(0, 0, 0, 0)
+        name_row.setSpacing(8)
+        name_row.addWidget(make_label("Save as", "fieldHint"))
+        self.quick_download_name = QLineEdit()
+        self.quick_download_name.setAccessibleName(tr("Output file name"))
+        self.quick_download_name.setPlaceholderText(tr("Leave empty to use the video title"))
+        self.quick_download_name.setToolTip(tr(
+            "Name the saved file. The extension is added for you. "
+            "Applies to a single link."
+        ))
+        self.quick_download_name.textChanged.connect(self._sync_quick_download_name_hint)
+        name_row.addWidget(self.quick_download_name, 1)
+        options_layout.addWidget(name_row_widget)
+        self.quick_download_name_hint = make_label("", "fieldHint", word_wrap=True)
+        self.quick_download_name_hint.setAccessibleName(tr("Output file name status"))
+        self.quick_download_name_hint.hide()
+        options_layout.addWidget(self.quick_download_name_hint)
+
         quick_layout.addWidget(self.quick_download_options_container)
         self.quick_download_clip_hint = make_label(
             tr("Clip ranges apply to a single link."), "fieldHint",

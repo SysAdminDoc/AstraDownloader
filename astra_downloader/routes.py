@@ -676,6 +676,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             quality=body.get('quality', 'best'),
             output_dir=body.get('outputDir'),
             title=body.get('title'),
+            output_name=body.get('outputName'),
             referer=body.get('referer'),
             cookies=cookies,
             section=body.get('section'),

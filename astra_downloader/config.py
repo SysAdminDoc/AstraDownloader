@@ -39,7 +39,8 @@ __all__ = (
     "RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", "MAX_REQUEST_BYTES",
     "MAX_RESPONSE_BYTES", "HELPER_DOWNLOAD_MAX_BYTES", "sanitize_config",
     "normalize_url", "normalize_output_dir", "normalize_download_section",
-    "normalize_playlist_items",
+    "normalize_playlist_items", "normalize_output_name",
+    "MAX_OUTPUT_NAME_LENGTH",
     "media_url_block_reason", "is_supported_media_url",
     "describe_media_url_block", "looks_like_media_link",
     "MEDIA_URL_BLOCK_MESSAGES", "MEDIA_HOST_HINTS",
@@ -82,7 +83,8 @@ _OWNED_EXPORTS = {
     "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
     "SETTINGS_BUNDLE_SCHEMA", "SETTINGS_BUNDLE_VERSION", "BUNDLE_EXCLUDED_SETTINGS",
     "bound_output_template_fields",
-    "normalize_output_template",
+    "normalize_output_template", "normalize_output_name",
+    "MAX_OUTPUT_NAME_LENGTH",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
     "media_url_block_reason", "is_supported_media_url",
     "describe_media_url_block", "looks_like_media_link",
@@ -117,6 +119,7 @@ HISTORY_RETENTION_MAX = 100000
 DOWNLOAD_REQUEST_ALLOWED_FIELDS = frozenset({
     "url", "audioOnly", "format", "quality", "outputDir", "title",
     "referer", "cookies", "section", "playlistItems", "videoPassword",
+    "outputName",
 })
 _MAX_VIDEO_PASSWORD_BYTES = 4096
 DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS = frozenset({
@@ -848,6 +851,53 @@ def normalize_output_template(value):
     if "%" in stripped:
         return ""
     return bound_output_template_fields(norm)
+
+
+MAX_OUTPUT_NAME_LENGTH = 180
+
+
+def normalize_output_name(value):
+    """Return a safe single-file output stem, or "" when empty/invalid.
+
+    This is a *name*, never a template and never a path: the whole point is
+    that a user can say "call this file X" for one download without learning
+    yt-dlp's template language. So every path-ish construct is rejected rather
+    than sanitized, because silently rewriting `../../evil` into `evil` teaches
+    the caller that traversal was accepted.
+
+    Open Video Downloader shipped a path-traversal fix in v3.1.2 for exactly
+    this feature. A title is attacker-influenced whenever the name is derived
+    from remote metadata or posted through the loopback API, so the rules here
+    are deliberately stricter than the Windows filesystem requires: no
+    separators, no drive letters, no `..`, no yt-dlp field syntax (a `%` would
+    make the stem a template again), no control characters, and no Windows
+    reserved device name. `_run_download` additionally proves the resolved
+    path stays inside the output directory before it is used.
+    """
+    # Checked before clean_text, which strips control characters: a name
+    # carrying one was built by something other than a person typing, and
+    # quietly deleting the byte would hand that caller a usable name back.
+    if re.search(r"[\x00-\x1f]", str(value or "")):
+        return ""
+    name = clean_text(value, "", MAX_OUTPUT_NAME_LENGTH).strip()
+    if not name:
+        return ""
+    if "/" in name or "\\" in name or re.match(r"^[A-Za-z]:", name):
+        return ""
+    if name in {".", ".."} or ".." in name:
+        return ""
+    if "%" in name:
+        return ""
+    if re.search(r"[<>:\"|?*\x00-\x1f]", name):
+        return ""
+    # Windows silently drops a trailing dot or space, so a name that is only
+    # those characters resolves to nothing at all.
+    trimmed = name.rstrip(" .")
+    if not trimmed:
+        return ""
+    if _windows_reserved_output_component(trimmed):
+        return ""
+    return trimmed
 
 
 WINDOWS_MAX_PATH = 260

@@ -790,6 +790,25 @@ CATALOGS = {
             "Startzeit des Clips",
         "Clip end timestamp":
             "Endzeit des Clips",
+        "Output file name":
+            "Name der Ausgabedatei",
+        "Output file name status":
+            "Status des Ausgabedateinamens",
+        "Leave empty to use the video title":
+            "Leer lassen, um den Videotitel zu verwenden",
+        "Name the saved file. The extension is added for you. Applies to a single link.":
+            "Benennt die gespeicherte Datei. Die Dateiendung wird automatisch "
+            "ergänzt. Gilt für einen einzelnen Link.",
+        "A saved file name applies to a single link only.":
+            "Ein gespeicherter Dateiname gilt nur für einen einzelnen Link.",
+        "Saves as {name}.<ext>":
+            "Wird als {name}.<ext> gespeichert",
+        "Trimmed to {name}.<ext>":
+            "Gekürzt auf {name}.<ext>",
+        "That name cannot be used. Remove any folder separators, drive letters, %, or reserved device names such as CON.":
+            "Dieser Name kann nicht verwendet werden. Entfernen Sie "
+            "Ordnertrennzeichen, Laufwerksbuchstaben, %, oder reservierte "
+            "Gerätenamen wie CON.",
         "Subtitle request summary":
             "Zusammenfassung der Untertitelanforderung",
         "Quick download status":
