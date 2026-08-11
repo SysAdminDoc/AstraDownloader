@@ -45,7 +45,7 @@ pasting a link never needs it.
   diagnosis.
 - **Archive deliberately.** Opt into info JSON, descriptions, thumbnails and
   split chapter files, or start a live stream from its beginning. A bounded
-  wait-for-live-video setting handles scheduled events without changing the
+  live-video retry interval handles scheduled events without changing the
   existing embed options.
 - **Preview Windows-safe names.** Settings renders an example output path,
   flags reserved names and overlong paths before saving, and enables yt-dlp's

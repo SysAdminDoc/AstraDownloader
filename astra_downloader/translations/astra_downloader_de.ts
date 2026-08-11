@@ -975,8 +975,8 @@
       <translation>Livestreams von Anfang an starten</translation>
     </message>
     <message>
-      <source>Wait for live video</source>
-      <translation>Auf Live-Video warten</translation>
+      <source>Live-video retry interval</source>
+      <translation>Intervall für Live-Video-Wiederholungen</translation>
     </message>
     <message>
       <source> seconds</source>
@@ -1011,8 +1011,8 @@
       <translation>Optionale Begleitdateien, Kapitelaufteilung und Live-Ereignissteuerung. Die bestehenden Einbettungsoptionen bleiben unverändert.</translation>
     </message>
     <message>
-      <source>0 disables waiting; use this when a scheduled live event has not started.</source>
-      <translation>0 deaktiviert das Warten; verwenden Sie dies, wenn ein geplanter Livestream noch nicht begonnen hat.</translation>
+      <source>0 disables live-event retries; otherwise yt-dlp retries at this interval within a bounded wait window.</source>
+      <translation>0 deaktiviert Wiederholungen für Live-Ereignisse; andernfalls versucht yt-dlp innerhalb eines begrenzten Wartefensters in diesem Intervall erneut.</translation>
     </message>
     <message>
       <source>Use SponsorBlock segments</source>
@@ -2173,6 +2173,18 @@
     <message>
       <source>check-network-and-retry</source>
       <translation>check-network-and-retry</translation>
+    </message>
+    <message>
+      <source>The live video did not start within the allowed wait window.</source>
+      <translation>Das Live-Video hat innerhalb des zulässigen Wartefensters nicht begonnen.</translation>
+    </message>
+    <message>
+      <source>Retry when the scheduled event is expected to start, or choose a shorter retry interval for live-event waiting.</source>
+      <translation>Versuchen Sie es erneut, wenn das geplante Ereignis beginnen soll, oder wählen Sie ein kürzeres Wiederholungsintervall für das Warten auf Live-Ereignisse.</translation>
+    </message>
+    <message>
+      <source>retry-live-video</source>
+      <translation>retry-live-video</translation>
     </message>
     <message>
       <source>Astra Downloader could not create a protected YouTube cookie jar.</source>

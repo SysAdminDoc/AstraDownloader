@@ -53,7 +53,8 @@ __all__ = (
     "escape_ffmpeg_filter_value",
     "RESUME_ROLLBACK_FIELDS", "RETRY_ROLLBACK_FIELDS",
     "snapshot_download_fields", "restore_download_fields",
-    "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
+    "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_LIVE_WAIT_MAX_SECONDS",
+    "DOWNLOAD_WATCHDOG_POLL_SECONDS",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
     "estimate_download_bytes", "check_download_disk_space",
@@ -82,6 +83,10 @@ HOST_BACKOFF_BASE_SECONDS = 60
 HOST_BACKOFF_MAX_SECONDS = 30 * 60
 HOST_BACKOFF_MAX_ENTRIES = 64
 DOWNLOAD_STALL_TIMEOUT_SECONDS = 1800
+# `--wait-for-video` is an interval between retries, not a process deadline.
+# Keep a never-started live event from holding a worker slot indefinitely even
+# when yt-dlp emits a fresh [wait] line for every retry.
+DOWNLOAD_LIVE_WAIT_MAX_SECONDS = 30 * 60
 DOWNLOAD_WATCHDOG_POLL_SECONDS = 15
 DOWNLOAD_QUEUE_SCHEMA_VERSION = 1
 DOWNLOAD_INTERMEDIATE_DIRNAME = 'download-temp'
@@ -103,6 +108,7 @@ DOWNLOAD_RETRYABLE_ERROR_CODES = {
     'po-token-required',
     'cookie-jar-failed',
     'worker-start-failed',
+    'live-wait-timeout',
     'transcription-model-missing',
     'transcription-failed',
 }
@@ -218,6 +224,14 @@ DOWNLOAD_FAILURE_RECOVERY = {
         'error': 'Astra Downloader could not reach the site or a required provider.',
         'advice': 'Check the network, VPN, firewall, and provider process, then retry.',
         'next_action': 'check-network-and-retry',
+    },
+    'live-wait-timeout': {
+        'error': 'The live video did not start within the allowed wait window.',
+        'advice': (
+            'Retry when the scheduled event is expected to start, or choose a '
+            'shorter retry interval for live-event waiting.'
+        ),
+        'next_action': 'retry-live-video',
     },
     'cookie-jar-failed': {
         'error': 'Astra Downloader could not create a protected YouTube cookie jar.',
@@ -3754,6 +3768,13 @@ class DownloadManagerCore:
         """
         last_lines = []
         last_error = None
+
+        def _mark_live_transfer_started():
+            # The live-wait deadline is independent of the ordinary stall
+            # timer. [wait] lines refresh `activity['at']`, but they must not
+            # extend the bounded window before any media bytes arrive.
+            activity['live_wait_deadline'] = None
+
         for line in proc.stdout:
             activity['at'] = time.monotonic()
             line = line.strip()
@@ -3769,6 +3790,7 @@ class DownloadManagerCore:
             # changes). Falls through to the legacy MDLP regex only if JSON
             # parsing fails.
             if line.startswith('MDLP_JSON '):
+                _mark_live_transfer_started()
                 try:
                     payload = json.loads(line[len('MDLP_JSON '):])
                     total = payload.get('total_bytes') or payload.get('total_bytes_estimate') or 0
@@ -3788,6 +3810,7 @@ class DownloadManagerCore:
                     # extractor exit. Fall through to MDLP.
                     pass
             if line.startswith('MDLP_FILEPATH '):
+                _mark_live_transfer_started()
                 try:
                     filepath = json.loads(line[len('MDLP_FILEPATH '):])
                     if isinstance(filepath, str) and filepath:
@@ -3804,6 +3827,7 @@ class DownloadManagerCore:
             # a track, even if yt-dlp removes the temporary sidecar afterward.
             written = SUBTITLE_WRITTEN_RE.match(line)
             if written:
+                _mark_live_transfer_started()
                 dl.subtitle_written = True
                 if getattr(dl, 'subtitles_only', False):
                     dl.filename = self._converted_subtitle_path(written.group(1))
@@ -3812,6 +3836,7 @@ class DownloadManagerCore:
             # Structured progress (MDLP prefix, legacy fallback)
             m = re.match(r'^MDLP\s+(\d+\.?\d*)%?\s+(\S+)\s+(\S+)', line)
             if m:
+                _mark_live_transfer_started()
                 dl.progress = float(m.group(1))
                 spd, eta = m.group(2), m.group(3)
                 if spd not in ('NA', 'Unknown'):
@@ -3824,6 +3849,7 @@ class DownloadManagerCore:
             # Legacy progress
             m = re.match(r'\[download\]\s+(\d+\.?\d*)%', line)
             if m:
+                _mark_live_transfer_started()
                 dl.progress = float(m.group(1))
                 m2 = re.search(r'at\s+(\S+)\s+ETA\s+(\S+)', line)
                 if m2:
@@ -3849,9 +3875,11 @@ class DownloadManagerCore:
             if dl.status == 'cancelled':
                 pass  # never resurrect a cancelled item from output lines
             elif '[Merger]' in line or 'Merging formats' in line:
+                _mark_live_transfer_started()
                 dl.status = "merging"
                 self.progress_updated.emit()
             elif '[ExtractAudio]' in line or '[extract]' in line:
+                _mark_live_transfer_started()
                 dl.status = "extracting"
                 self.progress_updated.emit()
 
@@ -3862,6 +3890,7 @@ class DownloadManagerCore:
             else:
                 m = re.search(r'\[download\] Destination: (.+)', line)
                 if m:
+                    _mark_live_transfer_started()
                     dl.filename = m.group(1)
         return last_lines, last_error
 
@@ -4454,7 +4483,14 @@ class DownloadManagerCore:
             # Stall watchdog (see DOWNLOAD_STALL_TIMEOUT_SECONDS): kill a wedged
             # yt-dlp/ffmpeg tree that produces no output for too long so it can't
             # block a worker thread / hold a concurrency slot forever.
-            activity = {'at': time.monotonic()}
+            activity_started = time.monotonic()
+            activity = {
+                'at': activity_started,
+                'live_wait_deadline': (
+                    activity_started + DOWNLOAD_LIVE_WAIT_MAX_SECONDS
+                    if wait_for_video > 0 else None
+                ),
+            }
             stop_watchdog = threading.Event()
 
             # Bind the stop event and process into the closure via default args.
@@ -4475,7 +4511,21 @@ class DownloadManagerCore:
                                     f"WARNING: cancelled-download watchdog termination failed: {error}"
                                 )
                         return
-                    if (time.monotonic() - activity['at']) > DOWNLOAD_STALL_TIMEOUT_SECONDS:
+                    now = time.monotonic()
+                    if (
+                        activity.get('live_wait_deadline') is not None
+                        and now >= activity['live_wait_deadline']
+                    ):
+                        watchdog_killed['value'] = 'live-wait-timeout'
+                        try:
+                            self._dependencies['terminate_process_tree'](watched_proc)
+                        except Exception as error:
+                            # reason: best-effort kill; process may already be gone
+                            self._dependencies['write_persistent_log'](
+                                f"live-wait watchdog termination failed: {error}"
+                            )
+                        return
+                    if (now - activity['at']) > DOWNLOAD_STALL_TIMEOUT_SECONDS:
                         watchdog_killed['value'] = 'stall'
                         try:
                             self._dependencies['terminate_process_tree'](watched_proc)
@@ -4500,6 +4550,15 @@ class DownloadManagerCore:
             if dl.status != "complete":
                 if dl.status == "cancelled":
                     dl.error = dl.error or "Cancelled by user."
+                elif watchdog_killed['value'] == 'live-wait-timeout':
+                    dl.status = "failed"
+                    dl.error = (
+                        "Live video did not start within "
+                        f"{DOWNLOAD_LIVE_WAIT_MAX_SECONDS // 60} minutes and was stopped."
+                    )
+                    apply_download_failure_classification(
+                        dl, 'live-wait-timeout', error=dl.error
+                    )
                 elif watchdog_killed['value'] == 'stall':
                     dl.status = "failed"
                     dl.error = (
@@ -4600,6 +4659,11 @@ class DownloadManagerCore:
                             pass
                         self._release_ytdlp_activity(proc)
                         activity['at'] = time.monotonic()
+                        activity['live_wait_deadline'] = (
+                            activity['at'] + DOWNLOAD_LIVE_WAIT_MAX_SECONDS
+                            if wait_for_video > 0 else None
+                        )
+                        watchdog_killed['value'] = None
                         stop_watchdog = threading.Event()
                         proc = self._dependencies['spawn_ytdlp'](
                             retry_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -4637,7 +4701,21 @@ class DownloadManagerCore:
                                                 f"WARNING: retry watchdog cancellation termination failed: {error}"
                                             )
                                     return
-                                if (time.monotonic() - activity['at']) > DOWNLOAD_STALL_TIMEOUT_SECONDS:
+                                now = time.monotonic()
+                                if (
+                                    activity.get('live_wait_deadline') is not None
+                                    and now >= activity['live_wait_deadline']
+                                ):
+                                    watchdog_killed['value'] = 'live-wait-timeout'
+                                    try:
+                                        self._dependencies['terminate_process_tree'](watched_proc)
+                                    except Exception as error:
+                                        # reason: best-effort kill; process may already be gone
+                                        self._dependencies['write_persistent_log'](
+                                            f"retry live-wait watchdog termination failed: {error}"
+                                        )
+                                    return
+                                if (now - activity['at']) > DOWNLOAD_STALL_TIMEOUT_SECONDS:
                                     watchdog_killed['value'] = 'stall'
                                     try:
                                         self._dependencies['terminate_process_tree'](watched_proc)
@@ -4659,6 +4737,15 @@ class DownloadManagerCore:
                         proc.wait()
                         if dl.status == 'cancelled':
                             dl.error = dl.error or "Cancelled by user."
+                        elif watchdog_killed['value'] == 'live-wait-timeout':
+                            dl.status = "failed"
+                            dl.error = (
+                                "Live video did not start within "
+                                f"{DOWNLOAD_LIVE_WAIT_MAX_SECONDS // 60} minutes and was stopped."
+                            )
+                            apply_download_failure_classification(
+                                dl, 'live-wait-timeout', error=dl.error
+                            )
                         elif watchdog_killed['value'] == 'stall':
                             dl.status = "failed"
                             dl.error = (
@@ -5919,7 +6006,8 @@ _OWNED_EXPORTS = {
     "DOWNLOAD_ACTIVE_STATES", "DOWNLOAD_RUNNING_STATES",
     "DOWNLOAD_PENDING_STATES", "DOWNLOAD_TERMINAL_STATES",
     "DOWNLOAD_RETRYABLE_ERROR_CODES", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
-    "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_WATCHDOG_POLL_SECONDS",
+    "DOWNLOAD_STALL_TIMEOUT_SECONDS", "DOWNLOAD_LIVE_WAIT_MAX_SECONDS",
+    "DOWNLOAD_WATCHDOG_POLL_SECONDS",
     "write_cookies_netscape", "cleanup_stale_cookie_jars",
     "terminate_process_tree", "build_subprocess_env", "ALLOWED_COOKIE_DOMAINS",
     "DownloadQueueStore", "DownloadManager", "DownloadManagerCore",
