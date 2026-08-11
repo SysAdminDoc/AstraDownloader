@@ -175,6 +175,10 @@
       <translation>Import cookies.txt</translation>
     </message>
     <message>
+      <source>The subscription was restored.</source>
+      <translation>The subscription was restored.</translation>
+    </message>
+    <message>
       <source>No settings match this search.</source>
       <translation>No settings match this search.</translation>
     </message>
@@ -313,6 +317,14 @@
     <message>
       <source>Restore defaults</source>
       <translation>Restore defaults</translation>
+    </message>
+    <message>
+      <source>Undo defaults</source>
+      <translation>Undo defaults</translation>
+    </message>
+    <message>
+      <source>Settings from before Restore defaults were restored.</source>
+      <translation>Settings from before Restore defaults were restored.</translation>
     </message>
     <message>
       <source>Unsaved changes</source>
@@ -659,8 +671,8 @@
       <translation>Watch YouTube channels or playlists on a schedule and queue only new uploads.</translation>
     </message>
     <message>
-      <source>Restore the subscription removed in this session.</source>
-      <translation>Restore the subscription removed in this session.</translation>
+      <source>Restore the subscription removed by the last action.</source>
+      <translation>Restore the subscription removed by the last action.</translation>
     </message>
     <message>
       <source>Subscription channel or playlist URL</source>
@@ -699,8 +711,8 @@
       <translation>로그인</translation>
     </message>
     <message>
-      <source>Restore the sign-in removed in this session.</source>
-      <translation>Restore the sign-in removed in this session.</translation>
+      <source>Restore the sign-in removed by the last action.</source>
+      <translation>Restore the sign-in removed by the last action.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -781,10 +793,6 @@
     <message>
       <source>Testing the stored sign-in…</source>
       <translation>Testing the stored sign-in…</translation>
-    </message>
-    <message>
-      <source>The subscription was restored.</source>
-      <translation>The subscription was restored.</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -1323,6 +1331,10 @@
       <translation>Restore the editable settings to their shipped defaults.</translation>
     </message>
     <message>
+      <source>Restore the settings from before Restore defaults was used.</source>
+      <translation>Restore the settings from before Restore defaults was used.</translation>
+    </message>
+    <message>
       <source>Starting</source>
       <translation>Starting</translation>
     </message>
@@ -1337,6 +1349,10 @@
     <message>
       <source>Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.</source>
       <translation>Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.</translation>
+    </message>
+    <message>
+      <source>Settings import undone.</source>
+      <translation>Settings import undone.</translation>
     </message>
     <message>
       <source>Loading history…</source>
@@ -1559,10 +1575,6 @@
       <translation>Subscription scan started. This row will update when it finishes.</translation>
     </message>
     <message>
-      <source>Subscription removed. Downloaded files were not deleted.</source>
-      <translation>Subscription removed. Downloaded files were not deleted.</translation>
-    </message>
-    <message>
       <source>No subscription removal is available to undo.</source>
       <translation>No subscription removal is available to undo.</translation>
     </message>
@@ -1619,12 +1631,36 @@
       <translation>Settings already use their defaults.</translation>
     </message>
     <message>
+      <source>Could not prepare the defaults undo snapshot. Nothing changed; check disk permissions and retry.</source>
+      <translation>Could not prepare the defaults undo snapshot. Nothing changed; check disk permissions and retry.</translation>
+    </message>
+    <message>
       <source>Could not restore defaults. Nothing changed; check disk permissions and retry.</source>
       <translation>Could not restore defaults. Nothing changed; check disk permissions and retry.</translation>
     </message>
     <message>
       <source>Restored defaults for {count} settings: {names}.</source>
       <translation>Restored defaults for {count} settings: {names}.</translation>
+    </message>
+    <message>
+      <source>No Restore defaults action is available to undo.</source>
+      <translation>No Restore defaults action is available to undo.</translation>
+    </message>
+    <message>
+      <source>Could not restore the previous settings. The Undo snapshot is still available; check disk permissions and retry.</source>
+      <translation>Could not restore the previous settings. The Undo snapshot is still available; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>The Undo record is still available; clear it before closing.</source>
+      <translation>The Undo record is still available; clear it before closing.</translation>
+    </message>
+    <message>
+      <source>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</source>
+      <translation>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>The import stopped before all subscriptions were added.</source>
+      <translation>The import stopped before all subscriptions were added.</translation>
     </message>
     <message>
       <source>No settings import is available to undo.</source>
@@ -1635,8 +1671,8 @@
       <translation>Settings were restored, but some imported subscriptions remain.</translation>
     </message>
     <message>
-      <source>Settings import undone.</source>
-      <translation>Settings import undone.</translation>
+      <source>Settings were restored, but the Undo record could not be updated on disk.</source>
+      <translation>Settings were restored, but the Undo record could not be updated on disk.</translation>
     </message>
     <message>
       <source>History unavailable</source>
@@ -1797,6 +1833,10 @@
     <message>
       <source>Stored sign-in test passed.</source>
       <translation>Stored sign-in test passed.</translation>
+    </message>
+    <message>
+      <source>Subscription removed. Downloaded files were not deleted.</source>
+      <translation>Subscription removed. Downloaded files were not deleted.</translation>
     </message>
     <message>
       <source>Could not restore the subscription.</source>
@@ -2025,6 +2065,10 @@
     <message>
       <source>Generate subtitles again without downloading the media.</source>
       <translation>Generate subtitles again without downloading the media.</translation>
+    </message>
+    <message>
+      <source>The import was only partly applied because its Undo snapshot could not be saved.</source>
+      <translation>The import was only partly applied because its Undo snapshot could not be saved.</translation>
     </message>
     <message>
       <source>Registering shortcuts and protocols...</source>

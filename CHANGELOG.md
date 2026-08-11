@@ -14,6 +14,10 @@ repository's git log.
 
 ### Fixed
 
+- **Undo snapshots survive restarts.** History clears, sign-in and subscription
+  removals, settings imports, and Restore defaults now persist adjacent recovery
+  journals; the companion restores their affordances on launch and cleans up
+  snapshots only after a successful undo.
 - **Interactive control boundaries now meet the non-text contrast floor.**
   Resting, disabled, hover, input, menu, text-edit, ghost-button, and
   checkbox boundaries are declared against their actual stylesheet fills.

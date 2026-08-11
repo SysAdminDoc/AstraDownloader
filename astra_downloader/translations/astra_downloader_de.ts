@@ -175,6 +175,10 @@
       <translation>cookies.txt importieren</translation>
     </message>
     <message>
+      <source>The subscription was restored.</source>
+      <translation>Das Abonnement wurde wiederhergestellt.</translation>
+    </message>
+    <message>
       <source>No settings match this search.</source>
       <translation>Keine Einstellungen entsprechen dieser Suche.</translation>
     </message>
@@ -313,6 +317,14 @@
     <message>
       <source>Restore defaults</source>
       <translation>Standards wiederherstellen</translation>
+    </message>
+    <message>
+      <source>Undo defaults</source>
+      <translation>Standards rückgängig</translation>
+    </message>
+    <message>
+      <source>Settings from before Restore defaults were restored.</source>
+      <translation>Die Einstellungen vor dem Zurücksetzen auf Standards wurden wiederhergestellt.</translation>
     </message>
     <message>
       <source>Unsaved changes</source>
@@ -659,8 +671,8 @@
       <translation>YouTube-Kanäle oder Playlists nach Zeitplan beobachten und nur neue Uploads einreihen.</translation>
     </message>
     <message>
-      <source>Restore the subscription removed in this session.</source>
-      <translation>In dieser Sitzung entferntes Abonnement wiederherstellen.</translation>
+      <source>Restore the subscription removed by the last action.</source>
+      <translation>Das durch die letzte Aktion entfernte Abonnement wiederherstellen.</translation>
     </message>
     <message>
       <source>Subscription channel or playlist URL</source>
@@ -699,8 +711,8 @@
       <translation>Anmeldungen</translation>
     </message>
     <message>
-      <source>Restore the sign-in removed in this session.</source>
-      <translation>In dieser Sitzung entfernte Anmeldung wiederherstellen.</translation>
+      <source>Restore the sign-in removed by the last action.</source>
+      <translation>Die durch die letzte Aktion entfernte Anmeldung wiederherstellen.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -781,10 +793,6 @@
     <message>
       <source>Testing the stored sign-in…</source>
       <translation>Gespeicherte Anmeldung wird getestet…</translation>
-    </message>
-    <message>
-      <source>The subscription was restored.</source>
-      <translation>Das Abonnement wurde wiederhergestellt.</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -1323,6 +1331,10 @@
       <translation>Bearbeitbare Einstellungen auf die mitgelieferten Standards zurücksetzen.</translation>
     </message>
     <message>
+      <source>Restore the settings from before Restore defaults was used.</source>
+      <translation>Die Einstellungen vor dem Zurücksetzen auf Standards wiederherstellen.</translation>
+    </message>
+    <message>
       <source>Starting</source>
       <translation>Wird gestartet</translation>
     </message>
@@ -1337,6 +1349,10 @@
     <message>
       <source>Could not restore the imported settings. The Undo snapshot is still available; check disk space and permissions, then retry.</source>
       <translation>Die importierten Einstellungen konnten nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist weiterhin verfügbar; prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>Settings import undone.</source>
+      <translation>Einstellungen-Import rückgängig gemacht.</translation>
     </message>
     <message>
       <source>Loading history…</source>
@@ -1559,10 +1575,6 @@
       <translation>Abonnement-Scan gestartet. Diese Zeile wird aktualisiert, sobald er abgeschlossen ist.</translation>
     </message>
     <message>
-      <source>Subscription removed. Downloaded files were not deleted.</source>
-      <translation>Abonnement entfernt. Heruntergeladene Dateien wurden nicht gelöscht.</translation>
-    </message>
-    <message>
       <source>No subscription removal is available to undo.</source>
       <translation>Kein entferntes Abonnement zum Wiederherstellen verfügbar.</translation>
     </message>
@@ -1619,12 +1631,36 @@
       <translation>Die Einstellungen verwenden bereits ihre Standards.</translation>
     </message>
     <message>
+      <source>Could not prepare the defaults undo snapshot. Nothing changed; check disk permissions and retry.</source>
+      <translation>Der Rückgängig-Schnappschuss für die Standards konnte nicht vorbereitet werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
       <source>Could not restore defaults. Nothing changed; check disk permissions and retry.</source>
       <translation>Standards konnten nicht wiederhergestellt werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
     </message>
     <message>
       <source>Restored defaults for {count} settings: {names}.</source>
       <translation>Standards für {count} Einstellungen wiederhergestellt: {names}.</translation>
+    </message>
+    <message>
+      <source>No Restore defaults action is available to undo.</source>
+      <translation>Keine Aktion zum Wiederherstellen der Standards verfügbar.</translation>
+    </message>
+    <message>
+      <source>Could not restore the previous settings. The Undo snapshot is still available; check disk permissions and retry.</source>
+      <translation>Die vorherigen Einstellungen konnten nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist weiterhin verfügbar; prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>The Undo record is still available; clear it before closing.</source>
+      <translation>Der Rückgängig-Eintrag ist weiterhin verfügbar; löschen Sie ihn vor dem Schließen.</translation>
+    </message>
+    <message>
+      <source>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</source>
+      <translation>Der Rückgängig-Schnappschuss für den Import konnte nicht vorbereitet werden. Nichts wurde geändert; prüfen Sie die Berechtigungen und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
+      <source>The import stopped before all subscriptions were added.</source>
+      <translation>Der Import wurde beendet, bevor alle Abonnements hinzugefügt wurden.</translation>
     </message>
     <message>
       <source>No settings import is available to undo.</source>
@@ -1635,8 +1671,8 @@
       <translation>Einstellungen wurden wiederhergestellt, aber einige importierte Abonnements sind noch vorhanden.</translation>
     </message>
     <message>
-      <source>Settings import undone.</source>
-      <translation>Einstellungen-Import rückgängig gemacht.</translation>
+      <source>Settings were restored, but the Undo record could not be updated on disk.</source>
+      <translation>Die Einstellungen wurden wiederhergestellt, aber der Rückgängig-Eintrag konnte nicht auf der Festplatte aktualisiert werden.</translation>
     </message>
     <message>
       <source>History unavailable</source>
@@ -1797,6 +1833,10 @@
     <message>
       <source>Stored sign-in test passed.</source>
       <translation>Test der gespeicherten Anmeldung bestanden.</translation>
+    </message>
+    <message>
+      <source>Subscription removed. Downloaded files were not deleted.</source>
+      <translation>Abonnement entfernt. Heruntergeladene Dateien wurden nicht gelöscht.</translation>
     </message>
     <message>
       <source>Could not restore the subscription.</source>
@@ -2025,6 +2065,10 @@
     <message>
       <source>Generate subtitles again without downloading the media.</source>
       <translation>Untertitel erneut erzeugen, ohne die Medien erneut herunterzuladen.</translation>
+    </message>
+    <message>
+      <source>The import was only partly applied because its Undo snapshot could not be saved.</source>
+      <translation>Der Import wurde nur teilweise angewendet, weil sein Rückgängig-Schnappschuss nicht gespeichert werden konnte.</translation>
     </message>
     <message>
       <source>Registering shortcuts and protocols...</source>

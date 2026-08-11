@@ -28,9 +28,11 @@ except ImportError:  # Flat source-path compatibility.
     from _compat import make_legacy_resolver
 
 try:
-    from .config import default_download_path, SITE_PROFILE_OVERRIDE_KEYS
+    from .config import (
+        DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS,
+    )
 except ImportError:  # Flat source-path compatibility.
-    from config import default_download_path, SITE_PROFILE_OVERRIDE_KEYS
+    from config import DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS
 
 
 __all__ = (
@@ -758,15 +760,36 @@ class SiteLoginStore:
                  reader=None, writer=None):
         self.root = Path(root) / SITE_LOGIN_DIRNAME
         self.index_path = self.root / SITE_LOGIN_INDEX_NAME
+        self.undo_manifest_path = self.root / '.undo.json'
         self._logger = logger
         self._clock = clock
         self._reader = reader
         self._writer = writer
         self._lock = threading.RLock()
-        # Undo backups contain session or password values, so they are
-        # session-only and never survive a new store instance. A crash
-        # therefore cannot leave an unlisted live sign-in in the protected
-        # directory indefinitely.
+        def read_json(path, fallback):
+            if self._reader is not None:
+                return self._reader(path, fallback)
+            try:
+                return json.loads(Path(path).read_text(encoding='utf-8'))
+            except (OSError, ValueError, TypeError):
+                return fallback
+
+        def write_json(path, data):
+            if self._writer is not None:
+                result = self._writer(path, data)
+                if result is False:
+                    raise OSError('site-login undo writer reported failure')
+                return
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2), encoding='utf-8')
+
+        self._undo = DurableUndoStore(
+            path=self.undo_manifest_path,
+            loader=read_json,
+            writer=write_json,
+            logger=self._log,
+        )
         self._cleanup_undo_backups()
 
     # -- storage -----------------------------------------------------------
@@ -848,9 +871,20 @@ class SiteLoginStore:
         try:
             if not self.root.exists():
                 return
+            undo = self._undo.get('removeSiteLogin')
+            keep = set()
+            if isinstance(undo, dict):
+                for path in (
+                    self._undo_path(undo.get('token')),
+                    self._credential_undo_path(undo.get('token')),
+                ):
+                    if path is not None:
+                        keep.add(path)
             for path in tuple(self.root.glob(".undo-*.txt")) + tuple(
                 self.root.glob(f".undo-*{SITE_LOGIN_CREDENTIAL_SUFFIX}")
             ):
+                if path in keep:
+                    continue
                 try:
                     path.unlink()
                 except OSError as error:
@@ -876,6 +910,10 @@ class SiteLoginStore:
             'importedAt': nonnegative_int(record.get('importedAt')),
             'earliestExpiry': nonnegative_int(record.get('earliestExpiry')),
         }
+
+    def load_removed_undo(self):
+        undo = self._undo.get('removeSiteLogin')
+        return undo if isinstance(undo, dict) else None
 
     # -- reads -------------------------------------------------------------
     def entries(self):
@@ -1135,11 +1173,12 @@ class SiteLoginStore:
         return existed
 
     def remove_with_undo(self, site):
-        """Remove one sign-in while keeping a protected, session-only undo.
+        """Remove one sign-in while keeping a protected, durable undo.
 
-        Cookie and credential bytes stay in the store's protected directory. The returned
-        token contains only the site name and non-secret index metadata, so a
-        GUI undo action never has to hold or serialize cookie values.
+        Cookie and credential bytes stay in the store's protected directory.
+        The returned token contains only the site name and non-secret index
+        metadata, while the protected backup paths are recorded in an adjacent
+        journal so a restart can still offer the undo.
         """
         key = site_login_key(site)
         if not key:
@@ -1158,6 +1197,13 @@ class SiteLoginStore:
             credential_backup = self._credential_undo_path(token)
             has_jar = jar.exists()
             has_credentials = credential_path.exists()
+            undo_payload = {
+                'site': key,
+                'token': token,
+                'hasJar': has_jar,
+                'hasCredentials': has_credentials,
+                'record': undo_record,
+            }
             try:
                 if has_jar:
                     jar.replace(backup)
@@ -1173,6 +1219,16 @@ class SiteLoginStore:
                     return None, (
                         'Could not remove the sign-in safely. The stored session '
                         'was kept; check disk space and permissions, then retry.'
+                    )
+                if not self._undo.set('removeSiteLogin', undo_payload):
+                    self._save_index(index)
+                    if has_jar and backup.exists() and not jar.exists():
+                        backup.replace(jar)
+                    if has_credentials and credential_backup.exists() and not credential_path.exists():
+                        credential_backup.replace(credential_path)
+                    return None, (
+                        'Could not prepare the sign-in undo snapshot. The stored '
+                        'session was kept; check disk space and permissions, then retry.'
                     )
             except OSError as error:
                 if has_jar and backup.exists() and not jar.exists():
@@ -1192,13 +1248,7 @@ class SiteLoginStore:
                 self._log(f"WARNING: site-login removal failed: {error}")
                 return None, 'Could not remove the stored sign-in safely.'
         self._log(f"Removed the stored site sign-in for {key}")
-        return {
-            'site': key,
-            'token': token,
-            'hasJar': has_jar,
-            'hasCredentials': has_credentials,
-            'record': undo_record,
-        }, None
+        return undo_payload, None
 
     def restore_removed(self, undo):
         """Restore the sign-in represented by a prior ``remove_with_undo``."""
@@ -1263,11 +1313,13 @@ class SiteLoginStore:
                         )
                 self._log(f"WARNING: site-login restore failed: {error}")
                 return False, 'Could not restore the stored sign-in safely.'
+        if not self._undo.clear('removeSiteLogin'):
+            self._log('WARNING: site-login undo journal cleanup failed after restore')
         self._log(f"Restored the stored site sign-in for {key}")
         return True, None
 
     def discard_removed(self, undo):
-        """Drop a superseded session-only undo backup."""
+        """Drop a superseded durable undo backup."""
         if not isinstance(undo, dict):
             return False
         backup = self._undo_path(undo.get('token'))
@@ -1277,7 +1329,10 @@ class SiteLoginStore:
         try:
             backup.unlink(missing_ok=True)
             credential_backup.unlink(missing_ok=True)
-            return True
+            current = self.load_removed_undo()
+            if current and current.get('token') != undo.get('token'):
+                return True
+            return self._undo.clear('removeSiteLogin')
         except OSError as error:
             self._log(f"WARNING: site-login undo cleanup failed: {error}")
             return False

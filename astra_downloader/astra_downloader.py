@@ -4224,6 +4224,14 @@ def _portable_state_paths(root=None):
             WHISPER_MODEL_PATH, ICON_PATH,
         )
     }
+    # One-step recovery journals live beside the state files and are owned by
+    # the same portable instance. Leaving them behind can resurrect an action
+    # after uninstall, and can also expose stale settings to a later install.
+    root_file_names.update({
+        '.config.json.undo',
+        '.history.json.undo',
+        '.subscriptions.json.undo',
+    })
     root_dir_names = {
         Path(path).name for path in (
             WHISPER_BIN_DIR, DENO_DIR, QUICKJS_DIR, NATIVE_HOST_DIR,
