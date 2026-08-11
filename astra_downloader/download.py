@@ -60,6 +60,8 @@ __all__ = (
     "MAX_CONCURRENT_TRANSCRIPTIONS", "LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS",
     "LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS",
     "TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS", "parse_whisper_progress",
+    "TRANSCRIPTION_WAV_BYTES_PER_SECOND", "TRANSCRIPTION_FALLBACK_DURATION_SECONDS",
+    "estimate_transcription_wav_bytes",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",
     "estimate_download_bytes", "check_download_disk_space",
@@ -139,6 +141,12 @@ DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES = frozenset({
 })
 
 DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
+# whisper.cpp converts media to 16 kHz, mono, signed 16-bit PCM: two bytes per
+# sample, or 32,000 bytes per second. yt-dlp's progress stream does not carry
+# duration, so a one-hour fallback keeps the preflight conservative when a
+# caller has no duration metadata of its own.
+TRANSCRIPTION_WAV_BYTES_PER_SECOND = 32000
+TRANSCRIPTION_FALLBACK_DURATION_SECONDS = 60 * 60
 
 
 def _stored_schema_version(value):
@@ -2192,6 +2200,36 @@ def check_download_disk_space(
     )
 
 
+def estimate_transcription_wav_bytes(download):
+    """Estimate the PCM scratch space required by local transcription.
+
+    Accurate clip requests already carry their duration. A future caller may
+    also attach duration metadata to a queued download; malformed or absent
+    values deliberately use the conservative one-hour fallback instead of
+    allowing an unbounded WAV write to bypass the disk check.
+    """
+    duration = 0.0
+    section = getattr(download, 'section', None)
+    if isinstance(section, dict):
+        try:
+            start = float(section.get('start'))
+            end = float(section.get('end'))
+            if math.isfinite(start) and math.isfinite(end) and end > start:
+                duration = end - start
+        except (TypeError, ValueError, OverflowError):
+            duration = 0.0
+    if duration <= 0:
+        try:
+            candidate = float(getattr(download, 'duration', 0) or 0)
+            if math.isfinite(candidate) and candidate > 0:
+                duration = candidate
+        except (TypeError, ValueError, OverflowError):
+            duration = 0.0
+    if duration <= 0:
+        duration = TRANSCRIPTION_FALLBACK_DURATION_SECONDS
+    return max(1, math.ceil(duration * TRANSCRIPTION_WAV_BYTES_PER_SECOND))
+
+
 def summarize_ytdlp_formats(info):
     """Reduce a yt-dlp `-J` info dict to a concise, UI-ready format list:
     real available formats with id/ext/resolution/codec/size/audio-video flags.
@@ -2797,6 +2835,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'clean_text',
     'cleanup_stale_cookie_jars',
     'coerce_bool',
+    'check_download_disk_space',
     'is_supported_media_url',
     'is_youtube_url',
     'load_json_file',
@@ -4128,9 +4167,50 @@ class DownloadManagerCore:
 
         media_path = Path(dl.filename)
         output_path = local_subtitle_output_path(media_path)
+        staging_dir = self._download_intermediate_dir(dl)
+        estimated_wav_bytes = estimate_transcription_wav_bytes(dl)
+        try:
+            disk_failure = self._dependencies['check_download_disk_space'](
+                output_path.parent,
+                estimated_wav_bytes,
+                staging_path=staging_dir,
+            )
+        except Exception as error:
+            disk_failure = download_error_payload(
+                'insufficient-disk-space',
+                error=(
+                    'Could not check free disk space before local subtitle '
+                    f'generation: {error}'
+                ),
+            )
+        if disk_failure:
+            self._mark_transcription_failure(
+                dl,
+                disk_failure.get('error_code', 'insufficient-disk-space'),
+                disk_failure.get(
+                    'error', 'Not enough disk space for local subtitles.'
+                ),
+            )
+            self.progress_updated.emit()
+            return False
+        try:
+            staging_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            self._mark_transcription_failure(
+                dl,
+                'transcription-failed',
+                'Could not prepare private local subtitle staging: '
+                f'{error}',
+            )
+            self.progress_updated.emit()
+            self._dependencies['write_persistent_log'](
+                f'Local subtitle staging for {dl.id} failed: '
+                f'{_redact_download_secrets(error, dl)}'
+            )
+            return False
         token = uuid.uuid4().hex
-        temporary_audio = output_path.with_name(f'.{output_path.name}.{token}.wav')
-        temporary_base = output_path.with_name(f'.{output_path.name}.{token}')
+        temporary_audio = staging_dir / f'{token}.wav'
+        temporary_base = staging_dir / token
         temporary_srt = Path(f'{temporary_base}.srt')
         language = subtitle_language_for_transcription(effective_config)
         ffmpeg_args = build_whisper_audio_args(
@@ -6229,6 +6309,8 @@ _OWNED_EXPORTS = {
     "MAX_CONCURRENT_TRANSCRIPTIONS", "LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS",
     "LOCAL_TRANSCRIPTION_WATCHDOG_POLL_SECONDS",
     "TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS", "parse_whisper_progress",
+    "TRANSCRIPTION_WAV_BYTES_PER_SECOND", "TRANSCRIPTION_FALLBACK_DURATION_SECONDS",
+    "estimate_transcription_wav_bytes",
     "write_cookies_netscape", "cleanup_stale_cookie_jars",
     "terminate_process_tree", "build_subprocess_env", "ALLOWED_COOKIE_DOMAINS",
     "DownloadQueueStore", "DownloadManager", "DownloadManagerCore",
