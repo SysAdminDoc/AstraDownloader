@@ -5383,6 +5383,52 @@ class HostBackoffTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("retry in", error)
 
+    def test_three_same_refusals_open_a_domain_circuit_and_hold_the_next_item(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        manager.pause_intake()
+        ids = [
+            manager.start_download(
+                f"https://www.example.com/video-{index}"
+            )[0]
+            for index in range(4)
+        ]
+        manager.intake_paused = False
+
+        with mock.patch.object(manager, "_arm_host_backoff_wakeup"):
+            for dl_id in ids[:3]:
+                download = manager.downloads[dl_id]
+                download.status = "failed"
+                download.error = "Sign in to confirm you are not a bot"
+                download.error_code = "sign-in-required"
+                manager._record_terminal_download(download)
+
+        circuit = manager._host_circuits["example.com"]
+        self.assertEqual(circuit["failures"], 3)
+        self.assertEqual(circuit["error_code"], "sign-in-required")
+        self.assertGreater(
+            manager.host_backoff_remaining("https://example.com/next"), 0
+        )
+
+        held = manager.downloads[ids[3]]
+        with mock.patch.object(manager, "_arm_host_backoff_wakeup"), \
+                mock.patch.object(manager, "_launch_workers") as launch:
+            manager._schedule()
+
+        self.assertEqual(held.status, "pending")
+        launch.assert_not_called()
+
+        gui = gui_module_for_tests()
+        queue_window = types.SimpleNamespace(
+            dl_manager=manager,
+            _value=lambda name: getattr(ad, name),
+            _download_host_backoff_seconds=lambda dl: int(
+                manager.host_backoff_remaining(dl.url)
+            ),
+        )
+        queue_text = gui.MainWindowCore._download_meta_text(queue_window, held)
+        self.assertIn("Host paused", queue_text)
+        self.assertIn("retry in", queue_text)
+
 
 class PoTokenProviderNudgeTests(unittest.TestCase):
     """No token-free client covers the whole catalogue, so a failure that a

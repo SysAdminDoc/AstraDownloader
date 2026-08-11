@@ -93,6 +93,9 @@ repository's git log.
 - **Local transcription follows the current whisper.cpp release.** The pinned
   v1.9.2 sidecar is checksum-verified, SRT output splits on words, and the
   CLI thread count follows the host CPU count within a safe bound.
+- **Repeated site refusals now open a per-domain circuit.** Three consecutive
+  bot/sign-in or HTTP 403 failures pause later items for that registrable
+  domain, keep other hosts flowing, and show the retry countdown in the queue.
 - **Windows subtitle filter paths are escaped at both parser levels.** The
   legacy FFmpeg argument builder now emits the doubled escaping required for
   drive letters and filter punctuation.
