@@ -631,6 +631,42 @@
       <translation>LRC</translation>
     </message>
     <message>
+      <source>mp3</source>
+      <translation>mp3</translation>
+    </message>
+    <message>
+      <source>m4a</source>
+      <translation>m4a</translation>
+    </message>
+    <message>
+      <source>opus</source>
+      <translation>opus</translation>
+    </message>
+    <message>
+      <source>flac</source>
+      <translation>flac</translation>
+    </message>
+    <message>
+      <source>wav</source>
+      <translation>wav</translation>
+    </message>
+    <message>
+      <source>mp4</source>
+      <translation>mp4</translation>
+    </message>
+    <message>
+      <source>mkv</source>
+      <translation>mkv</translation>
+    </message>
+    <message>
+      <source>webm</source>
+      <translation>webm</translation>
+    </message>
+    <message>
+      <source>—</source>
+      <translation>—</translation>
+    </message>
+    <message>
       <source>Missing</source>
       <translation>Missing</translation>
     </message>
@@ -1357,6 +1393,10 @@
     <message>
       <source>Use SponsorBlock segments</source>
       <translation>Use SponsorBlock segments</translation>
+    </message>
+    <message>
+      <source>(Using SponsorBlock)</source>
+      <translation>(Using SponsorBlock)</translation>
     </message>
     <message>
       <source>Action</source>
@@ -2087,6 +2127,10 @@
       <translation>{label}: {language}</translation>
     </message>
     <message>
+      <source>SponsorBlock data and API are licensed CC BY-NC-SA 4.0; Astra Downloader is MIT.</source>
+      <translation>SponsorBlock data and API are licensed CC BY-NC-SA 4.0; Astra Downloader is MIT.</translation>
+    </message>
+    <message>
       <source>{label} could not be restored. Its backup is at {backup}.</source>
       <translation>{label} could not be restored. Its backup is at {backup}.</translation>
     </message>
@@ -2365,42 +2409,6 @@
     <message>
       <source>{action} for {label}</source>
       <translation>{action} for {label}</translation>
-    </message>
-    <message>
-      <source>mp3</source>
-      <translation>mp3</translation>
-    </message>
-    <message>
-      <source>m4a</source>
-      <translation>m4a</translation>
-    </message>
-    <message>
-      <source>opus</source>
-      <translation>opus</translation>
-    </message>
-    <message>
-      <source>flac</source>
-      <translation>flac</translation>
-    </message>
-    <message>
-      <source>wav</source>
-      <translation>wav</translation>
-    </message>
-    <message>
-      <source>mp4</source>
-      <translation>mp4</translation>
-    </message>
-    <message>
-      <source>mkv</source>
-      <translation>mkv</translation>
-    </message>
-    <message>
-      <source>webm</source>
-      <translation>webm</translation>
-    </message>
-    <message>
-      <source>—</source>
-      <translation>—</translation>
     </message>
     <message>
       <source>{target} (unavailable)</source>

@@ -81,3 +81,7 @@ Astra Downloader drives yt-dlp and ffmpeg. Vulnerabilities in those belong
 upstream — report them to their projects. Report to us if Astra Downloader
 pins a version that is known-vulnerable, or invokes them in a way that creates
 an issue they do not have on their own.
+
+The optional SponsorBlock integration uses SponsorBlock's data/API under the
+[CC BY-NC-SA 4.0 licence](https://sponsor.ajay.app/). The Settings UI provides
+the required attribution link; Astra Downloader's own code remains MIT-licensed.

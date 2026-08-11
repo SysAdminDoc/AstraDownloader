@@ -42,6 +42,9 @@ repository's git log.
   records a verified digest as activation-pending before the detached helper
   takes over, and the helper rechecks fast health probes when a process exits
   during the `Wait-Process` handoff race.
+- **SponsorBlock now carries visible attribution.** The optional Settings
+  control links to SponsorBlock and identifies its CC BY-NC-SA 4.0 data/API
+  alongside Astra Downloader's MIT licence.
 - **The companion UI render harness now covers focus, DPI, locales, and recovery states.**
   It renders the bundled locale set, 1x/1.25x/2x scale fixtures, genuine empty
   states, filters, pagination, queue recovery, format probing, and invalid settings.
