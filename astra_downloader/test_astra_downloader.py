@@ -2331,22 +2331,16 @@ class UninstallCleanupTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 0)
         self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
 
-    def test_uninstall_shutdown_targets_only_companion_process_tree(self):
+    def test_uninstall_shutdown_does_not_kill_other_data_roots(self):
         with mock.patch.object(ad, "send_instance_command", return_value=True) as send, \
              mock.patch.object(ad.time, "sleep") as sleep, \
              mock.patch.object(ad.sys, "platform", "win32"), \
-             mock.patch.object(ad.os, "getpid", return_value=4242), \
              mock.patch.object(ad.subprocess, "run") as run:
             self.assertTrue(ad.stop_running_companion_for_uninstall())
 
         send.assert_called_once_with("shutdown", attempts=3, delay=0.2)
         sleep.assert_called_once_with(0.75)
-        run.assert_called_once()
-        command = run.call_args.args[0]
-        self.assertIn("AstraDownloader.exe", command)
-        self.assertIn("/T", command)
-        self.assertNotIn("yt-dlp.exe", command)
-        self.assertNotIn("ffmpeg.exe", command)
+        run.assert_not_called()
 
     def test_shutdown_instance_command_closes_owned_window(self):
         class Window:
@@ -2475,6 +2469,136 @@ class PortableModeTests(unittest.TestCase):
         self.assertFalse(ad.portable_mode_requested(["--background"]))
         with mock.patch.dict(os.environ, {"ASTRA_PORTABLE": "yes"}, clear=False):
             self.assertTrue(ad.portable_mode_requested([]))
+
+    def test_portable_marker_selects_a_frozen_copy_outside_managed_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            portable = root / "Portable"
+            managed = root / "AppData" / "AstraDownloader"
+            executable = portable / "AstraDownloader.exe"
+            portable.mkdir(parents=True)
+            executable.write_bytes(b"portable")
+            ad.portable_marker_path(executable).write_text("portable\n", encoding="utf-8")
+
+            self.assertTrue(ad.portable_mode_requested(
+                [], executable=executable, install_dir=managed, frozen=True,
+            ))
+            self.assertFalse(ad.portable_mode_requested(
+                [], executable=managed / "AstraDownloader.exe",
+                install_dir=managed, frozen=True,
+            ))
+            self.assertFalse(ad.portable_mode_requested(
+                ["--install"], executable=executable,
+                install_dir=managed, frozen=True,
+            ))
+
+    def test_one_file_copy_needs_the_explicit_portable_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "Downloads" / "AstraDownloader.exe"
+            executable.parent.mkdir()
+            executable.write_bytes(b"one-file")
+            self.assertFalse(ad.portable_mode_requested(
+                [], executable=executable,
+                install_dir=root / "AppData" / "AstraDownloader",
+                frozen=True,
+            ))
+            self.assertTrue(ad.portable_mode_requested(
+                ["--portable"], executable=executable,
+                install_dir=root / "AppData" / "AstraDownloader",
+                frozen=True,
+            ))
+
+    def test_instance_ports_and_mutex_namespace_follow_the_state_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installed = root / "AppData" / "AstraDownloader"
+            portable_a = root / "PortableA"
+            portable_b = root / "PortableB"
+            self.assertEqual(
+                ad.instance_ports_for_root(installed, installed),
+                (ad.INSTANCE_CONTROL_PORT_DEFAULT, ad.INSTANCE_LOCK_PORT_DEFAULT),
+            )
+            self.assertNotEqual(
+                ad.instance_ports_for_root(portable_a, installed),
+                ad.instance_ports_for_root(portable_b, installed),
+            )
+            self.assertNotEqual(
+                ad.instance_namespace_for_root(portable_a),
+                ad.instance_namespace_for_root(portable_b),
+            )
+
+    def test_onedir_build_is_never_relocated_or_silently_installed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "AstraDownloader.exe"
+            (root / "_internal").mkdir()
+            executable.write_bytes(b"onedir")
+            with mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "PORTABLE_MODE", False), \
+                 mock.patch.object(ad, "write_persistent_log") as log:
+                self.assertTrue(ad.is_onedir_build())
+                self.assertEqual(ad.ensure_installed_executable(), executable)
+                self.assertEqual(ad.companion_install_exit_code(["--install"]), 2)
+            log.assert_called_once()
+
+    def test_portable_one_file_self_update_restarts_with_the_portable_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload = b"MZ" + (b"portable-update" * 256)
+            expected_hash = "a" * 64
+
+            def fake_download(_url, path, **_kwargs):
+                Path(path).write_bytes(payload)
+
+            with mock.patch.object(ad, "INSTALL_DIR", root), \
+                 mock.patch.object(ad, "PORTABLE_MODE", True), \
+                 mock.patch.object(ad, "is_onedir_build", return_value=False), \
+                 mock.patch.object(ad, "fetch_latest_companion_version", return_value="9.9.9"), \
+                 mock.patch.object(ad, "download_file_atomic", side_effect=fake_download), \
+                 mock.patch.object(ad, "validate_companion_update_binary"), \
+                 mock.patch.object(ad, "fetch_expected_sha256", return_value=expected_hash), \
+                 mock.patch.object(ad, "verify_file_sha256"), \
+                 mock.patch.object(ad, "probe_companion_update_binary", return_value=True), \
+                 mock.patch.object(ad, "schedule_companion_update_restart", return_value={"scheduled": True}) as schedule, \
+                 mock.patch.object(ad, "write_persistent_log"), \
+                 mock.patch.object(ad, "schedule_companion_process_exit"):
+                result = ad._run_companion_self_update_unlocked(restart=False)
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(schedule.call_args.args[2], ["--start-server", "--portable"])
+
+    def test_portable_one_folder_self_update_fails_before_downloading(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", True), \
+             mock.patch.object(ad, "is_onedir_build", return_value=True), \
+             mock.patch.object(ad, "fetch_latest_companion_version") as fetch:
+            result = ad._run_companion_self_update_unlocked(restart=False)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_code"], "portable-onedir-update-unsupported")
+        fetch.assert_not_called()
+
+    def test_onedir_archive_carries_the_portable_marker(self):
+        import importlib.util
+
+        build_path = Path(ad.__file__).with_name("build.py")
+        spec = importlib.util.spec_from_file_location("astra_test_build", build_path)
+        build_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "AstraDownloader"
+            source.mkdir()
+            (source / "AstraDownloader.exe").write_bytes(b"MZ")
+            archive_path = root / "AstraDownloader-onedir.zip"
+            build_module.write_onedir_archive(source, archive_path)
+
+            with zipfile.ZipFile(archive_path) as archive:
+                self.assertIn(
+                    "AstraDownloader/" + build_module.PORTABLE_MARKER_NAME,
+                    archive.namelist(),
+                )
 
     def test_portable_state_root_is_the_executable_directory(self):
         with tempfile.TemporaryDirectory() as tmp:

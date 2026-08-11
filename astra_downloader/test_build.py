@@ -72,6 +72,7 @@ class ReleaseConstraintsTests(unittest.TestCase):
                 self.assertEqual(
                     handle.namelist(),
                     [
+                        'AstraDownloader/.astradownloader-portable',
                         'AstraDownloader/AstraDownloader.exe',
                         'AstraDownloader/translations/astra_downloader_en.qm',
                     ],
