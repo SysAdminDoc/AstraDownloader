@@ -88,6 +88,9 @@ repository's git log.
 - **Cookie-less live retries reset their failure state.** A successful retry no
   longer leaves stale rate-limit advice or host backoff behind, and a retry
   that exits cleanly without writing media is reported as `skipped`.
+- **Failed sign-in removal is now non-destructive.** If the site-login index
+  cannot be rewritten, the stored credentials and index entry remain available
+  instead of being silently split apart.
 
 ## [2.6.0] - 2026-08-09
 

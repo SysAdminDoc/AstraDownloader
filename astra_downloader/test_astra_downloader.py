@@ -18180,6 +18180,32 @@ class SiteLoginDurabilityTests(unittest.TestCase):
             )
             self.assertEqual(store.entries(), [])
 
+    def test_remove_keeps_the_index_and_jar_when_index_write_fails(self):
+        writes = {"fail": False}
+
+        def writer(path, data):
+            if writes["fail"]:
+                raise OSError(28, "No space left on device")
+            ad.atomic_write_json(path, data)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ad.SiteLoginStore(
+                tmpdir,
+                reader=ad.load_json_file,
+                writer=writer,
+            )
+            result, error = store.import_netscape_text("x.com", self.EXPORT)
+            self.assertIsNone(error)
+            self.assertEqual(result["site"], "x.com")
+            writes["fail"] = True
+
+            self.assertFalse(store.remove("x.com"))
+            jar = Path(tmpdir) / ad.SITE_LOGIN_DIRNAME / "x.com.txt"
+            index = Path(tmpdir) / ad.SITE_LOGIN_DIRNAME / ad.SITE_LOGIN_INDEX_NAME
+            self.assertTrue(jar.exists())
+            self.assertIn("x.com", json.loads(index.read_text(encoding="utf-8"))["sites"])
+            self.assertEqual(store.entries()[0]["site"], "x.com")
+
     def test_export_reports_its_site_without_a_second_index_read(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ad.SiteLoginStore(tmpdir)
