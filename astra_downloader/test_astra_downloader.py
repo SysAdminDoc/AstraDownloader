@@ -3496,7 +3496,9 @@ class InstalledExecutableTests(unittest.TestCase):
             current, target = self._paths(tmp)
             current.write_bytes(b"running-older")
             target.write_bytes(b"managed-newer")
-            patches = self._frozen_patches(current, target, installed_version="2.7.0")
+            # Unreachably newer, so this stays "newer than the running
+            # build" across every future version bump.
+            patches = self._frozen_patches(current, target, installed_version="999.0.0")
             with patches[0], patches[1], patches[2], patches[3], patches[4]:
                 result = ad.ensure_installed_executable()
 
@@ -7932,7 +7934,7 @@ class CookieThreatModelDocTests(unittest.TestCase):
             "CVE-2023-35934",
             "GHSA-v8mc-9377-rwjj",
             "2023.07.06",
-            "Astra Downloader 2.6.0",
+            f"Astra Downloader {ad.APP_VERSION}",
             "Astra Deck browser extension",
             "yt-dlp==2026.6.9",
             "ALLOWED_COOKIE_DOMAINS",
@@ -9584,7 +9586,11 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_6_0(self):
+    def test_app_version_bumped_to_2_7_0(self):
+        # v2.7.0: a download can carry its own file name, downloads can inherit
+        # the proxy Windows is configured with, a release ships a CycloneDX SBOM
+        # and a PEP 751 lock beside the binary, every check gate reports its own
+        # result, and the local API version became a negotiated contract.
         # v2.6.0: local SRT sidecars, an antivirus-resistant one-folder build,
         # bounded subscription rollback and first-run setup guidance join the
         # existing subtitle, QuickJS, taskbar, bundle and translation work.
@@ -9593,7 +9599,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.6.0")
+        self.assertEqual(ad.APP_VERSION, "2.7.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
