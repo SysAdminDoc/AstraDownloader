@@ -17,6 +17,7 @@ const {
     buildCompanionInventory,
     inspectCompanionInventory
 } = require('../scripts/companion-license-inventory');
+const { checkCompanionInventory } = require('../scripts/check-companion-inventory');
 
 function sha256(filePath) {
     return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
@@ -173,6 +174,18 @@ test('companion SBOM inventory carries the reviewed Python resolution graph', ()
     assert.deepEqual(pyqt.dependsOn, ['pkg:pypi/pyqt6-qt6@6.11.1']);
 });
 
+test('companion license inspection covers release components without the auxiliary tag', () => {
+    const { root, buildDir } = writeEmptyBuildTree();
+    const { artifactSha256, inventory } = writeCompanionInventoryFixture(root, buildDir);
+    const pyqt = inventory.components.find((component) => component.name === 'PyQt6');
+    pyqt.properties = pyqt.properties.filter((entry) => entry.name !== PROPERTY.inventory);
+    const inspection = inspectCompanionInventory({ components: inventory.components }, artifactSha256);
+    assert.ok(
+        inspection.components.some((component) => component.name === 'PyQt6'),
+        'a required component must not disappear when the auxiliary tag is absent'
+    );
+});
+
 test('companion SBOM inventory fails when the staged executable is missing', () => {
     const { root, buildDir } = writeEmptyBuildTree();
     assert.throws(
@@ -229,6 +242,34 @@ test('companion license inspection fails closed on disallowed decisions and clea
     assert.ok(inspectCompanionInventory(sbom, artifactSha256).issues.some(
         (issue) => /pyqt6: decision=disallowed/i.test(issue)
     ));
+});
+
+test('the companion gate rejects a planted unresolved component', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-companion-license-'));
+    const buildDir = path.join(root, 'build');
+    fs.mkdirSync(buildDir, { recursive: true });
+    const { artifactSha256, inventory } = writeCompanionInventoryFixture(root, buildDir);
+    const sbom = { components: inventory.components, dependencies: inventory.dependencies };
+    for (const component of sbom.components) {
+        const decision = component.properties.find((entry) => entry.name === PROPERTY.decision);
+        if (decision) decision.value = 'approved';
+        const evidence = component.properties.find((entry) => entry.name === PROPERTY.evidence);
+        if (evidence && !evidence.value) evidence.value = 'reviewed fixture evidence';
+        if (/^(?:unknown|unresolved|latest|dynamic)$/i.test(component.version)) component.version = '1.2.3';
+        const downloadHash = component.properties.find((entry) => entry.name === PROPERTY.downloadSha256);
+        if (downloadHash) downloadHash.value = 'a'.repeat(64);
+        for (const propertyName of [PROPERTY.distributionUrl, PROPERTY.checksumUrl, PROPERTY.sourceUrl]) {
+            const url = component.properties.find((entry) => entry.name === propertyName);
+            if (url && /latest/i.test(url.value)) url.value = 'https://example.test/releases/v1.2.3/artifact';
+        }
+    }
+    assert.doesNotThrow(() => checkCompanionInventory(sbom, artifactSha256));
+    const pyqt = sbom.components.find((component) => component.name === 'PyQt6');
+    pyqt.properties.find((entry) => entry.name === PROPERTY.decision).value = 'unresolved';
+    assert.throws(
+        () => checkCompanionInventory(sbom, artifactSha256),
+        /companion license inspection failed.*pyqt6: decision=unresolved/is
+    );
 });
 
 test('companion staging metadata is accepted only for the exact EXE bytes', () => {
