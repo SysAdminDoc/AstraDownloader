@@ -370,7 +370,14 @@ function componentLicenseExpression(component) {
 
 function inspectCompanionInventory(sbom, artifactSha256) {
     const components = (sbom && Array.isArray(sbom.components) ? sbom.components : [])
-        .filter((component) => propertyValue(component, PROPERTY.inventory) === 'true');
+        // Required release components must be inspected even if an older
+        // generator forgot the auxiliary inventory property. Explicitly
+        // inventoried build tooling remains in scope for policy review, while
+        // untagged excluded resolution records are validation/build metadata.
+        .filter((component) => (
+            component.scope !== 'excluded'
+            || propertyValue(component, PROPERTY.inventory) === 'true'
+        ));
     const issues = [];
     const keys = new Set(components.map((component) => propertyValue(component, PROPERTY.componentKey)));
     for (const key of REQUIRED_COMPONENT_KEYS) {

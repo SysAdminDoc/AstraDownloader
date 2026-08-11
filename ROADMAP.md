@@ -30,29 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P1 — Make the license gate run the inspection it exists for
-  Why: The gate that is supposed to enforce the license policy only asserts that
-  the SBOM is non-empty, so 37 real policy issues ship green.
-  Evidence: `scripts/check-companion-inventory.js:16-26` calls
-  `buildCompanionInventory` and throws only when `components`/`dependencies` are
-  empty. `inspectCompanionInventory`
-  (`scripts/companion-license-inventory.js:371-436`) — unresolved SPDX,
-  `decision !== 'approved'`, missing approval evidence, missing obligations,
-  moving `latest` download URLs, unresolved download SHA-256 — is referenced only
-  from `tests/companion-license-inventory.test.js`. Run against the real staged
-  build it reports 37 issues, including PyQt6/PyQt6-Qt6 `decision=unresolved`,
-  yt-dlp and Deno on moving `latest` targets, and an unresolved ffmpeg SHA-256.
-  It also filters on an `astra:companion:inventory` tag that
-  `resolvedPythonComponent` never sets, exempting 9 of 38 components. Note the
-  irony worth resolving together: the rule it never runs forbids moving `latest`
-  URLs, and the companion updater itself uses `releases/latest`.
-  Touches: `scripts/check-companion-inventory.js`,
-  `scripts/companion-license-inventory.js`, `astra_downloader/license-policy.json`
-  Acceptance: `npm run check` fails on today's inventory; every component is in
-  scope; each of the 37 issues is either resolved in the policy or fails the
-  build; a test proves the gate fails on a planted unresolved component.
-  Complexity: M
-
 - [ ] P1 — Preflight the volume the download actually writes to, and sweep staging on every terminal state
   Why: The disk check passes while the system drive fills, and every non-complete
   download leaks a full-size staging directory that nothing ever removes.

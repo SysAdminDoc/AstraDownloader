@@ -36,6 +36,10 @@ repository's git log.
   credentials, site profiles, network identity and extra output roots are
   excluded on export and ignored on import; the Settings status now lists the
   names of fields it changed.
+- **The companion license gate now enforces its inspection.** Release-scoped
+  components are checked for resolved licenses, policy decisions, obligations,
+  pinned runtime downloads and artifact linkage; unresolved inventory fails the
+  gate and is covered by a planted-component regression test.
 
 ## [2.6.0] - 2026-08-09
 
