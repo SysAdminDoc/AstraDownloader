@@ -855,6 +855,7 @@ class SubscriptionManager:
         enqueue,
         status_reader=None,
         logger=None,
+        activity_registry=None,
         clock=time.time,
         tick_seconds=15,
     ):
@@ -863,6 +864,7 @@ class SubscriptionManager:
         self._enqueue = enqueue
         self._status_reader = status_reader or (lambda _download_id: "failed")
         self._logger = logger or (lambda _message: None)
+        self._activity_registry = activity_registry
         self._clock = clock
         self._tick_seconds = max(1.0, float(tick_seconds))
         self._lock = threading.RLock()
@@ -972,6 +974,12 @@ class SubscriptionManager:
             if sub_id in self._scan_ids:
                 return {"id": sub_id, "queued": 0, "skipped": 0, "scanning": True}
             self._scan_ids.add(sub_id)
+        activity_token = None
+        if self._activity_registry is not None:
+            try:
+                activity_token = self._activity_registry.begin_activity()
+            except Exception as error:  # noqa: BLE001
+                self._logger(f"Could not register subscription activity: {error}")
         try:
             started = self.store.begin_scan(sub_id, now=now)
             if not started:
@@ -1073,6 +1081,11 @@ class SubscriptionManager:
                 "error": error,
             }
         finally:
+            if activity_token is not None:
+                try:
+                    self._activity_registry.end_activity(activity_token)
+                except Exception as error:  # noqa: BLE001
+                    self._logger(f"Could not release subscription activity: {error}")
             with self._lock:
                 self._scan_ids.discard(sub_id)
 

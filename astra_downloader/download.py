@@ -35,6 +35,7 @@ except ImportError:  # Flat source-path compatibility.
 
 __all__ = (
     "Download", "DownloadManager", "DownloadManagerCore", "build_video_format_args",
+    "YTDLPActivityRegistry",
     "terminate_process_tree", "is_playlist_url", "write_cookies_netscape",
     "cleanup_stale_cookie_jars", "DOWNLOAD_ACTIVE_STATES",
     "DOWNLOAD_RUNNING_STATES", "DOWNLOAD_PENDING_STATES",
@@ -401,7 +402,7 @@ def write_cookies_netscape(cookies, target_path, *, logger=None, domain_filter=N
             raw_expiry = entry.get("expirationDate")
             expiry = int(float(raw_expiry)) if raw_expiry not in (None, "") else 0
             expiry = max(0, expiry)
-        except (TypeError, ValueError, OverflowError):
+        except Exception:  # noqa: BLE001
             expiry = 0
         lines.append(
             f"{'#HttpOnly_' if entry.get('httpOnly') else ''}{domain}\t"
@@ -1342,12 +1343,13 @@ def describe_browser_cookie_failure(output):
 
 
 def cleanup_stale_cookie_jars(install_dir, older_than_seconds=300, *, clock=time.time):
-    """Remove crash-orphaned cookie jars older than the supplied horizon."""
+    """Remove crash-orphaned cookie jars, including fresh probe artifacts."""
     try:
         now = clock()
         for entry in Path(install_dir).glob('.cookies.*.txt'):
             try:
-                if now - entry.stat().st_mtime > older_than_seconds:
+                fresh_probe = entry.name.startswith(('.cookies.probe.', '.cookies.import.'))
+                if fresh_probe or now - entry.stat().st_mtime > older_than_seconds:
                     entry.unlink()
             except OSError:
                 # reason: a concurrent cleanup or antivirus scan may own the stale file
@@ -1355,6 +1357,62 @@ def cleanup_stale_cookie_jars(install_dir, older_than_seconds=300, *, clock=time
     except OSError:
         # reason: a missing or inaccessible install directory has no stale jars to sweep
         pass
+
+
+class YTDLPActivityRegistry:
+    """Shared, conservative view of every live or reserved yt-dlp activity."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._activities = {}
+
+    def reserve(self):
+        token = object()
+        with self._lock:
+            self._activities[token] = None
+        return token
+
+    def attach(self, token, process):
+        with self._lock:
+            if token in self._activities:
+                self._activities[token] = process
+
+    def release(self, token):
+        with self._lock:
+            self._activities.pop(token, None)
+
+    def release_process(self, process):
+        """Release every registration belonging to a completed process."""
+        if process is None:
+            return
+        with self._lock:
+            for token, registered in list(self._activities.items()):
+                if registered is process:
+                    self._activities.pop(token, None)
+
+    def begin_activity(self):
+        return self.reserve()
+
+    def end_activity(self, token):
+        self.release(token)
+
+    def active_count(self):
+        with self._lock:
+            for token, process in list(self._activities.items()):
+                if process is None:
+                    continue
+                poll = getattr(process, 'poll', None)
+                if not callable(poll):
+                    self._activities.pop(token, None)
+                    continue
+                try:
+                    finished = poll() is not None
+                except Exception:
+                    # An indeterminate process must keep the updater blocked.
+                    finished = False
+                if finished:
+                    self._activities.pop(token, None)
+            return len(self._activities)
 
 
 def build_subprocess_env(deno_path, deno_dir=None, *, environ=None):
@@ -4451,6 +4509,7 @@ class DownloadManagerCore:
                             # reason: test doubles and already-closed streams
                             # may not expose a conventional close operation
                             pass
+                        self._release_ytdlp_activity(proc)
                         activity['at'] = time.monotonic()
                         stop_watchdog = threading.Event()
                         proc = self._dependencies['spawn_ytdlp'](
@@ -4616,6 +4675,7 @@ class DownloadManagerCore:
             except Exception:
                 # reason: cleanup must never replace the download result
                 pass
+            self._release_ytdlp_activity(orphan)
             dl.process = None
             # Cookie jar holds session credentials — purge it as soon as the
             # download process exits so it never outlives the one request that
@@ -4948,7 +5008,28 @@ class DownloadManagerCore:
 
     def active_count(self):
         with self._lock:
-            return len(self._running_ids)
+            queued_activity = len(self._running_ids)
+        activity_counter = self._dependencies.get('ytdlp_activity_count')
+        if not callable(activity_counter):
+            return queued_activity
+        try:
+            process_activity = max(0, int(activity_counter() or 0))
+        except Exception:  # noqa: BLE001
+            # An unknown activity state must fail closed for updater guards.
+            process_activity = queued_activity + 1
+        return max(queued_activity, process_activity)
+
+    def _release_ytdlp_activity(self, process):
+        """Drop a registry reservation once a yt-dlp call has ended."""
+        release = self._dependencies.get('release_ytdlp_activity')
+        if not callable(release) or process is None:
+            return
+        try:
+            release(process)
+        except Exception as error:  # noqa: BLE001
+            self._dependencies['write_persistent_log'](
+                f"WARNING: yt-dlp activity cleanup failed: {error}"
+            )
 
     def maybe_refresh_ytdlp(self, reason):
         """Open the throttled, race-safe yt-dlp auto-update window from the
@@ -5032,6 +5113,7 @@ class DownloadManagerCore:
             return None, 'Timed out while listing formats.'
         finally:
             identity_cleanup()
+            self._release_ytdlp_activity(proc)
         if proc.returncode != 0:
             tail = [ln.strip() for ln in (errout or '').splitlines() if ln.strip()]
             msg = next((ln for ln in reversed(tail) if not _is_benign_failure_noise(ln)), '')
@@ -5114,6 +5196,7 @@ class DownloadManagerCore:
         finally:
             # The staging jar holds every cookie the browser exposed — far more
             # than the one site being stored. It never outlives this call.
+            self._release_ytdlp_activity(proc)
             self._unlink_quietly(staging)
 
     def test_site_login(self, site, timeout=SITE_LOGIN_TEST_TIMEOUT_SECONDS):
@@ -5182,6 +5265,8 @@ class DownloadManagerCore:
                         f'WARNING: sign-in test termination failed: {error}'
                     )
                 return None, f'Sign-in test timed out for {key}.'
+            finally:
+                self._release_ytdlp_activity(proc)
             if proc.returncode != 0:
                 lines = [
                     line.strip() for line in (error_output or '').splitlines()
@@ -5320,6 +5405,7 @@ class DownloadManagerCore:
             return None, 'Timed out while previewing the playlist.'
         finally:
             identity_cleanup()
+            self._release_ytdlp_activity(proc)
         if proc.returncode != 0:
             tail = [line.strip() for line in (errout or '').splitlines() if line.strip()]
             message = next(

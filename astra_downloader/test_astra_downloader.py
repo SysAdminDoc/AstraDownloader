@@ -1338,6 +1338,79 @@ class SubscriptionTests(unittest.TestCase):
             self.assertTrue(removed.get_json()["removed"])
 
 
+    def test_subscription_scan_registers_shared_yt_dlp_activity(self):
+        registry = ad.YTDLPActivityRegistry()
+        scan_started = threading.Event()
+        release_scan = threading.Event()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "subscriptions.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel", now=1000,
+            )
+            self.assertIsNone(error)
+
+            def probe(_url):
+                scan_started.set()
+                release_scan.wait(2)
+                return [], None
+
+            subscription_manager = ad.SubscriptionManager(
+                store=store,
+                probe=probe,
+                enqueue=lambda *_args: (None, "not used"),
+                activity_registry=registry,
+            )
+            queue_manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+            queue_manager._dependencies['ytdlp_activity_count'] = registry.active_count
+            worker = threading.Thread(
+                target=lambda: subscription_manager.scan_subscription(
+                    record['id'], now=1000,
+                ),
+                daemon=True,
+            )
+            worker.start()
+            self.assertTrue(scan_started.wait(1), "subscription probe did not start")
+            self.assertEqual(registry.active_count(), 1)
+            self.assertEqual(queue_manager.active_count(), 1)
+            release_scan.set()
+            worker.join(2)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(registry.active_count(), 0)
+
+
+class YTDLPActivityBoundaryTests(unittest.TestCase):
+    def test_spawn_registers_and_prunes_a_live_process(self):
+        registry = ad.YTDLPActivityRegistry()
+
+        class Process:
+            returncode = None
+
+            def poll(self):
+                return self.returncode
+
+        process = Process()
+        with mock.patch.object(ad, '_YTDLP_ACTIVITY', registry), \
+             mock.patch.object(ad.subprocess, 'Popen', return_value=process):
+            self.assertIs(
+                ad.spawn_ytdlp(['yt-dlp.exe', 'https://example.test']),
+                process,
+            )
+            self.assertEqual(registry.active_count(), 1)
+            process.returncode = 0
+            self.assertEqual(registry.active_count(), 0)
+
+    def test_completed_process_can_release_a_polling_reservation(self):
+        registry = ad.YTDLPActivityRegistry()
+        process = object()
+        token = registry.reserve()
+        registry.attach(token, process)
+
+        registry.release_process(process)
+
+        self.assertEqual(registry.active_count(), 0)
+
+
 class CompanionGuiPolicyTests(unittest.TestCase):
     def test_history_csv_cells_escape_spreadsheet_formula_prefixes(self):
         import gui as gui_module
@@ -3462,7 +3535,9 @@ class IntermediateFileSweepTests(unittest.TestCase):
                 (cancelled_dir / "clip.part").write_text("partial", encoding="utf-8")
                 (other_dir / "keep.part").write_text("partial", encoding="utf-8")
 
-                self.assertTrue(manager.cancel(cancelled.id))
+                with mock.patch.object(manager, "_launch_workers") as launch:
+                    self.assertTrue(manager.cancel(cancelled.id))
+                launch.assert_called_once_with([other])
 
                 self.assertFalse(cancelled_dir.exists())
                 self.assertTrue(other_dir.exists())
@@ -6401,9 +6476,11 @@ class CookieJarSweepTests(unittest.TestCase):
                 ad.INSTALL_DIR = install_dir
                 stale = install_dir / ".cookies.abc123.txt"
                 fresh = install_dir / ".cookies.def456.txt"
+                fresh_probe = install_dir / ".cookies.probe.crashed.txt"
                 unrelated = install_dir / "config.json"
                 stale.write_text("stale", encoding="utf-8")
                 fresh.write_text("fresh", encoding="utf-8")
+                fresh_probe.write_text("probe", encoding="utf-8")
                 unrelated.write_text("{}", encoding="utf-8")
                 # Backdate the stale entry to beyond the cleanup horizon.
                 old_mtime = time.time() - 3600
@@ -6412,6 +6489,7 @@ class CookieJarSweepTests(unittest.TestCase):
                 ad.cleanup_stale_cookie_jars(older_than_seconds=300)
                 self.assertFalse(stale.exists(), "stale cookie jar should be removed")
                 self.assertTrue(fresh.exists(), "fresh cookie jar should be preserved")
+                self.assertFalse(fresh_probe.exists(), "probe jars must be removed regardless of age")
                 self.assertTrue(unrelated.exists(), "non-cookie files must not be touched")
             finally:
                 ad.INSTALL_DIR = original
