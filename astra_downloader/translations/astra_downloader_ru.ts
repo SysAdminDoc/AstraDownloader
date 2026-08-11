@@ -723,6 +723,14 @@
       <translation>Open the persisted server log in File Explorer.</translation>
     </message>
     <message>
+      <source>No server events yet</source>
+      <translation>No server events yet</translation>
+    </message>
+    <message>
+      <source>Start the local API or pair the browser extension to see recent activity here.</source>
+      <translation>Start the local API or pair the browser extension to see recent activity here.</translation>
+    </message>
+    <message>
       <source>Recent local companion events. Use Clear to remove visible entries.</source>
       <translation>Recent local companion events. Use Clear to remove visible entries.</translation>
     </message>

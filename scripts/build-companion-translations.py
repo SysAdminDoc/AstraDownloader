@@ -320,6 +320,10 @@ CATALOGS = {
             "Die Erweiterung findet diesen Server selbst, sobald er läuft. Anfragen werden nur von diesem Computer angenommen und müssen das Sitzungstoken enthalten.",
         "Server log":
             "Serverprotokoll",
+        "No server events yet":
+            "Noch keine Serverereignisse",
+        "Start the local API or pair the browser extension to see recent activity here.":
+            "Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.",
         "Download a video":
             "Video herunterladen",
         "Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.":

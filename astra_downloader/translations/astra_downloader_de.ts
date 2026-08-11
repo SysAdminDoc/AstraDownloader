@@ -723,6 +723,14 @@
       <translation>Gespeichertes Serverprotokoll im Datei-Explorer öffnen.</translation>
     </message>
     <message>
+      <source>No server events yet</source>
+      <translation>Noch keine Serverereignisse</translation>
+    </message>
+    <message>
+      <source>Start the local API or pair the browser extension to see recent activity here.</source>
+      <translation>Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.</translation>
+    </message>
+    <message>
       <source>Recent local companion events. Use Clear to remove visible entries.</source>
       <translation>Aktuelle lokale Companion-Ereignisse. Mit „Leeren“ sichtbare Einträge entfernen.</translation>
     </message>

@@ -42,6 +42,9 @@ pasting a link never needs it.
 - **History you can keep and search.** Choose the local retention cap in
   Settings, search by title, filename, or URL, and see subscription-archive
   records alongside ordinary downloads without duplicating the same URL.
+- **Empty pages point the way forward.** History, scheduled subscriptions,
+  stored sign-ins, and extension activity explain what to do when there is
+  nothing to show yet, including one-click recovery actions.
 - **Keeps output folders clean.** Partial and merge files use a private,
   per-download staging folder and only the finished file is moved into the
   destination. The Settings page can put intermediates beside the output for

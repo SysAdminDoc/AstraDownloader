@@ -2413,6 +2413,16 @@ class MainWindowCore(QMainWindow):
         btn_reveal_log.clicked.connect(self._reveal_log_file)
         log_header.addWidget(btn_reveal_log)
         layout.addLayout(log_header)
+        self.log_empty_state = make_empty_state(
+            tr("No server events yet"),
+            tr(
+                "Start the local API or pair the browser extension to see "
+                "recent activity here."
+            ),
+            "Start server",
+            self._start_server,
+        )
+        layout.addWidget(self.log_empty_state, 1)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setAccessibleName(tr("Server log"))
@@ -3574,6 +3584,8 @@ class MainWindowCore(QMainWindow):
             self.subscription_container.addWidget(make_empty_state(
                 "No scheduled subscriptions",
                 "Add a YouTube channel or playlist above. New uploads will be queued on its interval.",
+                "Add subscription",
+                self._focus_subscription_url,
             ))
             self.subscription_container.addStretch()
             return
@@ -3581,6 +3593,8 @@ class MainWindowCore(QMainWindow):
             self.subscription_container.addWidget(make_empty_state(
                 tr("No subscriptions match these filters"),
                 tr("Try a different search or choose All subscriptions."),
+                "Clear",
+                self._clear_subscription_filters,
             ))
             self.subscription_container.addStretch()
             return
@@ -3854,6 +3868,8 @@ class MainWindowCore(QMainWindow):
                 tr("Add one above for any site that only serves video to "
                    "signed-in viewers. YouTube downloads use the browser "
                    "extension instead and need nothing here."),
+                "Add a site sign-in",
+                self._focus_site_login_url,
             ))
             self.site_login_container.addStretch()
             return
@@ -3861,6 +3877,8 @@ class MainWindowCore(QMainWindow):
             self.site_login_container.addWidget(make_empty_state(
                 tr("No sign-ins match these filters"),
                 tr("Try a different search or choose All sign-ins."),
+                "Clear",
+                self._clear_site_login_filters,
             ))
             self.site_login_container.addStretch()
             return
@@ -5569,6 +5587,37 @@ class MainWindowCore(QMainWindow):
         """Put the caret in the paste box, wherever the user is."""
         self._nav_click("Download")
         self.quick_download_url.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _focus_subscription_url(self):
+        self._nav_click("Subscriptions")
+        self.subscription_url.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _clear_subscription_filters(self):
+        self.subscription_search.clear()
+        self.subscription_status_filter.setCurrentIndex(0)
+        self._refresh_subscriptions(force=True)
+        self.subscription_search.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _focus_site_login_url(self):
+        self._nav_click("Sign-ins")
+        self.site_login_url.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _clear_site_login_filters(self):
+        self.site_login_search.clear()
+        self.site_login_status_filter.setCurrentIndex(0)
+        self._refresh_site_logins(force=True)
+        self.site_login_search.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _clear_history_filters(self):
+        self.history_search.clear()
+        self.history_status.setCurrentIndex(0)
+        self.history_format.setCurrentIndex(0)
+        self.history_sort.setCurrentIndex(0)
+        self.history_date_from.clear()
+        self.history_date_to.clear()
+        self._history_offset = 0
+        self._refresh_history()
+        self.history_search.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _apply_first_run_panel_state(self):
         panel = getattr(self, "first_run_panel", None)
@@ -7370,6 +7419,8 @@ class MainWindowCore(QMainWindow):
             self.history_container.addWidget(make_empty_state(
                 "No matching downloads",
                 "Adjust the search, status, format, or saved-date filters.",
+                "Clear",
+                self._clear_history_filters,
             ))
             self.history_container.addStretch()
             return
@@ -8554,10 +8605,14 @@ class MainWindowCore(QMainWindow):
                 continue
             timestamp = str(entry.get('ts') or '')
             lines.append(f"{timestamp[-8:]} {message}" if timestamp else message)
-        self.log_text.setPlainText("\n".join(lines) if lines else "Ready.")
+        self.log_text.setPlainText("\n".join(lines))
+        self.log_empty_state.setVisible(not lines)
+        self.log_text.setVisible(bool(lines))
 
     def _clear_log(self):
-        self.log_text.setPlainText("Ready.")
+        self.log_text.clear()
+        self.log_empty_state.setVisible(True)
+        self.log_text.setVisible(False)
 
     def _toggle_token_visible(self):
         showing = self.cfg_token.echoMode() == QLineEdit.EchoMode.Normal
@@ -8585,6 +8640,8 @@ class MainWindowCore(QMainWindow):
 
     def _append_log(self, msg):
         ts = datetime.now().strftime("%H:%M:%S")
+        self.log_empty_state.setVisible(False)
+        self.log_text.setVisible(True)
         self.log_text.append(f"{ts} {msg}")
         self._dependencies['write_persistent_log'](msg)
         cursor = self.log_text.textCursor()
