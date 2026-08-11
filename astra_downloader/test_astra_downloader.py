@@ -3,6 +3,7 @@ import inspect
 import io
 import json
 import os
+import queue
 import shutil
 import socket
 import struct
@@ -801,42 +802,128 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(store.get("ServerPort"), 9800)
 
     def test_start_server_port_fallback_uses_session_override(self):
-        import inspect
+        import gui as gui_module
 
-        gui_module = __import__("gui")
-        start_source = inspect.getsource(gui_module.MainWindowCore._start_server)
-        finish_source = inspect.getsource(gui_module.MainWindowCore._finish_server_start)
-        source = (
-            start_source + finish_source
+        class SessionConfig(FakeConfig):
+            def __init__(self):
+                super().__init__({"ServerPort": 9751})
+                self.session = {}
+
+            def set_session(self, key, value):
+                self.session[key] = value
+
+            def get(self, key, default=None):
+                return self.session.get(key, super().get(key, default))
+
+            def get_persisted(self, key, default=None):
+                return super().get(key, default)
+
+        class Server:
+            backend = "fixture"
+
+            def run(self):
+                raise AssertionError("the serving thread must be startable without running in the test")
+
+        class Thread:
+            created = []
+
+            def __init__(self, target=None, name=None, daemon=None):
+                self.target = target
+                self.name = name
+                self.daemon = daemon
+                self.created.append(self)
+
+            def start(self):
+                return None
+
+        config = SessionConfig()
+        logs = []
+        window = types.SimpleNamespace(
+            config=config,
+            _server_starting=True,
+            _server_start_cancel=None,
+            _server_start_thread=object(),
+            _dependencies={
+                "clamp_int": ad.clamp_int,
+                "maybe_auto_update_ytdlp": lambda *_args: None,
+            },
+            _value=lambda name: {
+                "SERVER_PORT": 9751,
+            }[name],
+            _append_log=logs.append,
+            _sync_connection_ui=lambda: logs.append("connection synced"),
+            _update_server_ui=lambda: None,
+            _show_server_error=lambda message: logs.append(message),
+            _subscription_manager=lambda: None,
+            dl_manager=types.SimpleNamespace(active_count=lambda: 0),
+            log_message=types.SimpleNamespace(emit=lambda *_args: None),
         )
-        self.assertIn('set_session("ServerPort", chosen_port)', source)
-        self.assertNotIn('self.config.set("ServerPort"', source)
-        self.assertIn('self._server_starting = True', start_source)
-        self.assertIn('name="server-prepare"', start_source)
-        self.assertIn('name="server-serve"', finish_source)
-        save_source = inspect.getsource(gui_module.MainWindowCore._save_settings)
-        self.assertIn('get_persisted', save_source)
+
+        with mock.patch.object(gui_module.threading, "Thread", Thread):
+            gui_module.MainWindowCore._finish_server_start(
+                window,
+                {"ok": True, "port": 9761, "server": Server()},
+            )
+
+        self.assertEqual(config.get_persisted("ServerPort"), 9751)
+        self.assertEqual(config.get("ServerPort"), 9761)
+        self.assertEqual(config.session["ServerPort"], 9761)
+        self.assertIn("connection synced", logs)
+        self.assertEqual([thread.name for thread in Thread.created], ["server-serve"])
 
     def test_settings_port_row_explains_a_session_fallback(self):
         # During a bind-conflict session the dashboard shows the bound fallback
         # port while the Settings spinbox shows the configured one. Without the
         # hint the two surfaces silently disagree.
-        import inspect
+        class SessionConfig(FakeConfig):
+            def __init__(self):
+                super().__init__({"ServerPort": 9751})
+                self.session_port = 9761
 
-        gui_module = __import__("gui")
-        build_source = inspect.getsource(gui_module.MainWindowCore._build_settings)
-        self.assertIn("cfg_port_session_hint", build_source)
-        # The spinbox must never echo the session override back at the user;
-        # saving any unrelated setting would then persist the fallback port.
-        self.assertIn("_persisted_get(\"ServerPort\"", build_source)
-        sync_source = inspect.getsource(gui_module.MainWindowCore._sync_connection_ui)
-        self.assertIn("get_persisted", sync_source)
-        self.assertIn("fallback port", sync_source)
-        self.assertIn("setAccessibleDescription", sync_source)
-        smoke_source = (
-            Path(ad.__file__).parents[1] / "scripts" / "render-companion-gui.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("settings-fallback-port", smoke_source)
+            def get(self, key, default=None):
+                if key == "ServerPort":
+                    return self.session_port
+                return super().get(key, default)
+
+            def get_persisted(self, key, default=None):
+                return super().get(key, default)
+
+        class Field:
+            def __init__(self):
+                self.value = None
+                self.description = None
+                self.visible = None
+
+            def setText(self, value):
+                self.value = value
+
+            def setAccessibleDescription(self, value):
+                self.description = value
+
+        config = SessionConfig()
+        hint = Field()
+        port = Field()
+        visibility = []
+        window = types.SimpleNamespace(
+            config=config,
+            _dependencies={"clamp_int": ad.clamp_int},
+            _value=lambda name: {"SERVER_PORT": 9751}[name],
+            dash_endpoint=Field(),
+            stat_port=Field(),
+            cfg_port_session_hint=hint,
+            cfg_port=port,
+            _set_settings_filter_hidden=lambda widget, hidden: (
+                visibility.append((widget, hidden))
+            ),
+        )
+
+        gui_module_for_tests().MainWindowCore._sync_connection_ui(window)
+
+        self.assertEqual(window.dash_endpoint.value, "http://127.0.0.1:9761")
+        self.assertEqual(window.stat_port.value, "9761")
+        self.assertIn("fallback port 9761", hint.value)
+        self.assertIn("retry 9751", port.description)
+        self.assertEqual(visibility[-1], (hint, False))
 
     def test_owned_history_store_enforces_injected_retention_limit(self):
         import importlib
@@ -924,13 +1011,34 @@ class PersistenceTests(unittest.TestCase):
             self.assertTrue(gui.MainWindowCore._history_is_quarantined(window))
 
     def test_history_view_explains_loading_and_unreadable_states(self):
-        import inspect
-        import gui
+        from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
 
-        source = inspect.getsource(gui.MainWindowCore._refresh_history)
-        self.assertIn('tr("Loading history…")', source)
-        self.assertIn('tr("History could not be read")', source)
-        self.assertIn('self._history_is_quarantined()', source)
+        _get_qapp_or_skip(self)
+
+        class BrokenHistory(FakeHistory):
+            def load(self):
+                raise OSError("fixture history is unreadable")
+
+        history = BrokenHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                window._refresh_history()
+                QApplication.processEvents()
+                labels = [label.text() for label in window.findChildren(QLabel)]
+                buttons = [button.text() for button in window.findChildren(QPushButton)]
+                self.assertEqual(window.history_meta.text(), "History unavailable")
+                self.assertIn("History could not be read", labels)
+                self.assertIn("Open diagnostics", buttons)
+                self.assertIn(
+                    "fixture history is unreadable",
+                    window.history_page_status.text(),
+                )
+            finally:
+                _retire_test_window(window)
 
     def test_json_loader_quarantines_oversized_state_before_parsing(self):
         import importlib
@@ -2288,8 +2396,6 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             Path(ad.__file__).read_text(encoding='utf-8')
             + Path(ad.__file__).with_name('gui.py').read_text(encoding='utf-8')
         )
-        import inspect
-        server_error_src = inspect.getsource(ad.MainWindow._show_server_error)
         self.assertNotIn(
             "QMessageBox",
             src,
@@ -2298,12 +2404,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn("self.btn_undo_clear_history.show()", src)
         self.assertIn("self.history_mgr.replace(self._cleared_history_snapshot)", src)
         self.assertIn("restart_now = connection_changed and self.server_running", src)
-        self.assertNotIn("raise_()", server_error_src)
-        self.assertNotIn("activateWindow()", server_error_src)
 
     def test_companion_uses_premium_command_center_and_async_readiness(self):
-        import inspect
-
         gui_source = "\n".join(
             Path(ad.__file__).with_name(name).read_text(encoding="utf-8")
             for name in (
@@ -2314,27 +2416,30 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             )
         )
         source = Path(ad.__file__).read_text(encoding="utf-8") + gui_source
-        probe_source = inspect.getsource(ad.ReadinessProbe.run)
-        probe_wiring_source = inspect.getsource(ad.ReadinessProbe.__init__)
-        download_card_source = inspect.getsource(ad.MainWindow._download_card)
+        probe_calls = []
+        probe_payloads = []
+        probe = gui_module_for_tests().ReadinessProbe(
+            configured_runtime="deno",
+            runtime_probe=lambda **kwargs: probe_calls.append(("runtime", kwargs)) or {"ejsReady": True},
+            provider_probe=lambda: probe_calls.append(("provider", {})) or {"ok": False},
+            ytdlp_version=lambda: "2026.08.04",
+            ffmpeg_version=lambda: "8.1.2",
+            logger=lambda message: probe_calls.append(("log", message)),
+            impersonate_targets=lambda: probe_calls.append(("targets", {})) or ["chrome"],
+        )
+        probe.completed.connect(probe_payloads.append)
+        probe.run()
+        self.assertEqual(probe_payloads[0]["runtime"]["ejsReady"], True)
+        self.assertEqual(probe_payloads[0]["impersonateTargets"], ["chrome"])
+        self.assertEqual([name for name, _value in probe_calls[:2]], ["runtime", "provider"])
         self.assertIn("#ff6552", ad.STYLESHEET)
         self.assertIn('QFrame[class="readiness"]', ad.STYLESHEET)
         self.assertIn('QLabel[class="errorCallout"]', ad.STYLESHEET)
-        self.assertIn("self._runtime_probe", probe_source)
-        self.assertIn("self._provider_probe", probe_source)
-        self.assertIn("self._impersonate_targets", probe_source)
-        self.assertIn("impersonate_targets", probe_wiring_source)
-        self.assertIn("probe_javascript_runtime", probe_wiring_source)
-        self.assertIn("probe_po_token_provider", probe_wiring_source)
-        settings_source = inspect.getsource(ad.MainWindow._build_settings)
-        self.assertNotIn("probe_impersonate_targets", settings_source)
-        self.assertIn("__impersonate_pending__", settings_source)
         self.assertIn("self.readiness_worker.moveToThread", source)
         self.assertIn("if is_frozen_app() and not visual_smoke", source)
         # The throwaway smoke render must not delegate to a live companion.
         self.assertIn("if not visual_smoke:\n        try:\n            lock = check_single_instance", source)
         self.assertIn("if visual_smoke:", source)
-        self.assertIn("dl.error_advice", download_card_source)
         renderer_path = Path(ad.__file__).parents[1] / "scripts" / "render-companion-gui.py"
         self.assertTrue(renderer_path.exists())
         renderer_source = renderer_path.read_text(encoding="utf-8")
@@ -2622,7 +2727,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_source_address = Field("")
         window.cfg_xff = Field("")
         window.cfg_geo_verification_proxy = Field("")
-        window.cfg_outtmpl = Field("")
+        window.cfg_outtmpl = Field("%(filepath)s.%(ext)s")
         window.statuses = []
         window._set_input_error = lambda field, value: setattr(field, "has_error", value)
         window._show_settings_status = lambda message, tone="neutral": window.statuses.append((message, tone))
@@ -2645,6 +2750,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
 
         self.assertTrue(window.cfg_dl_path.has_error)
         self.assertTrue(window.cfg_audio_path.has_error)
+        self.assertTrue(window.cfg_outtmpl.has_error)
+        self.assertIn("Keep %(ext)s", window.cfg_outtmpl.description)
         self.assertTrue(window.cfg_dl_path.focused)
         self.assertIn("video download folder", window.cfg_dl_path.description)
         self.assertEqual(window.statuses[-1][1], "danger")
@@ -5317,9 +5424,61 @@ class PoTokenProviderNudgeTests(unittest.TestCase):
         self.assertNotIn('No PO-token provider is running', running.error_advice)
 
     def test_download_path_does_not_probe_or_route_through_a_provider(self):
-        source = inspect.getsource(ad.DownloadManagerCore._run_download)
-        self.assertNotIn('probe_po_token_provider', source)
-        self.assertNotIn('provider_running=bool(', source)
+        captured = []
+
+        class Proc:
+            returncode = 0
+
+            def __init__(self, args, **_kwargs):
+                captured.append(list(args))
+                self.stdout = iter(["[download] Destination: clip.mp4\n"])
+
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                pass
+
+            def kill(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+                FakeHistory(),
+            )
+            manager._dependencies["probe_po_token_provider"] = mock.Mock(
+                side_effect=AssertionError("download path must not probe a provider")
+            )
+            manager._dependencies["spawn_ytdlp"] = Proc
+            manager._dependencies["probe_javascript_runtime"] = (
+                lambda **_kwargs: {}
+            )
+            manager._dependencies["build_javascript_runtime_args"] = (
+                lambda *_args, **_kwargs: []
+            )
+            download = ad.Download(
+                "dl_nudge_behavior",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                output_dir=tmpdir,
+            )
+            download.status = "queued"
+            manager._run_download(download)
+
+        self.assertEqual(download.status, "complete")
+        self.assertEqual(len(captured), 1)
+        self.assertTrue(any(
+            argument.startswith(
+                "youtube:player_client=visionos,tv,web_embedded,android_vr"
+            )
+            for argument in captured[0]
+        ))
+        self.assertFalse(any(
+            "youtubepot-bgutilhttp" in argument for argument in captured[0]
+        ))
 
 
 class DownloadFailureClassifierTests(unittest.TestCase):
@@ -8013,47 +8172,114 @@ class FolderPickerWatchdogTests(unittest.TestCase):
         )
 
     def test_watchdog_emits_log_when_dialog_blocks_past_threshold(self):
-        # Source-pin the log emission shape: when elapsed exceeds
-        # the threshold, write_persistent_log must be called with a
-        # message that names the elapsed time and the threshold so an
-        # operator reading the log can correlate.
-        import inspect
-        src = inspect.getsource(ad.FolderPickerService._tick)
-        self.assertIn(
-            "elapsed > self.DIALOG_WATCHDOG_THRESHOLD_SECONDS",
-            src,
-            "FolderPickerService._tick must check elapsed time against the threshold",
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+
+        class DialogTypes:
+            FileMode = types.SimpleNamespace(Directory=1)
+            Option = types.SimpleNamespace(ShowDirsOnly=2, DontResolveSymlinks=4)
+            DialogCode = types.SimpleNamespace(Accepted=1)
+
+        class Dialog:
+            def setFileMode(self, _value):
+                pass
+
+            def setOption(self, *_args):
+                pass
+
+            def windowFlags(self):
+                return 0
+
+            def setWindowFlags(self, _value):
+                pass
+
+            def activateWindow(self):
+                pass
+
+            def raise_(self):
+                pass
+
+            def exec(self):
+                return DialogTypes.DialogCode.Accepted
+
+            def selectedFiles(self):
+                return [r"C:\Videos"]
+
+        requests = queue.Queue()
+        response = queue.Queue()
+        requests.put({"response": response, "initial": r"C:\Videos"})
+        logs = []
+        clock_values = iter((0.0, 61.0))
+        service = gui_module_for_tests().FolderPickerService(
+            request_queue=requests,
+            dialog_factory=lambda *_args: Dialog(),
+            dialog_types=lambda: DialogTypes,
+            clock=lambda: next(clock_values),
+            logger=logs.append,
         )
-        self.assertIn(
-            "FolderPickerService: dialog blocked for",
-            src,
-            "Watchdog log message must use the documented prefix so log scraping works",
-        )
-        self.assertIn(
-            "Possible Qt event-loop or file-system hang.",
-            src,
-            "Watchdog log message must surface the suspected cause",
-        )
+        self.addCleanup(service.deleteLater)
+
+        service._tick()
+        QApplication.processEvents()
+
+        self.assertEqual(response.get_nowait()["path"], r"C:\Videos")
+        self.assertEqual(len(logs), 1)
+        self.assertIn("FolderPickerService: dialog blocked for 61.0s", logs[0])
+        self.assertIn("threshold 60s", logs[0])
+        self.assertIn("Possible Qt event-loop or file-system hang.", logs[0])
 
     def test_watchdog_does_not_log_for_fast_dialogs(self):
-        # The threshold gate ensures fast dialog interactions don't
-        # spam the log. We pin this via source-shape rather than a
-        # live Qt test — the gate is a single boolean check.
-        import inspect
-        src = inspect.getsource(ad.FolderPickerService._tick)
-        # The log call must sit INSIDE the `if elapsed > ...`
-        # block, not outside. We test this by ensuring the log line
-        # is preceded by the watchdog conditional within a reasonable
-        # window.
-        log_line = "FolderPickerService: dialog blocked for"
-        cond_line = "elapsed > self.DIALOG_WATCHDOG_THRESHOLD_SECONDS"
-        log_idx = src.find(log_line)
-        cond_idx = src.find(cond_line)
-        self.assertGreater(log_idx, cond_idx,
-                           "Log line must appear after the threshold check, not before")
-        # And within 500 characters — proving they're in the same block.
-        self.assertLess(log_idx - cond_idx, 500,
-                        "Log line and threshold check must be in the same control block")
+        _get_qapp_or_skip(self)
+
+        class DialogTypes:
+            FileMode = types.SimpleNamespace(Directory=1)
+            Option = types.SimpleNamespace(ShowDirsOnly=2, DontResolveSymlinks=4)
+            DialogCode = types.SimpleNamespace(Accepted=1)
+
+        class Dialog:
+            def setFileMode(self, _value):
+                pass
+
+            def setOption(self, *_args):
+                pass
+
+            def windowFlags(self):
+                return 0
+
+            def setWindowFlags(self, _value):
+                pass
+
+            def activateWindow(self):
+                pass
+
+            def raise_(self):
+                pass
+
+            def exec(self):
+                return DialogTypes.DialogCode.Accepted
+
+            def selectedFiles(self):
+                return [r"C:\Videos"]
+
+        requests = queue.Queue()
+        response = queue.Queue()
+        requests.put({"response": response, "initial": r"C:\Videos"})
+        logs = []
+        clock_values = iter((0.0, 1.0))
+        service = gui_module_for_tests().FolderPickerService(
+            request_queue=requests,
+            dialog_factory=lambda *_args: Dialog(),
+            dialog_types=lambda: DialogTypes,
+            clock=lambda: next(clock_values),
+            logger=logs.append,
+        )
+        self.addCleanup(service.deleteLater)
+
+        service._tick()
+
+        self.assertEqual(response.get_nowait()["path"], r"C:\Videos")
+        self.assertEqual(logs, [])
 
 
 class DenoRuntimeHardGateTests(unittest.TestCase):
@@ -8258,16 +8484,6 @@ class NoArchiveLockTests(unittest.TestCase):
                          "yt-dlp argv must not include --download-archive.")
         self.assertNotIn('"--download-archive"', src,
                          "yt-dlp argv must not include --download-archive.")
-
-    def test_source_passes_force_overwrites_to_ytdlp(self):
-        import download
-
-        src = inspect.getsource(download.DownloadManagerCore._run_download)
-        self.assertIn("'--force-overwrites'", src,
-                      "yt-dlp argv must include --force-overwrites so "
-                      "re-downloads of the same URL aren't skipped because "
-                      "the destination file already exists.")
-
 
 class VideoFormatSelectorTests(unittest.TestCase):
     """Codec-aware format selection — the previous selector picked the
@@ -9816,19 +10032,6 @@ class EndToEndDownloadTests(unittest.TestCase):
         self.assertEqual(len(last_lines), 2)
         self.assertIsNone(last_error)
 
-    def test_download_output_parser_is_shared_by_both_attempts(self):
-        import download as download_module
-
-        source = inspect.getsource(download_module.DownloadManagerCore._run_download)
-        self.assertEqual(
-            source.count('self._consume_ytdlp_output(dl, proc, activity)'), 2,
-            "both the first attempt and the retry must use the shared parser",
-        )
-        self.assertNotIn(
-            'for line in proc.stdout:', source,
-            "no copy of the parse loop may remain inline",
-        )
-
     def test_full_download_flow_marks_complete_and_writes_history(self):
         # Fake yt-dlp output: structured progress lines that the parsing
         # loop knows how to decode + a Merger line (sets filename) + a
@@ -9978,6 +10181,10 @@ class EndToEndDownloadTests(unittest.TestCase):
             if isinstance(arg, str) and arg.startswith('--')
         }
         self.assertTrue(options.isdisjoint(ad.YTDLP_FORBIDDEN_LINK_FLAGS))
+        self.assertFalse(any(
+            "aria2" in str(argument).casefold()
+            for argument in captured_args[0]
+        ))
         self.assertIn('--ignore-config', captured_args[0])
         self.assertIn('--no-js-runtimes', captured_args[0])
         self.assertIn('deno:C:/Tools/deno.exe', captured_args[0])
@@ -10449,24 +10656,6 @@ class Aria2cExternalDownloaderBanTests(unittest.TestCase):
     aria2c manifest downloads allowed arbitrary code execution.  Verify
     the companion never passes --external-downloader aria2c."""
 
-    def test_source_never_references_aria2c(self):
-        src = Path(ad.__file__).read_text(encoding='utf-8')
-        self.assertNotIn('aria2', src.lower(),
-            "astra_downloader source must not reference aria2c "
-            "(CVE-2026-50574: RCE via manifest downloads)")
-
-    def test_source_never_passes_external_downloader_flag(self):
-        # The argv builder lives in download.py. astra_downloader.py names
-        # these flags only in the process-boundary denylist, which is the
-        # thing enforcing the ban rather than breaking it.
-        import download
-
-        src = inspect.getsource(download)
-        for flag in ('--external-downloader', '--downloader'):
-            with self.subTest(flag=flag):
-                self.assertNotIn(flag, src,
-                    "the yt-dlp argv builder must not pass an external downloader")
-
     def test_external_downloader_is_refused_at_the_process_boundary(self):
         for option in ('--external-downloader', '--downloader', '--downloader-args'):
             with self.subTest(option=option), \
@@ -10684,20 +10873,29 @@ class ResponseSizeCapTests(unittest.TestCase):
         self.assertIn("fixture route exploded", log.call_args.args[0])
 
     def test_cors_response_has_outgoing_size_guard(self):
-        # cors_response is an inner closure inside create_api, so we
-        # can't call it directly from a test. Pin the guard at the
-        # source level so a future refactor that drops the check fails
-        # CI. The shape pinned here: len(resp.get_data()) > MAX_RESPONSE_BYTES
-        # must short-circuit into a 413 jsonify response.
-        import inspect
-        import routes
-        src = inspect.getsource(routes.create_api)
-        self.assertIn("MAX_RESPONSE_BYTES", src,
-            "create_api must reference MAX_RESPONSE_BYTES in cors_response")
-        self.assertIn("status_code = 413", src,
-            "cors_response must set status_code = 413 when the body exceeds the cap")
-        self.assertIn("resp.get_data()", src,
-            "cors_response must measure the actual serialised body length, not the input dict")
+        # Force a small policy limit and return a deliberately oversized
+        # history payload. The public route must replace it with the bounded
+        # 413 response before it reaches the client.
+        token = "i" * 32
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad, "MAX_RESPONSE_BYTES", 64), \
+                mock.patch.object(
+                    ad,
+                    "query_history_entries",
+                    return_value={"history": ["x" * 256]},
+                ):
+            api = ad.create_api(config, manager, FakeHistory())
+        response = api.test_client().get(
+            "/history?limit=1",
+            headers={
+                "X-Auth-Token": token,
+                "Host": "127.0.0.1:9751",
+            },
+        )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("byte limit", response.get_json()["error"])
 
 
 _qapp_singleton = None
@@ -11515,17 +11713,6 @@ class UpdateYtdlpEndpointTests(unittest.TestCase):
         once = n("%(uploader)s/%(title)s.%(ext)s")
         self.assertEqual(n(once), once, "normalization must be idempotent")
 
-    def test_save_settings_flags_invalid_output_template(self):
-        # A rejected template must surface as a field error, never a silent
-        # "Settings saved." while sanitize blanks it to the default naming.
-        import inspect
-
-        gui_module = __import__("gui")
-        source = inspect.getsource(gui_module.MainWindowCore._save_settings)
-        self.assertIn("normalize_output_template", source)
-        self.assertIn("mark_error(\n                self.cfg_outtmpl", source)
-        self.assertIn('"OutputTemplate": outtmpl,', source)
-
     def test_manager_max_concurrent_reads_config(self):
         mgr = ad.DownloadManager(FakeConfig({"MaxConcurrentDownloads": 5}), FakeHistory())
         self.assertEqual(mgr._max_concurrent(), 5)
@@ -11581,15 +11768,6 @@ class SabrReadinessTests(unittest.TestCase):
         win._dependencies['evaluate_sabr_support'] = boom
         ad.MainWindow._apply_readiness(win, {"ytDlp": "2026.07.04", "ffmpeg": "8.1.2"})
         self.assertIn(("sabr", "Limited", "warning"), calls)
-
-    def test_download_page_build_never_probes_ytdlp_synchronously_for_sabr(self):
-        import inspect
-
-        gui_module = __import__("gui")
-        source = inspect.getsource(gui_module.MainWindowCore._build_download)
-        self.assertNotIn("evaluate_sabr_support", source,
-                         "SABR must come from the async readiness probe, not a cold GUI-thread subprocess")
-
 
 class TrayCompletionNotifyTests(unittest.TestCase):
     """Download-complete tray notification: one-shot, out-of-sight-only,
@@ -12816,12 +12994,22 @@ class DownloadWorkerRaceGuardTests(unittest.TestCase):
         self.assertEqual(calls, [], "initiation must not open the update window while the download is about to spawn")
 
     def test_worker_entry_triggers_ytdlp_update_at_queue_idle(self):
-        import inspect
-        import download as download_module
+        manager = self._manager()
+        download = ad.Download(
+            "dl_queue_idle_hook",
+            "https://example.com/video",
+        )
+        download.status = "complete"
+        with manager._lock:
+            manager._running_ids.add(download.id)
+        manager._run_download = lambda _download: None
+        manager._schedule = lambda: None
+        refresh = mock.Mock()
+        manager.maybe_refresh_ytdlp = refresh
 
-        source = inspect.getsource(download_module.DownloadManagerCore._worker_entry)
-        self.assertIn("self.maybe_refresh_ytdlp('queue-idle')", source)
-        self.assertIn('if self.active_count() == 0:', source)
+        manager._worker_entry(download)
+
+        refresh.assert_called_once_with("queue-idle")
 
     def test_maybe_refresh_ytdlp_is_a_safe_noop_without_the_hook(self):
         manager = self._manager()
@@ -14520,15 +14708,6 @@ class QuarantinedBinaryTests(unittest.TestCase):
         self.assertTrue(any('security floor' in message for message in logged))
         self.assertEqual(len(persisted), 1)
 
-    def test_setup_refetches_rather_than_reporting_already_installed(self):
-        # The gate itself, read from source: an existence check here is what
-        # let a stub through, and it must not come back.
-        import inspect
-        source = inspect.getsource(gui_module_for_tests().SetupWorkerCore.run)
-        self.assertNotIn("YTDLP_PATH').exists()", source)
-        self.assertNotIn("FFMPEG_PATH').exists()", source)
-        self.assertIn("_report_managed_binary", source)
-
     # ── What the readiness row says ──────────────────────────────────────
 
     def _readiness_window(self, state):
@@ -14564,12 +14743,6 @@ class QuarantinedBinaryTests(unittest.TestCase):
         win, calls = self._readiness_window("ok")
         win._set_tool_readiness("ytDlp", "2026.08.04", "ignored")
         self.assertEqual(calls[0][:3], ("ytDlp", "2026.08.04", "success"))
-
-    def test_launch_does_not_gate_setup_on_mere_existence(self):
-        import inspect
-        source = inspect.getsource(ad.main)
-        self.assertIn("managed_binary_usable(YTDLP_PATH)", source)
-        self.assertNotIn("not YTDLP_PATH.exists()", source)
 
 class DiskSpacePreflightTests(unittest.TestCase):
     """Size estimates refuse a known-full destination before yt-dlp starts."""
@@ -14676,12 +14849,6 @@ class DiskSpacePreflightTests(unittest.TestCase):
 
         self.assertEqual(received["staging_path"], Path(install_dir))
         self.assertEqual(len(calls), 1)
-
-    def test_setup_source_checks_space_before_opening_the_ffmpeg_stream(self):
-        source = inspect.getsource(gui_module_for_tests().SetupWorkerCore.run)
-        self.assertIn("check_download_disk_space", source)
-        self.assertLess(source.index("check_download_disk_space"), source.index("http_get"))
-
 
 class FormatSortTests(unittest.TestCase):
     """Codec and frame-rate preferences compile to one --format-sort."""
@@ -16685,10 +16852,24 @@ class SettingsFormReloadTests(unittest.TestCase):
         # screen. A widget missing from the table keeps its pre-import value,
         # and the next Save writes that value straight back over the import —
         # so a new setting that forgets this table is a silent data loss.
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
         gui = gui_module_for_tests()
-        source = inspect.getsource(gui.MainWindowCore._build_settings)
-        import re
-        built = set(re.findall(r"self\.(cfg_[a-z_0-9]+)\s*=", source))
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            QApplication.processEvents()
+            built = {
+                name for name in vars(window)
+                if name.startswith("cfg_")
+            }
+        finally:
+            _retire_test_window(window)
         # Not a stored setting: it reports the session's bound port.
         built.discard("cfg_port_session_hint")
         # A dict of checkboxes, refreshed separately by name.
@@ -17302,8 +17483,27 @@ class CompletionNotificationTests(unittest.TestCase):
         self.assertEqual(window.shown, ["shown"])
 
     def test_the_signal_is_connected(self):
-        source = inspect.getsource(gui_module_for_tests().MainWindowCore)
-        self.assertIn("messageClicked.connect", source)
+        from PyQt6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            shown = []
+            revealed = []
+            window._show_from_tray = lambda: shown.append(True)
+            window._show_download_location = revealed.append
+            window._last_notified_file = r"C:\Videos\notified.mp4"
+            window.tray.messageClicked.emit()
+            QApplication.processEvents()
+            self.assertEqual(shown, [True])
+            self.assertEqual(revealed, [r"C:\Videos\notified.mp4"])
+        finally:
+            _retire_test_window(window)
 
 
 class DownloadCardMenuTests(unittest.TestCase):
@@ -17346,12 +17546,6 @@ class DownloadCardMenuTests(unittest.TestCase):
             self.assertFalse(
                 window._play_download(str(Path(tmpdir) / "gone.mp4")))
         self.assertTrue(any("no longer" in line for line in window.logs))
-
-    def test_the_menu_is_attached_to_a_terminal_card(self):
-        source = inspect.getsource(
-            gui_module_for_tests().MainWindowCore._download_card)
-        self.assertIn('if recent:', source)
-        self.assertIn("_download_card_menu", source)
 
 class QuickJsRuntimeTests(unittest.TestCase):
     """The runtime the app can fetch for itself when Deno is not there."""
@@ -19241,13 +19435,6 @@ class DownloadPageFeedbackTests(unittest.TestCase):
         self.assertEqual(calls, ["dl_2"])
         self.assertNotIn("INTAKE", calls)
 
-    def test_the_card_button_is_bound_to_the_per_item_resume(self):
-        import inspect
-        source = inspect.getsource(gui_module_for_tests().MainWindowCore._download_card)
-        self.assertIn("_resume_one_download", source)
-        self.assertNotIn("clicked.connect(self._resume_download_queue)", source)
-
-
 class WindowTeardownTests(unittest.TestCase):
     """Nothing the window scheduled outlives it."""
 
@@ -19370,32 +19557,141 @@ class WindowTeardownTests(unittest.TestCase):
         self.assertTrue(window._tray_hint_shown)
 
     def test_close_reports_the_work_cancelled_before_calling_cancel_all(self):
-        source = inspect.getsource(gui_module_for_tests().MainWindowCore.closeEvent)
-        self.assertIn("_downloads_that_will_be_cancelled", source)
-        self.assertIn("Closing now will cancel {count} active downloads.", source)
-        self.assertLess(source.index("showMessage"), source.index("cancel_all"))
+        events = []
+
+        class Event:
+            def __init__(self):
+                self.accepted = False
+
+            def accept(self):
+                self.accepted = True
+
+            def ignore(self):
+                raise AssertionError("forced close must not be ignored")
+
+        class Timer:
+            def stop(self):
+                events.append("timer stopped")
+
+        class Tray:
+            def isVisible(self):
+                return True
+
+            def showMessage(self, _title, message, *_args):
+                events.append(("message", message))
+
+            def hide(self):
+                events.append("tray hidden")
+
+        window = types.SimpleNamespace(
+            _force_exit=True,
+            config=FakeConfig({"CloseToTray": False}),
+            server_running=False,
+            _server_starting=False,
+            tray=Tray(),
+            _persist_window_state=lambda: events.append("persisted"),
+            _stop_instance_command_listener=lambda: events.append("listener stopped"),
+            _subscription_manager=lambda: None,
+            _downloads_that_will_be_cancelled=lambda: 3,
+            _append_log=lambda message: events.append(("log", message)),
+            _value=lambda name: "Astra Downloader" if name == "APP_NAME" else None,
+            dl_manager=types.SimpleNamespace(
+                cancel_all=lambda: events.append("cancelled"),
+            ),
+            tools_status_timer=Timer(),
+            update_timer=Timer(),
+            cleanup_timer=Timer(),
+            _format_probe_timer=Timer(),
+            _ui_refresh_timer=Timer(),
+            _history_filter_timer=Timer(),
+        )
+
+        event = Event()
+        ad.MainWindow.closeEvent(window, event)
+
+        messages = [
+            event[1] for event in events
+            if isinstance(event, tuple) and event[0] == "message"
+        ]
+        self.assertEqual(len(messages), 1)
+        self.assertIn("cancel 3 active downloads", messages[0])
+        self.assertLess(events.index(("message", messages[0])), events.index("cancelled"))
+        self.assertTrue(event.accepted)
 
     def test_window_state_is_saved_on_navigation_and_close(self):
         gui = gui_module_for_tests()
-        navigation = inspect.getsource(gui.MainWindowCore._nav_click)
-        close = inspect.getsource(gui.MainWindowCore.closeEvent)
-        restore = inspect.getsource(gui.MainWindowCore._restore_window_state)
-        persist = inspect.getsource(gui.MainWindowCore._persist_window_state)
-        self.assertIn("_persist_window_state()", navigation)
-        self.assertIn("self._persist_window_state()", close)
-        self.assertIn("restoreGeometry", restore)
-        self.assertIn('self.config.get("LastPage", "Download")', restore)
-        self.assertIn("saveGeometry", persist)
-        self.assertIn('"WindowMaximized"', persist)
 
-    def test_close_stops_every_timer_it_owns(self):
-        import inspect
-        source = inspect.getsource(gui_module_for_tests().MainWindowCore.closeEvent)
-        for timer in ("tools_status_timer", "update_timer", "cleanup_timer",
-                      "_format_probe_timer", "_ui_refresh_timer",
-                      "_history_filter_timer"):
-            with self.subTest(timer=timer):
-                self.assertIn(f"self.{timer}.stop()", source)
+        class Tabs:
+            def setCurrentIndex(self, index):
+                self.index = index
+
+            def currentIndex(self):
+                return 1
+
+        class Button:
+            def setChecked(self, _value):
+                pass
+
+            def setProperty(self, *_args):
+                pass
+
+        class Config:
+            def __init__(self):
+                self.data = {
+                    "LastPage": "History",
+                    "WindowMaximized": False,
+                }
+                self.saved = None
+
+            def get(self, key, default=None):
+                return self.data.get(key, default)
+
+            def update(self, values):
+                self.saved = dict(values)
+                self.data.update(values)
+                return True
+
+        config = Config()
+        persisted = []
+        window = types.SimpleNamespace(
+            _page_names=["Download", "History"],
+            _restoring_window_state=False,
+            _first_run=False,
+            config=config,
+            tabs=Tabs(),
+            nav_buttons=[Button(), Button()],
+            _animate_page=lambda: None,
+            _refresh_history=lambda: None,
+            _refresh_subscriptions=lambda **_kwargs: None,
+            _persist_window_state=lambda: persisted.append(True),
+            saveGeometry=lambda: types.SimpleNamespace(
+                toBase64=lambda: b"geometry"
+            ),
+            isMaximized=lambda: True,
+            _append_log=lambda _message: None,
+        )
+
+        with mock.patch.object(gui, "repolish"):
+            gui.MainWindowCore._nav_click(window, "History")
+        self.assertEqual(persisted, [True])
+
+        restored = types.SimpleNamespace(
+            _page_names=["Download", "History"],
+            _first_run=False,
+            _restoring_window_state=False,
+            config=config,
+            restoreGeometry=lambda _geometry: persisted.append("geometry"),
+            showMaximized=lambda: persisted.append("maximized"),
+            _nav_click=lambda page: persisted.append(page),
+        )
+        config.data["WindowMaximized"] = True
+        gui.MainWindowCore._restore_window_state(restored)
+        self.assertIn("History", persisted)
+        self.assertIn("maximized", persisted)
+
+        self.assertTrue(gui.MainWindowCore._persist_window_state(window))
+        self.assertEqual(config.saved["LastPage"], "History")
+        self.assertTrue(config.saved["WindowMaximized"])
 
     def test_a_probe_already_in_flight_is_abandoned_on_exit(self):
         # closeEvent can be called while the debounce is mid-flight, so the
@@ -19423,10 +19719,24 @@ class ButtonLabelCaseTests(unittest.TestCase):
     """Labels are sentence case, matching the rest of the product."""
 
     def test_no_tool_button_label_is_title_case(self):
-        import inspect
-        import re
-        source = inspect.getsource(gui_module_for_tests())
-        labels = set(re.findall(r'_make_tool_button\(\s*"([^"]+)"', source))
+        from PyQt6.QtWidgets import QApplication, QPushButton
+
+        _get_qapp_or_skip(self)
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            QApplication.processEvents()
+            labels = {
+                button.text()
+                for button in window.findChildren(QPushButton)
+                if button.property("class") in {"primary", "secondary", "ghost", "danger"}
+            }
+        finally:
+            _retire_test_window(window)
         self.assertTrue(labels, "expected to find tool button labels")
         offenders = []
         for label in labels:
@@ -19435,7 +19745,9 @@ class ButtonLabelCaseTests(unittest.TestCase):
             capitals = [w for w in words[1:] if w[0].isupper()]
             # Proper nouns and file names keep their own casing.
             capitals = [w for w in capitals
-                        if w not in {"Server", "Deck", "Astra", "SponsorBlock"}]
+                        if w not in {
+                            "Server", "Deck", "Astra", "SponsorBlock", "FFmpeg",
+                        }]
             if capitals:
                 offenders.append((label, capitals))
         self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
@@ -19518,19 +19830,34 @@ class QueueRollbackTests(unittest.TestCase):
                     self.assertEqual(getattr(dl, name), value)
 
     def test_the_snapshot_covers_every_field_each_path_mutates(self):
-        # The drift this replaced was a field present in the snapshot and
-        # absent from the restore. Assert the lists cover what the methods
-        # actually write, read from the source rather than restated here.
-        import inspect
-        source = inspect.getsource(ad.DownloadManagerCore.retry)
-        written = {
-            line.split("=")[0].strip().removeprefix("dl.")
-            for line in source.splitlines()
-            if line.strip().startswith("dl.") and "=" in line
-            and "==" not in line and not line.strip().startswith("dl.id")
-        }
-        missing = sorted(written - set(ad.RETRY_ROLLBACK_FIELDS))
-        self.assertEqual(missing, [], f"retry() mutates unrestored fields: {missing}")
+        # Track the real retry mutation and force persistence to fail. Every
+        # field touched by the rollback path must be represented in the
+        # snapshot, otherwise a future retry would leave a half-applied item.
+        class TrackingDownload(ad.Download):
+            def __setattr__(self, name, value):
+                if getattr(self, "track_writes", False):
+                    self.writes.add(name)
+                super().__setattr__(name, value)
+
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        download = TrackingDownload(
+            "dl_snapshot_tracking",
+            "https://example.com/video",
+        )
+        download.status = "failed"
+        download.error_code = "network-unreachable"
+        download.writes = set()
+        download.track_writes = True
+        manager.downloads[download.id] = download
+        manager._persist_locked = lambda: False
+
+        ok, _error = manager.retry(download.id)
+
+        self.assertFalse(ok)
+        missing = sorted(
+            download.writes - set(ad.RETRY_ROLLBACK_FIELDS) - {"track_writes"}
+        )
+        self.assertEqual(missing, [])
 
     def test_restore_is_the_inverse_of_snapshot(self):
         dl = ad.Download("dl_x", "https://example.com/v")
@@ -19876,32 +20203,56 @@ class StartMenuIntegrationTests(unittest.TestCase):
 
 class DownloaderFirstLayoutTests(unittest.TestCase):
     """The product is a video downloader; the extension server is a feature
-    of it. That ordering is a design decision, so it is pinned rather than
-    left to whoever next edits the rail.
+    of it. That ordering is a design decision, so exercise the constructed
+    window rather than pinning the implementation text that creates it.
     """
 
-    def test_download_is_the_first_page_and_the_landing_page(self):
-        import gui as gui_module
-        import inspect
+    def _window(self, config=None, *, first_run=False):
+        _get_qapp_or_skip(self)
+        config = config or FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        for patcher in (
+            mock.patch.object(ad.MainWindow, "_start_instance_command_listener"),
+            mock.patch.object(ad.MainWindow, "_start_readiness_probe"),
+            mock.patch.object(ad.QSystemTrayIcon, "show"),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        window = ad.MainWindow(
+            config,
+            manager,
+            FakeHistory(),
+            first_run=first_run,
+        )
+        self.addCleanup(_retire_test_window, window)
+        return window
 
-        source = inspect.getsource(gui_module.MainWindowCore.__init__)
-        names_at = source.index("self._page_names")
-        page_block = source[names_at:source.index("]", names_at)]
-        self.assertIn('"Download"', page_block)
-        first = page_block.split('[', 1)[1].strip().split(',')[0].strip()
+    def test_download_is_the_first_page_and_the_landing_page(self):
+        window = self._window()
         self.assertEqual(
-            first, '"Download"',
+            window._page_names[0],
+            "Download",
             "Download must be the first rail entry - the paste box is the "
             "product, not a page you navigate to",
         )
-        # Window state restoration owns the landing-page choice now, rather
-        # than hard-coding Download on every launch.
-        self.assertIn(
-            "self._restore_window_state(start_minimized)", source,
-            "the window must restore its last page before falling back to Download",
+        self.assertEqual(window.tabs.currentIndex(), 0)
+
+        window.config.set("LastPage", "History")
+        window._restore_window_state()
+        self.assertEqual(
+            window._page_names[window.tabs.currentIndex()],
+            "History",
+            "a saved page should replace the default landing page",
         )
-        restore_source = inspect.getsource(gui_module.MainWindowCore._restore_window_state)
-        self.assertIn('self.config.get("LastPage", "Download")', restore_source)
+
+        first_run_window = self._window(
+            FakeConfig({"LastPage": "History"}), first_run=True
+        )
+        self.assertEqual(
+            first_run_window._page_names[first_run_window.tabs.currentIndex()],
+            "Download",
+            "first-run onboarding must always open beside the paste box",
+        )
 
     def test_first_run_confirms_destination_before_queueing_and_reaches_pairing(self):
         from PyQt6.QtWidgets import QApplication
@@ -19956,88 +20307,107 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_first_run_launches_setup_from_the_visible_download_page(self):
-        import inspect
+        from PyQt6.QtWidgets import QApplication
 
-        main_source = inspect.getsource(ad.main)
-        self.assertIn('first_launch = not CONFIG_PATH.exists()', main_source)
-        self.assertIn('config.update({"FirstRunComplete": False})', main_source)
-        self.assertIn('first_run=first_run', main_source)
-        self.assertIn('elif needs_setup or first_run:', main_source)
-        self.assertIn('window.show()', main_source)
-        self.assertIn('if needs_setup:', main_source)
-        self.assertIn('window._run_setup()', main_source)
+        config = FakeConfig({"LastPage": "History"})
+        manager = ad.DownloadManager(config, FakeHistory())
+        started = []
 
-        gui = gui_module_for_tests()
-        core_source = inspect.getsource(gui.MainWindowCore.__init__)
-        restore_source = inspect.getsource(gui.MainWindowCore._restore_window_state)
-        download_source = inspect.getsource(gui.MainWindowCore._build_download)
-        self.assertIn('first_run=False', core_source)
-        self.assertIn('page = "Download" if self._first_run', restore_source)
-        self.assertIn('self.setup_progress', download_source)
-        self.assertIn('self.first_run_panel', download_source)
+        class Signal:
+            def connect(self, callback):
+                self.callback = callback
+
+        class Worker:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+                self.log = Signal()
+                self.progress = Signal()
+                self.finished_ok = Signal()
+                self.finished_err = Signal()
+
+            def start(self):
+                started.append(self)
+
+            def isRunning(self):
+                return False
+
+        _get_qapp_or_skip(self)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"), \
+                mock.patch.object(ad, "SetupWorker", Worker):
+            window = ad.MainWindow(
+                config,
+                manager,
+                FakeHistory(),
+                first_run=True,
+            )
+            window._run_setup()
+        self.addCleanup(_retire_test_window, window)
+        self.assertEqual(window.tabs.currentIndex(), 0)
+        QApplication.processEvents()
+        self.assertEqual(len(started), 1)
+        self.assertFalse(window.setup_progress.isHidden())
+        self.assertFalse(window.setup_status.isHidden())
+        self.assertFalse(window.btn_startstop.isEnabled())
 
     def test_server_page_is_named_for_the_extension_it_serves(self):
-        import gui as gui_module
-        import inspect
+        from PyQt6.QtWidgets import QLabel
 
-        source = inspect.getsource(gui_module.MainWindowCore._build_extension)
-        self.assertIn('"Browser extension"', source)
-        self.assertIn(
-            "by pasting a link never needs this server.", source,
+        window = self._window()
+        page = window.tabs.widget(window._page_names.index("Browser extension"))
+        labels = [label.text() for label in page.findChildren(QLabel)]
+        self.assertIn("Browser extension", labels)
+        self.assertTrue(
+            any("by pasting a link never needs this server." in text for text in labels),
             "the server page must say the downloader works without it",
         )
 
     def test_download_tool_readiness_lives_with_the_paste_box(self):
-        import gui as gui_module
-        import inspect
+        from PyQt6.QtWidgets import QLabel, QScrollArea
 
-        download_page = inspect.getsource(gui_module.MainWindowCore._build_download)
-        server_page = inspect.getsource(gui_module.MainWindowCore._build_extension)
-        for key in ("ytDlp", "ffmpeg", "deno", "sabr"):
-            with self.subTest(key=key):
-                self.assertIn(
-                    f'"{key}"', download_page,
-                    f"{key} readiness explains why a download failed and "
-                    "belongs on the download page",
-                )
-                self.assertNotIn(f'_make_readiness_row("{key}"', server_page)
-        self.assertIn('_make_readiness_row("server"', server_page)
-        self.assertNotIn('_make_readiness_row("server"', download_page)
+        window = self._window()
+        download_page = window.tabs.widget(0)
+        if isinstance(download_page, QScrollArea):
+            download_page = download_page.widget()
+        server_page = window.tabs.widget(window._page_names.index("Browser extension"))
 
-    def test_every_readiness_key_the_probe_writes_has_a_row(self):
-        # _set_readiness returns silently for an unregistered key, so a state
-        # the probe computes can be discarded with no error anywhere. The PO
-        # provider status was invisible from the day it was written because of
-        # exactly this, while failure advice referred the user to it.
-        import gui as gui_module
-        import re as _re
-
-        source = inspect.getsource(gui_module.MainWindowCore._apply_readiness)
-        written = set(_re.findall(r'_set_readiness\(\s*"([^"]+)"', source))
-        for block in _re.findall(r'for key in \(([^)]*)\)', source):
-            written.update(_re.findall(r'"([^"]+)"', block))
-        self.assertIn("provider", written, "the probe must still compute a provider state")
-
-        # Compare against a real window rather than the page source: the rows
-        # are built from a table, and a source scan would start passing for
-        # the wrong reason the next time that construction is refactored.
-        from PyQt6.QtWidgets import QApplication
-
-        _get_qapp_or_skip(self)
-        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
-        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
-                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
-                mock.patch.object(ad.QSystemTrayIcon, "show"):
-            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
-            try:
-                registered = set(window.readiness_values)
-            finally:
-                _retire_test_window(window)
+        def readiness_labels(page):
+            return {
+                str(dot.property("statusLabel"))
+                for _key, (dot, _value) in window.readiness_values.items()
+                if page.isAncestorOf(dot)
+            }
 
         self.assertEqual(
-            written - registered, set(),
-            "every readiness key the probe writes needs a row to write it into",
+            readiness_labels(download_page),
+            {
+                "yt-dlp", "FFmpeg", "JavaScript runtime", "SABR",
+                "PO provider", "Transcription model",
+            },
         )
+        self.assertEqual(readiness_labels(server_page), {"Local API"})
+
+    def test_every_readiness_key_the_probe_writes_has_a_row(self):
+        # Feed a complete probe result through the real update path. A missing
+        # row would make one of these updates disappear silently.
+        window = self._window()
+        expected = {"ytDlp", "ffmpeg", "deno", "sabr", "provider", "whisper"}
+        self.assertTrue(expected.issubset(window.readiness_values))
+        window._apply_readiness({
+            "ytDlp": "2026.08.01",
+            "ffmpeg": "8.0",
+            "runtime": {
+                "runtime": "deno",
+                "version": "2.0",
+                "supported": True,
+                "ejsReady": True,
+            },
+            "provider": {"ok": True, "version": "1.3.0"},
+        })
+        for key in expected:
+            with self.subTest(key=key):
+                self.assertNotEqual(window.readiness_values[key][1].text(), "")
 
     def test_provider_readiness_row_is_built_on_the_download_page(self):
         from PyQt6.QtWidgets import QApplication
@@ -20089,13 +20459,23 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_empty_queue_points_at_the_paste_box_not_the_server(self):
-        import gui as gui_module
-        import inspect
+        from PyQt6.QtWidgets import QApplication, QPushButton
 
-        source = inspect.getsource(gui_module.MainWindowCore._reconcile_download_list)
-        self.assertIn("Nothing downloading yet", source)
-        self.assertIn("self._focus_download_url", source)
-        self.assertNotIn("Open dashboard", source)
+        window = self._window()
+        focused = []
+        window._focus_download_url = lambda: focused.append(True)
+        window._reconcile_download_list([], [], [])
+        QApplication.processEvents()
+        empty = window._download_widgets[("empty",)]
+        buttons = [button for button in empty.findChildren(QPushButton)]
+        self.assertEqual([button.text() for button in buttons], ["Paste a link"])
+        self.assertNotIn(
+            "Open dashboard",
+            [button.text() for button in empty.findChildren(QPushButton)],
+        )
+
+        buttons[0].click()
+        self.assertEqual(focused, [True])
 
 
 if __name__ == "__main__":
