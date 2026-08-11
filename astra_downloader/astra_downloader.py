@@ -137,11 +137,11 @@ try:
         write_cookies_netscape as _owned_write_cookies_netscape,
     )
     from .health import (
-        BGUTIL_POT_MIN_VERSION, DENO_MIN_VERSION, NODE_MIN_VERSION,
+        DENO_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
-        ExecutableVersionProbe, FfmpegCapabilitiesProbe, PoTokenProviderProbe,
+        ExecutableVersionProbe, FfmpegCapabilitiesProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
-        PO_TOKEN_PROVIDER_PORT, YTDLP_EXTERNAL_RUNTIME_CUTOFF,
+        YTDLP_EXTERNAL_RUNTIME_CUTOFF,
         _compare_semver, _parse_ytdlp_release_date, evaluate_sabr_support,
         _run_captured as _owned_run_captured,
         build_javascript_runtime_args, build_youtube_extractor_args,
@@ -263,11 +263,11 @@ except ImportError:  # Direct script / flat source-path compatibility.
         write_cookies_netscape as _owned_write_cookies_netscape,
     )
     from health import (
-        BGUTIL_POT_MIN_VERSION, DENO_MIN_VERSION, NODE_MIN_VERSION,
+        DENO_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
-        ExecutableVersionProbe, FfmpegCapabilitiesProbe, PoTokenProviderProbe,
+        ExecutableVersionProbe, FfmpegCapabilitiesProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
-        PO_TOKEN_PROVIDER_PORT, YTDLP_EXTERNAL_RUNTIME_CUTOFF,
+        YTDLP_EXTERNAL_RUNTIME_CUTOFF,
         _compare_semver, _parse_ytdlp_release_date, evaluate_sabr_support,
         _run_captured as _owned_run_captured,
         build_javascript_runtime_args, build_youtube_extractor_args,
@@ -418,8 +418,8 @@ def instance_namespace_for_root(root=None):
 PORTABLE_MODE = portable_mode_requested()
 SERVICE_ID = "astra-downloader"
 # SERVICE_API_VERSION is the wire-schema version. 1.2.0 adds /health fields
-# (ytDlpVersion, ffmpegVersion, rateLimit); 1.4.0 adds /health.poTokenProvider
-# for bgutil-ytdlp-pot-provider availability; 1.5.0 adds
+# (ytDlpVersion, ffmpegVersion, rateLimit); 1.4.0 adds the compatibility
+# /health.poTokenProvider field; 1.5.0 adds
 # /health.denoRuntime for the external JS runtime that yt-dlp >= 2026.04
 # requires on YouTube extractions. Older clients ignore unknown keys, so
 # the major version stays at 2 (additive, backward-compatible).
@@ -572,26 +572,12 @@ FFMPEG_SHA256_ASSET = Path(urlparse(FFMPEG_URL).path).name
 INTEGRATIONS_STAMP_KEY = r'Software\Classes\AstraDownloader'
 INTEGRATIONS_STAMP_VALUE = 'IntegrationsVersion'
 
-# v1.4.0 (N1): bgutil-ytdlp-pot-provider integration.
-# YouTube binds PO tokens per video in 2026; manual extraction is deprecated.
-# Without a PO Token provider, yt-dlp's `web` client increasingly fails with
-# "Sign in to confirm you're not a bot." Astra Downloader detects the
-# upstream provider's HTTP server on its default port and surfaces availability
-# both in /health (for the extension banner) and in the yt-dlp invocation
-# (via the youtubepot-bgutilhttp extractor-arg). The plugin itself is
-# installed by the user via pip/docker; we only consume the HTTP endpoint.
-# Refs:
-#   https://github.com/Brainicism/bgutil-ytdlp-pot-provider
-#   https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+# v1.4.0 (N1): the old bgutil-ytdlp-pot-provider integration is retained only
+# as a compatibility-shaped health field. yt-dlp is always launched with
+# --no-plugin-dirs, so no external plugin can affect a download. The actual
+# path is the verified token-exempt client chain in health.py; advertising a
+# reachable bgutil process as usable would be misleading.
 PO_TOKEN_PROVIDER_PROBE_TIMEOUT = 1.0
-_PO_TOKEN_PROVIDER_CACHE_TTL_SECONDS = 30
-# v1.5.0: minimum bgutil-ytdlp-pot-provider version that is
-# known to work cleanly with current yt-dlp. Bumped when upstream fixes
-# something that materially changes our success rate (PO token format
-# change, attestation extractor change, etc.). Older providers may still
-# work but the extension popup surfaces a notice asking the user to update.
-# Compare via the local _compare_semver helper — handles X.Y / X.Y.Z and
-# pre-release suffixes by truncating at the first non-numeric segment.
 
 # yt-dlp >= 2026.04 ships an `external n/sig solver` for YouTube
 # (upstream PR #14157). Without an installed JavaScript runtime — Deno is
@@ -708,10 +694,7 @@ def probe_subscription_uploads(
         '--flat-playlist', '--dump-single-json', '--skip-download',
         '--playlist-end', str(SUBSCRIPTION_PROBE_LIMIT),
     ]
-    args += build_youtube_extractor_args(
-        normalized,
-        po_token_provider=probe_po_token_provider(),
-    )
+    args += build_youtube_extractor_args(normalized)
     args += build_javascript_runtime_args(
         probe_javascript_runtime(configured_runtime=configured_runtime)
     )
@@ -1409,20 +1392,15 @@ def reset_impersonate_targets_cache():
     _impersonate_targets_probe.reset()
 
 
-_po_token_provider_probe = PoTokenProviderProbe(
-    http_get=lambda *args, **kwargs: http_requests.get(*args, **kwargs),
-    clock=lambda: time.time(),
-    port=PO_TOKEN_PROVIDER_PORT,
-    min_version=BGUTIL_POT_MIN_VERSION,
-    ttl_seconds=_PO_TOKEN_PROVIDER_CACHE_TTL_SECONDS,
-)
-
 def probe_po_token_provider(force=False, timeout=PO_TOKEN_PROVIDER_PROBE_TIMEOUT):
-    return _po_token_provider_probe.probe(force=force, timeout=timeout)
+    """Return no usable provider while yt-dlp plugin loading is disabled."""
+    return None
 
 
 def reset_po_token_provider_cache():
-    _po_token_provider_probe.reset()
+    # Kept as a no-op for callers that reset all readiness probes between
+    # tests or after a setup run. There is no network probe to cache anymore.
+    return None
 
 
 # Deno (or other external JS runtime) presence probe + cutoff
@@ -3894,7 +3872,6 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_playlist_items': lambda *args, **kwargs: normalize_playlist_items(*args, **kwargs),
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
-                'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
                 'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),

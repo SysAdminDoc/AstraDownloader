@@ -1475,8 +1475,8 @@
       <translation>Fallback</translation>
     </message>
     <message>
-      <source>No proof-of-origin provider is running. Downloads fall back to the token-exempt tv and android_vr clients.</source>
-      <translation>Kein Proof-of-Origin-Anbieter läuft. Downloads fallen auf die tokenfreien tv- und android_vr-Clients zurück.</translation>
+      <source>Plugin-based proof-of-origin providers are disabled. Downloads use the verified token-exempt YouTube client chain.</source>
+      <translation>Pluginbasierte Proof-of-Origin-Anbieter sind deaktiviert. Downloads verwenden die verifizierte tokenfreie YouTube-Clientkette.</translation>
     </message>
     <message>
       <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
@@ -2039,28 +2039,24 @@
       <translation>Erstes Cookie läuft ab</translation>
     </message>
     <message>
-      <source>YouTube requires a PO token for this video. Start the PO-token provider, then retry the download.</source>
-      <translation>YouTube benötigt für dieses Video ein PO-Token. Starten Sie den PO-Token-Anbieter und versuchen Sie den Download erneut.</translation>
+      <source>YouTube requires a proof-of-origin token for this video, and the plugin-free client chain cannot supply one.</source>
+      <translation>YouTube benötigt für dieses Video ein Proof-of-Origin-Token, das die pluginfreie Clientkette nicht bereitstellen kann.</translation>
     </message>
     <message>
-      <source>Start bgutil-ytdlp-pot-provider on 127.0.0.1:4416 and retry.</source>
-      <translation>Starten Sie bgutil-ytdlp-pot-provider auf 127.0.0.1:4416 und versuchen Sie es erneut.</translation>
+      <source>Retry with a stored site sign-in, or try again later if YouTube makes a token-exempt format available.</source>
+      <translation>Versuchen Sie es mit einer gespeicherten Website-Anmeldung erneut oder später, falls YouTube ein tokenfreies Format bereitstellt.</translation>
     </message>
     <message>
-      <source>start-po-token-provider</source>
-      <translation>start-po-token-provider</translation>
+      <source>sign-in-and-retry</source>
+      <translation>sign-in-and-retry</translation>
     </message>
     <message>
-      <source>The PO-token provider is reachable but looks stale or failed to issue a usable token.</source>
-      <translation>Der PO-Token-Anbieter ist erreichbar, wirkt aber veraltet oder konnte kein nutzbares Token ausstellen.</translation>
+      <source>The YouTube proof-of-origin token path is unavailable for this video.</source>
+      <translation>Der Proof-of-Origin-Tokenpfad von YouTube ist für dieses Video nicht verfügbar.</translation>
     </message>
     <message>
-      <source>Update or restart bgutil-ytdlp-pot-provider, then retry.</source>
-      <translation>Aktualisieren oder starten Sie bgutil-ytdlp-pot-provider neu und versuchen Sie es erneut.</translation>
-    </message>
-    <message>
-      <source>update-po-token-provider</source>
-      <translation>update-po-token-provider</translation>
+      <source>The plugin-based provider path is disabled. Retry with a stored site sign-in or later.</source>
+      <translation>Der pluginbasierte Anbieterpfad ist deaktiviert. Versuchen Sie es mit einer gespeicherten Website-Anmeldung oder später erneut.</translation>
     </message>
     <message>
       <source>This video only exposes SABR-limited formats that this yt-dlp path cannot download yet.</source>
@@ -2149,10 +2145,6 @@
     <message>
       <source>Sign in to YouTube in this browser and allow Astra Deck to attach YouTube cookies.</source>
       <translation>Melden Sie sich in diesem Browser bei YouTube an und erlauben Sie Astra Deck, YouTube-Cookies anzuhängen.</translation>
-    </message>
-    <message>
-      <source>sign-in-and-retry</source>
-      <translation>sign-in-and-retry</translation>
     </message>
     <message>
       <source>ffmpeg is missing, stale, or failed during merge/extract.</source>
