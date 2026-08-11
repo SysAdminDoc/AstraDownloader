@@ -305,14 +305,32 @@ class SubscriptionStore:
         now = self._clock()
         subscriptions = []
         seen_ids = set()
-        for item in raw.get("subscriptions", []) if isinstance(raw.get("subscriptions", []), list) else []:
+        dropped_subscriptions = 0
+        raw_subscriptions = raw.get("subscriptions", [])
+        if not isinstance(raw_subscriptions, list):
+            raw_subscriptions = []
+        for item in raw_subscriptions:
             record = self._sanitize_subscription(item, now)
-            if not record or record["id"] in seen_ids:
+            if not record:
+                dropped_subscriptions += 1
+                continue
+            if record["id"] in seen_ids:
+                dropped_subscriptions += 1
                 continue
             seen_ids.add(record["id"])
             subscriptions.append(record)
-            if len(subscriptions) >= self.max_records:
-                break
+        if dropped_subscriptions:
+            self._logger(
+                f"Subscription state dropped {dropped_subscriptions} invalid or "
+                "duplicate record(s) while loading."
+            )
+        if len(subscriptions) > self.max_records:
+            self._logger(
+                f"Subscription state contains {len(subscriptions)} records, "
+                f"above the configured limit of {self.max_records}; preserving "
+                "the over-limit records. New subscriptions remain blocked until "
+                "records are removed."
+            )
         archive = self._sanitize_archive(raw.get("archive"))
         return {
             "schemaVersion": self.schema_version,
@@ -400,6 +418,30 @@ class SubscriptionStore:
             if key.startswith("url:") and entry["url"]:
                 key = subscription_archive_key({"url": entry["url"]})
             entries.append((key, entry))
+        by_key = {}
+        collisions = 0
+        for key, entry in entries:
+            previous = by_key.get(key)
+            if previous is None:
+                by_key[key] = entry
+                continue
+            collisions += 1
+            previous_rank = (
+                _archive_status_priority(previous),
+                previous.get("updatedAt", 0),
+            )
+            entry_rank = (
+                _archive_status_priority(entry),
+                entry.get("updatedAt", 0),
+            )
+            if entry_rank > previous_rank:
+                by_key[key] = entry
+        if collisions:
+            self._logger(
+                f"Subscription archive merged {collisions} duplicate key(s), "
+                "keeping the highest-priority state."
+            )
+        entries = list(by_key.items())
         entries.sort(
             key=lambda item: (
                 _archive_status_priority(item[1]),
@@ -407,7 +449,13 @@ class SubscriptionStore:
             ),
             reverse=True,
         )
-        return dict(entries[: self.max_archive_entries])
+        if len(entries) > self.max_archive_entries:
+            self._logger(
+                f"Subscription archive contains {len(entries)} entries, above "
+                f"the configured limit of {self.max_archive_entries}; preserving "
+                "the over-limit entries until an archive mutation trims them."
+            )
+        return dict(entries)
 
     def _save_locked(self):
         if not self._compatible:
@@ -841,6 +889,10 @@ class SubscriptionStore:
             if key not in kept
         }
         self._data["archive"] = kept
+        self._logger(
+            f"Subscription archive limit removed {len(removed)} older entry(ies) "
+            f"to keep the configured maximum of {self.max_archive_entries}."
+        )
         return removed
 
 

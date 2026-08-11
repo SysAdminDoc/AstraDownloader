@@ -74,6 +74,9 @@ repository's git log.
 - **Restored server credentials take effect immediately.** API authentication
   and legacy health-token settings are read from the live config on each
   request, so restoring `config.json` no longer requires a process restart.
+- **Subscription state no longer loses over-limit history on load.** Extra
+  records are preserved and reported, archive-key migrations keep the
+  highest-priority collision, and deliberate archive trimming is logged.
 
 ## [2.6.0] - 2026-08-09
 
