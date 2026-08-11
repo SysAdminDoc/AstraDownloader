@@ -279,7 +279,13 @@ test('companion staging metadata is accepted only for the exact EXE bytes', () =
     const exe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2048, 4)]);
     const metadata = {
         schemaVersion: 2,
+        version: '1.5.1',
+        buildId: 'c'.repeat(64),
         artifact: { name: 'AstraDownloader.exe', size: exe.length, sha256: crypto.createHash('sha256').update(exe).digest('hex') },
+        artifacts: {
+            onefile: { name: 'AstraDownloader.exe', size: exe.length, sha256: crypto.createHash('sha256').update(exe).digest('hex') },
+            onedir: { name: 'AstraDownloader-onedir.zip', version: '1.5.1', buildId: 'c'.repeat(64) }
+        },
         python: { version: '3.12.10' },
         resolution: {
             schemaVersion: 1,
@@ -343,6 +349,44 @@ test('one-folder staging validates the ZIP contents and sidecar pair', () => {
     assert.throws(
         () => readValidatedSidecar(sidecarPath, archive, 'AstraDownloader-onedir.zip'),
         /sidecar does not match/
+    );
+});
+
+test('one-folder staging reads the embedded shared build metadata', () => {
+    const { readEmbeddedBuildMetadata } = require('../scripts/stage-companion-release');
+    const metadata = {
+        schemaVersion: 2,
+        version: '2.6.0',
+        buildId: 'f'.repeat(64),
+        artifacts: {
+            onedir: { name: 'AstraDownloader-onedir.zip', version: '2.6.0', buildId: 'f'.repeat(64) }
+        }
+    };
+    const archive = storedZip([
+        ['AstraDownloader/AstraDownloader.exe', Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2048, 8)])],
+        ['AstraDownloader/companion-build-metadata.json', JSON.stringify(metadata)],
+    ]);
+    assert.deepEqual(readEmbeddedBuildMetadata(archive), metadata);
+});
+
+test('one-folder metadata must share the version and build identity', () => {
+    const { validateSharedBuildMetadata } = require('../scripts/stage-companion-release');
+    const metadata = {
+        schemaVersion: 2,
+        version: '2.6.0',
+        buildId: 'd'.repeat(64),
+        artifacts: {
+            onedir: { name: 'AstraDownloader-onedir.zip', version: '2.6.0', buildId: 'd'.repeat(64) }
+        }
+    };
+    assert.doesNotThrow(() => validateSharedBuildMetadata(metadata, metadata, 'AstraDownloader-onedir.zip'));
+    assert.throws(
+        () => validateSharedBuildMetadata(
+            metadata,
+            { ...metadata, buildId: 'e'.repeat(64) },
+            'AstraDownloader-onedir.zip',
+        ),
+        /metadata disagree/
     );
 });
 

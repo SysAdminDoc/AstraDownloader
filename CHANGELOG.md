@@ -89,6 +89,9 @@ repository's git log.
 - **Local transcription scratch now stays out of download folders.** WAV and
   intermediate SRT files use the managed per-download staging directory, with
   a conservative disk-space preflight before either helper starts.
+- **Release artifacts now share build provenance.** The one-folder archive carries
+  the same version and one-file analysis ID as the executable metadata; staging
+  rejects mismatches and builds remove stale root artifacts first.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the

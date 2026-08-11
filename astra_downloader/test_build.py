@@ -85,6 +85,169 @@ class ReleaseConstraintsTests(unittest.TestCase):
                 f'{digest}  {archive.name}\n',
             )
 
+    def test_onedir_archive_can_carry_shared_build_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'AstraDownloader'
+            source.mkdir()
+            (source / 'AstraDownloader.exe').write_bytes(b'MZ' + b'app')
+            metadata = root / 'companion-build-metadata.json'
+            metadata.write_text(
+                '{"version":"2.6.0","buildId":"a"}',
+                encoding='utf-8',
+            )
+            archive = root / 'AstraDownloader-onedir.zip'
+
+            build.write_onedir_archive(source, archive, metadata_path=metadata)
+
+            with zipfile.ZipFile(archive) as handle:
+                self.assertEqual(
+                    handle.read('AstraDownloader/companion-build-metadata.json'),
+                    metadata.read_bytes(),
+                )
+
+    def test_clean_removes_stale_release_outputs_before_a_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            astra_root = root / 'astra_downloader'
+            build_dir = astra_root / 'build'
+            dist_dir = astra_root / 'dist'
+            build_dir.mkdir(parents=True)
+            dist_dir.mkdir(parents=True)
+            artifacts = (
+                root / 'AstraDownloader.exe',
+                root / 'AstraDownloader.exe.sha256',
+                root / 'AstraDownloader-onedir.zip',
+                root / 'AstraDownloader-onedir.zip.sha256',
+            )
+            for artifact in artifacts:
+                artifact.write_bytes(b'stale')
+
+            with mock.patch.object(build, 'ROOT', root), \
+                    mock.patch.object(build, 'HERE', astra_root), \
+                    mock.patch.object(build, 'BUILD_DIR', build_dir), \
+                    mock.patch.object(build, 'DIST_DIR', dist_dir), \
+                    mock.patch.object(build, 'OUT_EXE', artifacts[0]), \
+                    mock.patch.object(build, 'OUT_SHA256', artifacts[1]), \
+                    mock.patch.object(build, 'OUT_ONEDIR_ZIP', artifacts[2]), \
+                    mock.patch.object(build, 'OUT_ONEDIR_SHA256', artifacts[3]):
+                build.clean()
+
+            self.assertFalse(build_dir.exists())
+            self.assertFalse(dist_dir.exists())
+            self.assertTrue(all(not artifact.exists() for artifact in artifacts))
+
+    def test_build_keeps_the_onefile_analysis_for_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            astra_root = root / 'astra_downloader'
+            build_dir = astra_root / 'build'
+            dist_dir = astra_root / 'dist'
+            spec_dir = build_dir / 'spec'
+            outputs = {
+                'exe': root / 'AstraDownloader.exe',
+                'exe_sha': root / 'AstraDownloader.exe.sha256',
+                'zip': root / 'AstraDownloader-onedir.zip',
+                'zip_sha': root / 'AstraDownloader-onedir.zip.sha256',
+            }
+            metadata_calls = []
+
+            def fake_pyinstaller(mode):
+                analysis = build_dir / 'AstraDownloader' / 'Analysis-00.toc'
+                analysis.parent.mkdir(parents=True, exist_ok=True)
+                analysis.write_text(mode, encoding='utf-8')
+                if mode == 'onefile':
+                    dist_dir.mkdir(parents=True, exist_ok=True)
+                    (dist_dir / 'AstraDownloader.exe').write_bytes(b'MZ' + b'app')
+                else:
+                    folder = dist_dir / 'AstraDownloader'
+                    folder.mkdir(parents=True, exist_ok=True)
+                    (folder / 'AstraDownloader.exe').write_bytes(b'MZ' + b'app')
+
+            def fake_metadata(exe_path, analysis_toc=None):
+                metadata_calls.append((Path(exe_path), Path(analysis_toc)))
+
+            def fake_archive(_source, archive_path, metadata_path=None):
+                Path(archive_path).write_bytes(b'zip')
+                self.assertIsNotNone(metadata_path)
+
+            with mock.patch.object(build, 'preflight'), \
+                    mock.patch.object(build, 'prepare_translations'), \
+                    mock.patch.object(build, 'clean'), \
+                    mock.patch.object(build, 'BUILD_DIR', build_dir), \
+                    mock.patch.object(build, 'DIST_DIR', dist_dir), \
+                    mock.patch.object(build, 'SPEC_DIR', spec_dir), \
+                    mock.patch.object(build, 'OUT_EXE', outputs['exe']), \
+                    mock.patch.object(build, 'OUT_SHA256', outputs['exe_sha']), \
+                    mock.patch.object(build, 'OUT_ONEDIR_ZIP', outputs['zip']), \
+                    mock.patch.object(build, 'OUT_ONEDIR_SHA256', outputs['zip_sha']), \
+                    mock.patch.object(build, 'run_pyinstaller', side_effect=fake_pyinstaller), \
+                    mock.patch.object(build, 'write_build_metadata', side_effect=fake_metadata), \
+                    mock.patch.object(build, 'write_onedir_archive', side_effect=fake_archive):
+                build.build()
+
+            self.assertEqual(len(metadata_calls), 1)
+            self.assertEqual(metadata_calls[0][1].read_text(encoding='utf-8'), 'onefile')
+
+    def test_build_metadata_records_the_onefile_analysis_identity(self):
+        class Metadata:
+            def __init__(self, name):
+                self._values = {'Name': name, 'License': 'MIT'}
+
+            def get(self, key, default=None):
+                return self._values.get(key, default)
+
+            def get_all(self, _key):
+                return []
+
+        class Distribution:
+            def __init__(self, name, files=()):
+                self.metadata = Metadata(name)
+                self.version = '6.21.0'
+                self.files = list(files)
+
+            def locate_file(self, item):
+                return Path(item)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exe = root / 'AstraDownloader.exe'
+            exe.write_bytes(b'MZ' + b'app')
+            analysis = root / 'onefile-analysis.toc'
+            packaged_pyqt = root / 'site-packages' / 'PyQt6' / '__init__.py'
+            packaged_pyqt.parent.mkdir(parents=True)
+            packaged_pyqt.write_text('fixture', encoding='utf-8')
+            analysis.write_text(repr([str(packaged_pyqt)]), encoding='utf-8')
+            constraints = root / 'constraints-release.txt'
+            constraints.write_text('pyqt6==6.11.0\n', encoding='utf-8')
+            script = root / 'astra_downloader.py'
+            script.write_text('APP_VERSION = "2.6.0"\n', encoding='utf-8')
+            metadata_path = root / 'companion-build-metadata.json'
+            pyqt = Distribution('PyQt6', [packaged_pyqt])
+            pyqt.version = '6.11.0'
+            pyinstaller = Distribution('PyInstaller')
+
+            environment = {
+                'distributions': {'pyinstaller': pyinstaller, 'pyqt6': pyqt},
+                'buildNames': {'pyinstaller'},
+                'graph': {'pyinstaller': [], 'pyqt6': []},
+                'directNames': ['pyinstaller', 'pyqt6'],
+            }
+            with mock.patch.object(build, 'BUILD_METADATA', metadata_path), \
+                    mock.patch.object(build, 'OUT_ONEDIR_ZIP', root / 'AstraDownloader-onedir.zip'), \
+                    mock.patch.object(build, 'RELEASE_CONSTRAINTS', constraints), \
+                    mock.patch.object(build, 'SCRIPT', script), \
+                    mock.patch.object(build, 'verify_release_environment', return_value=environment):
+                build.write_build_metadata(exe, analysis_toc=analysis)
+
+            payload = build.json.loads(metadata_path.read_text(encoding='utf-8'))
+            self.assertEqual(payload['version'], '2.6.0')
+            self.assertEqual(payload['buildId'], build.sha256_file(analysis))
+            self.assertEqual(payload['artifacts']['onefile'], payload['artifact'])
+            self.assertEqual(
+                payload['artifacts']['onedir']['buildId'], payload['buildId']
+            )
+
     def _verify_fixture(self, app_requires=('dep>=2',), app_version='1.0'):
         distributions = {
             'app': FakeDistribution('app', app_version, app_requires),

@@ -201,8 +201,8 @@ def write_sha256_sidecar(exe_path, sidecar_path=None):
     return digest
 
 
-def write_onedir_archive(source_dir, archive_path):
-    """Pack a PyInstaller one-folder directory under a stable top-level name."""
+def write_onedir_archive(source_dir, archive_path, metadata_path=None):
+    """Pack a one-folder build under a stable root, optionally with metadata."""
     source_dir = Path(source_dir)
     archive_path = Path(archive_path)
     if not source_dir.is_dir():
@@ -226,6 +226,17 @@ def write_onedir_archive(source_dir, archive_path):
             marker.compress_type = zipfile.ZIP_DEFLATED
             marker.external_attr = 0o100644 << 16
             archive.writestr(marker, b"Astra Downloader portable one-folder layout\n")
+            if metadata_path is not None:
+                metadata_path = Path(metadata_path)
+                if not metadata_path.is_file():
+                    raise SystemExit(f"Missing companion build metadata: {metadata_path}")
+                metadata = zipfile.ZipInfo(
+                    (Path(source_dir.name) / metadata_path.name).as_posix()
+                )
+                metadata.date_time = (1980, 1, 1, 0, 0, 0)
+                metadata.compress_type = zipfile.ZIP_DEFLATED
+                metadata.external_attr = 0o100644 << 16
+                archive.writestr(metadata, metadata_path.read_bytes())
             files = sorted(
                 (path for path in source_dir.rglob("*") if path.is_file()),
                 key=lambda path: path.relative_to(source_dir).as_posix().lower(),
@@ -296,8 +307,12 @@ def distribution_metadata(dist, scope):
     }
 
 
-def write_build_metadata(exe_path):
-    analysis_toc = BUILD_DIR / "AstraDownloader" / "Analysis-00.toc"
+def write_build_metadata(exe_path, analysis_toc=None):
+    """Write metadata tied to the exact one-file analysis and EXE bytes."""
+    exe_path = Path(exe_path)
+    analysis_toc = Path(
+        analysis_toc or BUILD_DIR / "AstraDownloader" / "Analysis-00.toc"
+    )
     if not analysis_toc.is_file():
         raise SystemExit(f"Missing PyInstaller analysis inventory: {analysis_toc}")
     try:
@@ -337,13 +352,25 @@ def write_build_metadata(exe_path):
     if not version_match:
         raise SystemExit(f"Could not read APP_VERSION from {SCRIPT}")
 
+    version = version_match.group(1)
+    build_id = sha256_file(analysis_toc)
+    artifact = {
+        "name": exe_path.name,
+        "size": exe_path.stat().st_size,
+        "sha256": sha256_file(exe_path),
+    }
     payload = {
         "schemaVersion": 2,
-        "version": version_match.group(1),
-        "artifact": {
-            "name": exe_path.name,
-            "size": exe_path.stat().st_size,
-            "sha256": sha256_file(exe_path),
+        "version": version,
+        "buildId": build_id,
+        "artifact": artifact,
+        "artifacts": {
+            "onefile": dict(artifact),
+            "onedir": {
+                "name": OUT_ONEDIR_ZIP.name,
+                "version": version,
+                "buildId": build_id,
+            },
         },
         "python": {
             "implementation": platform.python_implementation(),
@@ -367,8 +394,8 @@ def write_build_metadata(exe_path):
 
 def assert_inside_workspace(path):
     resolved = path.resolve()
-    if resolved != HERE and HERE not in resolved.parents:
-        raise SystemExit(f"Refusing to clean path outside astra_downloader: {resolved}")
+    if resolved != ROOT and ROOT not in resolved.parents:
+        raise SystemExit(f"Refusing to clean path outside the repository: {resolved}")
 
 
 def clean():
@@ -376,6 +403,13 @@ def clean():
         if d.exists():
             assert_inside_workspace(d)
             shutil.rmtree(d, ignore_errors=True)
+    for artifact in (OUT_EXE, OUT_SHA256, OUT_ONEDIR_ZIP, OUT_ONEDIR_SHA256):
+        if not artifact.exists() and not artifact.is_symlink():
+            continue
+        assert_inside_workspace(artifact)
+        if artifact.is_dir():
+            raise SystemExit(f"Refusing to remove release directory: {artifact}")
+        artifact.unlink()
 
 
 def preflight():
@@ -495,14 +529,24 @@ def build():
     if not built.exists():
         raise SystemExit(f"Build failed: {built} not found")
 
+    onefile_analysis = BUILD_DIR / "AstraDownloader" / "Analysis-00.toc"
+    if not onefile_analysis.is_file():
+        raise SystemExit(f"Missing one-file PyInstaller analysis inventory: {onefile_analysis}")
+    onefile_analysis_snapshot = BUILD_DIR / "AstraDownloader-onefile-Analysis-00.toc"
+    shutil.copy2(onefile_analysis, onefile_analysis_snapshot)
+
     OUT_EXE.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built, OUT_EXE)
 
     run_pyinstaller("onedir")
     built_onedir = DIST_DIR / "AstraDownloader"
-    write_onedir_archive(built_onedir, OUT_ONEDIR_ZIP)
+    write_build_metadata(OUT_EXE, analysis_toc=onefile_analysis_snapshot)
+    write_onedir_archive(
+        built_onedir,
+        OUT_ONEDIR_ZIP,
+        metadata_path=BUILD_METADATA,
+    )
 
-    write_build_metadata(OUT_EXE)
     write_sha256_sidecar(OUT_EXE, OUT_SHA256)
     write_sha256_sidecar(OUT_ONEDIR_ZIP, OUT_ONEDIR_SHA256)
     size_mb = OUT_EXE.stat().st_size / (1024 * 1024)
