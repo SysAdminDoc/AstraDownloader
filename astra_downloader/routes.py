@@ -153,6 +153,7 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'RATE_LIMIT_UPDATE_WINDOW_SECONDS',
     'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS',
     'SERVER_PORT',
+    'SERVICE_API_MINIMUM_CLIENT',
     'SERVICE_API_VERSION',
     'SERVICE_ID',
     'YTDLP_PATH',
@@ -215,6 +216,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS = dependencies['COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS']
     SERVER_PORT = dependencies['SERVER_PORT']
     SERVICE_API_VERSION = dependencies['SERVICE_API_VERSION']
+    SERVICE_API_MINIMUM_CLIENT = dependencies['SERVICE_API_MINIMUM_CLIENT']
     SERVICE_ID = dependencies['SERVICE_ID']
     YTDLP_PATH = dependencies['YTDLP_PATH']
     _folder_pick_q = dependencies['_folder_pick_q']
@@ -372,7 +374,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             resp.headers["Vary"] = "Origin"
         resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = (
-            "Content-Type,X-Auth-Token,X-MDL-Client,"
+            "Content-Type,X-Auth-Token,X-MDL-Api,X-MDL-Client,"
             "X-MDL-Token,X-MDL-Token-Source"
         )
         # v1.2.0: cache preflight for 10 minutes. Multi-video downloads
@@ -437,11 +439,45 @@ def create_api(config, dl_manager, history, *, dependencies):
             "code": "internal-server-error",
         }, 500)
 
+    def client_api_version():
+        """The wire version the caller claims, or None when it says nothing.
+
+        Astra Deck does not send this yet, so absence must keep behaving
+        exactly as before. A client that does send it gets a named refusal
+        instead of a slow drift into wrong answers.
+        """
+        raw = clean_text(request.headers.get("X-MDL-Api", ""), "", 16)
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
     @api.before_request
     def guard_request():
         # Reject DNS-rebinding probes before any route handler sees them.
         if not is_allowed_host():
             return cors_response({"error": "Invalid Host header"}, 421)
+        # A version handshake only helps if a mismatch is named. /health is
+        # exempt so an out-of-date client can still read the numbers it needs
+        # to explain itself to the user.
+        claimed = client_api_version()
+        if (
+            claimed is not None
+            and request.path != '/health'
+            and claimed < SERVICE_API_MINIMUM_CLIENT
+        ):
+            return cors_response({
+                "error": (
+                    f"This Astra Deck speaks API {claimed}; Astra Downloader "
+                    f"{APP_VERSION} needs at least {SERVICE_API_MINIMUM_CLIENT}."
+                ),
+                "code": "client-api-too-old",
+                "api": SERVICE_API_VERSION,
+                "minimumClientApi": SERVICE_API_MINIMUM_CLIENT,
+                "remediation": "Update the Astra Deck browser extension.",
+            }, 426)
         if request.method == 'OPTIONS':
             return cors_response({"ok": True})
 
@@ -468,6 +504,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         ffmpeg_capabilities = get_preflight_ffmpeg_capabilities()
         resp = {
             "status": "ok", "service": SERVICE_ID, "api": SERVICE_API_VERSION,
+            "minimumClientApi": SERVICE_API_MINIMUM_CLIENT,
             "name": APP_NAME, "version": APP_VERSION,
             "port": clamp_int(config.get("ServerPort", SERVER_PORT), SERVER_PORT, 1024, 65535),
             "downloads": dl_manager.active_count(),
@@ -665,10 +702,14 @@ def create_api(config, dl_manager, history, *, dependencies):
         raw_cookies = body.get('cookies')
         cookies = raw_cookies if isinstance(raw_cookies, list) else None
         # Cap the cookie list so a hostile extension context can't cause the
-        # server to write a multi-megabyte cookie jar. 200 is far higher than
-        # a real YouTube session ever produces but still bounded.
-        if cookies is not None and len(cookies) > 200:
-            cookies = cookies[:200]
+        # server to write a multi-megabyte cookie jar. The bound is the same
+        # one the sign-in store enforces: a hardcoded 200 here meant a jar the
+        # store accepted whole was silently halved on the download path, and
+        # the only symptom was yt-dlp failing to authenticate.
+        cookies_truncated = False
+        if cookies is not None and len(cookies) > MAX_SITE_LOGIN_COOKIES:
+            cookies = cookies[:MAX_SITE_LOGIN_COOKIES]
+            cookies_truncated = True
         dl_id, err = dl_manager.start_download(
             url=url,
             audio_only=body.get('audioOnly', False),
@@ -707,11 +748,16 @@ def create_api(config, dl_manager, history, *, dependencies):
                 return cors_response({"error": err, "code": "queue-persistence-failed"}, 503)
             return cors_response({"error": err}, 400)
         status_value = dl_manager.status_of(dl_id, default='pending')
-        return cors_response({
+        payload = {
             "id": dl_id,
             "status": status_value,
             "capacity": dl_manager.capacity(),
-        })
+        }
+        if cookies_truncated:
+            # Say so rather than letting the caller discover it as an
+            # authentication failure with nothing pointing at the cause.
+            payload["cookiesTruncated"] = MAX_SITE_LOGIN_COOKIES
+        return cors_response(payload)
 
     @api.route('/playlist', methods=['POST'])
     def playlist():
@@ -936,7 +982,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             return None, None
         if not isinstance(raw, list):
             return None, 'cookies must be a JSON array.'
-        return raw[:200], None
+        return raw[:MAX_SITE_LOGIN_COOKIES], None
 
     @api.route('/queue/<dl_id>/resume', methods=['POST'])
     def resume_queued_download(dl_id):

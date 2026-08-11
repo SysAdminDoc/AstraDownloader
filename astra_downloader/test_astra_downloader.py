@@ -19973,6 +19973,191 @@ class ButtonLabelCaseTests(unittest.TestCase):
                 offenders.append((label, capitals))
         self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
 
+class SmallerGapTests(unittest.TestCase):
+    """The second batch of measured, individually-minor defects."""
+
+    def _store(self, path, clock=lambda: 1000.0):
+        return ad.SubscriptionStore(
+            path=path,
+            reader=ad.load_json_file,
+            writer=ad.atomic_write_json,
+            logger=self.fail,
+            normalize_url=ad.normalize_url,
+            is_youtube_url=ad.is_youtube_url,
+            clean_text=ad.clean_text,
+            clamp_int=ad.clamp_int,
+            coerce_bool=ad.coerce_bool,
+            clock=clock,
+        )
+
+    def test_the_download_cookie_cap_matches_the_store_that_accepts_them(self):
+        # A hardcoded 200 here halved a jar the sign-in store keeps whole, and
+        # the only symptom was yt-dlp failing to authenticate.
+        import routes
+
+        source = inspect.getsource(routes.create_api)
+        self.assertNotIn("> 200", source)
+        self.assertIn("len(cookies) > MAX_SITE_LOGIN_COOKIES", source)
+        self.assertEqual(ad.MAX_SITE_LOGIN_COOKIES, 400)
+
+    def test_the_precondition_cache_drops_expired_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmp, "AudioDownloadPath": tmp}),
+                FakeHistory(),
+            )
+            ttl = manager._PRECONDITION_TTL_SECONDS
+            stale = time.time() - (ttl * 10)
+            with manager._precondition_cache_lock:
+                for index in range(50):
+                    manager._precondition_cache[("sign-in", f"u{index}", False)] = (
+                        stale, (True, None)
+                    )
+            self.assertEqual(len(manager._precondition_cache), 50)
+
+            dl = ad.Download("dl_cache", "https://www.youtube.com/watch?v=abc12345678")
+            dl.error_code = "sign-in-required"
+            manager.recovery_precondition(dl)
+
+            # Every stale entry is gone; only the fresh answer remains.
+            self.assertLessEqual(
+                len(manager._precondition_cache), 1,
+                "expired precondition entries must not accumulate for the "
+                "life of a tray app that runs for days",
+            )
+
+    def test_the_next_scan_is_anchored_to_the_scan_start_not_its_end(self):
+        # Measuring from the finish adds the scan duration to every cycle, so
+        # an hourly subscription whose scan takes two minutes slips about 48
+        # minutes a day.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "subscriptions.json"
+            clock = {"now": 1_000_000.0}
+            store = self._store(path, clock=lambda: clock["now"])
+            created, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel", interval_minutes=60
+            )
+            self.assertIsNone(error)
+            sub_id = created["id"]
+
+            started = clock["now"]
+            self.assertIsNotNone(store.begin_scan(sub_id))
+            clock["now"] = started + 120.0  # a two-minute scan
+            self.assertTrue(store.finish_scan(sub_id, queued=1))
+
+            record = store.list_subscriptions()[0]
+            self.assertEqual(
+                record["nextScanAt"], started + 3600.0,
+                "the next scan must fall an interval after this one began",
+            )
+
+    def test_a_scan_longer_than_its_interval_does_not_schedule_in_the_past(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "subscriptions.json"
+            clock = {"now": 1_000_000.0}
+            store = self._store(path, clock=lambda: clock["now"])
+            created, _error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel", interval_minutes=1
+            )
+            sub_id = created["id"]
+            self.assertIsNotNone(store.begin_scan(sub_id))
+            clock["now"] += 600.0  # the scan outran its own interval
+            self.assertTrue(store.finish_scan(sub_id, queued=0))
+
+            record = store.list_subscriptions()[0]
+            self.assertGreater(
+                record["nextScanAt"], clock["now"],
+                "an overrunning scan must not queue a backlog of due scans",
+            )
+
+    def test_one_archive_entry_is_read_without_copying_the_whole_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "subscriptions.json"
+            store = self._store(path)
+            created, _error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel"
+            )
+            key = "id:onlyone"
+            store.reserve_archive(key, {"title": "Only one"}, created["id"])
+
+            entry = store.archive_entry(key)
+            self.assertTrue(entry, "the entry must be returned")
+            self.assertEqual(store.archive_entry("id:absent"), {})
+
+            # A copy, not the live record: mutating the result must not reach
+            # the store.
+            entry["title"] = "mutated"
+            self.assertNotEqual(store.archive_entry(key).get("title"), "mutated")
+
+    def test_the_retry_exhausted_branch_reads_a_single_entry(self):
+        source = inspect.getsource(ad.SubscriptionManager.scan_subscription)
+        self.assertIn("self.store.archive_entry(key)", source)
+        self.assertNotIn("self.store.archive_entries().get(key", source)
+
+
+class ClientApiHandshakeTests(unittest.TestCase):
+    """Two independently-versioned products sharing one port catalogue.
+
+    The downloader advertised an API version nothing read. A floor plus a
+    named refusal turns that number into a contract, while a client that sends
+    no version keeps working exactly as before.
+    """
+
+    TOKEN = "t" * 32
+
+    def _client(self):
+        config = FakeConfig({"ServerToken": self.TOKEN, "DownloadPath": "."})
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        api.config.update(TESTING=True)
+        return api.test_client()
+
+    def test_health_advertises_the_floor_it_will_serve(self):
+        response = self._client().get("/health")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["api"], ad.SERVICE_API_VERSION)
+        self.assertEqual(payload["minimumClientApi"], ad.SERVICE_API_MINIMUM_CLIENT)
+
+    def test_a_client_that_sends_no_version_is_served_as_before(self):
+        # The shipped Astra Deck sends nothing. Absence must not be a refusal.
+        response = self._client().get(
+            "/status", headers={"X-Auth-Token": self.TOKEN}
+        )
+        self.assertNotEqual(response.status_code, 426)
+
+    def test_a_client_below_the_floor_is_refused_by_name(self):
+        response = self._client().get(
+            "/status",
+            headers={"X-Auth-Token": self.TOKEN, "X-MDL-Api": "0"},
+        )
+        self.assertEqual(response.status_code, 426)
+        payload = response.get_json()
+        self.assertEqual(payload["code"], "client-api-too-old")
+        self.assertEqual(payload["minimumClientApi"], ad.SERVICE_API_MINIMUM_CLIENT)
+        self.assertIn("Update the Astra Deck", payload["remediation"])
+
+    def test_an_old_client_can_still_read_health_to_explain_itself(self):
+        response = self._client().get("/health", headers={"X-MDL-Api": "0"})
+        self.assertEqual(
+            response.status_code, 200,
+            "an out-of-date client must still be able to read the numbers "
+            "that tell the user why it stopped working",
+        )
+
+    def test_a_junk_version_header_is_ignored_rather_than_refused(self):
+        response = self._client().get(
+            "/status",
+            headers={"X-Auth-Token": self.TOKEN, "X-MDL-Api": "not-a-number"},
+        )
+        self.assertNotEqual(response.status_code, 426)
+
+    def test_the_version_header_survives_preflight(self):
+        response = self._client().options("/status")
+        allowed = response.headers.get("Access-Control-Allow-Headers", "")
+        self.assertIn("X-MDL-Api", allowed)
+
+
 class SystemProxyTests(unittest.TestCase):
     """Windows already knows the proxy; the user should not retype it.
 
