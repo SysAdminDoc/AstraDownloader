@@ -4380,7 +4380,13 @@ class DownloadManagerTests(unittest.TestCase):
         manager.downloads[stalled.id] = stalled
 
         unusable = {'supported': False, 'ejsReady': False, 'reason': 'runtime-not-installed'}
-        with mock.patch.object(ad, 'probe_javascript_runtime', return_value=unusable):
+        manager.update_readiness_snapshot({
+            'configuredRuntime': 'auto',
+            'runtime': unusable,
+            'impersonateTargets': [],
+        })
+        with mock.patch.object(ad, 'probe_javascript_runtime',
+                               side_effect=AssertionError('GUI path spawned a probe')):
             manager._precondition_cache.clear()
             self.assertFalse(manager.is_retryable(stalled))
             ok, err = manager.retry(stalled.id)
@@ -4389,12 +4395,39 @@ class DownloadManagerTests(unittest.TestCase):
 
         # The user installs the runtime; the readiness probe now reports it.
         usable = {'supported': True, 'ejsReady': True, 'runtime': 'deno'}
-        with mock.patch.object(ad, 'probe_javascript_runtime', return_value=usable):
+        manager.update_readiness_snapshot({
+            'configuredRuntime': 'auto',
+            'runtime': usable,
+            'impersonateTargets': [],
+        })
+        with mock.patch.object(ad, 'probe_javascript_runtime',
+                               side_effect=AssertionError('retry path spawned a probe')):
             manager._precondition_cache.clear()
             self.assertTrue(manager.is_retryable(stalled))
             ok, err = manager.retry(stalled.id)
             self.assertTrue(ok, err)
             self.assertEqual(stalled.status, 'pending')
+
+    def test_recovery_preconditions_use_cached_impersonate_targets(self):
+        config = FakeConfig({'ImpersonateTarget': 'Chrome-131'})
+        manager = ad.DownloadManager(config, FakeHistory())
+        manager.pause_intake()
+        blocked = ad.Download('blocked-browser', 'https://example.com/video')
+        blocked.status = 'failed'
+        blocked.error_code = 'blocked-by-site'
+        blocked.mark_terminal()
+        manager.downloads[blocked.id] = blocked
+        manager.update_readiness_snapshot({
+            'configuredRuntime': 'auto',
+            'runtime': {},
+            'impersonateTargets': ['Chrome-131'],
+        })
+
+        with mock.patch.object(ad, 'probe_impersonate_targets',
+                               side_effect=AssertionError('GUI path spawned a probe')):
+            self.assertTrue(manager.is_retryable(blocked))
+            payload = manager.queue_payload()
+            self.assertTrue(payload['downloads'][0]['retryable'])
 
     def test_an_unknown_failure_code_stays_unretryable(self):
         # New codes must default to refusing rather than to allowing.
@@ -17006,7 +17039,11 @@ Edge-101        Windows-10   curl_cffi
             targets = ["Chrome-136"]
             settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}
             manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
-            manager._dependencies["probe_impersonate_targets"] = lambda: targets
+            manager.update_readiness_snapshot({
+                "configuredRuntime": "auto",
+                "runtime": {},
+                "impersonateTargets": targets,
+            })
             dl = ad.Download("dl_403", "https://example.com/v")
             dl.status = "failed"
             dl.error_code = "blocked-by-site"
@@ -17025,7 +17062,11 @@ Edge-101        Windows-10   curl_cffi
             settings = {"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir,
                         "ImpersonateTarget": "Chrome-999"}
             manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
-            manager._dependencies["probe_impersonate_targets"] = lambda: ["Chrome-136"]
+            manager.update_readiness_snapshot({
+                "configuredRuntime": "auto",
+                "runtime": {},
+                "impersonateTargets": ["Chrome-136"],
+            })
             dl = ad.Download("dl_403", "https://example.com/v")
             dl.status = "failed"
             dl.error_code = "blocked-by-site"

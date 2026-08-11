@@ -65,6 +65,9 @@ repository's git log.
 - **Health checks are bounded and coalesced.** Failed executable probes now
   honor their TTL, concurrent cold requests share one probe, and `/health`
   has its own burst limit with `Retry-After` guidance.
+- **Recovery checks no longer probe from the GUI or queue lock.** Runtime and
+  browser-impersonation results are published by the background readiness
+  worker, while retry/status refreshes consume the cached snapshot.
 
 ## [2.6.0] - 2026-08-09
 
