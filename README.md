@@ -161,6 +161,8 @@ plus `AstraDownloader-onedir.zip` and a matching sidecar. The zip contains a
 normal PyInstaller one-folder build, so it is the recommended antivirus
 fallback when the one-file executable is flagged: it avoids runtime
 self-extraction at the cost of a larger download and an extracted folder.
+Both artifacts are tied to the same version and one-file analysis build ID;
+the portable zip carries the shared build metadata for staging verification.
 `npm run release:stage` validates and stages both artifacts.
 Release dependencies are pinned in
 [`astra_downloader/constraints-release.txt`](astra_downloader/constraints-release.txt).
@@ -168,7 +170,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 903 tests; scratch state stays under build/pytest
+py -3.12 -m pytest          # 910 tests; scratch state stays under build/pytest
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

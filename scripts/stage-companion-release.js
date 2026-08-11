@@ -4,6 +4,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
+const zlib = require('zlib');
 const {
     COMPANION_BUILD_METADATA_NAME,
     validateResolutionMetadata
@@ -22,6 +23,7 @@ const ONEDIR_DEST = path.join(BUILD_DIR, 'AstraDownloader-onedir.zip');
 const ONEDIR_SIDECAR_DEST = path.join(BUILD_DIR, 'AstraDownloader-onedir.zip.sha256');
 const MIN_BYTES = 1024;
 const ONEDIR_ENTRY = 'AstraDownloader/AstraDownloader.exe';
+const ONEDIR_METADATA_ENTRY = `AstraDownloader/${COMPANION_BUILD_METADATA_NAME}`;
 
 function openCompanionExe(filePath) {
     try {
@@ -66,6 +68,129 @@ function readValidatedCompanionExe(filePath) {
     }
 }
 
+function readValidatedZipEntries(data) {
+    const minimumEndRecord = 22;
+    const searchStart = Math.max(0, data.length - minimumEndRecord - 0xffff);
+    let endRecord = -1;
+    for (let index = data.length - minimumEndRecord; index >= searchStart; index -= 1) {
+        if (index + 4 <= data.length && data.readUInt32LE(index) === 0x06054b50) {
+            endRecord = index;
+            break;
+        }
+    }
+    if (endRecord < 0) {
+        throw new Error('one-folder archive has no ZIP end record');
+    }
+    if (
+        data.readUInt16LE(endRecord + 4) !== 0
+        || data.readUInt16LE(endRecord + 6) !== 0
+        || data.readUInt16LE(endRecord + 8) !== data.readUInt16LE(endRecord + 10)
+        || data.readUInt16LE(endRecord + 10) === 0xffff
+    ) {
+        throw new Error('one-folder archive uses unsupported ZIP64 or multi-disk metadata');
+    }
+
+    const entryCount = data.readUInt16LE(endRecord + 10);
+    const centralDirectorySize = data.readUInt32LE(endRecord + 12);
+    const centralDirectoryOffset = data.readUInt32LE(endRecord + 16);
+    const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
+    if (centralDirectoryEnd > endRecord || centralDirectoryOffset < 0) {
+        throw new Error('one-folder archive has an invalid central directory');
+    }
+
+    const entries = new Map();
+    let cursor = centralDirectoryOffset;
+    for (let index = 0; index < entryCount; index += 1) {
+        if (cursor + 46 > centralDirectoryEnd || data.readUInt32LE(cursor) !== 0x02014b50) {
+            throw new Error('one-folder archive has an invalid central directory entry');
+        }
+        const flags = data.readUInt16LE(cursor + 8);
+        const compressionMethod = data.readUInt16LE(cursor + 10);
+        const compressedSize = data.readUInt32LE(cursor + 20);
+        const uncompressedSize = data.readUInt32LE(cursor + 24);
+        const nameLength = data.readUInt16LE(cursor + 28);
+        const extraLength = data.readUInt16LE(cursor + 30);
+        const commentLength = data.readUInt16LE(cursor + 32);
+        const localHeaderOffset = data.readUInt32LE(cursor + 42);
+        const entryEnd = cursor + 46 + nameLength + extraLength + commentLength;
+        if (entryEnd > centralDirectoryEnd) {
+            throw new Error('one-folder archive has a truncated central directory entry');
+        }
+        const name = data.toString('utf8', cursor + 46, cursor + 46 + nameLength)
+            .replaceAll('\\', '/');
+        const segments = name.split('/');
+        if (
+            !name
+            || entries.has(name)
+            || name.startsWith('/')
+            || /^[A-Za-z]:/.test(name)
+            || segments.includes('..')
+            || (flags & 0x1) !== 0
+        ) {
+            throw new Error(`one-folder archive has an unsafe entry: ${name || '<empty>'}`);
+        }
+        entries.set(name, {
+            name,
+            compressionMethod,
+            compressedSize,
+            uncompressedSize,
+            localHeaderOffset,
+        });
+        cursor = entryEnd;
+    }
+    if (cursor !== centralDirectoryEnd) {
+        throw new Error('one-folder archive has trailing central directory data');
+    }
+    return entries;
+}
+
+function readValidatedZipEntry(data, entry) {
+    const headerOffset = entry.localHeaderOffset;
+    if (headerOffset + 30 > data.length || data.readUInt32LE(headerOffset) !== 0x04034b50) {
+        throw new Error(`one-folder archive has an invalid local header: ${entry.name}`);
+    }
+    const nameLength = data.readUInt16LE(headerOffset + 26);
+    const extraLength = data.readUInt16LE(headerOffset + 28);
+    const localName = data.toString('utf8', headerOffset + 30, headerOffset + 30 + nameLength)
+        .replaceAll('\\', '/');
+    if (localName !== entry.name) {
+        throw new Error(`one-folder archive local header does not match ${entry.name}`);
+    }
+    const dataStart = headerOffset + 30 + nameLength + extraLength;
+    const dataEnd = dataStart + entry.compressedSize;
+    if (dataStart < 0 || dataEnd > data.length) {
+        throw new Error(`one-folder archive has truncated data: ${entry.name}`);
+    }
+    const compressed = data.subarray(dataStart, dataEnd);
+    let unpacked;
+    if (entry.compressionMethod === 0) {
+        unpacked = compressed;
+    } else if (entry.compressionMethod === 8) {
+        unpacked = zlib.inflateRawSync(compressed);
+    } else {
+        throw new Error(`one-folder archive uses unsupported compression for ${entry.name}`);
+    }
+    if (unpacked.length !== entry.uncompressedSize) {
+        throw new Error(`one-folder archive size mismatch for ${entry.name}`);
+    }
+    return unpacked;
+}
+
+function readEmbeddedBuildMetadata(archiveData) {
+    let metadata;
+    const entries = readValidatedZipEntries(archiveData);
+    const entry = entries.get(ONEDIR_METADATA_ENTRY);
+    if (!entry) {
+        throw new Error(`one-folder archive is missing ${ONEDIR_METADATA_ENTRY}`);
+    }
+    try {
+        metadata = JSON.parse(readValidatedZipEntry(archiveData, entry).toString('utf8'));
+    } catch (err) {
+        throw new Error(`invalid embedded companion build metadata: ${err.message}`);
+    }
+    return metadata;
+}
+
 function readValidatedOnedirArchive(filePath) {
     let fd;
     try {
@@ -95,65 +220,8 @@ function readValidatedOnedirArchive(filePath) {
             throw new Error(`one-folder archive changed while reading: ${filePath}`);
         }
 
-        const minimumEndRecord = 22;
-        const searchStart = Math.max(0, data.length - minimumEndRecord - 0xffff);
-        let endRecord = -1;
-        for (let index = data.length - minimumEndRecord; index >= searchStart; index -= 1) {
-            if (data.readUInt32LE(index) === 0x06054b50) {
-                endRecord = index;
-                break;
-            }
-        }
-        if (endRecord < 0) {
-            throw new Error('one-folder archive has no ZIP end record');
-        }
-        if (
-            data.readUInt16LE(endRecord + 4) !== 0
-            || data.readUInt16LE(endRecord + 6) !== 0
-            || data.readUInt16LE(endRecord + 8) !== data.readUInt16LE(endRecord + 10)
-            || data.readUInt16LE(endRecord + 10) === 0xffff
-        ) {
-            throw new Error('one-folder archive uses unsupported ZIP64 or multi-disk metadata');
-        }
-        const entryCount = data.readUInt16LE(endRecord + 10);
-        const centralDirectorySize = data.readUInt32LE(endRecord + 12);
-        const centralDirectoryOffset = data.readUInt32LE(endRecord + 16);
-        const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
-        if (centralDirectoryEnd > endRecord || centralDirectoryOffset < 0) {
-            throw new Error('one-folder archive has an invalid central directory');
-        }
-
-        const entries = new Set();
-        let cursor = centralDirectoryOffset;
-        for (let index = 0; index < entryCount; index += 1) {
-            if (cursor + 46 > centralDirectoryEnd || data.readUInt32LE(cursor) !== 0x02014b50) {
-                throw new Error('one-folder archive has an invalid central directory entry');
-            }
-            const flags = data.readUInt16LE(cursor + 8);
-            const nameLength = data.readUInt16LE(cursor + 28);
-            const extraLength = data.readUInt16LE(cursor + 30);
-            const commentLength = data.readUInt16LE(cursor + 32);
-            const entryEnd = cursor + 46 + nameLength + extraLength + commentLength;
-            if (entryEnd > centralDirectoryEnd) {
-                throw new Error('one-folder archive has a truncated central directory entry');
-            }
-            const name = data.toString('utf8', cursor + 46, cursor + 46 + nameLength)
-                .replaceAll('\\', '/');
-            const segments = name.split('/');
-            if (
-                !name
-                || entries.has(name)
-                || name.startsWith('/')
-                || /^[A-Za-z]:/.test(name)
-                || segments.includes('..')
-                || (flags & 0x1) !== 0
-            ) {
-                throw new Error(`one-folder archive has an unsafe entry: ${name || '<empty>'}`);
-            }
-            entries.add(name);
-            cursor = entryEnd;
-        }
-        if (cursor !== centralDirectoryEnd || !entries.has(ONEDIR_ENTRY)) {
+        const entries = readValidatedZipEntries(data);
+        if (!entries.has(ONEDIR_ENTRY)) {
             throw new Error(`one-folder archive is missing ${ONEDIR_ENTRY}`);
         }
         return data;
@@ -197,6 +265,16 @@ function readValidatedMetadata(metadataPath, companionExe) {
         || metadata.artifact.name !== 'AstraDownloader.exe'
         || metadata.artifact.size !== companionExe.length
         || metadata.artifact.sha256 !== sha256(companionExe)
+        || !/^[0-9a-f]{64}$/i.test(String(metadata.buildId || ''))
+        || !metadata.artifacts
+        || !metadata.artifacts.onefile
+        || metadata.artifacts.onefile.name !== metadata.artifact.name
+        || metadata.artifacts.onefile.size !== metadata.artifact.size
+        || metadata.artifacts.onefile.sha256 !== metadata.artifact.sha256
+        || !metadata.artifacts.onedir
+        || metadata.artifacts.onedir.name !== 'AstraDownloader-onedir.zip'
+        || metadata.artifacts.onedir.version !== metadata.version
+        || metadata.artifacts.onedir.buildId !== metadata.buildId
     ) {
         throw new Error('companion build metadata does not match the staged AstraDownloader.exe');
     }
@@ -226,6 +304,22 @@ function readValidatedSidecar(sidecarPath, companionBytes, artifactName = 'Astra
     return expected;
 }
 
+function validateSharedBuildMetadata(metadata, embeddedMetadata, onedirName) {
+    if (
+        embeddedMetadata.schemaVersion !== metadata.schemaVersion
+        || embeddedMetadata.version !== metadata.version
+        || embeddedMetadata.buildId !== metadata.buildId
+        || !embeddedMetadata.artifacts
+        || !embeddedMetadata.artifacts.onedir
+        || embeddedMetadata.artifacts.onedir.name !== onedirName
+        || embeddedMetadata.artifacts.onedir.version !== metadata.version
+        || embeddedMetadata.artifacts.onedir.buildId !== metadata.buildId
+    ) {
+        throw new Error('one-file and one-folder companion metadata disagree on version or build');
+    }
+    return embeddedMetadata;
+}
+
 function writeValidatedSidecar(sidecarPath, companionBytes, artifactName = 'AstraDownloader.exe') {
     const digest = crypto.createHash('sha256').update(companionBytes).digest('hex');
     fs.writeFileSync(sidecarPath, `${digest}  ${artifactName}\n`, 'utf8');
@@ -249,6 +343,8 @@ function stageCompanionRelease(
     const companionDigest = readValidatedSidecar(resolvedSidecar, companionExe);
     const onedirArchive = readValidatedOnedirArchive(resolvedOnedir);
     const onedirName = path.basename(resolvedOnedir);
+    const embeddedMetadata = readEmbeddedBuildMetadata(onedirArchive);
+    validateSharedBuildMetadata(metadata, embeddedMetadata, onedirName);
     const onedirDigest = readValidatedSidecar(
         resolvedOnedirSidecar,
         onedirArchive,
@@ -294,6 +390,8 @@ if (require.main === module) {
 module.exports = {
     readValidatedMetadata,
     readValidatedOnedirArchive,
+    readEmbeddedBuildMetadata,
     readValidatedSidecar,
+    validateSharedBuildMetadata,
     stageCompanionRelease
 };
