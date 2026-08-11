@@ -30,22 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P0 — Show the subscription store's error instead of "you have none"
-  Why: A user with an unreadable store is told their subscriptions do not exist
-  and invited to re-add them — the opposite of this project's stated invariant
-  that a failure names its cause and offers the fix.
-  Evidence: `gui.py:2907` sets `Could not read subscriptions: {error}`; 44 lines
-  later `gui.py:2952` unconditionally overwrites it with
-  `0 configured · 0 archived · 0 queued`, and `:2957` renders the "No scheduled
-  subscriptions" empty state. Reproduced with a store whose `snapshot()` raises.
-  No test covers it. The same shape exists on Sign-ins: with `store is None`
-  (`gui.py:3181`) the page renders "No stored sign-ins" with no message at all.
-  Touches: `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: an unreadable subscription or sign-in store renders a distinct
-  error state with a recovery action (open diagnostics / reveal the file) and
-  never the empty state; tests drive a raising store for both pages.
-  Complexity: S
-
 - [ ] P1 — Make the license gate run the inspection it exists for
   Why: The gate that is supposed to enforce the license policy only asserts that
   the SBOM is non-empty, so 37 real policy issues ship green.
