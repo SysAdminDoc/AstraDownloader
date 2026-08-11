@@ -1077,8 +1077,10 @@ class SiteLoginStore:
         with self._lock:
             index = self._load_index()
             existed = key in index
-            index.pop(key, None)
-            self._save_index(index)
+            if existed:
+                index.pop(key, None)
+                if not self._save_index(index):
+                    return False
             for path, label in (
                 (self._jar_path(key), 'jar'),
                 (self._credential_path(key), 'credential'),
