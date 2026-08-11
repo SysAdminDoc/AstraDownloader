@@ -2898,6 +2898,63 @@ class UninstallCleanupTests(unittest.TestCase):
             self.assertTrue(downloaded.exists(), "uninstall must not remove downloads")
             self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
 
+    def test_portable_state_sweep_covers_rotations_quarantine_and_orphans(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            install = Path(tmp) / "AstraDownloader"
+            install.mkdir()
+            executable = install / "AstraDownloader.exe"
+            executable.write_bytes(b"portable")
+            media = install / "keep-me.mp4"
+            media.write_bytes(b"media")
+            (install / ad.PORTABLE_MARKER_NAME).write_text("portable\n", encoding="utf-8")
+
+            (install / "config.json").write_text("state", encoding="utf-8")
+            (install / "site-logins").mkdir()
+            (install / "site-logins" / "index.json").write_text("{}", encoding="utf-8")
+            (install / "download-temp" / "dl_1").mkdir(parents=True)
+            (install / "download-temp" / "dl_1" / "audio.wav").write_bytes(b"scratch")
+            for name in (
+                ".cookies.probe.deadbeef.txt",
+                ".cookies.dl_1.txt",
+                "server.log.1",
+                "crash.log.1",
+                "config.json.corrupt-20260811120000",
+                ".history.json.deadbeef.tmp",
+                ".AstraDownloader.update.deadbeef.exe",
+                ".yt-dlp.update.deadbeef.exe",
+                ".whisper.deadbeef.zip",
+                "archive.txt",
+            ):
+                (install / name).write_text("orphan", encoding="utf-8")
+            bystander = install / "notes.txt"
+            bystander.write_text("keep", encoding="utf-8")
+
+            with mock.patch.object(ad, "INSTALL_DIR", install), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "write_persistent_log"):
+                ad.remove_portable_state()
+
+            self.assertTrue(executable.exists())
+            self.assertTrue(media.exists())
+            self.assertTrue((install / ad.PORTABLE_MARKER_NAME).exists())
+            self.assertTrue(bystander.exists())
+            self.assertFalse((install / "config.json").exists())
+            self.assertFalse((install / "site-logins").exists())
+            self.assertFalse((install / "download-temp").exists())
+            for name in (
+                ".cookies.probe.deadbeef.txt",
+                ".cookies.dl_1.txt",
+                "server.log.1",
+                "crash.log.1",
+                "config.json.corrupt-20260811120000",
+                ".history.json.deadbeef.tmp",
+                ".AstraDownloader.update.deadbeef.exe",
+                ".yt-dlp.update.deadbeef.exe",
+                ".whisper.deadbeef.zip",
+                "archive.txt",
+            ):
+                self.assertFalse((install / name).exists(), name)
+
     def test_uninstall_removes_the_integration_stamp(self):
         deleted = []
 

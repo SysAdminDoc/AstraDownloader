@@ -45,6 +45,10 @@ repository's git log.
 - **Retry checks now honor site profiles.** Geo and browser-refusal recovery
   uses the URL's effective profile settings, so a profile-provided workaround
   can actually unlock Retry.
+- **Portable uninstall now sweeps the full app state surface.** Stored sign-ins,
+  download staging, rotated logs, quarantine copies, cookie probes, legacy
+  archive data, and interrupted update/setup artifacts are removed while the
+  executable, marker, and downloaded media remain.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
