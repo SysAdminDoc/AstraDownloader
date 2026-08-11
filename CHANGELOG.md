@@ -14,6 +14,9 @@ repository's git log.
 
 ### Fixed
 
+- **Interactive control boundaries now meet the non-text contrast floor.**
+  Resting, disabled, hover, input, menu, text-edit, ghost-button, and
+  checkbox boundaries are declared against their actual stylesheet fills.
 - **Local transcription uses a verified whisper.cpp sidecar.** Setup now fetches
   the pinned CLI and sibling DLLs, probes the SRT capability, and reports a
   missing runtime before a job starts; successful media stays complete when

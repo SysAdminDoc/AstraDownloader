@@ -3760,17 +3760,17 @@ QLabel[class="errorCallout"] {
 QPushButton {
     background-color: transparent;
     color: #d8dde3;
-    border: 1px solid #343d49;
+    border: 1px solid #607080;
     border-radius: 6px;
     padding: 7px 13px;
     min-height: 36px;
     font-size: 13px;
     font-weight: 600;
 }
-QPushButton:hover { background-color: #171d25; border-color: #4a5563; color: #fffaf6; }
+QPushButton:hover { background-color: #171d25; border-color: #718092; color: #fffaf6; }
 QPushButton:pressed { background-color: #11161d; }
 QPushButton:focus { border-color: #ff7664; }
-QPushButton:disabled { color: #606a77; background: transparent; border-color: #232a33; }
+QPushButton:disabled { color: #606a77; background: transparent; border-color: #607080; }
 QPushButton[class="primary"] {
     background-color: #ff6552;
     color: #170806;
@@ -3778,10 +3778,10 @@ QPushButton[class="primary"] {
     font-weight: 700;
 }
 QPushButton[class="primary"]:hover { background-color: #ff7867; border-color: #ff7867; }
-QPushButton[class="secondary"] { background: transparent; color: #d8dde3; border-color: #3a4451; }
-QPushButton[class="danger"] { background: transparent; color: #ef9b93; border-color: #65403e; }
-QPushButton[class="ghost"] { background-color: #11161d; border-color: transparent; color: #aeb6c1; padding-left: 9px; padding-right: 9px; }
-QPushButton[class="ghost"]:hover { background-color: #171d25; border-color: transparent; color: #f2f0ed; }
+QPushButton[class="secondary"] { background: transparent; color: #d8dde3; border-color: #607080; }
+QPushButton[class="danger"] { background: transparent; color: #ef9b93; border-color: #c9675f; }
+QPushButton[class="ghost"] { background-color: #11161d; border-color: #607080; color: #aeb6c1; padding-left: 9px; padding-right: 9px; }
+QPushButton[class="ghost"]:hover { background-color: #171d25; border-color: #718092; color: #f2f0ed; }
 /* Keyboard focus. The bare QPushButton:focus rule above is the same
    specificity as every QPushButton[class="…"] rule, so those later rules won
    the cascade and focus rendered no pixels at all on ghost, primary,
@@ -3820,7 +3820,7 @@ QPushButton[class="nav"][active="true"]:focus { background-color: #242b35; borde
 QLineEdit, QSpinBox, QComboBox {
     background-color: #11161d;
     color: #f0eeeb;
-    border: 1px solid #606a77;
+    border: 1px solid #607080;
     border-radius: 6px;
     padding: 7px 10px;
     min-height: 36px;
@@ -3828,7 +3828,7 @@ QLineEdit, QSpinBox, QComboBox {
 }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #ff7664; background: #151b23; }
 QLineEdit[state="error"], QSpinBox[state="error"] { border-color: #c9675f; background: #1a1214; }
-QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: #687381; background: #0e1319; border-color: #252d37; }
+QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: #687381; background: #0e1319; border-color: #607080; }
 /* The paste box is the product's front door, so it is sized like one.
    An attribute selector outranks a pseudo-class in Qt's CSS2 cascade, so
    the focus state has to be restated here or the hero field would render
@@ -3843,7 +3843,7 @@ QLineEdit[class="heroUrl"]:focus { border-color: #ff7664; background: #151b23; }
 QComboBox::drop-down { border: none; width: 24px; }
 QSpinBox::up-button, QSpinBox::down-button { width: 18px; border: none; background: transparent; }
 QCheckBox { color: #d7dce2; font-size: 13px; spacing: 10px; min-height: 26px; }
-QCheckBox::indicator { width: 17px; height: 17px; border-radius: 4px; border: 1px solid #485362; background: transparent; }
+QCheckBox::indicator { width: 17px; height: 17px; border-radius: 4px; border: 1px solid #607080; background: transparent; }
 QCheckBox::indicator:hover { border-color: #718092; }
 QCheckBox::indicator:checked { background: #ff6552; border-color: #ff6552; }
 /* A styled indicator suppresses Qt's native focus rect, so the checked and
@@ -3889,7 +3889,7 @@ QFrame[class="verticalDivider"] { background: #2b333d; border: none; min-width: 
 QTextEdit {
     background-color: #0d1218;
     color: #b4bcc6;
-    border: 1px solid #303945;
+    border: 1px solid #607080;
     border-radius: 6px;
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 12px;
@@ -3904,10 +3904,10 @@ QProgressBar::chunk { background: #ff6552; border-radius: 4px; }
 QTabWidget::pane { border: none; }
 QTabBar { background: transparent; }
 QTabBar::tab { height: 0; width: 0; }
-QMenu { background: #11161d; color: #f0eeeb; border: 1px solid #343e4a; padding: 5px; }
+QMenu { background: #11161d; color: #f0eeeb; border: 1px solid #607080; padding: 5px; }
 QMenu::item { padding: 7px 22px 7px 10px; border-radius: 4px; }
 QMenu::item:selected { background: #242b35; }
-QToolTip { background: #11161d; color: #f0eeeb; border: 1px solid #343e4a; padding: 6px 8px; }
+QToolTip { background: #11161d; color: #f0eeeb; border: 1px solid #607080; padding: 6px 8px; }
 """
 
 # ══════════════════════════════════════════════════════════════
