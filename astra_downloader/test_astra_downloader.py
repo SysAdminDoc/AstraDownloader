@@ -2269,8 +2269,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         build_source = (root / "astra_downloader" / "build.py").read_text(
             encoding="utf-8"
         )
-        gui_source = (root / "astra_downloader" / "gui.py").read_text(
-            encoding="utf-8"
+        gui_source = "\n".join(
+            (root / "astra_downloader" / name).read_text(encoding="utf-8")
+            for name in ("gui.py", "gui_support.py")
         )
         renderer_source = (
             root / "scripts" / "render-companion-gui.py"
@@ -2303,7 +2304,15 @@ class CompanionGuiPolicyTests(unittest.TestCase):
     def test_companion_uses_premium_command_center_and_async_readiness(self):
         import inspect
 
-        gui_source = Path(ad.__file__).with_name("gui.py").read_text(encoding="utf-8")
+        gui_source = "\n".join(
+            Path(ad.__file__).with_name(name).read_text(encoding="utf-8")
+            for name in (
+                "gui.py", "gui_support.py", "gui_download_page.py",
+                "gui_history_page.py", "gui_site_logins_page.py",
+                "gui_subscriptions_page.py", "gui_extension_page.py",
+                "gui_settings_page.py",
+            )
+        )
         source = Path(ad.__file__).read_text(encoding="utf-8") + gui_source
         probe_source = inspect.getsource(ad.ReadinessProbe.run)
         probe_wiring_source = inspect.getsource(ad.ReadinessProbe.__init__)
@@ -6664,6 +6673,39 @@ from PyQt6.QtWidgets import QApplication
 assert QApplication.instance() is None
 assert gui.human_status("needs-auth") == "Needs sign-in"
 assert gui.format_duration(3660) == "1h 1m"
+assert "astra_downloader.astra_downloader" not in sys.modules
+'''
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(ad.__file__).resolve().parent.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_gui_pages_are_importable_mixins_without_the_composition_root(self):
+        script = r'''
+import importlib
+import sys
+
+gui = importlib.import_module("astra_downloader.gui")
+pages = {
+    "download": ("DownloadPageMixin", "_build_download"),
+    "history": ("HistoryPageMixin", "_build_history"),
+    "site_logins": ("SiteLoginsPageMixin", "_build_site_logins"),
+    "subscriptions": ("SubscriptionsPageMixin", "_build_subscriptions"),
+    "extension": ("ExtensionPageMixin", "_build_extension"),
+    "settings": ("SettingsPageMixin", "_build_settings"),
+}
+for page, (mixin_name, builder_name) in pages.items():
+    module = importlib.import_module(f"astra_downloader.gui_{page}_page")
+    mixin = getattr(module, mixin_name)
+    assert callable(getattr(mixin, builder_name))
+    assert issubclass(gui.MainWindowCore, mixin)
 assert "astra_downloader.astra_downloader" not in sys.modules
 '''
         env = os.environ.copy()
@@ -13884,7 +13926,18 @@ class TranslationCoverageTests(unittest.TestCase):
         spec.loader.exec_module(extractor)
         self.assertEqual(
             {path.name for path in extractor.SOURCE_FILES},
-            {"gui.py", "download.py", "health.py"},
+            {
+                "gui.py",
+                "gui_support.py",
+                "gui_download_page.py",
+                "gui_history_page.py",
+                "gui_site_logins_page.py",
+                "gui_subscriptions_page.py",
+                "gui_extension_page.py",
+                "gui_settings_page.py",
+                "download.py",
+                "health.py",
+            },
         )
         strings = set(extractor.extract_all())
         for expected in (
@@ -19594,8 +19647,13 @@ window.close()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_skipped_size_message_names_a_control_that_exists(self):
-        gui_source = Path(ad.__file__).resolve().parent.joinpath("gui.py").read_text(
-            encoding="utf-8"
+        gui_dir = Path(ad.__file__).resolve().parent
+        gui_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                gui_dir / "gui.py",
+                gui_dir / "gui_settings_page.py",
+            )
         )
         self.assertIn('make_label("Max file size", "fieldLabel")', gui_source)
         self.assertIn('"MaxFileSizeMB": self.cfg_maxsize.value()', gui_source)
