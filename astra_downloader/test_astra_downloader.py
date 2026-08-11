@@ -6512,6 +6512,60 @@ class SetupChecksumTests(unittest.TestCase):
                     )
             self.assertFalse(path.exists())
 
+    def test_setup_worker_keeps_existing_binary_until_staged_checksum_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "yt-dlp.exe"
+            previous = b"previous verified helper"
+            replacement = b"replacement helper"
+            path.write_bytes(previous)
+            worker = ad.SetupWorker()
+
+            def fake_download(_url, staged, **_kwargs):
+                Path(staged).write_bytes(replacement)
+
+            def verify_staged(staged, _expected):
+                self.assertNotEqual(Path(staged), path)
+                self.assertEqual(path.read_bytes(), previous)
+                return True
+
+            with mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "fetch_expected_sha256",
+                                      return_value="a" * 64), \
+                    mock.patch.object(ad, "verify_file_sha256",
+                                      side_effect=verify_staged):
+                installed = worker._download_verified_binary(
+                    "https://example.invalid/yt-dlp.exe", path,
+                    "https://example.invalid/yt-dlp.exe.sha256",
+                    asset_name="yt-dlp.exe", label="yt-dlp",
+                )
+
+            self.assertEqual(installed, path)
+            self.assertEqual(path.read_bytes(), replacement)
+            self.assertEqual(list(path.parent.glob(".yt-dlp.exe.*.verified")), [])
+
+    def test_setup_worker_keeps_existing_binary_when_staged_checksum_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "yt-dlp.exe"
+            previous = b"previous verified helper"
+            path.write_bytes(previous)
+            worker = ad.SetupWorker()
+
+            def fake_download(_url, staged, **_kwargs):
+                Path(staged).write_bytes(b"bad replacement")
+
+            with mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "fetch_expected_sha256",
+                                      return_value="0" * 64):
+                with self.assertRaises(RuntimeError):
+                    worker._download_verified_binary(
+                        "https://example.invalid/yt-dlp.exe", path,
+                        "https://example.invalid/yt-dlp.exe.sha256",
+                        asset_name="yt-dlp.exe", label="yt-dlp",
+                    )
+
+            self.assertEqual(path.read_bytes(), previous)
+            self.assertEqual(list(path.parent.glob(".yt-dlp.exe.*.verified")), [])
+
     def test_setup_worker_passes_ffmpeg_asset_name_to_checksum_manifest(self):
         source = Path(ad.__file__).with_name('gui.py').read_text(encoding='utf-8')
         self.assertIn("asset_name=self._value('FFMPEG_SHA256_ASSET')", source)
@@ -15785,6 +15839,24 @@ class QuickJsProvisioningTests(unittest.TestCase):
         self.assertEqual(result, str(self.path))
         self.assertEqual(len(calls), 1)
 
+    def test_a_failed_refresh_keeps_the_previous_runtime(self):
+        self._plant(b"previous runtime" + (b"\0" * (2 * 1024 * 1024)))
+
+        def fake_download(_url, destination, **_kwargs):
+            Path(destination).write_bytes(b"bad replacement")
+
+        with mock.patch.object(ad, "download_file_atomic", fake_download), \
+             mock.patch.object(ad, "_probe_quickjs_binary_version",
+                               lambda _path: "0.1.0"), \
+             mock.patch.object(ad, "verify_file_sha256",
+                               side_effect=RuntimeError("bad digest")):
+            result = ad.provision_quickjs()
+
+        self.assertIsNone(result)
+        self.assertTrue(self.path.exists())
+        self.assertTrue(self.path.read_bytes().startswith(b"previous runtime"))
+        self.assertEqual(list(self.path.parent.glob(".qjs.exe.*.verified")), [])
+
 
 class QuickJsSetupFallbackTests(unittest.TestCase):
     """Setup falls back to QuickJS when Deno cannot be had."""
@@ -16306,6 +16378,31 @@ class WhisperModelProvisioningTests(unittest.TestCase):
                 self.assertIsNone(ad.provision_whisper_model())
             self.assertFalse(model.exists())
 
+    def test_a_failed_refresh_keeps_the_previous_model(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            model = root / "ggml-tiny-q5_1.bin"
+            previous = b"previous model"
+            model.write_bytes(previous)
+
+            def fake_download(_url, path, **_kwargs):
+                Path(path).write_bytes(b"bad model")
+
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "managed_binary_state",
+                                      return_value="damaged"), \
+                    mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "verify_file_sha256",
+                                      side_effect=RuntimeError("bad digest")), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                self.assertIsNone(ad.provision_whisper_model())
+
+            self.assertEqual(model.read_bytes(), previous)
+            self.assertEqual(list(root.glob(".ggml-tiny-q5_1.bin.*.verified")), [])
+
     def test_a_download_is_verified_before_it_is_reported_ready(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -16313,7 +16410,7 @@ class WhisperModelProvisioningTests(unittest.TestCase):
             calls = []
 
             def fake_download(url, path, **kwargs):
-                calls.append((url, kwargs))
+                calls.append((url, Path(path), kwargs))
                 Path(path).write_bytes(b"verified model")
 
             with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
@@ -16326,7 +16423,8 @@ class WhisperModelProvisioningTests(unittest.TestCase):
                 result = ad.provision_whisper_model()
             self.assertEqual(result, str(model))
             self.assertEqual(calls[0][0], ad.WHISPER_MODEL_URL)
-            self.assertEqual(calls[0][1]["max_bytes"], ad.HELPER_DOWNLOAD_MAX_BYTES)
+            self.assertNotEqual(calls[0][1], model)
+            self.assertEqual(calls[0][2]["max_bytes"], ad.HELPER_DOWNLOAD_MAX_BYTES)
 
 
 class SubtitleRetryTests(unittest.TestCase):
