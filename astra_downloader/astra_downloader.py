@@ -4140,6 +4140,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,
         'validate_download_request_body': lambda *args, **kwargs: validate_download_request_body(*args, **kwargs),
+        'write_persistent_log': lambda *args, **kwargs: write_persistent_log(*args, **kwargs),
     })
 
 

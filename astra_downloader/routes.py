@@ -4,10 +4,12 @@ import hmac
 import queue
 import threading
 import time
+import traceback
 from collections import deque
 from pathlib import Path
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 try:
     from ._compat import make_legacy_resolver
@@ -182,6 +184,7 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'query_history_entries',
     'read_update_recovery_status',
     'validate_download_request_body',
+    'write_persistent_log',
 })
 
 
@@ -238,6 +241,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     query_history_entries = dependencies['query_history_entries']
     read_update_recovery_status = dependencies['read_update_recovery_status']
     validate_download_request_body = dependencies['validate_download_request_body']
+    write_persistent_log = dependencies['write_persistent_log']
     subscription_manager = dependencies.get('subscription_manager')
 
     api = Flask(__name__)
@@ -245,9 +249,8 @@ def create_api(config, dl_manager, history, *, dependencies):
     import logging
     logging.getLogger('werkzeug').disabled = True
     # v1.5.1 EI12: cap request bodies BEFORE any route handler sees them.
-    # Flask emits 413 itself when this is exceeded; we don't need a
-    # custom errorhandler because all legitimate clients (the extension
-    # popup + ytkit.js EXT_FETCH) post tiny payloads (<2 KB).
+    # The error handlers below keep Flask's rejection in the same JSON/CORS
+    # contract as an ordinary route response.
     api.config['MAX_CONTENT_LENGTH'] = MAX_REQUEST_BYTES
 
     # v1.2.0: token-bucket rate limit on /download. Other endpoints are
@@ -384,6 +387,43 @@ def create_api(config, dl_manager, history, *, dependencies):
             for k, v in extra_headers.items():
                 resp.headers[k] = v
         return resp
+
+    def log_api_error(label, error):
+        try:
+            write_persistent_log(
+                f"{label}: {type(error).__name__}: {error}\n{traceback.format_exc()}"
+            )
+        except Exception:
+            # reason: logging must not turn an already-safe JSON error response
+            # into a second exception when the log volume is unavailable.
+            pass
+
+    @api.errorhandler(413)
+    def handle_request_too_large(error):
+        log_api_error("API request rejected because its body was too large", error)
+        return cors_response({
+            "error": f"Request body exceeds the {MAX_REQUEST_BYTES} byte limit.",
+            "code": "request-too-large",
+        }, 413)
+
+    @api.errorhandler(HTTPException)
+    def handle_http_error(error):
+        if error.code == 413:
+            return handle_request_too_large(error)
+        return cors_response({
+            "error": error.description or "The request could not be completed.",
+            "code": f"http-{error.code or 500}",
+        }, error.code or 500)
+
+    @api.errorhandler(Exception)
+    def handle_unexpected_error(error):
+        if isinstance(error, HTTPException):
+            return handle_http_error(error)
+        log_api_error("Unhandled API exception", error)
+        return cors_response({
+            "error": "Astra Downloader could not complete the request.",
+            "code": "internal-server-error",
+        }, 500)
 
     @api.before_request
     def guard_request():
@@ -998,6 +1038,24 @@ def create_api(config, dl_manager, history, *, dependencies):
             return None, _subscription_unavailable()
         return subscription_manager, None
 
+    def _is_subscription_persistence_error(error):
+        text = str(error or "").casefold()
+        return any(marker in text for marker in (
+            "could not save subscriptions",
+            "subscription state was written by a newer",
+            "subscription state schema is incompatible",
+            "could not reset subscription retry state",
+            "could not save scheduled download archive state",
+        ))
+
+    def _subscription_error(error, code, status):
+        if _is_subscription_persistence_error(error):
+            return cors_response({
+                "error": error,
+                "code": "subscription-persistence-failed",
+            }, 503)
+        return cors_response({"error": error, "code": code}, status)
+
     @api.route('/subscriptions', methods=['GET'])
     def subscriptions_list():
         if not check_auth():
@@ -1034,7 +1092,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         )
         if error:
             status = 409 if "already configured" in error.lower() else 400
-            return cors_response({"error": error, "code": "subscription-rejected"}, status)
+            return _subscription_error(error, "subscription-rejected", status)
         return cors_response(record, 201)
 
     @api.route('/subscriptions/<subscription_id>', methods=['PATCH'])
@@ -1066,7 +1124,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         record, error = manager.update_subscription(subscription_id, **fields)
         if error:
             status = 404 if "no longer exists" in error.lower() else 400
-            return cors_response({"error": error, "code": "subscription-update-rejected"}, status)
+            return _subscription_error(error, "subscription-update-rejected", status)
         return cors_response(record)
 
     @api.route('/subscriptions/<subscription_id>', methods=['DELETE'])
@@ -1078,7 +1136,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             return response
         removed, error = manager.remove_subscription(subscription_id)
         if error:
-            return cors_response({"error": error, "code": "subscription-delete-rejected"}, 404)
+            return _subscription_error(error, "subscription-delete-rejected", 404)
         return cors_response({"id": subscription_id, "removed": bool(removed)})
 
     @api.route('/subscriptions/<subscription_id>/scan', methods=['POST'])
@@ -1090,7 +1148,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             return response
         result, error = manager.request_scan(subscription_id)
         if error:
-            return cors_response({"error": error, "code": "subscription-scan-rejected"}, 404)
+            return _subscription_error(error, "subscription-scan-rejected", 404)
         return cors_response(result, 202)
 
     @api.route('/config', methods=['GET'])

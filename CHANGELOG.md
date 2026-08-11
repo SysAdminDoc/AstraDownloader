@@ -81,6 +81,10 @@ repository's git log.
   and older schema markers are normalized on the next save, while newer files
   stay untouched and report the required Astra Downloader version instead of
   masquerading as a disk-space failure.
+- **API failures keep the JSON contract.** Oversized requests and unexpected
+  handler errors now carry the same CORS, cache, and security headers as normal
+  responses, are logged for recovery, and subscription persistence failures
+  return a retryable 503 with a distinct code.
 
 ## [2.6.0] - 2026-08-09
 

@@ -1672,6 +1672,41 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(removed.status_code, 200)
             self.assertTrue(removed.get_json()["removed"])
 
+    def test_subscription_persistence_failure_is_a_retryable_server_error(self):
+        token = "s" * 32
+        config = FakeConfig({"ServerToken": token})
+
+        def fail_write(*_args, **_kwargs):
+            raise OSError("disk full")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ad.SubscriptionStore(
+                path=Path(tmp) / "subscriptions.json",
+                writer=fail_write,
+                logger=lambda _message: None,
+            )
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: ([], None),
+                enqueue=lambda *_args: ("dl", None),
+            )
+            api = ad.create_api(
+                config,
+                ad.DownloadManager(config, FakeHistory()),
+                FakeHistory(),
+                subscriptions=manager,
+            )
+
+            response = api.test_client().post(
+                "/subscriptions",
+                json={"url": "https://www.youtube.com/@persistence-failure"},
+                headers={"X-Auth-Token": token, "Host": "127.0.0.1"},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["code"], "subscription-persistence-failed")
+        self.assertIn("disk space", response.get_json()["error"])
+
 
     def test_subscription_scan_registers_shared_yt_dlp_activity(self):
         registry = ad.YTDLPActivityRegistry()
@@ -9725,17 +9760,43 @@ class ResponseSizeCapTests(unittest.TestCase):
         manager = ad.DownloadManager(config, FakeHistory())
         api = ad.create_api(config, manager, FakeHistory())
         oversized = "x" * (ad.MAX_REQUEST_BYTES + 1024)
-        resp = api.test_client().post(
-            "/download",
-            data=oversized,
-            headers={
-                "X-Auth-Token": token,
-                "Content-Type": "application/json",
-                "Host": "127.0.0.1:9751",
-            },
-        )
+        with mock.patch.object(ad, "write_persistent_log") as log:
+            resp = api.test_client().post(
+                "/download",
+                data=oversized,
+                headers={
+                    "X-Auth-Token": token,
+                    "Content-Type": "application/json",
+                    "Host": "127.0.0.1:9751",
+                },
+            )
         self.assertEqual(resp.status_code, 413,
             "POST body > MAX_REQUEST_BYTES must return 413 (RequestEntityTooLarge)")
+        self.assertEqual(resp.get_json()["code"], "request-too-large")
+        self.assertEqual(resp.headers["Cache-Control"], "no-store")
+        self.assertEqual(resp.headers["X-Content-Type-Options"], "nosniff")
+        self.assertTrue(log.called)
+
+    def test_unhandled_route_exception_is_json_logged_and_security_headered(self):
+        token = "h" * 32
+        config = FakeConfig({"ServerToken": token})
+        api = ad.create_api(config, ad.DownloadManager(config, FakeHistory()), FakeHistory())
+
+        def fail_for_test():
+            raise RuntimeError("fixture route exploded")
+
+        api.add_url_rule("/test-unhandled", view_func=fail_for_test)
+        with mock.patch.object(ad, "write_persistent_log") as log:
+            response = api.test_client().get(
+                "/test-unhandled", headers={"Host": "127.0.0.1"}
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.get_json()["code"], "internal-server-error")
+        self.assertIn("could not complete", response.get_json()["error"].lower())
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertIn("fixture route exploded", log.call_args.args[0])
 
     def test_cors_response_has_outgoing_size_guard(self):
         # cors_response is an inner closure inside create_api, so we
