@@ -1318,7 +1318,12 @@ class MainWindowCore(QMainWindow):
 
         # Tab stack
         self.tabs = QTabWidget()
-        self.tabs.tabBar().hide()
+        tab_bar = self.tabs.tabBar()
+        tab_bar.hide()
+        # The hidden tab bar is QTabWidget's focus proxy. Leaving it
+        # focusable makes Tab appear to succeed while focus is sent back to
+        # the same invisible widget, trapping keyboard users on every page.
+        tab_bar.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tabs.setAccessibleName(tr("Companion pages"))
         main_layout.addWidget(self.tabs)
 
@@ -3872,6 +3877,10 @@ class MainWindowCore(QMainWindow):
         self.cfg_site_profiles = QTextEdit()
         self.cfg_site_profiles.setAccessibleName(tr("Named site profiles"))
         self.cfg_site_profiles.setAcceptRichText(False)
+        # Tab inserts a literal tab in a JSON editor by default. Settings is
+        # a form, so hand the key to the next control instead of mutating the
+        # document and trapping focus in this field.
+        self.cfg_site_profiles.setTabChangesFocus(True)
         self.cfg_site_profiles.setMinimumHeight(170)
         self.cfg_site_profiles.setPlainText(json.dumps(
             self.config.get("SiteProfiles", []), indent=2, ensure_ascii=False

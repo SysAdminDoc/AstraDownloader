@@ -30,40 +30,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   harness gains a theme axis.
   Complexity: L
 
-- [ ] P0 — Free the forward-Tab focus chain
-  Why: Forward Tab does nothing on all six pages — a WCAG 2.1.2 keyboard trap in
-  an app that already invested in accessible names and focus rings.
-  Evidence: `gui.py:1285-1288` hides the `QTabWidget` tab bar, which is the
-  widget's focus **proxy**, so `setFocus()` forwards into a hidden widget and Qt
-  still reports success. Reproduced in an isolated 25-line PyQt6 script: tab bar
-  visible → `nav0, qt_tabwidget_tabbar, f0, f1, f2, …`; hidden as shipped →
-  `nav0, nav0, nav0, …`; hidden with `setFocusPolicy(Qt.FocusPolicy.NoFocus)` →
-  `f0, f1, f2, nav0, …`. Zero tests touch keyboard navigation
-  (`Key_Tab|focusNextPrevChild|tabChangesFocus` → 0 hits), which is why it
-  shipped. Tab traversal is baseline keyboard access, not a keyboard *shortcut* —
-  the project's no-shortcuts convention does not cover it.
-  Touches: `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
-  Acceptance: Tab from the first nav button reaches every focusable control on
-  each page in visual order and wraps; a test walks `focusNextPrevChild(True)`
-  and asserts the visited set per page.
-  Complexity: S
-
-- [ ] P0 — Stop the Site-profiles editor trapping Tab and eating the keystroke
-  Why: It is a second keyboard trap, and every trapped press silently corrupts
-  the JSON the user is editing.
-  Evidence: `cfg_site_profiles = QTextEdit()` (`gui.py:3836`) with
-  `tabChangesFocus()` false. Measured on the live window: 60 Tab presses from the
-  settings filter reach 10 of 108 focusable controls, leaving Storage,
-  Post-processing, Format preferences, Playlist limits, Performance, Language,
-  Tray behavior, Maintenance, Import/export, **Save changes** and **Restore
-  defaults** unreachable; each press also appends a tab character to the buffer
-  (`len 2 -> 5` after three presses).
-  Touches: `astra_downloader/gui.py`
-  Acceptance: `setTabChangesFocus(True)` (or an equivalent), Tab moves on without
-  modifying the document, and the Settings page is fully traversable; a test
-  asserts both.
-  Complexity: S
-
 - [ ] P0 — Show the subscription store's error instead of "you have none"
   Why: A user with an unreadable store is told their subscriptions do not exist
   and invited to re-add them — the opposite of this project's stated invariant
