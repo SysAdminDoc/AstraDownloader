@@ -1040,11 +1040,17 @@ class SubscriptionManager:
             return True
 
     def stop(self, timeout=2):
+        timeout = max(0.1, float(timeout))
         with self._lock:
             thread = self._thread
             self._stop.set()
         if thread and thread.is_alive():
-            thread.join(timeout=max(0.1, float(timeout)))
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                self._logger(
+                    "Subscription scheduler stop timed out after "
+                    f"{timeout:.1f}s; a scan is still finishing."
+                )
         with self._lock:
             if self._thread is thread and (not thread or not thread.is_alive()):
                 self._thread = None
@@ -1063,6 +1069,8 @@ class SubscriptionManager:
         due = self.store.due_subscriptions(now)
         results = []
         for item in due:
+            if self._stop.is_set():
+                break
             results.append(self.scan_subscription(item["id"], now=now, manual=False))
         return results
 
@@ -1073,25 +1081,35 @@ class SubscriptionManager:
         with self._lock:
             if sub_id in self._scan_ids:
                 return {"id": sub_id, "scheduled": False, "scanning": True}, None
+            self._scan_ids.add(sub_id)
         threading.Thread(
-            target=self.scan_subscription,
-            kwargs={"sub_id": sub_id, "manual": True},
+            target=self._run_requested_scan,
+            args=(sub_id,),
             name=f"AstraSubscriptionScan-{sub_id}",
             daemon=True,
         ).start()
         return {"id": sub_id, "scheduled": True}, None
+
+    def _run_requested_scan(self, sub_id):
+        try:
+            self.scan_subscription(sub_id, manual=True, _claimed=True)
+        except Exception as error:  # noqa: BLE001
+            self._logger(f"Manual subscription scan failed for {sub_id}: {error}")
+            with self._lock:
+                self._scan_ids.discard(str(sub_id))
 
     def scan_now(self, sub_id, *, background=False):
         if background:
             return self.request_scan(sub_id)
         return self.scan_subscription(sub_id, manual=True)
 
-    def scan_subscription(self, sub_id, *, now=None, manual=False):
+    def scan_subscription(self, sub_id, *, now=None, manual=False, _claimed=False):
         sub_id = str(sub_id)
-        with self._lock:
-            if sub_id in self._scan_ids:
-                return {"id": sub_id, "queued": 0, "skipped": 0, "scanning": True}
-            self._scan_ids.add(sub_id)
+        if not _claimed:
+            with self._lock:
+                if sub_id in self._scan_ids:
+                    return {"id": sub_id, "queued": 0, "skipped": 0, "scanning": True}
+                self._scan_ids.add(sub_id)
         activity_token = None
         if self._activity_registry is not None:
             try:
@@ -1140,6 +1158,8 @@ class SubscriptionManager:
             skipped = 0
             errors = []
             for candidate in candidates:
+                if self._stop.is_set():
+                    break
                 key = subscription_archive_key(candidate)
                 reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
                 if reserved == RESERVE_ALREADY_PRESENT:
@@ -1172,6 +1192,13 @@ class SubscriptionManager:
                         "space and permissions."
                     )
                     continue
+                if self._stop.is_set():
+                    self.store.release_archive(
+                        key,
+                        "Scheduled scan stopped before queueing this item.",
+                        now=now,
+                    )
+                    break
                 try:
                     result = self._enqueue(started, candidate, key)
                     if isinstance(result, tuple):
