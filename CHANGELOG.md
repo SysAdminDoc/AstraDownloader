@@ -59,6 +59,10 @@ repository's git log.
   focused mixin modules, while shared visual primitives and the injected core
   contract remain centralized. Cross-module translation discovery keeps the
   German catalogue complete across all 759 companion strings.
+- **Safety regressions now test observable behavior.** Download argv policy,
+  CORS size rejection, queue-idle refresh, folder-picker watchdogs, settings
+  recovery, and window teardown are exercised through calls and fixtures rather
+  than line-sensitive function-source inspection.
 - **Companion translation extraction now follows the UI boundary.** Qt setter
   roots, constant picker loops, tray/dialog copy, and dynamic status templates
   are catalogued together; the shipped German catalogue remains complete and
