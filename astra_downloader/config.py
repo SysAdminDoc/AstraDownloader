@@ -50,7 +50,7 @@ __all__ = (
     "normalize_site_profile_domain", "normalize_site_profiles",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
     "output_template_preview", "WINDOWS_MAX_PATH",
-    "normalize_sublangs",
+    "normalize_sublangs", "normalize_subtitle_sleep",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
@@ -75,7 +75,7 @@ _OWNED_EXPORTS = {
     "normalize_site_profile_domain", "normalize_site_profiles",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
     "output_template_preview", "WINDOWS_MAX_PATH",
-    "normalize_sublangs",
+    "normalize_sublangs", "normalize_subtitle_sleep",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
@@ -240,10 +240,11 @@ DEFAULT_CONFIG = {
     # Verify a chosen format is actually downloadable before committing to it.
     # Off by default: it costs an extra request per candidate format.
     "VerifyFormats": False,
-    # Soft codec and frame-rate preferences, compiled into --format-sort. The
-    # container choice is a hard constraint and still wins: MP4 forces H.264
-    # + AAC so an editor imports the result without transcoding. These order
-    # what is left. "auto" leaves yt-dlp's own ordering alone.
+    # Soft audio richness/original-language, codec, and frame-rate preferences,
+    # compiled into --format-sort. The container choice is a hard constraint
+    # and still wins: MP4 forces H.264 + AAC so an editor imports the result
+    # without transcoding. "auto" leaves codec and frame-rate ordering alone;
+    # channels and original-language audio remain the safe default preference.
     "VideoCodecPreference": "auto",
     "AudioCodecPreference": "auto",
     # Preferred frame rate, as a target rather than a cap: 60 puts 60fps
@@ -282,6 +283,9 @@ DEFAULT_CONFIG = {
     # Zero keeps the historical fixed pacing behaviour.
     "PacingJitterPercent": 0,
     "SubLangs": "en",
+    # Subtitle endpoints are commonly rate-limited. One second between track
+    # requests is a small default delay and can be disabled or raised.
+    "SubtitleSleepSeconds": 1.0,
     # Creator-written captions, the machine transcript, or the former with the
     # latter as fallback (which is what this app has always done).
     "SubtitleMode": "prefer-manual",
@@ -680,8 +684,16 @@ def normalize_site_profiles(value):
 
 def normalize_sublangs(value):
     cleaned = clean_text(value, "en", 80)
-    cleaned = re.sub(r"[^a-zA-Z0-9,\-]", "", cleaned)
-    return cleaned or "en"
+    cleaned = re.sub(r"[^a-zA-Z0-9,_\-]", "", cleaned)
+    parts = []
+    for part in cleaned.split(","):
+        part = part.strip()
+        if not part or part.lstrip("-").casefold() == "live_chat":
+            continue
+        parts.append(part)
+    if any(part.casefold() == "all" for part in parts):
+        return "all,-live_chat"
+    return ",".join(parts) or "en"
 
 
 # Which subtitle tracks to ask for.
@@ -707,6 +719,19 @@ def normalize_subtitle_mode(value):
 def normalize_subtitle_format(value):
     cleaned = clean_text(value, "", 8).lower()
     return cleaned if cleaned in SUBTITLE_FORMATS else ""
+
+
+def normalize_subtitle_sleep(value):
+    """Return a finite yt-dlp subtitle-request delay between 0 and 60 seconds."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    if not math.isfinite(seconds) or seconds < 0:
+        return 0.0
+    return round(min(seconds, 60.0), 2)
 
 
 # yt-dlp's SponsorBlock category names. An unknown name is dropped rather than
@@ -1141,7 +1166,7 @@ def _parse_section_timestamp(value):
 
 
 def normalize_download_section(value):
-    """Normalize an accurate re-cut range expressed as seconds or HH:MM:SS."""
+    """Normalize a positive re-cut range or a yt-dlp native clip selector."""
     if value in (None, ""):
         return None, None
     if not isinstance(value, dict):
@@ -1149,6 +1174,17 @@ def normalize_download_section(value):
     unknown = sorted(str(key) for key in value if str(key) not in {"start", "end"})
     if unknown:
         return None, "Unsupported section field(s): {}.".format(", ".join(unknown))
+    raw_start = str(value.get("start") or "").strip().lower()
+    raw_end = str(value.get("end") or "").strip().lower()
+    if raw_start == "*from-url" and raw_end == "inf":
+        return {"start": "*from-url", "end": "inf"}, None
+    if raw_end == "inf" and re.fullmatch(r"\*-\d+(?:\.\d+)?", raw_start):
+        try:
+            tail_seconds = float(raw_start[2:])
+        except (TypeError, ValueError, OverflowError):
+            tail_seconds = 0.0
+        if math.isfinite(tail_seconds) and 0 < tail_seconds <= 86400:
+            return {"start": raw_start, "end": "inf"}, None
     start = _parse_section_timestamp(value.get("start"))
     end = _parse_section_timestamp(value.get("end"))
     if start is None or end is None:
@@ -1528,6 +1564,9 @@ def sanitize_config(raw):
         "Browser extension", "Settings",
     } else "Download"
     data["SubLangs"] = normalize_sublangs(data.get("SubLangs"))
+    data["SubtitleSleepSeconds"] = normalize_subtitle_sleep(
+        data.get("SubtitleSleepSeconds")
+    )
     data["SubtitleMode"] = normalize_subtitle_mode(data.get("SubtitleMode"))
     data["SubtitleFormat"] = normalize_subtitle_format(data.get("SubtitleFormat"))
     data["SponsorBlockAction"] = "mark" if data.get("SponsorBlockAction") == "mark" else "remove"

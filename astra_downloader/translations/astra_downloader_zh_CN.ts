@@ -931,6 +931,10 @@
       <translation>Settings saved.</translation>
     </message>
     <message>
+      <source>Clip ranges are unavailable for this SABR-only link.</source>
+      <translation>Clip ranges are unavailable for this SABR-only link.</translation>
+    </message>
+    <message>
       <source>{quality}p</source>
       <translation>{quality}p</translation>
     </message>
@@ -1041,6 +1045,14 @@
     <message>
       <source>auto-generated subtitles only</source>
       <translation>auto-generated subtitles only</translation>
+    </message>
+    <message>
+      <source>for a yt-dlp clip</source>
+      <translation>for a yt-dlp clip</translation>
+    </message>
+    <message>
+      <source>for an accurate ffmpeg clip</source>
+      <translation>for an accurate ffmpeg clip</translation>
     </message>
     <message>
       <source>Saving to {path}.</source>
@@ -1387,10 +1399,6 @@
       <translation>Finishing setup...</translation>
     </message>
     <message>
-      <source>for an accurate ffmpeg clip</source>
-      <translation>for an accurate ffmpeg clip</translation>
-    </message>
-    <message>
       <source>unknown</source>
       <translation>unknown</translation>
     </message>
@@ -1433,6 +1441,14 @@
     <message>
       <source>Open extension pairing</source>
       <translation>Open extension pairing</translation>
+    </message>
+    <message>
+      <source>From link</source>
+      <translation>From link</translation>
+    </message>
+    <message>
+      <source>Last 30 s</source>
+      <translation>Last 30 s</translation>
     </message>
     <message>
       <source>Restore</source>
@@ -1553,6 +1569,14 @@
     <message>
       <source>Clip end timestamp</source>
       <translation>Clip end timestamp</translation>
+    </message>
+    <message>
+      <source>Use the timestamp in the pasted link as the clip start.</source>
+      <translation>Use the timestamp in the pasted link as the clip start.</translation>
+    </message>
+    <message>
+      <source>Download only the last 30 seconds using yt-dlp.</source>
+      <translation>Download only the last 30 seconds using yt-dlp.</translation>
     </message>
     <message>
       <source>Site profile summary</source>
@@ -2393,6 +2417,14 @@
     <message>
       <source>Subtitle languages</source>
       <translation>Subtitle languages</translation>
+    </message>
+    <message>
+      <source>Pause between subtitle requests</source>
+      <translation>Pause between subtitle requests</translation>
+    </message>
+    <message>
+      <source>Seconds between subtitle-track requests. Helps avoid subtitle rate limits; 0 disables it.</source>
+      <translation>Seconds between subtitle-track requests. Helps avoid subtitle rate limits; 0 disables it.</translation>
     </message>
     <message>
       <source>Archive output</source>

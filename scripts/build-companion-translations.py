@@ -352,8 +352,18 @@ CATALOGS = {
             "Ausschnitt von",
         "to":
             "bis",
-        "Clip ranges apply to a single link.":
+    "Clip ranges apply to a single link.":
             "Ausschnitte gelten nur für einen einzelnen Link.",
+        "From link":
+            "Aus Link",
+        "Use the timestamp in the pasted link as the clip start.":
+            "Den Zeitstempel des eingefügten Links als Clipstart verwenden.",
+        "Last 30 s":
+            "Letzte 30 s",
+        "Download only the last 30 seconds using yt-dlp.":
+            "Nur die letzten 30 Sekunden mit yt-dlp herunterladen.",
+        "Clip ranges are unavailable for this SABR-only link.":
+            "Clipbereiche sind für diesen SABR-only-Link nicht verfügbar.",
         "History":
             "Verlauf",
         "All statuses":
@@ -1527,6 +1537,10 @@ CATALOGS["de"].update({
         "Läuft weiterhin im Infobereich, damit Astra Deck Downloads senden kann.",
     "{label} {date}": "{label} {date}",
     "for an accurate ffmpeg clip": "für einen präzisen ffmpeg-Clip",
+    "for a yt-dlp clip": "für einen yt-dlp-Clip",
+    "Pause between subtitle requests": "Pause zwischen Untertitelanfragen",
+    "Seconds between subtitle-track requests. Helps avoid subtitle rate limits; 0 disables it.":
+        "Sekunden zwischen Anfragen für Untertitelspuren. Hilft, Ratenbegrenzungen für Untertitel zu vermeiden; 0 deaktiviert die Pause.",
 })
 
 

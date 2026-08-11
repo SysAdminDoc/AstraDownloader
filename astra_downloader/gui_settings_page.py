@@ -9,8 +9,9 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
-    QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
+    QLineEdit, QProgressBar, QScrollArea, QSpinBox, QTextEdit, QVBoxLayout,
+    QWidget,
 )
 
 try:
@@ -432,6 +433,32 @@ class SettingsPageMixin:
         sub_row.addWidget(self.cfg_sublangs)
         sub_row.addStretch()
         pp_l.addLayout(sub_row)
+        subtitle_sleep_row = QHBoxLayout()
+        subtitle_sleep_row.setSpacing(8)
+        subtitle_sleep_row.addSpacing(28)
+        subtitle_sleep_row.addWidget(make_label(
+            "Pause between subtitle requests", "fieldHint"
+        ))
+        self.cfg_subtitle_sleep = QDoubleSpinBox()
+        self.cfg_subtitle_sleep.setAccessibleName(
+            tr("Pause between subtitle requests")
+        )
+        self.cfg_subtitle_sleep.setRange(0.0, 60.0)
+        self.cfg_subtitle_sleep.setDecimals(2)
+        self.cfg_subtitle_sleep.setSingleStep(0.5)
+        self.cfg_subtitle_sleep.setSuffix(" s")
+        self.cfg_subtitle_sleep.setSpecialValueText(tr("Off"))
+        self.cfg_subtitle_sleep.setValue(float(
+            self.config.get("SubtitleSleepSeconds", 1.0) or 0.0
+        ))
+        self.cfg_subtitle_sleep.setFixedWidth(100)
+        subtitle_sleep_row.addWidget(self.cfg_subtitle_sleep)
+        subtitle_sleep_row.addWidget(make_label(
+            "Seconds between subtitle-track requests. Helps avoid subtitle "
+            "rate limits; 0 disables it.",
+            "fieldHint", word_wrap=True,
+        ), 1)
+        pp_l.addLayout(subtitle_sleep_row)
         # The field above still accepts any code yt-dlp knows; these are the
         # common ones, so picking two languages does not mean knowing that
         # Simplified Chinese is spelled zh-Hans. Three per row, because a

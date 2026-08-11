@@ -79,7 +79,8 @@ try:
         normalize_rate_limit, normalize_sponsorblock_categories,
         normalize_playlist_date,
         normalize_impersonate_target,
-        normalize_sublangs, normalize_subtitle_format, normalize_subtitle_mode,
+        normalize_sublangs, normalize_subtitle_sleep,
+        normalize_subtitle_format, normalize_subtitle_mode,
         SUBTITLE_MODES, SUBTITLE_FORMATS, JAVASCRIPT_RUNTIME_CHOICES,
         build_settings_bundle, read_settings_bundle, describe_bundle_changes,
         SETTINGS_BUNDLE_SCHEMA, SETTINGS_BUNDLE_VERSION, BUNDLE_EXCLUDED_SETTINGS,
@@ -122,7 +123,7 @@ try:
         build_playlist_bound_args,
         build_impersonate_args,
         build_network_workaround_args,
-        build_subtitle_args,
+        build_subtitle_args, build_download_section_args,
         build_local_subtitle_args, local_subtitle_output_path,
         build_whisper_audio_args, build_whisper_transcription_args,
         local_subtitle_sidecar_exists, should_generate_local_subtitles,
@@ -214,7 +215,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         normalize_rate_limit, normalize_sponsorblock_categories,
         normalize_playlist_date,
         normalize_impersonate_target,
-        normalize_sublangs, normalize_subtitle_format, normalize_subtitle_mode,
+        normalize_sublangs, normalize_subtitle_sleep,
+        normalize_subtitle_format, normalize_subtitle_mode,
         SUBTITLE_MODES, SUBTITLE_FORMATS, JAVASCRIPT_RUNTIME_CHOICES,
         build_settings_bundle, read_settings_bundle, describe_bundle_changes,
         SETTINGS_BUNDLE_SCHEMA, SETTINGS_BUNDLE_VERSION, BUNDLE_EXCLUDED_SETTINGS,
@@ -257,7 +259,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_playlist_bound_args,
         build_impersonate_args,
         build_network_workaround_args,
-        build_subtitle_args,
+        build_subtitle_args, build_download_section_args,
         build_local_subtitle_args, local_subtitle_output_path,
         build_whisper_audio_args, build_whisper_transcription_args,
         local_subtitle_sidecar_exists, should_generate_local_subtitles,
@@ -768,7 +770,7 @@ def probe_subscription_uploads(
     if error or not normalized or not is_youtube_url(normalized):
         return [], "Subscriptions must use a YouTube channel or playlist URL."
     args = [
-        str(YTDLP_PATH), '--ignore-config', '--no-colors', '--no-warnings',
+        str(YTDLP_PATH), '--ignore-config', '--color', 'no_color', '--no-warnings',
         '--flat-playlist', '--dump-single-json', '--skip-download',
         '--playlist-end', str(SUBSCRIPTION_PROBE_LIMIT),
     ]

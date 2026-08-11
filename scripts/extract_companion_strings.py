@@ -103,6 +103,9 @@ NOT_TRANSLATABLE = {
     "%(title)s.%(ext)s",
     "en,es",
     "today-30days",
+    "*-30",
+    "*from-url",
+    "inf",
     "--",
     "A",
 }

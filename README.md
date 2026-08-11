@@ -28,8 +28,9 @@ pasting a link never needs it.
   really has, so the quality list stops offering 2160p on a 720p video.
 - **Bound a playlist.** Cap how many items a pasted playlist queues, and
   filter it by upload date or item duration.
-- **Clip a range.** Give a start and end timestamp and get an accurate
-  ffmpeg-cut section instead of the whole video.
+- **Clip a range.** Give a start and end timestamp for an accurate ffmpeg-cut
+  section, or use **From link** for a pasted `?t=` timestamp and **Last 30 s**
+  for a yt-dlp-native tail clip.
 - **Sign in to sites.** Private and members-only videos work: import a
   `cookies.txt`, or read a browser profile. One jar per site, filtered to
   that site's registrable domain and attached to that site alone.
@@ -75,7 +76,8 @@ pasting a link never needs it.
   site or route needs more than a whole-session proxy.
 - **Subtitles, the ones you asked for.** Creator captions, the machine
   transcript, or the former falling back to the latter. Pick languages from a
-  list, normalise everything to SRT, or fetch subtitles without the video.
+  list (including all non-live-chat tracks), normalise everything to SRT, set
+  a pause between subtitle requests, or fetch subtitles without the video.
 - **Transcribe locally when needed.** Enable local subtitle generation in
   Settings and a successful video with no subtitle track gets an SRT sidecar
   beside it. The pinned multilingual Whisper model is downloaded during setup
