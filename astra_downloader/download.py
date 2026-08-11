@@ -2741,6 +2741,18 @@ class DownloadManagerCore:
         self._history_error = ""
         # (requirement, url, requires_auth) -> (checked_at, (satisfied, message))
         self._precondition_cache = {}
+        self._precondition_cache_lock = threading.Lock()
+        # Slow JavaScript and browser-fingerprint probes are owned by the
+        # background readiness worker. Keep only their immutable result here;
+        # recovery checks must never turn a GUI refresh into a subprocess.
+        self._readiness_lock = threading.Lock()
+        self._readiness_snapshot = {
+            'configuredRuntime': None,
+            'runtime': None,
+            'impersonateTargets': None,
+            'updatedAt': 0.0,
+            'error': '',
+        }
         self._persistence_compatible = True
         self.intake_paused = False
         self._closing = False
@@ -2751,6 +2763,42 @@ class DownloadManagerCore:
         self._dependencies['cleanup_stale_cookie_jars']()
         self._restore_pending_queue()
         self._sweep_orphaned_download_intermediates()
+
+    def update_readiness_snapshot(self, payload):
+        """Publish probe results produced by the background readiness worker.
+
+        The GUI receives the same payload for display, but it is deliberately
+        not the owner of this update: the worker calls this method before its
+        Qt signal crosses into the GUI thread. A malformed payload is treated
+        as unavailable rather than allowing a stale positive result to linger.
+        """
+        payload = payload if isinstance(payload, dict) else {}
+        runtime = payload.get('runtime')
+        if not isinstance(runtime, dict):
+            runtime = None
+        raw_targets = payload.get('impersonateTargets')
+        targets = None
+        if isinstance(raw_targets, (list, tuple)):
+            values = []
+            for target in raw_targets:
+                target = str(target or '').strip()
+                if target and target not in values:
+                    values.append(target)
+            targets = tuple(values)
+        configured_runtime = payload.get('configuredRuntime')
+        if configured_runtime is not None:
+            configured_runtime = str(configured_runtime).strip().lower() or None
+        error = str(payload.get('error') or '')[:240]
+        with self._readiness_lock:
+            self._readiness_snapshot = {
+                'configuredRuntime': configured_runtime,
+                'runtime': dict(runtime) if runtime is not None else None,
+                'impersonateTargets': targets,
+                'updatedAt': time.time(),
+                'error': error,
+            }
+        with self._precondition_cache_lock:
+            self._precondition_cache.clear()
 
     def _effective_config_for_url(self, url, profile_name=None):
         """Return global settings overlaid with the URL's site profile."""
@@ -4774,115 +4822,162 @@ class DownloadManagerCore:
         return True, None
 
     def retry(self, dl_id, cookies=None):
-        with self._lock:
-            dl = self.downloads.get(dl_id)
-            if not dl:
-                return False, 'Download no longer exists in the queue.'
-            if dl_id in self._running_ids:
-                # A worker can stamp a retryable failure milliseconds before
-                # its finally block discards the id from _running_ids. A retry
-                # accepted in that gap starts a second worker, then the first
-                # worker's teardown discards the second worker's slot and
-                # marks the retrying download failed.
-                return False, 'Download is still finalizing — retry in a moment.'
-            # `skipped` is retryable by definition: nothing was written, and
-            # the fix (raise the size limit, sign in, pick another link) is a
-            # setting change followed by exactly this action.
-            subtitle_retry = (
-                dl.status == 'complete'
-                and dl.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES
-            )
-            if dl.status not in ('failed', 'skipped') and not subtitle_retry:
-                return False, 'Only failed or skipped downloads can be retried.'
-            if dl.status == 'failed' and dl.error_code not in DOWNLOAD_RETRYABLE_ERROR_CODES:
-                # Not "never retryable" — "not yet". Re-check the thing the
-                # failure was waiting for instead of refusing on the code alone.
-                satisfied, still_missing = self.recovery_precondition(dl)
-                if not satisfied:
-                    return False, still_missing
-            if dl.status == 'failed' and dl.error_code == 'rate-limited':
-                remaining = self._host_backoff_remaining_locked(dl.url)
-                if remaining > 0:
-                    return False, (
-                        'This site is still rate-limited; retry in '
-                        f'{math.ceil(remaining)} seconds.'
+        # Recovery checks may consult a cached readiness snapshot, but keeping
+        # this preflight outside the queue lock makes that contract explicit
+        # and prevents a future check from reintroducing lock contention.
+        while True:
+            with self._lock:
+                dl = self.downloads.get(dl_id)
+                if not dl:
+                    return False, 'Download no longer exists in the queue.'
+                if dl_id in self._running_ids:
+                    # A worker can stamp a retryable failure milliseconds before
+                    # its finally block discards the id from _running_ids. A
+                    # retry accepted in that gap starts a second worker, then
+                    # the first worker's teardown discards the second worker's
+                    # slot and marks the retrying download failed.
+                    return False, 'Download is still finalizing — retry in a moment.'
+                # `skipped` is retryable by definition: nothing was written,
+                # and the fix (raise the size limit, sign in, pick another
+                # link) is a setting change followed by exactly this action.
+                subtitle_retry = (
+                    dl.status == 'complete'
+                    and dl.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES
+                )
+                if dl.status not in ('failed', 'skipped') and not subtitle_retry:
+                    return False, 'Only failed or skipped downloads can be retried.'
+                needs_recovery = (
+                    dl.status == 'failed'
+                    and dl.error_code not in DOWNLOAD_RETRYABLE_ERROR_CODES
+                )
+                recovery_signature = (
+                    dl.error_code, dl.url, bool(dl.requires_auth)
+                ) if needs_recovery else None
+
+            recovery_answer = None
+            if needs_recovery:
+                # The object is revalidated under the lock below. This first
+                # pass only reads immutable recovery inputs and is intentionally
+                # outside the manager lock.
+                recovery_answer = self.recovery_precondition(dl)
+                if not recovery_answer[0]:
+                    return False, recovery_answer[1]
+
+            with self._lock:
+                dl = self.downloads.get(dl_id)
+                if not dl:
+                    return False, 'Download no longer exists in the queue.'
+                if dl_id in self._running_ids:
+                    return False, 'Download is still finalizing — retry in a moment.'
+                subtitle_retry = (
+                    dl.status == 'complete'
+                    and dl.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES
+                )
+                if dl.status not in ('failed', 'skipped') and not subtitle_retry:
+                    return False, 'Only failed or skipped downloads can be retried.'
+                if dl.status == 'failed' and dl.error_code not in DOWNLOAD_RETRYABLE_ERROR_CODES:
+                    current_signature = (
+                        dl.error_code, dl.url, bool(dl.requires_auth)
                     )
-            if self._capacity_locked()['total'] >= MAX_QUEUED_TOTAL:
+                    if current_signature != recovery_signature:
+                        # The record changed while the cached precondition was
+                        # being read. Re-evaluate the new failure outside the
+                        # lock instead of accepting a stale answer.
+                        continue
+                    if recovery_answer is None or not recovery_answer[0]:
+                        return False, (
+                            recovery_answer[1]
+                            if recovery_answer is not None else
+                            'This failure needs its recovery action before it can be retried.'
+                        )
+                result = self._retry_locked(dl, cookies, subtitle_retry)
+            if result[0]:
+                self.progress_updated.emit()
+                self._schedule()
+            return result
+
+    def _retry_locked(self, dl, cookies, subtitle_retry):
+        """Apply a validated retry while ``self._lock`` is held."""
+        if dl.status == 'failed' and dl.error_code == 'rate-limited':
+            remaining = self._host_backoff_remaining_locked(dl.url)
+            if remaining > 0:
                 return False, (
-                    f"Download queue is full ({MAX_QUEUED_TOTAL}/{MAX_QUEUED_TOTAL}). "
-                    "Cancel a pending item or wait for a running download to finish, then retry."
+                    'This site is still rate-limited; retry in '
+                    f'{math.ceil(remaining)} seconds.'
                 )
-            previous = snapshot_download_fields(dl, RETRY_ROLLBACK_FIELDS)
-            if subtitle_retry:
-                try:
-                    media_path = Path(dl.filename).resolve(strict=True)
-                    output_root = Path(dl.output_dir).resolve(strict=True)
-                    if media_path != output_root and not media_path.is_relative_to(output_root):
-                        raise ValueError
-                except (OSError, RuntimeError, ValueError):
-                    return False, 'The completed media file is no longer available for subtitle retry.'
-                dl.status = 'pending'
-                dl.progress = 0.0
-                dl.speed = ''
-                dl.eta = ''
-                dl.error = ''
-                dl.error_code = ''
-                dl.error_advice = ''
-                dl.error_action = ''
-                dl.finished_time = None
-                dl.start_time = time.time()
-                dl.resume_partial = False
-                dl.subtitle_retry = True
-                self._next_order += 1
-                dl.queue_order = self._next_order
-                if not self._persist_locked():
-                    restore_download_fields(dl, previous)
-                    return False, self._persistence_error
-                # The completed media remains in place. This job deliberately
-                # bypasses cookie preparation and yt-dlp in _run_download.
-                pass
-            elif dl.requires_auth and not cookies:
-                dl.status = 'needs-auth'
-                dl.error = (
-                    'Fresh YouTube authentication is required before this download can retry.'
-                )
-                dl.error_code = ''
-                dl.error_advice = ''
-                dl.error_action = 'sign-in-and-retry'
-                dl.finished_time = None
-                self._next_order += 1
-                dl.queue_order = self._next_order
-                if not self._persist_locked():
-                    restore_download_fields(dl, previous)
-                    return False, self._persistence_error
-                return False, (
-                    'Fresh YouTube cookies are required. Retry from Astra Deck so the '
-                    'browser can authorize this download.'
-                )
-            if not subtitle_retry and cookies:
-                dl.requires_auth = True
-                dl._cookies = list(cookies)
-            if not subtitle_retry:
-                dl.status = 'pending'
-                dl.progress = 0.0
-                dl.speed = ''
-                dl.eta = ''
-                dl.filename = ''
-                dl.error = ''
-                dl.error_code = ''
-                dl.error_advice = ''
-                dl.error_action = ''
-                dl.finished_time = None
-                dl.start_time = time.time()
-                # A retry continues whatever the failed attempt left on disk.
-                dl.resume_partial = True
-                self._next_order += 1
-                dl.queue_order = self._next_order
-                if not self._persist_locked():
-                    restore_download_fields(dl, previous)
-                    return False, self._persistence_error
-        self.progress_updated.emit()
-        self._schedule()
+        if self._capacity_locked()['total'] >= MAX_QUEUED_TOTAL:
+            return False, (
+                f"Download queue is full ({MAX_QUEUED_TOTAL}/{MAX_QUEUED_TOTAL}). "
+                "Cancel a pending item or wait for a running download to finish, then retry."
+            )
+        previous = snapshot_download_fields(dl, RETRY_ROLLBACK_FIELDS)
+        if subtitle_retry:
+            try:
+                media_path = Path(dl.filename).resolve(strict=True)
+                output_root = Path(dl.output_dir).resolve(strict=True)
+                if media_path != output_root and not media_path.is_relative_to(output_root):
+                    raise ValueError
+            except (OSError, RuntimeError, ValueError):
+                return False, 'The completed media file is no longer available for subtitle retry.'
+            dl.status = 'pending'
+            dl.progress = 0.0
+            dl.speed = ''
+            dl.eta = ''
+            dl.error = ''
+            dl.error_code = ''
+            dl.error_advice = ''
+            dl.error_action = ''
+            dl.finished_time = None
+            dl.start_time = time.time()
+            dl.resume_partial = False
+            dl.subtitle_retry = True
+            self._next_order += 1
+            dl.queue_order = self._next_order
+            if not self._persist_locked():
+                restore_download_fields(dl, previous)
+                return False, self._persistence_error
+            # The completed media remains in place. This job deliberately
+            # bypasses cookie preparation and yt-dlp in _run_download.
+        elif dl.requires_auth and not cookies:
+            dl.status = 'needs-auth'
+            dl.error = (
+                'Fresh YouTube authentication is required before this download can retry.'
+            )
+            dl.error_code = ''
+            dl.error_advice = ''
+            dl.error_action = 'sign-in-and-retry'
+            dl.finished_time = None
+            self._next_order += 1
+            dl.queue_order = self._next_order
+            if not self._persist_locked():
+                restore_download_fields(dl, previous)
+                return False, self._persistence_error
+            return False, (
+                'Fresh YouTube cookies are required. Retry from Astra Deck so the '
+                'browser can authorize this download.'
+            )
+        if not subtitle_retry and cookies:
+            dl.requires_auth = True
+            dl._cookies = list(cookies)
+        if not subtitle_retry:
+            dl.status = 'pending'
+            dl.progress = 0.0
+            dl.speed = ''
+            dl.eta = ''
+            dl.filename = ''
+            dl.error = ''
+            dl.error_code = ''
+            dl.error_advice = ''
+            dl.error_action = ''
+            dl.finished_time = None
+            dl.start_time = time.time()
+            # A retry continues whatever the failed attempt left on disk.
+            dl.resume_partial = True
+            self._next_order += 1
+            dl.queue_order = self._next_order
+            if not self._persist_locked():
+                restore_download_fields(dl, previous)
+                return False, self._persistence_error
         return True, None
 
     def move_pending(self, dl_id, position):
@@ -5452,24 +5547,32 @@ class DownloadManagerCore:
         with self._lock:
             pending = self._ordered_pending_locked()
             pending_positions = {dl.id: index for index, dl in enumerate(pending)}
-            items = []
-            for dl in sorted(
-                    self.downloads.values(),
-                    key=lambda item: (item.queue_order, item.start_time, item.id)):
-                payload = dl.to_dict()
-                # Download.to_dict answers this from the code alone; only the
-                # manager can see whether the recovery action has been done.
-                payload['retryable'] = self.is_retryable(dl)
-                if dl.id in pending_positions:
-                    payload['queuePosition'] = pending_positions[dl.id]
-                items.append(payload)
-            return {
-                'downloads': items,
-                'count': len(items),
-                'capacity': self._capacity_locked(),
-                'persistenceError': self._persistence_error or None,
-                'historyError': self._history_error or None,
-            }
+            ordered = sorted(
+                self.downloads.values(),
+                key=lambda item: (item.queue_order, item.start_time, item.id)
+            )
+            # Take the durable queue snapshot and capacity under the lock, but
+            # resolve recovery actions after releasing it. A GUI/API refresh
+            # must never hold the manager lock while evaluating a precondition.
+            payloads = [(dl, dl.to_dict()) for dl in ordered]
+            capacity = self._capacity_locked()
+            persistence_error = self._persistence_error or None
+            history_error = self._history_error or None
+        items = []
+        for dl, payload in payloads:
+            # Download.to_dict answers this from the code alone; only the
+            # manager can see whether the recovery action has been done.
+            payload['retryable'] = self.is_retryable(dl)
+            if dl.id in pending_positions:
+                payload['queuePosition'] = pending_positions[dl.id]
+            items.append(payload)
+        return {
+            'downloads': items,
+            'count': len(items),
+            'capacity': capacity,
+            'persistenceError': persistence_error,
+            'historyError': history_error,
+        }
 
     def _sweep_orphaned_download_intermediates(self):
         """Remove staging directories whose ids are no longer in the queue.
@@ -5616,22 +5719,35 @@ class DownloadManagerCore:
         cache_key = (requirement, dl.url if requirement == 'sign-in' else '',
                      bool(dl.requires_auth))
         now = time.time()
-        cached = self._precondition_cache.get(cache_key)
+        with self._precondition_cache_lock:
+            cached = self._precondition_cache.get(cache_key)
         if cached is not None and now - cached[0] < self._PRECONDITION_TTL_SECONDS:
             return cached[1]
         answer = self._evaluate_recovery_precondition(dl, requirement)
-        self._precondition_cache[cache_key] = (now, answer)
+        with self._precondition_cache_lock:
+            self._precondition_cache[cache_key] = (now, answer)
         return answer
 
     def _evaluate_recovery_precondition(self, dl, requirement):
         if requirement == 'runtime':
-            try:
-                runtime = self._dependencies['probe_javascript_runtime'](
-                    configured_runtime=self.config.get('JavaScriptRuntime', 'auto')
+            with self._readiness_lock:
+                readiness = dict(self._readiness_snapshot)
+            configured_runtime = str(
+                self.config.get('JavaScriptRuntime', 'auto') or 'auto'
+            ).strip().lower()
+            if (
+                not readiness.get('updatedAt')
+                or (
+                    readiness.get('configuredRuntime')
+                    and readiness.get('configuredRuntime') != configured_runtime
                 )
-            except Exception:
-                # reason: an unavailable probe must not turn into a retry
-                return False, 'The JavaScript runtime could not be checked. Try again in a moment.'
+                or not isinstance(readiness.get('runtime'), dict)
+            ):
+                return False, (
+                    'The JavaScript runtime is still being checked. Try again '
+                    'in a moment.'
+                )
+            runtime = readiness['runtime']
             if runtime.get('supported') is True and runtime.get('ejsReady') is True:
                 return True, None
             return False, (
@@ -5653,17 +5769,23 @@ class DownloadManagerCore:
             target = self._dependencies['normalize_impersonate_target'](
                 self.config.get('ImpersonateTarget', '')
             )
-            available = self._dependencies['probe_impersonate_targets']()
+            if not target:
+                return False, (
+                    'Choose a browser to imitate in Settings — the usual remedy '
+                    'for this refusal — then retry.'
+                )
+            with self._readiness_lock:
+                available = self._readiness_snapshot.get('impersonateTargets')
+            if available is None:
+                return False, (
+                    'Browser capability information is still being checked. '
+                    'Try again in a moment.'
+                )
             if target and target in set(available):
                 return True, None
-            if target:
-                return False, (
-                    f'The installed yt-dlp cannot imitate {target}. Choose a '
-                    'different browser in Settings, then retry.'
-                )
             return False, (
-                'Choose a browser to imitate in Settings — the usual remedy '
-                'for this refusal — then retry.'
+                f'The installed yt-dlp cannot imitate {target}. Choose a '
+                'different browser in Settings, then retry.'
             )
         if requirement == 'geo':
             workaround_args = build_network_workaround_args(self.config)

@@ -4388,7 +4388,8 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
 
 class ReadinessProbe(_OwnedReadinessProbe):
     def __init__(self, configured_runtime='auto', *, impersonate_targets=None,
-                 whisper_model_state=None, whisper_runtime_state=None):
+                 whisper_model_state=None, whisper_runtime_state=None,
+                 readiness_sink=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -4412,6 +4413,7 @@ class ReadinessProbe(_OwnedReadinessProbe):
                     WHISPER_BIN_PATH, WHISPER_BIN_MIN_BYTES
                 ))
             ),
+            readiness_sink=readiness_sink,
         )
 
 # ══════════════════════════════════════════════════════════════

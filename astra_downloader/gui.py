@@ -475,7 +475,7 @@ class ReadinessProbe(QObject):
     def __init__(self, configured_runtime='auto', *, runtime_probe,
                  provider_probe, ytdlp_version, ffmpeg_version, logger,
                  impersonate_targets=None, whisper_model_state=None,
-                 whisper_runtime_state=None):
+                 whisper_runtime_state=None, readiness_sink=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -486,6 +486,7 @@ class ReadinessProbe(QObject):
         self._impersonate_targets = impersonate_targets
         self._whisper_model_state = whisper_model_state
         self._whisper_runtime_state = whisper_runtime_state
+        self._readiness_sink = readiness_sink
 
     def run(self):
         try:
@@ -503,6 +504,7 @@ class ReadinessProbe(QObject):
                 if self._whisper_runtime_state else None
             )
             payload = {
+                "configuredRuntime": self.configured_runtime,
                 "ytDlp": self._ytdlp_version() or "",
                 "ffmpeg": self._ffmpeg_version() or "",
                 "runtime": runtime or {},
@@ -514,7 +516,18 @@ class ReadinessProbe(QObject):
             }
         except Exception as error:
             self._logger(f"Readiness probe failed: {error}")
-            payload = {"error": str(error)}
+            payload = {
+                "configuredRuntime": self.configured_runtime,
+                "error": str(error),
+            }
+        if self._readiness_sink is not None:
+            try:
+                # This worker owns the slow probe results. Publishing before
+                # the Qt signal keeps the manager's cache independent of the
+                # GUI thread and lets callers use it without spawning probes.
+                self._readiness_sink(payload)
+            except Exception as error:
+                self._logger(f"Readiness cache update failed: {error}")
         self.completed.emit(payload)
 
 
@@ -1706,9 +1719,15 @@ class MainWindowCore(QMainWindow):
         if self.readiness_thread is not None:
             return
         self.readiness_thread = QThread(self)
+        readiness_args = {
+            'impersonate_targets': self._dependencies['probe_impersonate_targets'],
+        }
+        readiness_sink = getattr(self.dl_manager, 'update_readiness_snapshot', None)
+        if callable(readiness_sink):
+            readiness_args['readiness_sink'] = readiness_sink
         self.readiness_worker = self._dependencies['ReadinessProbe'](
             self.config.get('JavaScriptRuntime', 'auto'),
-            impersonate_targets=self._dependencies['probe_impersonate_targets'],
+            **readiness_args,
         )
         self.readiness_worker.moveToThread(self.readiness_thread)
         self.readiness_thread.started.connect(self.readiness_worker.run)
