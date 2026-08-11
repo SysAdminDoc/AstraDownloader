@@ -14174,6 +14174,127 @@ window.close()
         self.assertIn("QCheckBox::indicator:focus", sheet)
         self.assertIn("QCheckBox::indicator:checked:focus", sheet)
 
+    def test_tab_traversal_skips_hidden_tab_bar_and_leaves_site_profile_editor(self):
+        script = r'''
+import os
+import sys
+import tempfile
+
+temp_dir = tempfile.mkdtemp(prefix="astra-tab-chain-")
+os.environ["LOCALAPPDATA"] = temp_dir
+os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
+
+from astra_downloader import astra_downloader as app
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QAbstractButton, QAbstractSpinBox, QApplication, QComboBox, QLineEdit,
+    QTextEdit, QWidget,
+)
+
+qt_app = QApplication(["tab-chain-pin"])
+app.MainWindow._start_instance_command_listener = lambda self: None
+app.MainWindow._stop_instance_command_listener = lambda self: None
+app.MainWindow._start_readiness_probe = lambda self: None
+app.MainWindow._refresh_tools_status = lambda self: None
+
+config = app.Config()
+config.update({
+    "CloseToTray": False,
+    "StartMinimized": False,
+    "DownloadPath": temp_dir,
+    "AudioDownloadPath": temp_dir,
+})
+manager = app.DownloadManager(config, app.History())
+window = app.MainWindow(config, manager, app.History())
+window._animate_page = lambda: None
+window.update_timer.stop()
+window.cleanup_timer.stop()
+window.tools_status_timer.stop()
+window.show()
+qt_app.processEvents()
+
+tab_bar = window.tabs.tabBar()
+assert tab_bar.focusPolicy() == Qt.FocusPolicy.NoFocus
+assert window.cfg_site_profiles.tabChangesFocus()
+
+def focus_name(widget):
+    return widget.objectName() or widget.accessibleName() or type(widget).__name__
+
+def walk_page(page_name):
+    window._nav_click(page_name)
+    qt_app.processEvents()
+    nav = window.nav_buttons[window._page_names.index(page_name)]
+    nav.setFocus(Qt.FocusReason.TabFocusReason)
+    qt_app.processEvents()
+    seen = []
+    for _ in range(256):
+        widget = qt_app.focusWidget()
+        assert widget is not None, page_name
+        assert widget is not tab_bar, (page_name, focus_name(widget))
+        if widget is nav and seen:
+            break
+        seen.append(widget)
+        assert window.focusNextPrevChild(True), (page_name, focus_name(widget))
+        qt_app.processEvents()
+    else:
+        raise AssertionError((page_name, [focus_name(widget) for widget in seen]))
+    assert qt_app.focusWidget() is nav, page_name
+    assert len({id(widget) for widget in seen}) > 1, page_name
+    return seen
+
+for page in window._page_names:
+    seen = walk_page(page)
+    page_root = window.tabs.currentWidget()
+    interactive_types = (
+        QAbstractButton, QAbstractSpinBox, QComboBox, QLineEdit, QTextEdit,
+    )
+    focusable_set = {
+        widget for widget in page_root.findChildren(QWidget)
+        if widget.isVisible() and widget.isEnabled()
+        and isinstance(widget, interactive_types)
+        and widget.focusPolicy() != Qt.FocusPolicy.NoFocus
+    }
+    # QSpinBox/QComboBox expose an internal editor that is focusable as a
+    # child but enters the tab chain through the composite control.
+    def has_focusable_parent(widget):
+        parent = widget.parentWidget()
+        while parent is not None:
+            if parent in focusable_set:
+                return True
+            parent = parent.parentWidget()
+        return False
+
+    focusable = [
+        widget for widget in focusable_set
+        if not has_focusable_parent(widget)
+    ]
+    assert focusable, page
+    missing = [focus_name(widget) for widget in focusable if widget not in seen]
+    assert not missing, (page, missing)
+
+window._nav_click("Settings")
+qt_app.processEvents()
+window.cfg_site_profiles.setFocus(Qt.FocusReason.TabFocusReason)
+before = window.cfg_site_profiles.toPlainText()
+assert window.focusNextPrevChild(True)
+qt_app.processEvents()
+assert qt_app.focusWidget() is not window.cfg_site_profiles
+assert qt_app.focusWidget() is not tab_bar
+assert window.cfg_site_profiles.toPlainText() == before
+window.close()
+'''
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(ad.__file__).resolve().parent.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 class LabelPlainTextTests(unittest.TestCase):
     """Labels render remote-supplied strings literally. Qt's default AutoText

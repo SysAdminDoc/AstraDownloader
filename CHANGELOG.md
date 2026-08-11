@@ -29,6 +29,9 @@ repository's git log.
   Plugin loading stays disabled, every extraction uses the verified
   token-exempt client chain, and `/health` no longer claims that a reachable
   external provider can affect downloads.
+- **Keyboard traversal now leaves hidden navigation and the Site-profiles
+  editor.** The page stack no longer traps focus in its hidden tab bar, and
+  Tab in the JSON editor advances through Settings without changing its text.
 
 ## [2.6.0] - 2026-08-09
 
