@@ -474,7 +474,8 @@ class ReadinessProbe(QObject):
 
     def __init__(self, configured_runtime='auto', *, runtime_probe,
                  provider_probe, ytdlp_version, ffmpeg_version, logger,
-                 impersonate_targets=None, whisper_model_state=None):
+                 impersonate_targets=None, whisper_model_state=None,
+                 whisper_runtime_state=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -484,6 +485,7 @@ class ReadinessProbe(QObject):
         self._logger = logger
         self._impersonate_targets = impersonate_targets
         self._whisper_model_state = whisper_model_state
+        self._whisper_runtime_state = whisper_runtime_state
 
     def run(self):
         try:
@@ -496,6 +498,10 @@ class ReadinessProbe(QObject):
                 self._whisper_model_state()
                 if self._whisper_model_state else None
             )
+            whisper_runtime = (
+                self._whisper_runtime_state()
+                if self._whisper_runtime_state else None
+            )
             payload = {
                 "ytDlp": self._ytdlp_version() or "",
                 "ffmpeg": self._ffmpeg_version() or "",
@@ -504,6 +510,7 @@ class ReadinessProbe(QObject):
                 "provider": provider or {},
                 "impersonateTargets": targets or [],
                 "whisperModel": whisper_model,
+                "whisperRuntime": whisper_runtime,
             }
         except Exception as error:
             self._logger(f"Readiness probe failed: {error}")
@@ -618,6 +625,8 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'is_portable_mode',
     'WHISPER_MODEL_MIN_BYTES',
     'WHISPER_MODEL_PATH',
+    'WHISPER_BIN_MIN_BYTES',
+    'WHISPER_BIN_PATH',
     'YTDLP_PATH',
     'YTDLP_SHA256_ASSET',
     'YTDLP_SHA256_URL',
@@ -634,6 +643,8 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'provision_deno',
     'provision_quickjs',
     'provision_whisper_model',
+    'provision_whisper_runtime',
+    'probe_whisper_runtime',
     'register_desktop_shortcut',
     'register_protocol_handlers',
     'register_startup_task',
@@ -909,9 +920,29 @@ class SetupWorkerCore(QThread):
             # pinned fetch is still part of setup once the user enables the
             # setting, so a media job never reaches a half-provisioned model.
             if bool(self.config.get('GenerateSubtitles', False)):
+                self.log.emit('Preparing local subtitle transcription runtime...')
+                runtime = self._dependencies['probe_whisper_runtime'](
+                    self._value('WHISPER_BIN_PATH'),
+                    self._value('WHISPER_BIN_MIN_BYTES'),
+                )
+                if not runtime.get('usable'):
+                    runtime_path = self._dependencies['provision_whisper_runtime'](
+                        progress_cb=self._ranged_progress_cb(60, 64),
+                    )
+                    if runtime_path:
+                        self.log.emit(f'  Whisper runtime ready: {runtime_path}')
+                    else:
+                        self.log.emit(
+                            '  Whisper runtime is unavailable; local subtitle '
+                            'generation will remain unavailable until setup succeeds.'
+                        )
+                else:
+                    self.log.emit(
+                        f"  Whisper runtime already ready: {runtime.get('path')}"
+                    )
                 self.log.emit('Preparing local subtitle transcription model...')
                 model = self._dependencies['provision_whisper_model'](
-                    progress_cb=self._ranged_progress_cb(60, 68),
+                    progress_cb=self._ranged_progress_cb(64, 68),
                 )
                 if model:
                     self.log.emit(f'  Whisper model ready: {model}')
@@ -1028,6 +1059,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'DEFAULT_CONFIG',
     'DOWNLOAD_PENDING_STATES',
     'DOWNLOAD_RETRYABLE_ERROR_CODES',
+    'DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES',
     'DOWNLOAD_RUNNING_STATES',
     'DOWNLOAD_TERMINAL_STATES',
     'FFMPEG_PATH',
@@ -1046,6 +1078,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'YTDLP_PATH',
     'WHISPER_MODEL_MIN_BYTES',
     'WHISPER_MODEL_PATH',
+    'WHISPER_BIN_MIN_BYTES',
+    'WHISPER_BIN_PATH',
+    'probe_whisper_runtime',
     '_build_wsgi_server',
     '_ffmpeg_version_probe',
     '_run_ytdlp_self_update',
@@ -1734,20 +1769,21 @@ class MainWindowCore(QMainWindow):
 
         if subtitles_enabled:
             whisper_state = payload.get("whisperModel")
-            if whisper_state == "ok":
+            whisper_runtime = payload.get("whisperRuntime") or {}
+            if whisper_state == "ok" and whisper_runtime.get("usable"):
                 self._set_readiness(
                     "whisper", "Ready", "success",
-                    "Local transcription is enabled and the pinned Whisper model is ready.",
+                    "Local transcription is enabled and the pinned Whisper model and runtime are ready.",
                 )
-            elif whisper_state == "damaged":
+            elif whisper_state == "damaged" or whisper_runtime.get("state") == "damaged":
                 self._set_readiness(
                     "whisper", "Repair needed", "warning",
-                    "The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.",
+                    "The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.",
                 )
             else:
                 self._set_readiness(
                     "whisper", "Missing", "danger",
-                    "Run setup to provision the local Whisper model before downloading.",
+                    "Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.",
                 )
         else:
             self._set_readiness("whisper", "Optional", "neutral")
@@ -4934,9 +4970,18 @@ class MainWindowCore(QMainWindow):
                 self._value('WHISPER_MODEL_MIN_BYTES'),
             )
         )
-        if not tools_ready or (model_missing and not self._model_setup_attempted):
+        runtime_missing = False
+        if self.config.get('GenerateSubtitles', False):
+            try:
+                runtime_missing = not self._dependencies['probe_whisper_runtime'](
+                    self._value('WHISPER_BIN_PATH'),
+                    self._value('WHISPER_BIN_MIN_BYTES'),
+                ).get('usable')
+            except Exception:
+                runtime_missing = True
+        if not tools_ready or ((model_missing or runtime_missing) and not self._model_setup_attempted):
             self._append_log("Required download tools are missing or unusable. Starting setup...")
-            if model_missing:
+            if model_missing or runtime_missing:
                 self._model_setup_attempted = True
             self._run_setup()
             return
@@ -5230,6 +5275,9 @@ class MainWindowCore(QMainWindow):
         return (dl.status == "skipped" or (
             dl.status == "failed"
             and dl.error_code in self._value('DOWNLOAD_RETRYABLE_ERROR_CODES')
+        ) or (
+            dl.status == "complete"
+            and dl.error_code in self._value('DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES')
         ))
 
     def _download_host_backoff_seconds(self, dl):
@@ -5262,6 +5310,11 @@ class MainWindowCore(QMainWindow):
         if recent:
             if dl.status == "failed" and self._is_retryable(dl):
                 action = "retry"
+            elif (
+                dl.status == "complete"
+                and dl.error_code in self._value('DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES')
+            ):
+                action = "retry-subtitles"
             elif dl.status == "skipped":
                 # Nothing was written, so the whole recovery is "change the
                 # setting the reason names, then run it again".
@@ -5432,6 +5485,15 @@ class MainWindowCore(QMainWindow):
             or dl.status == "skipped"
         ):
             btn_retry = self._make_tool_button("Retry", "ghost", card_target)
+            btn_retry.clicked.connect(lambda checked=False, item=dl: self._retry_download(item))
+            top.addWidget(btn_retry)
+        elif (
+            recent
+            and dl.status == "complete"
+            and dl.error_code in self._value('DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES')
+        ):
+            btn_retry = self._make_tool_button("Retry subtitles", "ghost", card_target)
+            btn_retry.setToolTip(tr("Generate subtitles again without downloading the media."))
             btn_retry.clicked.connect(lambda checked=False, item=dl: self._retry_download(item))
             top.addWidget(btn_retry)
         elif recent and dl.status == "complete" and dl.filename:

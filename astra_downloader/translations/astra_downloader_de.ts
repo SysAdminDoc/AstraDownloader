@@ -1463,8 +1463,8 @@
       <translation>Bereit</translation>
     </message>
     <message>
-      <source>Local transcription is enabled and the pinned Whisper model is ready.</source>
-      <translation>Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell ist bereit.</translation>
+      <source>Local transcription is enabled and the pinned Whisper model and runtime are ready.</source>
+      <translation>Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell sowie die Laufzeit sind bereit.</translation>
     </message>
     <message>
       <source>Downloads use the web client with proof-of-origin tokens.</source>
@@ -1735,12 +1735,12 @@
       <translation>Reparatur erforderlich</translation>
     </message>
     <message>
-      <source>The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.</source>
-      <translation>Das lokale Whisper-Modell ist vorhanden, aber unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um es abzurufen.</translation>
+      <source>The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</source>
+      <translation>Das lokale Whisper-Modell oder die whisper.cpp-Laufzeit ist unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um sie abzurufen.</translation>
     </message>
     <message>
-      <source>Run setup to provision the local Whisper model before downloading.</source>
-      <translation>Führen Sie die Einrichtung aus, um das lokale Whisper-Modell vor dem Download bereitzustellen.</translation>
+      <source>Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.</source>
+      <translation>Führen Sie die Einrichtung aus, um das lokale Whisper-Modell und die whisper.cpp-Laufzeit vor dem Download bereitzustellen.</translation>
     </message>
     <message>
       <source>Required</source>
@@ -1955,6 +1955,10 @@
       <translation>{progress} Prozent abgeschlossen</translation>
     </message>
     <message>
+      <source>Retry subtitles</source>
+      <translation>Untertitel erneut erzeugen</translation>
+    </message>
+    <message>
       <source>Settings restored. Restart Astra Downloader to apply the language.</source>
       <translation>Einstellungen wiederhergestellt. Starten Sie Astra Downloader neu, um die Sprache anzuwenden.</translation>
     </message>
@@ -2013,6 +2017,10 @@
     <message>
       <source>Host paused · retry in {duration}</source>
       <translation>Host pausiert · erneut versuchen in {duration}</translation>
+    </message>
+    <message>
+      <source>Generate subtitles again without downloading the media.</source>
+      <translation>Untertitel erneut erzeugen, ohne die Medien erneut herunterzuladen.</translation>
     </message>
     <message>
       <source>Registering shortcuts and protocols...</source>
@@ -2231,24 +2239,28 @@
       <translation>Das lokale Transkriptionsmodell fehlt oder ist beschädigt.</translation>
     </message>
     <message>
-      <source>Run setup with local subtitle generation enabled, then retry the download.</source>
-      <translation>Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie den Download.</translation>
+      <source>Run setup with local subtitle generation enabled, then retry subtitle generation on this completed media.</source>
+      <translation>Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie die Untertitelerzeugung für diese abgeschlossenen Medien.</translation>
     </message>
     <message>
-      <source>run-setup</source>
-      <translation>Einrichtung ausführen</translation>
+      <source>run-setup-and-retry-subtitles</source>
+      <translation>Einrichtung ausführen und Untertitel erneut erzeugen</translation>
+    </message>
+    <message>
+      <source>The local transcription runtime is missing or cannot produce SRT output.</source>
+      <translation>Die lokale Transkriptionslaufzeit fehlt oder kann keine SRT-Ausgabe erzeugen.</translation>
     </message>
     <message>
       <source>Local subtitle generation failed after the media downloaded.</source>
       <translation>Die lokale Untertitelerzeugung ist nach dem Mediendownload fehlgeschlagen.</translation>
     </message>
     <message>
-      <source>Check the ffmpeg and local transcription model readiness rows, then retry the download.</source>
-      <translation>Prüfen Sie die Bereitschaftszeilen für ffmpeg und das lokale Transkriptionsmodell und wiederholen Sie den Download.</translation>
+      <source>Check the local transcription readiness rows, then retry subtitles without downloading the media again.</source>
+      <translation>Prüfen Sie die Bereitschaftszeilen für die lokale Transkription und versuchen Sie die Untertitel erneut, ohne die Medien erneut herunterzuladen.</translation>
     </message>
     <message>
-      <source>retry</source>
-      <translation>Erneut versuchen</translation>
+      <source>retry-subtitles</source>
+      <translation>Untertitel erneut erzeugen</translation>
     </message>
     <message>
       <source>This link only offers SABR streams. {options} do not apply to them and will be ignored.</source>

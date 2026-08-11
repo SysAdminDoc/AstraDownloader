@@ -6,7 +6,7 @@ Manages yt-dlp downloads with a PyQt6 GUI, system tray, and REST API on port 975
 First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 """
 
-import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, struct, math
+import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, struct, math, stat
 import queue
 from pathlib import Path
 from datetime import datetime
@@ -93,6 +93,7 @@ try:
     from .download import (
         ALLOWED_COOKIE_DOMAINS, DOWNLOAD_ACTIVE_STATES, DOWNLOAD_FAILURE_RECOVERY,
         DOWNLOAD_PENDING_STATES, DOWNLOAD_RETRYABLE_ERROR_CODES,
+        DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
         DOWNLOAD_RUNNING_STATES, DOWNLOAD_STALL_TIMEOUT_SECONDS,
         DOWNLOAD_TERMINAL_STATES, DOWNLOAD_WATCHDOG_POLL_SECONDS,
         DOWNLOAD_QUEUE_SCHEMA_VERSION, MAX_CONCURRENT, MAX_QUEUED_TOTAL,
@@ -121,6 +122,7 @@ try:
         build_network_workaround_args,
         build_subtitle_args,
         build_local_subtitle_args, local_subtitle_output_path,
+        build_whisper_audio_args, build_whisper_transcription_args,
         local_subtitle_sidecar_exists, should_generate_local_subtitles,
         subtitle_language_for_transcription, escape_ffmpeg_filter_value,
         SUBTITLE_WRITE_FLAGS, SUBTITLE_CONVERT_FORMATS, SUBTITLE_WRITTEN_RE,
@@ -151,6 +153,7 @@ try:
         parse_ffmpeg_major, parse_ffmpeg_snapshot_date, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
         parse_ytdlp_version_output,
+        probe_whisper_runtime,
         probe_javascript_execution as _owned_probe_javascript_execution,
         ytdlp_needs_external_runtime,
     )
@@ -216,6 +219,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
     from download import (
         ALLOWED_COOKIE_DOMAINS, DOWNLOAD_ACTIVE_STATES, DOWNLOAD_FAILURE_RECOVERY,
         DOWNLOAD_PENDING_STATES, DOWNLOAD_RETRYABLE_ERROR_CODES,
+        DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
         DOWNLOAD_RUNNING_STATES, DOWNLOAD_STALL_TIMEOUT_SECONDS,
         DOWNLOAD_TERMINAL_STATES, DOWNLOAD_WATCHDOG_POLL_SECONDS,
         DOWNLOAD_QUEUE_SCHEMA_VERSION, MAX_CONCURRENT, MAX_QUEUED_TOTAL,
@@ -244,6 +248,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_network_workaround_args,
         build_subtitle_args,
         build_local_subtitle_args, local_subtitle_output_path,
+        build_whisper_audio_args, build_whisper_transcription_args,
         local_subtitle_sidecar_exists, should_generate_local_subtitles,
         subtitle_language_for_transcription, escape_ffmpeg_filter_value,
         SUBTITLE_WRITE_FLAGS, SUBTITLE_CONVERT_FORMATS, SUBTITLE_WRITTEN_RE,
@@ -274,6 +279,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         parse_ffmpeg_major, parse_ffmpeg_snapshot_date, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
         parse_ytdlp_version_output,
+        probe_whisper_runtime,
         probe_javascript_execution as _owned_probe_javascript_execution,
         ytdlp_needs_external_runtime,
     )
@@ -372,6 +378,21 @@ WHISPER_MODEL_URL = (
 )
 WHISPER_MODEL_SHA256 = (
     '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'
+)
+# FFmpeg-Builds removed its Whisper filter from the security-floor archive.
+# Keep the media tool on that floor and provision the small, CPU-only
+# whisper.cpp CLI separately instead. The release asset is pinned by both tag
+# and digest; the archive contains the CLI and its colocated DLLs.
+WHISPER_BIN_VERSION = '1.9.1'
+WHISPER_BIN_DIR = INSTALL_DIR / 'whisper'
+WHISPER_BIN_PATH = WHISPER_BIN_DIR / 'whisper-cli.exe'
+WHISPER_BIN_MIN_BYTES = 128 * 1024
+WHISPER_BIN_URL = (
+    'https://github.com/ggml-org/whisper.cpp/releases/download/'
+    f'v{WHISPER_BIN_VERSION}/whisper-bin-x64.zip'
+)
+WHISPER_BIN_SHA256 = (
+    '7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539'
 )
 ICON_PATH = INSTALL_DIR / 'AstraDownloader.ico'
 # Scheduled subscriptions keep their archive in the schema-checked
@@ -1055,6 +1076,96 @@ def extract_archive_executable_atomic(archive_path, destination, executable_name
             pass
 
 
+def extract_archive_directory_atomic(archive_path, destination,
+                                     executable_name,
+                                     max_bytes=HELPER_DOWNLOAD_MAX_BYTES):
+    """Install a verified runtime archive while retaining its sibling DLLs.
+
+    ``extract_archive_executable_atomic`` is intentionally limited to one
+    file, which is right for ffmpeg and Deno. whisper.cpp ships a CLI beside
+    several DLLs, so extract the one directory containing the named CLI. The
+    archive is still treated as untrusted: traversal, absolute names,
+    symlinks, ambiguous executables, and expanded-size abuse are rejected
+    before the live runtime directory is replaced.
+    """
+    import zipfile
+
+    archive_path = Path(archive_path)
+    destination = Path(destination)
+    expected_name = str(executable_name).casefold()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp_root = destination.parent / f'.{destination.name}.{uuid.uuid4().hex}.extract'
+    backup = destination.parent / f'.{destination.name}.{uuid.uuid4().hex}.old'
+    candidates = []
+    expanded = 0
+    moved_old = False
+    try:
+        with zipfile.ZipFile(archive_path) as zf:
+            for info in zf.infolist():
+                raw_name = str(info.filename or '').replace('\\', '/')
+                if (
+                    not raw_name or raw_name.startswith('/')
+                    or re.match(r'^[A-Za-z]:', raw_name)
+                ):
+                    raise RuntimeError('Downloaded runtime archive contained an absolute path')
+                parts = tuple(part for part in raw_name.split('/') if part not in ('', '.'))
+                if not parts or '..' in parts:
+                    raise RuntimeError('Downloaded runtime archive contained a traversal path')
+                target = tmp_root.joinpath(*parts)
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                mode = (int(info.external_attr) >> 16) & 0xFFFF
+                if stat.S_ISLNK(mode):
+                    raise RuntimeError('Downloaded runtime archive contained a symlink')
+                if info.file_size <= 0:
+                    raise RuntimeError(f'Runtime archive member {raw_name} was empty')
+                member_size = int(info.file_size)
+                if expanded + member_size > max_bytes:
+                    raise RuntimeError(
+                        f'Runtime archive expands beyond the {max_bytes} byte limit'
+                    )
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as source, open(target, 'wb') as stream:
+                    copied = copy_stream_limited(
+                        source, stream, max_bytes=max_bytes - expanded
+                    )
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                if copied != member_size:
+                    raise RuntimeError(f'Runtime archive member {raw_name} was truncated')
+                expanded += member_size
+                if target.name.casefold() == expected_name:
+                    candidates.append(target)
+        if len(candidates) != 1:
+            raise RuntimeError(
+                f'Downloaded runtime archive must contain exactly one {executable_name}'
+            )
+        source_dir = candidates[0].parent
+        if destination.exists():
+            os.replace(destination, backup)
+            moved_old = True
+        os.replace(source_dir, destination)
+        if moved_old:
+            shutil.rmtree(backup, ignore_errors=True)
+            moved_old = False
+        return destination / executable_name
+    except Exception:
+        if moved_old and not destination.exists() and backup.exists():
+            try:
+                os.replace(backup, destination)
+                moved_old = False
+            except OSError:
+                # reason: recovery is best-effort; the old verified runtime
+                # is preferable to leaving a half-extracted directory
+                pass
+        raise
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+        if not moved_old:
+            shutil.rmtree(backup, ignore_errors=True)
+
+
 # ── v1.2.0 helpers: SHA-256 verification, path confinement, rate limiting ──
 def _compute_sha256(path, chunk_size=65536):
     """Return lowercase hex SHA-256 of a file's contents, or None on error."""
@@ -1503,6 +1614,60 @@ def provision_whisper_model(progress_cb=None):
             pass
         write_persistent_log(f'Whisper model provisioning failed: {error}')
         return None
+
+
+def provision_whisper_runtime(progress_cb=None):
+    """Fetch the pinned whisper.cpp CLI and its runtime DLLs atomically."""
+    current = probe_whisper_runtime(
+        WHISPER_BIN_PATH, WHISPER_BIN_MIN_BYTES,
+    )
+    if current.get('usable'):
+        return str(WHISPER_BIN_PATH)
+
+    space_failure = check_download_disk_space(INSTALL_DIR, HELPER_DOWNLOAD_MAX_BYTES)
+    if space_failure:
+        write_persistent_log(
+            'Whisper runtime provisioning skipped: '
+            f"{space_failure.get('error', 'insufficient disk space')}"
+        )
+        return None
+
+    tmp_zip = INSTALL_DIR / f'.whisper.{uuid.uuid4().hex}.zip'
+    installed = False
+    try:
+        download_file_atomic(
+            WHISPER_BIN_URL,
+            tmp_zip,
+            timeout=120,
+            chunk_size=65536,
+            progress_cb=progress_cb,
+            max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
+        )
+        verify_file_sha256(tmp_zip, WHISPER_BIN_SHA256)
+        extracted = extract_archive_directory_atomic(
+            tmp_zip,
+            WHISPER_BIN_DIR,
+            'whisper-cli.exe',
+            max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
+        )
+        installed = True
+        result = probe_whisper_runtime(extracted, WHISPER_BIN_MIN_BYTES)
+        if not result.get('usable'):
+            raise RuntimeError(
+                'Downloaded whisper.cpp runtime did not expose its SRT capability.'
+            )
+        return str(extracted)
+    except Exception as error:
+        if installed:
+            shutil.rmtree(WHISPER_BIN_DIR, ignore_errors=True)
+        write_persistent_log(f'Whisper runtime provisioning failed: {error}')
+        return None
+    finally:
+        try:
+            tmp_zip.unlink(missing_ok=True)
+        except OSError:
+            # reason: cleanup is best-effort after a verified extraction
+            pass
 
 
 def _probe_quickjs_binary_version(path):
@@ -3598,6 +3763,8 @@ class DownloadManager(DownloadManagerCore):
                 'CREATE_NO_WINDOW': CREATE_NO_WINDOW,
                 'FFMPEG_PATH': lambda: FFMPEG_PATH,
                 'INSTALL_DIR': lambda: INSTALL_DIR,
+                'WHISPER_BIN_MIN_BYTES': lambda: WHISPER_BIN_MIN_BYTES,
+                'WHISPER_BIN_PATH': lambda: WHISPER_BIN_PATH,
                 'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
                 'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
                 'YTDLP_PATH': lambda: YTDLP_PATH,
@@ -3628,6 +3795,7 @@ class DownloadManager(DownloadManagerCore):
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
                 'spawn_ytdlp': lambda *args, **kwargs: spawn_ytdlp(*args, **kwargs),
@@ -3757,6 +3925,8 @@ class SetupWorker(SetupWorkerCore):
                 'is_portable_mode': lambda: is_portable_mode(),
                 'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
                 'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
+                'WHISPER_BIN_MIN_BYTES': lambda: WHISPER_BIN_MIN_BYTES,
+                'WHISPER_BIN_PATH': lambda: WHISPER_BIN_PATH,
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 'YTDLP_SHA256_ASSET': lambda: YTDLP_SHA256_ASSET,
                 'YTDLP_SHA256_URL': lambda: YTDLP_SHA256_URL,
@@ -3772,7 +3942,9 @@ class SetupWorker(SetupWorkerCore):
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
                 'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
+                'provision_whisper_runtime': lambda *args, **kwargs: provision_whisper_runtime(*args, **kwargs),
                 'provision_whisper_model': lambda *args, **kwargs: provision_whisper_model(*args, **kwargs),
+                'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'build_reveal_command': lambda *args, **kwargs: build_reveal_command(*args, **kwargs),
                 'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
                 'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
@@ -3978,7 +4150,7 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
 
 class ReadinessProbe(_OwnedReadinessProbe):
     def __init__(self, configured_runtime='auto', *, impersonate_targets=None,
-                 whisper_model_state=None):
+                 whisper_model_state=None, whisper_runtime_state=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -3994,6 +4166,12 @@ class ReadinessProbe(_OwnedReadinessProbe):
                 whisper_model_state
                 or (lambda: managed_binary_state(
                     WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES
+                ))
+            ),
+            whisper_runtime_state=(
+                whisper_runtime_state
+                or (lambda: probe_whisper_runtime(
+                    WHISPER_BIN_PATH, WHISPER_BIN_MIN_BYTES
                 ))
             ),
         )
@@ -4016,6 +4194,7 @@ class MainWindow(MainWindowCore):
                 'DEFAULT_CONFIG': lambda: DEFAULT_CONFIG,
                 'DOWNLOAD_PENDING_STATES': lambda: DOWNLOAD_PENDING_STATES,
                 'DOWNLOAD_RETRYABLE_ERROR_CODES': lambda: DOWNLOAD_RETRYABLE_ERROR_CODES,
+                'DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES': lambda: DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES,
                 'DOWNLOAD_RUNNING_STATES': lambda: DOWNLOAD_RUNNING_STATES,
                 'DOWNLOAD_TERMINAL_STATES': lambda: DOWNLOAD_TERMINAL_STATES,
                 'FFMPEG_PATH': lambda: FFMPEG_PATH,
@@ -4040,6 +4219,8 @@ class MainWindow(MainWindowCore):
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
                 'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
+                'WHISPER_BIN_MIN_BYTES': lambda: WHISPER_BIN_MIN_BYTES,
+                'WHISPER_BIN_PATH': lambda: WHISPER_BIN_PATH,
                 '_build_wsgi_server': lambda *args, **kwargs: _build_wsgi_server(*args, **kwargs),
                 '_ffmpeg_version_probe': lambda: _ffmpeg_version_probe,
                 '_run_ytdlp_self_update': lambda *args, **kwargs: _run_ytdlp_self_update(*args, **kwargs),
@@ -4070,6 +4251,7 @@ class MainWindow(MainWindowCore):
                 'MANAGED_BINARY_ANTIVIRUS_ADVICE': lambda: MANAGED_BINARY_ANTIVIRUS_ADVICE,
                 'managed_binary_state': lambda *args, **kwargs: managed_binary_state(*args, **kwargs),
                 'managed_binary_usable': lambda *args, **kwargs: managed_binary_usable(*args, **kwargs),
+                'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
                 'maybe_auto_update_ytdlp': lambda *args, **kwargs: maybe_auto_update_ytdlp(*args, **kwargs),
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
