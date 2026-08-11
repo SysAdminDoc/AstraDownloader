@@ -877,6 +877,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'managed_binary_usable',
     'maybe_auto_update_ytdlp',
     'normalize_output_dir',
+    'detect_system_proxy',
     'normalize_download_section',
     'normalize_output_name',
     'normalize_output_template',
@@ -2061,6 +2062,27 @@ class MainWindowCore(
                 self._describe_subtitle_request() if subtitles_only else ""
             )
             self.quick_download_subs_hint.setVisible(subtitles_only)
+
+    def _sync_system_proxy_hint(self, *_args):
+        """Show what "use the system proxy" would actually route through."""
+        hint = getattr(self, "cfg_system_proxy_hint", None)
+        checkbox = getattr(self, "cfg_use_system_proxy", None)
+        if hint is None or checkbox is None:
+            return
+        typed = self.cfg_proxy.text().strip() if hasattr(self, "cfg_proxy") else ""
+        if typed:
+            hint.setText(tr(
+                "A proxy is typed above, so it is used and the system proxy is ignored."
+            ))
+            return
+        if not checkbox.isChecked():
+            hint.setText(tr("Downloads connect directly."))
+            return
+        detected = self._dependencies['detect_system_proxy']()
+        hint.setText(
+            tr_format("Windows reports {proxy}.", proxy=detected) if detected
+            else tr("Windows reports no proxy, so downloads connect directly.")
+        )
 
     def _sync_quick_download_name_hint(self, *_args):
         """Tell the user before they press Download whether the name is usable."""
@@ -4300,6 +4322,7 @@ class MainWindowCore(
         ("cfg_ratelimit", "RateLimit", "text"),
         ("cfg_throttled", "ThrottledRate", "text"),
         ("cfg_proxy", "Proxy", "text"),
+        ("cfg_use_system_proxy", "UseSystemProxy", "check"),
         ("cfg_source_address", "SourceAddress", "text"),
         ("cfg_xff", "Xff", "text"),
         ("cfg_geo_verification_proxy", "GeoVerificationProxy", "text"),

@@ -12,23 +12,6 @@ dropped rather than filed. Line numbers are from `2811827`.
 
 ### P2
 
-- [ ] P2 — Detect the system proxy
-  Why: The app has a full proxy settings surface and no way to inherit the one
-  Windows already knows about, so a user behind a corporate proxy must copy it
-  in by hand or fail with a network error.
-  Evidence: `getproxies`, `WinHttpGetIEProxyConfigForCurrentUser`, `ProxyServer`
-  and `SystemProxy` all return **0** hits outside tests; `Proxy` is a plain
-  string setting (`config.py:413-422`). ytDownloader ships automatic
-  system-proxy detection and it is one of the few things its issue tracker does
-  not complain about.
-  Touches: `astra_downloader/config.py`, `astra_downloader/gui_settings_page.py`,
-  `astra_downloader/download.py`
-  Acceptance: a "Use the system proxy" option reads the current WinINET/WinHTTP
-  configuration, shows the resolved value before saving, and is off by default;
-  credentials in a detected proxy are handled by the same bundle-quarantine
-  rules as a typed one.
-  Complexity: M
-
 - [ ] P2 — Publish a lock file and an SBOM beside the release
   Why: The license gate's unresolved entries and the release's missing
   provenance are the same problem, and the standards that fix both landed in

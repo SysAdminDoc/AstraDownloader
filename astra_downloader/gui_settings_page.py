@@ -911,6 +911,27 @@ class SettingsPageMixin:
         self.cfg_proxy.setMinimumWidth(260)
         proxy_row.addWidget(self.cfg_proxy)
         perf_l.addLayout(proxy_row)
+        self.cfg_use_system_proxy = QCheckBox(
+            tr("Use the proxy Windows is configured with")
+        )
+        self.cfg_use_system_proxy.setChecked(
+            bool(self.config.get("UseSystemProxy", False))
+        )
+        self.cfg_use_system_proxy.setAccessibleName(tr("Use the system proxy"))
+        self.cfg_use_system_proxy.setToolTip(tr(
+            "Reads the proxy from Windows Internet Settings. A proxy typed "
+            "above always wins."
+        ))
+        self.cfg_use_system_proxy.toggled.connect(self._sync_system_proxy_hint)
+        self.cfg_proxy.textChanged.connect(self._sync_system_proxy_hint)
+        perf_l.addWidget(self.cfg_use_system_proxy)
+        # The detected value is shown before the setting is saved: "use the
+        # system proxy" is otherwise a switch whose effect the user cannot see
+        # until a download fails.
+        self.cfg_system_proxy_hint = make_label("", "fieldHint", word_wrap=True)
+        self.cfg_system_proxy_hint.setAccessibleName(tr("Detected system proxy"))
+        perf_l.addWidget(self.cfg_system_proxy_hint)
+        self._sync_system_proxy_hint()
         # Impersonation. Built from what the installed binary reports, because
         # yt-dlp aborts the download outright on an unknown target.
         impersonate_row = QHBoxLayout()

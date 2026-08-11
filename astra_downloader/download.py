@@ -3359,8 +3359,10 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'normalize_output_dir',
     'normalize_sponsorblock_categories',
     'normalize_download_section',
+    'detect_system_proxy',
     'normalize_output_name',
     'normalize_playlist_items',
+    'resolve_effective_proxy',
     'normalize_url',
     'probe_javascript_runtime',
     'probe_impersonate_targets',
@@ -5356,7 +5358,9 @@ class DownloadManagerCore:
                     1, round(sleep_requests * self._pacing_jitter_multiplier())
                 )
             args += ['--sleep-requests', str(sleep_requests)]
-        proxy = effective_config.get("Proxy", "")
+        proxy = self._dependencies['resolve_effective_proxy'](
+            effective_config.get, self._dependencies['detect_system_proxy']()
+        )
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
         args += build_network_workaround_args(effective_config)
@@ -6525,7 +6529,9 @@ class DownloadManagerCore:
         """
         args = []
         effective_config = self._effective_config_for_url(url)
-        proxy = effective_config.get("Proxy", "")
+        proxy = self._dependencies['resolve_effective_proxy'](
+            effective_config.get, self._dependencies['detect_system_proxy']()
+        )
         if proxy and re.match(r'^(socks(?:4a?|5h?)?|https?)://', proxy):
             args += ['--proxy', proxy]
         args += build_network_workaround_args(effective_config)

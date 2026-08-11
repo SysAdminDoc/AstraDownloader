@@ -595,6 +595,22 @@
       <translation>Die automatische Zuordnung ist aktiv; kein Profil passt zu diesem Link.</translation>
     </message>
     <message>
+      <source>A proxy is typed above, so it is used and the system proxy is ignored.</source>
+      <translation>Oben ist ein Proxy eingetragen; dieser wird verwendet und der Systemproxy ignoriert.</translation>
+    </message>
+    <message>
+      <source>Downloads connect directly.</source>
+      <translation>Downloads verbinden sich direkt.</translation>
+    </message>
+    <message>
+      <source>Windows reports {proxy}.</source>
+      <translation>Windows meldet {proxy}.</translation>
+    </message>
+    <message>
+      <source>Windows reports no proxy, so downloads connect directly.</source>
+      <translation>Windows meldet keinen Proxy; Downloads verbinden sich direkt.</translation>
+    </message>
+    <message>
       <source>That name cannot be used. Remove any folder separators, drive letters, %, or reserved device names such as CON.</source>
       <translation>Dieser Name kann nicht verwendet werden. Entfernen Sie Ordnertrennzeichen, Laufwerksbuchstaben, %, oder reservierte Gerätenamen wie CON.</translation>
     </message>
@@ -2657,6 +2673,22 @@
     <message>
       <source>Optional HTTP(S) or SOCKS proxy.</source>
       <translation>Optionaler HTTP(S)- oder SOCKS-Proxy.</translation>
+    </message>
+    <message>
+      <source>Use the proxy Windows is configured with</source>
+      <translation>Den von Windows konfigurierten Proxy verwenden</translation>
+    </message>
+    <message>
+      <source>Use the system proxy</source>
+      <translation>Systemproxy verwenden</translation>
+    </message>
+    <message>
+      <source>Reads the proxy from Windows Internet Settings. A proxy typed above always wins.</source>
+      <translation>Liest den Proxy aus den Windows-Internetoptionen. Ein oben eingetragener Proxy hat immer Vorrang.</translation>
+    </message>
+    <message>
+      <source>Detected system proxy</source>
+      <translation>Erkannter Systemproxy</translation>
     </message>
     <message>
       <source>Imitate a browser</source>

@@ -73,6 +73,9 @@ pasting a link never needs it.
   causes and recovery guidance.
 - **Get past a block.** Imitate a real browser's TLS fingerprint, chosen from
   the targets your yt-dlp actually ships, for sites that answer 403.
+- **Inherit the system proxy.** Turn one Settings option on and downloads use
+  the proxy Windows already knows about; the resolved address is shown before
+  you save.
 - **Work around network geography.** Force IPv4 or IPv6, bind a source address,
   send a geo X-Forwarded-For value, or use a verification-only proxy when a
   site or route needs more than a whole-session proxy.

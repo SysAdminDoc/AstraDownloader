@@ -805,6 +805,24 @@ CATALOGS = {
             "Wird als {name}.<ext> gespeichert",
         "Trimmed to {name}.<ext>":
             "Gekürzt auf {name}.<ext>",
+        "Use the proxy Windows is configured with":
+            "Den von Windows konfigurierten Proxy verwenden",
+        "Use the system proxy":
+            "Systemproxy verwenden",
+        "Detected system proxy":
+            "Erkannter Systemproxy",
+        "Reads the proxy from Windows Internet Settings. A proxy typed above always wins.":
+            "Liest den Proxy aus den Windows-Internetoptionen. Ein oben "
+            "eingetragener Proxy hat immer Vorrang.",
+        "A proxy is typed above, so it is used and the system proxy is ignored.":
+            "Oben ist ein Proxy eingetragen; dieser wird verwendet und der "
+            "Systemproxy ignoriert.",
+        "Downloads connect directly.":
+            "Downloads verbinden sich direkt.",
+        "Windows reports no proxy, so downloads connect directly.":
+            "Windows meldet keinen Proxy; Downloads verbinden sich direkt.",
+        "Windows reports {proxy}.":
+            "Windows meldet {proxy}.",
         "That name cannot be used. Remove any folder separators, drive letters, %, or reserved device names such as CON.":
             "Dieser Name kann nicht verwendet werden. Entfernen Sie "
             "Ordnertrennzeichen, Laufwerksbuchstaben, %, oder reservierte "
