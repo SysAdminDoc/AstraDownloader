@@ -38,6 +38,10 @@ repository's git log.
   identify their destination, and the site-profile editor contributes safe
   names, domains and format values to Settings search without indexing proxy
   credentials.
+- **Companion self-update handoff is more observable.** The production path
+  records a verified digest as activation-pending before the detached helper
+  takes over, and the helper rechecks fast health probes when a process exits
+  during the `Wait-Process` handoff race.
 - **The companion UI render harness now covers focus, DPI, locales, and recovery states.**
   It renders the bundled locale set, 1x/1.25x/2x scale fixtures, genuine empty
   states, filters, pagination, queue recovery, format probing, and invalid settings.
