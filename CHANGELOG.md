@@ -56,6 +56,9 @@ repository's git log.
   numeric settings fall back to bounded defaults, malformed bundles return a
   validation error, and documents rejected by sanitization are quarantined
   before a clean config is saved.
+- **Managed binaries install only after verification.** yt-dlp, QuickJS and
+  the Whisper model now download into disposable sibling paths, verify there,
+  and replace the active binary only after the checksum passes.
 
 ## [2.6.0] - 2026-08-09
 

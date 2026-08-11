@@ -1385,6 +1385,34 @@ def verify_file_sha256(path, expected_hex):
     return True
 
 
+def download_verified_file_atomic(url, path, expected_hex, **download_kwargs):
+    """Download, verify, and activate a managed file transactionally.
+
+    ``download_file_atomic`` makes a complete download durable, but its
+    destination is still live before a caller can perform integrity checks.
+    Managed binaries therefore download into a fresh sibling staging path;
+    only a successful digest check can replace the installed file.  If the
+    fetch or verification fails, an existing installed file is untouched.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staged = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.verified')
+    try:
+        download_file_atomic(url, staged, **download_kwargs)
+        if not verify_file_sha256(staged, expected_hex):
+            raise RuntimeError(
+                f"Could not verify downloaded file {path.name}; refusing to install it."
+            )
+        _durable_replace(staged, path)
+        return path
+    finally:
+        try:
+            staged.unlink(missing_ok=True)
+        except OSError:
+            # reason: failed staging cleanup may race with antivirus
+            pass
+
+
 def cleanup_stale_cookie_jars(older_than_seconds=300):
     return _owned_cleanup_stale_cookie_jars(
         INSTALL_DIR,
@@ -1647,21 +1675,11 @@ def provision_quickjs():
         )
     QUICKJS_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        # download_file_atomic replaces the destination only after the whole
-        # stream lands, so a failed fetch cannot leave a stub behind that
-        # every later existence check would accept.
-        download_file_atomic(
-            QUICKJS_EXE_URL, QUICKJS_PATH, timeout=120,
-            max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
+        download_verified_file_atomic(
+            QUICKJS_EXE_URL, QUICKJS_PATH, QUICKJS_SHA256,
+            timeout=120, max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
         )
-        verify_file_sha256(QUICKJS_PATH, QUICKJS_SHA256)
     except Exception as error:
-        try:
-            QUICKJS_PATH.unlink(missing_ok=True)
-        except OSError:
-            # reason: cleanup of an unverified runtime is best-effort and may
-            # race with antivirus
-            pass
         write_persistent_log(f"QuickJS provisioning failed: {error}")
         return None
     reset_deno_runtime_cache()
@@ -1694,27 +1712,21 @@ def provision_whisper_model(progress_cb=None):
         )
         return None
     try:
-        download_file_atomic(
+        download_verified_file_atomic(
             WHISPER_MODEL_URL,
             WHISPER_MODEL_PATH,
+            WHISPER_MODEL_SHA256,
             timeout=120,
             chunk_size=65536,
             progress_cb=progress_cb,
             max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
         )
-        verify_file_sha256(WHISPER_MODEL_PATH, WHISPER_MODEL_SHA256)
         if managed_binary_state(
             WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES
         ) != 'ok':
             raise RuntimeError('Downloaded Whisper model was smaller than expected.')
         return str(WHISPER_MODEL_PATH)
     except Exception as error:
-        try:
-            WHISPER_MODEL_PATH.unlink(missing_ok=True)
-        except OSError:
-            # reason: an unverified model must not remain trusted after a
-            # failed fetch, even if antivirus or another process has it open
-            pass
         write_persistent_log(f'Whisper model provisioning failed: {error}')
         return None
 

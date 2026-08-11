@@ -761,6 +761,31 @@ class SetupWorkerCore(QThread):
         self.log.emit(f"  {label} checksum OK")
         return True
 
+    def _download_verified_binary(
+        self, url, destination, sidecar_url, asset_name=None, label="", **download_kwargs
+    ):
+        """Stage a helper download until its release checksum has passed."""
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staged = destination.with_name(
+            f".{destination.name}.{uuid.uuid4().hex}.verified"
+        )
+        try:
+            self._dependencies['download_file_atomic'](
+                url, staged, **download_kwargs
+            )
+            self._verify_required_checksum(
+                staged, sidecar_url, asset_name=asset_name, label=label
+            )
+            os.replace(staged, destination)
+            return destination
+        finally:
+            try:
+                staged.unlink(missing_ok=True)
+            except OSError:
+                # reason: failed staging cleanup may race with antivirus
+                pass
+
     def _provision_javascript_runtime(self):
         """Make sure some JavaScript runtime exists, preferring Deno.
 
@@ -811,16 +836,12 @@ class SetupWorkerCore(QThread):
             if ytdlp_state != 'ok':
                 self.log.emit("Downloading yt-dlp...")
                 self.progress.emit(10)
-                self._dependencies['download_file_atomic'](
-                    self._value('YTDLP_URL'), self._value('YTDLP_PATH'), timeout=60, chunk_size=65536,
-                    progress_cb=self._ranged_progress_cb(10, 28),
-                )
-                # Verify against the release SHA-256 sidecar before trusting
-                # the binary — it'll be executed with user privileges for
-                # every download from now on.
-                self._verify_required_checksum(
-                    self._value('YTDLP_PATH'), self._value('YTDLP_SHA256_URL'),
+                self._download_verified_binary(
+                    self._value('YTDLP_URL'), self._value('YTDLP_PATH'),
+                    self._value('YTDLP_SHA256_URL'),
                     asset_name=self._value('YTDLP_SHA256_ASSET'), label="yt-dlp",
+                    timeout=60, chunk_size=65536,
+                    progress_cb=self._ranged_progress_cb(10, 28),
                 )
                 self.log.emit("  Done")
             else:
