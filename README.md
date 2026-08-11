@@ -168,7 +168,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 829 tests
+py -3.12 -m pytest          # 903 tests; scratch state stays under build/pytest
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```
