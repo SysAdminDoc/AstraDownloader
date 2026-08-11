@@ -18028,41 +18028,130 @@ class StylesheetContrastTests(unittest.TestCase):
         lighter, darker = max(first, second), min(first, second)
         return (lighter + 0.05) / (darker + 0.05)
 
+    @staticmethod
+    def _stylesheet_rules():
+        # Keep this parser deliberately small: the companion sheet only uses
+        # flat selector blocks, and parsing the declarations makes the test
+        # follow the palette instead of baking in a guessed background.
+        import re
+        sheet = re.sub(r"/\*.*?\*/", "", ad.STYLESHEET, flags=re.S)
+        rules = {}
+        for selector_text, body in re.findall(r"([^{}]+)\{([^{}]*)\}", sheet):
+            for selector in selector_text.split(","):
+                rules[selector.strip()] = body
+        return rules
+
+    @staticmethod
+    def _declared_colour(body, properties):
+        import re
+        for property_name in properties:
+            match = re.search(
+                rf"(?:^|;)\s*{re.escape(property_name)}\s*:\s*([^;]+)",
+                body,
+            )
+            if not match:
+                continue
+            value = match.group(1).strip()
+            if value == "transparent":
+                return value
+            colour = re.search(r"#[0-9a-fA-F]{6}", value)
+            if colour:
+                return colour.group(0).lower()
+        return None
+
+    @classmethod
+    def _effective_background(cls, rules, selector, fallback=None):
+        page = cls._declared_colour(
+            rules["QWidget"], ("background-color", "background")
+        )
+        for candidate in (selector, fallback):
+            if not candidate or candidate not in rules:
+                continue
+            colour = cls._declared_colour(
+                rules[candidate], ("background-color", "background")
+            )
+            if colour == "transparent":
+                return page
+            if colour:
+                return colour
+        return page
+
+    def _assert_declared_boundaries(self, specifications):
+        rules = self._stylesheet_rules()
+        for label, selector, fallback in specifications:
+            with self.subTest(control=label):
+                self.assertIn(selector, rules, f"missing {selector} rule")
+                border = self._declared_colour(
+                    rules[selector], ("border-color", "border")
+                )
+                self.assertRegex(
+                    border or "", r"^#[0-9a-f]{6}$",
+                    f"{selector} needs an explicit coloured boundary",
+                )
+                background = self._effective_background(
+                    rules, selector, fallback
+                )
+                self.assertRegex(
+                    background or "", r"^#[0-9a-f]{6}$",
+                    f"{selector} needs a declared or inherited fill",
+                )
+                ratio = self._contrast(border, background)
+                self.assertGreaterEqual(
+                    ratio, 3.0,
+                    f"{selector} border {border} is {ratio:.2f}:1 against {background}",
+                )
+
     def test_the_page_background_is_what_this_measures_against(self):
         # The ratios below are meaningless if this drifts, and an earlier
         # measurement of this palette was wrong precisely because it assumed
         # a background the sheet does not contain.
-        self.assertIn(
-            f"background-color: {self.PAGE_BACKGROUND}", ad.STYLESHEET
+        rules = self._stylesheet_rules()
+        self.assertEqual(
+            self._declared_colour(
+                rules["QWidget"], ("background-color", "background")
+            ),
+            self.PAGE_BACKGROUND,
         )
 
     def test_input_boundaries_clear_the_non_text_contrast_floor(self):
         # WCAG 2.2 SC 1.4.11 wants 3:1 for a control's visual boundary. The
         # fill cannot carry it here — #11161d against the page is 1.07:1 —
         # so the border is the only thing marking where a field is.
-        import re
-        borders = re.findall(
-            r"QLineEdit, QSpinBox, QComboBox \{[^}]*?border: 1px solid (#[0-9a-fA-F]{6})",
-            ad.STYLESHEET, re.S,
-        )
-        self.assertEqual(len(borders), 1, "expected one input border rule")
-        hero = re.findall(
-            r'QLineEdit\[class="heroUrl"\][^{]*\{[^}]*?border-color: (#[0-9a-fA-F]{6})',
-            ad.STYLESHEET, re.S,
-        )
-        self.assertTrue(hero, "expected a hero paste box border")
-        for label, colour in (("input", borders[0]), ("hero", hero[0])):
-            with self.subTest(border=label):
-                ratio = self._contrast(colour, self.PAGE_BACKGROUND)
-                self.assertGreaterEqual(
-                    ratio, 3.0,
-                    f"{label} border {colour} is {ratio:.2f}:1 against the page",
-                )
+        self._assert_declared_boundaries([
+            ("line edit", "QLineEdit", None),
+            ("spin box", "QSpinBox", None),
+            ("combo box", "QComboBox", None),
+            ("disabled line edit", "QLineEdit:disabled", "QLineEdit"),
+            ("disabled spin box", "QSpinBox:disabled", "QSpinBox"),
+            ("disabled combo box", "QComboBox:disabled", "QComboBox"),
+            ("hero paste box", 'QLineEdit[class="heroUrl"]', "QLineEdit"),
+            ("text edit", "QTextEdit", None),
+            ("menu", "QMenu", None),
+        ])
+
+    def test_button_and_indicator_boundaries_clear_the_non_text_floor(self):
+        self._assert_declared_boundaries([
+            ("button", "QPushButton", None),
+            ("hover button", "QPushButton:hover", None),
+            ("disabled button", "QPushButton:disabled", None),
+            ("secondary button", 'QPushButton[class="secondary"]', None),
+            ("danger button", 'QPushButton[class="danger"]', None),
+            ("ghost button", 'QPushButton[class="ghost"]', None),
+            ("hover ghost button", 'QPushButton[class="ghost"]:hover', None),
+            ("checkbox indicator", "QCheckBox::indicator", None),
+        ])
 
     def test_the_input_fill_alone_cannot_identify_the_control(self):
         # Documents why the border has to carry it, so a future change does
         # not "fix" this by darkening the border and trusting the fill.
-        ratio = self._contrast("#11161d", self.PAGE_BACKGROUND)
+        rules = self._stylesheet_rules()
+        fill = self._declared_colour(
+            rules["QLineEdit"], ("background-color", "background")
+        )
+        page = self._declared_colour(
+            rules["QWidget"], ("background-color", "background")
+        )
+        ratio = self._contrast(fill, page)
         self.assertLess(ratio, 3.0)
 
     def test_a_ghost_button_is_not_a_bare_label(self):
@@ -18077,6 +18166,7 @@ class StylesheetContrastTests(unittest.TestCase):
         body = rule.group(1)
         self.assertNotIn("background: transparent", body)
         self.assertRegex(body, r"background-color: #[0-9a-fA-F]{6}")
+        self.assertRegex(body, r"border-color: #[0-9a-fA-F]{6}")
 
 class SubscriptionScanReportingTests(unittest.TestCase):
     """A scan that cannot write says so instead of reporting a quiet skip."""
