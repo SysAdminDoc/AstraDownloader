@@ -15492,8 +15492,8 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             language="en",
         )
         graph = args[args.index("-af") + 1]
-        self.assertIn(r"model=C\:/Users/A\:B/whisper model.bin", graph)
-        self.assertIn(r"destination=C\:/Videos/A\:B\,clip.srt", graph)
+        self.assertIn(r"model=C\\:/Users/A\\:B/whisper model.bin", graph)
+        self.assertIn(r"destination=C\\:/Videos/A\\:B\\,clip.srt", graph)
         self.assertIn("format=srt", graph)
         self.assertEqual(
             args[-6:],
@@ -15514,18 +15514,32 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
         def __init__(self, args, **_kwargs):
             self.args = list(args)
             self.returncode = 0
-            graph = self.args[self.args.index("-af") + 1]
-            destination = graph.split(":destination=", 1)[1].split(
-                ":format=", 1
-            )[0]
-            for character in (":", ",", "[", "]", ";", "'"):
-                destination = destination.replace("\\" + character, character)
-            destination_path = Path(destination)
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            destination_path.write_text(
-                "1\n00:00:00,000 --> 00:00:01,000\nhello\n",
-                encoding="utf-8",
-            )
+            if "-af" in self.args:
+                graph = self.args[self.args.index("-af") + 1]
+                destination = graph.split(":destination=", 1)[1].split(
+                    ":format=", 1
+                )[0]
+                for character in (":", ",", "[", "]", ";", "'"):
+                    destination = destination.replace("\\\\" + character, character)
+                    destination = destination.replace("\\" + character, character)
+                destination_path = Path(destination)
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                destination_path.write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\nhello\n",
+                    encoding="utf-8",
+                )
+            elif "-c:a" in self.args:
+                audio_path = Path(self.args[self.args.index("-c:a") + 2])
+                audio_path.parent.mkdir(parents=True, exist_ok=True)
+                audio_path.write_bytes(b"pcm audio")
+            elif "-osrt" in self.args:
+                base = Path(self.args[self.args.index("-of") + 1])
+                output = Path(f"{base}.srt")
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\nhello\n",
+                    encoding="utf-8",
+                )
             self.stdout = io.StringIO("out_time_ms=100\nprogress=end\n")
 
         def wait(self, timeout=None):
@@ -15541,10 +15555,15 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             media.write_bytes(b"media")
             model = root / "ggml-tiny-q5_1.bin"
             model.write_bytes(b"model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
             config, download = self._download(media)
             manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
             with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
                     mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
                     mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
                     mock.patch.object(ad, "spawn_media_process", self._TranscriptProcess):
                 self.assertTrue(manager._run_local_subtitles(download, config))
@@ -15561,6 +15580,8 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             media.write_bytes(b"media")
             model = root / "ggml-tiny-q5_1.bin"
             model.write_bytes(b"model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
             config, download = self._download(media)
 
             class CancelProcess(self._TranscriptProcess):
@@ -15572,6 +15593,9 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
             with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
                     mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
                     mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
                     mock.patch.object(ad, "spawn_media_process", CancelProcess):
                 self.assertFalse(manager._run_local_subtitles(download, config))
@@ -15621,6 +15645,144 @@ class WhisperModelProvisioningTests(unittest.TestCase):
             self.assertEqual(result, str(model))
             self.assertEqual(calls[0][0], ad.WHISPER_MODEL_URL)
             self.assertEqual(calls[0][1]["max_bytes"], ad.HELPER_DOWNLOAD_MAX_BYTES)
+
+
+class SubtitleRetryTests(unittest.TestCase):
+    """A sidecar failure is retried in place, never as a second media fetch."""
+
+    def test_completed_media_keeps_its_path_when_subtitles_are_retried(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            download = ad.Download(
+                "dl_subtitle_retry", "https://example.com/video",
+                output_dir=str(root),
+            )
+            download.status = "complete"
+            download.filename = str(media)
+            download.error_code = "transcription-failed"
+            manager = ad.DownloadManager(config=FakeConfig(), history=FakeHistory())
+            manager.downloads[download.id] = download
+            manager._schedule = lambda: None
+
+            ok, error = manager.retry(download.id)
+
+            self.assertTrue(ok, error)
+            self.assertIsNone(error)
+            self.assertEqual(download.status, "pending")
+            self.assertTrue(download.subtitle_retry)
+            self.assertEqual(download.filename, str(media))
+            self.assertTrue(download.to_dict()["retryable"] is False)
+
+    def test_complete_transcription_failure_is_visible_as_retryable(self):
+        download = ad.Download("dl_complete", "https://example.com/video")
+        download.status = "complete"
+        download.error_code = "transcription-runtime-missing"
+        self.assertTrue(download.to_dict()["retryable"])
+
+
+class WhisperRuntimeProbeTests(unittest.TestCase):
+    """A size-valid CLI is not trusted until its SRT capability is observable."""
+
+    def _binary(self, root, size=1):
+        path = Path(root) / "whisper-cli.exe"
+        path.write_bytes(b"x" * size)
+        return path
+
+    def test_missing_runtime_is_reported_before_process_probe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = ad.probe_whisper_runtime(Path(tmpdir) / "missing.exe", 1)
+        self.assertEqual(result["state"], "missing")
+        self.assertFalse(result["usable"])
+        self.assertEqual(result["reason"], "missing")
+
+    def test_present_runtime_without_srt_switch_is_not_usable(self):
+        calls = []
+
+        def runner(args, **kwargs):
+            calls.append((args, kwargs))
+            return types.SimpleNamespace(stdout="Usage: whisper-cli", stderr="", returncode=0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._binary(tmpdir)
+            result = ad.probe_whisper_runtime(path, 1, runner=runner)
+        self.assertEqual(result["state"], "ok")
+        self.assertFalse(result["usable"])
+        self.assertEqual(result["reason"], "capability-missing")
+        self.assertEqual(calls[0][0], [str(path), "--help"])
+
+    def test_help_output_proves_the_srt_capability(self):
+        def runner(_args, **_kwargs):
+            return types.SimpleNamespace(
+                stdout="--output-srt, -osrt  output SRT subtitles",
+                stderr="",
+                returncode=0,
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = ad.probe_whisper_runtime(self._binary(tmpdir), 1, runner=runner)
+        self.assertTrue(result["usable"])
+        self.assertEqual(result["reason"], "ready")
+
+
+class WhisperRuntimeProvisioningTests(unittest.TestCase):
+    """The multi-file whisper.cpp runtime is verified and swapped atomically."""
+
+    def _archive(self, path):
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("build/bin/Release/whisper-cli.exe", b"cli")
+            archive.writestr("build/bin/Release/whisper.dll", b"dll")
+
+    def test_archive_provisions_the_cli_and_sibling_dll(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_dir = root / "whisper"
+            runtime_path = runtime_dir / "whisper-cli.exe"
+
+            def fake_download(_url, path, **_kwargs):
+                self._archive(path)
+
+            def fake_probe(path, *_args, **_kwargs):
+                return {"usable": Path(path).is_file(), "path": str(path)}
+
+            with mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_BIN_DIR", runtime_dir), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", runtime_path), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "verify_file_sha256", return_value=True), \
+                    mock.patch.object(ad, "probe_whisper_runtime", side_effect=fake_probe), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                result = ad.provision_whisper_runtime()
+
+            self.assertEqual(result, str(runtime_path))
+            self.assertTrue(runtime_path.is_file())
+            self.assertTrue((runtime_dir / "whisper.dll").is_file())
+
+    def test_checksum_failure_keeps_an_existing_runtime(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_dir = root / "whisper"
+            runtime_path = runtime_dir / "whisper-cli.exe"
+            runtime_dir.mkdir()
+            runtime_path.write_bytes(b"verified old runtime")
+
+            def fake_probe(_path, *_args, **_kwargs):
+                return {"usable": False}
+
+            with mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_BIN_DIR", runtime_dir), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", runtime_path), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "download_file_atomic", lambda _u, path, **_k: Path(path).write_bytes(b"bad")), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "verify_file_sha256", side_effect=RuntimeError("bad digest")), \
+                    mock.patch.object(ad, "probe_whisper_runtime", side_effect=fake_probe), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                self.assertIsNone(ad.provision_whisper_runtime())
+            self.assertEqual(runtime_path.read_bytes(), b"verified old runtime")
 
 
 class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):

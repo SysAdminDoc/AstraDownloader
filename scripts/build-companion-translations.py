@@ -410,12 +410,18 @@ CATALOGS = {
             "Bereit",
         "Local transcription is enabled and the pinned Whisper model is ready.":
             "Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell ist bereit.",
+        "Local transcription is enabled and the pinned Whisper model and runtime are ready.":
+            "Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell sowie die Laufzeit sind bereit.",
         "Repair needed":
             "Reparatur erforderlich",
         "The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.":
             "Das lokale Whisper-Modell ist vorhanden, aber unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um es abzurufen.",
+        "The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.":
+            "Das lokale Whisper-Modell oder die whisper.cpp-Laufzeit ist unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um sie abzurufen.",
         "Run setup to provision the local Whisper model before downloading.":
             "Führen Sie die Einrichtung aus, um das lokale Whisper-Modell vor dem Download bereitzustellen.",
+        "Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.":
+            "Führen Sie die Einrichtung aus, um das lokale Whisper-Modell und die whisper.cpp-Laufzeit vor dem Download bereitzustellen.",
         "Keep intermediate files":
             "Zwischendateien behalten",
         "Tracks":
@@ -980,12 +986,26 @@ CATALOGS = {
             "Das lokale Transkriptionsmodell fehlt oder ist beschädigt.",
         "Run setup with local subtitle generation enabled, then retry the download.":
             "Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie den Download.",
+        "Run setup with local subtitle generation enabled, then retry subtitle generation on this completed media.":
+            "Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie die Untertitelerzeugung für diese abgeschlossenen Medien.",
         "run-setup":
             "Einrichtung ausführen",
+        "run-setup-and-retry-subtitles":
+            "Einrichtung ausführen und Untertitel erneut erzeugen",
         "Local subtitle generation failed after the media downloaded.":
             "Die lokale Untertitelerzeugung ist nach dem Mediendownload fehlgeschlagen.",
         "Check the ffmpeg and local transcription model readiness rows, then retry the download.":
             "Prüfen Sie die Bereitschaftszeilen für ffmpeg und das lokale Transkriptionsmodell und wiederholen Sie den Download.",
+        "The local transcription runtime is missing or cannot produce SRT output.":
+            "Die lokale Transkriptionslaufzeit fehlt oder kann keine SRT-Ausgabe erzeugen.",
+        "Check the local transcription readiness rows, then retry subtitles without downloading the media again.":
+            "Prüfen Sie die Bereitschaftszeilen für die lokale Transkription und versuchen Sie die Untertitel erneut, ohne die Medien erneut herunterzuladen.",
+        "retry-subtitles":
+            "Untertitel erneut erzeugen",
+        "Retry subtitles":
+            "Untertitel erneut erzeugen",
+        "Generate subtitles again without downloading the media.":
+            "Untertitel erneut erzeugen, ohne die Medien erneut herunterzuladen.",
         "retry":
             "Erneut versuchen",
         "Optional":

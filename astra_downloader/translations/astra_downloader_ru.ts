@@ -1463,8 +1463,8 @@
       <translation>Ready</translation>
     </message>
     <message>
-      <source>Local transcription is enabled and the pinned Whisper model is ready.</source>
-      <translation>Local transcription is enabled and the pinned Whisper model is ready.</translation>
+      <source>Local transcription is enabled and the pinned Whisper model and runtime are ready.</source>
+      <translation>Local transcription is enabled and the pinned Whisper model and runtime are ready.</translation>
     </message>
     <message>
       <source>Downloads use the web client with proof-of-origin tokens.</source>
@@ -1735,12 +1735,12 @@
       <translation>Repair needed</translation>
     </message>
     <message>
-      <source>The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.</source>
-      <translation>The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.</translation>
+      <source>The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</source>
+      <translation>The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</translation>
     </message>
     <message>
-      <source>Run setup to provision the local Whisper model before downloading.</source>
-      <translation>Run setup to provision the local Whisper model before downloading.</translation>
+      <source>Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.</source>
+      <translation>Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.</translation>
     </message>
     <message>
       <source>Required</source>
@@ -1955,6 +1955,10 @@
       <translation>{progress} percent complete</translation>
     </message>
     <message>
+      <source>Retry subtitles</source>
+      <translation>Retry subtitles</translation>
+    </message>
+    <message>
       <source>Settings restored. Restart Astra Downloader to apply the language.</source>
       <translation>Settings restored. Restart Astra Downloader to apply the language.</translation>
     </message>
@@ -2013,6 +2017,10 @@
     <message>
       <source>Host paused · retry in {duration}</source>
       <translation>Host paused · retry in {duration}</translation>
+    </message>
+    <message>
+      <source>Generate subtitles again without downloading the media.</source>
+      <translation>Generate subtitles again without downloading the media.</translation>
     </message>
     <message>
       <source>Registering shortcuts and protocols...</source>
@@ -2231,24 +2239,28 @@
       <translation>The local transcription model is missing or damaged.</translation>
     </message>
     <message>
-      <source>Run setup with local subtitle generation enabled, then retry the download.</source>
-      <translation>Run setup with local subtitle generation enabled, then retry the download.</translation>
+      <source>Run setup with local subtitle generation enabled, then retry subtitle generation on this completed media.</source>
+      <translation>Run setup with local subtitle generation enabled, then retry subtitle generation on this completed media.</translation>
     </message>
     <message>
-      <source>run-setup</source>
-      <translation>run-setup</translation>
+      <source>run-setup-and-retry-subtitles</source>
+      <translation>run-setup-and-retry-subtitles</translation>
+    </message>
+    <message>
+      <source>The local transcription runtime is missing or cannot produce SRT output.</source>
+      <translation>The local transcription runtime is missing or cannot produce SRT output.</translation>
     </message>
     <message>
       <source>Local subtitle generation failed after the media downloaded.</source>
       <translation>Local subtitle generation failed after the media downloaded.</translation>
     </message>
     <message>
-      <source>Check the ffmpeg and local transcription model readiness rows, then retry the download.</source>
-      <translation>Check the ffmpeg and local transcription model readiness rows, then retry the download.</translation>
+      <source>Check the local transcription readiness rows, then retry subtitles without downloading the media again.</source>
+      <translation>Check the local transcription readiness rows, then retry subtitles without downloading the media again.</translation>
     </message>
     <message>
-      <source>retry</source>
-      <translation>retry</translation>
+      <source>retry-subtitles</source>
+      <translation>retry-subtitles</translation>
     </message>
     <message>
       <source>This link only offers SABR streams. {options} do not apply to them and will be ignored.</source>

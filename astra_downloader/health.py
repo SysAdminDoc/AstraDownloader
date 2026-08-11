@@ -25,7 +25,7 @@ __all__ = (
     "reset_deno_runtime_cache", "provision_deno", "_parse_ytdlp_release_date",
     "ytdlp_needs_external_runtime", "YTDLP_EXTERNAL_RUNTIME_CUTOFF",
     "DENO_MIN_VERSION", "NODE_MIN_VERSION", "parse_ffmpeg_major",
-    "parse_ffmpeg_snapshot_date",
+    "parse_ffmpeg_snapshot_date", "probe_whisper_runtime",
     "check_ffmpeg_capabilities", "reset_ffmpeg_capabilities_cache",
     "build_youtube_extractor_args", "is_youtube_url", "should_check_ytdlp_update",
     "maybe_auto_update_ytdlp", "_run_ytdlp_self_update",
@@ -450,6 +450,40 @@ def parse_ffmpeg_version_output(output):
     return (match.group(1) if match else '')[:64] or None
 
 
+def probe_whisper_runtime(path, minimum_bytes=MANAGED_BINARY_MIN_BYTES,
+                          *, runner=None):
+    """Verify that the managed whisper.cpp CLI can provide SRT output.
+
+    A present executable is not enough: an incomplete extraction can leave
+    the CLI on disk while its DLLs are missing, and a generic helper binary
+    can satisfy a size check without implementing the capability we need.
+    ``whisper-cli --help`` is deliberately parsed instead of trusting its
+    exit code, just as the ffmpeg capability probe must parse filter output.
+    """
+    path = Path(path)
+    state = managed_binary_state(path, minimum_bytes)
+    result = {
+        'state': state,
+        'usable': False,
+        'path': str(path),
+        'reason': 'missing' if state == 'missing' else 'damaged',
+    }
+    if state != 'ok':
+        return result
+    output = _run_captured(
+        [str(path), '--help'],
+        timeout=5,
+        runner=runner,
+    )
+    # The CLI writes help to stderr. _run_captured combines both streams, but
+    # check for the actual SRT switch rather than merely a successful process.
+    if re.search(r'(?m)--output-srt\b', output or ''):
+        result.update({'usable': True, 'reason': 'ready'})
+    else:
+        result['reason'] = 'capability-missing'
+    return result
+
+
 class ExecutableVersionProbe:
     """Thread-safe TTL cache for an injected executable version command."""
 
@@ -698,6 +732,7 @@ _OWNED_EXPORTS = {
     "parse_impersonate_targets", "ImpersonateTargetsProbe",
     "IMPERSONATE_TARGET_RE",
     "parse_ffmpeg_version_output",
+    "probe_whisper_runtime",
     "PoTokenProviderProbe",
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",

@@ -10,6 +10,18 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased] - 2026-08-10
+
+### Fixed
+
+- **Local transcription uses a verified whisper.cpp sidecar.** Setup now fetches
+  the pinned CLI and sibling DLLs, probes the SRT capability, and reports a
+  missing runtime before a job starts; successful media stays complete when
+  subtitle generation fails, with a retry that regenerates only the SRT.
+- **Windows subtitle filter paths are escaped at both parser levels.** The
+  legacy FFmpeg argument builder now emits the doubled escaping required for
+  drive letters and filter punctuation.
+
 ## [2.6.0] - 2026-08-09
 
 ### Added

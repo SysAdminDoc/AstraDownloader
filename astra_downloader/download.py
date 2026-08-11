@@ -39,12 +39,14 @@ __all__ = (
     "cleanup_stale_cookie_jars", "DOWNLOAD_ACTIVE_STATES",
     "DOWNLOAD_RUNNING_STATES", "DOWNLOAD_PENDING_STATES",
     "DOWNLOAD_TERMINAL_STATES", "DOWNLOAD_RETRYABLE_ERROR_CODES",
+    "DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES",
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "HOST_BACKOFF_BASE_SECONDS", "HOST_BACKOFF_MAX_SECONDS",
     "HOST_BACKOFF_MAX_ENTRIES", "parse_retry_after_seconds",
     "build_impersonate_args",
     "build_network_workaround_args",
     "build_subtitle_args", "build_local_subtitle_args",
+    "build_whisper_audio_args", "build_whisper_transcription_args",
     "local_subtitle_output_path", "local_subtitle_sidecar_exists",
     "should_generate_local_subtitles", "subtitle_language_for_transcription",
     "escape_ffmpeg_filter_value",
@@ -103,6 +105,11 @@ DOWNLOAD_RETRYABLE_ERROR_CODES = {
     'transcription-model-missing',
     'transcription-failed',
 }
+DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES = frozenset({
+    'transcription-model-missing',
+    'transcription-runtime-missing',
+    'transcription-failed',
+})
 
 DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
 
@@ -230,18 +237,26 @@ DOWNLOAD_FAILURE_RECOVERY = {
     'transcription-model-missing': {
         'error': 'The local transcription model is missing or damaged.',
         'advice': (
-            'Run setup with local subtitle generation enabled, then retry the '
-            'download.'
+            'Run setup with local subtitle generation enabled, then retry subtitle '
+            'generation on this completed media.'
         ),
-        'next_action': 'run-setup',
+        'next_action': 'run-setup-and-retry-subtitles',
+    },
+    'transcription-runtime-missing': {
+        'error': 'The local transcription runtime is missing or cannot produce SRT output.',
+        'advice': (
+            'Run setup with local subtitle generation enabled, then retry subtitle '
+            'generation on this completed media.'
+        ),
+        'next_action': 'run-setup-and-retry-subtitles',
     },
     'transcription-failed': {
         'error': 'Local subtitle generation failed after the media downloaded.',
         'advice': (
-            'Check the ffmpeg and local transcription model readiness rows, '
-            'then retry the download.'
+            'Check the local transcription readiness rows, then retry subtitles '
+            'without downloading the media again.'
         ),
-        'next_action': 'retry',
+        'next_action': 'retry-subtitles',
     },
 }
 
@@ -1629,11 +1644,13 @@ def escape_ffmpeg_filter_value(value):
     The process is spawned with an argv list, so shell quoting is neither
     needed nor wanted. The whisper filter still uses ``:`` as its option
     separator, though, which makes a Windows drive letter special. Convert
-    separators to forward slashes and escape the filter punctuation only.
+    separators to forward slashes and escape the filter punctuation twice.
+    ffmpeg parses the filtergraph once before the option parser sees the
+    value, so one backslash is consumed too early on Windows.
     """
     text = str(value or '').replace('\\', '/')
     for character in (':', ',', '[', ']', ';', "'"):
-        text = text.replace(character, '\\' + character)
+        text = text.replace(character, '\\\\' + character)
     return text
 
 
@@ -1700,6 +1717,38 @@ def build_local_subtitle_args(ffmpeg_path, media_path, model_path,
         str(ffmpeg_path), '-hide_banner', '-nostdin', '-y',
         '-i', str(media_path), '-vn', '-af', filter_graph,
         '-progress', 'pipe:1', '-nostats', '-f', 'null', '-',
+    ]
+
+
+def build_whisper_audio_args(ffmpeg_path, media_path, output_path):
+    """Extract the 16 kHz mono PCM WAV accepted by whisper.cpp."""
+    return [
+        str(ffmpeg_path), '-hide_banner', '-nostdin', '-y',
+        '-i', str(media_path), '-vn', '-ac', '1', '-ar', '16000',
+        '-c:a', 'pcm_s16le', str(output_path),
+        '-progress', 'pipe:1', '-nostats',
+    ]
+
+
+def build_whisper_transcription_args(whisper_path, model_path, audio_path,
+                                     output_base, language='auto',
+                                     threads=4, max_len=42):
+    """Build a deterministic whisper.cpp SRT invocation."""
+    language = str(language or 'auto').strip().lower()
+    if not re.fullmatch(r'[a-z]{2,3}', language) and language != 'auto':
+        language = 'auto'
+    try:
+        threads = max(1, min(32, int(threads)))
+    except (TypeError, ValueError, OverflowError):
+        threads = 4
+    try:
+        max_len = max(0, min(200, int(max_len)))
+    except (TypeError, ValueError, OverflowError):
+        max_len = 42
+    return [
+        str(whisper_path), '-m', str(model_path), '-f', str(audio_path),
+        '-l', language, '-t', str(threads), '-ml', str(max_len),
+        '-osrt', '-of', str(output_base), '-ng',
     ]
 
 
@@ -2327,6 +2376,9 @@ class Download:
         # file may already hold most of the media — sending it there restarts a
         # 4 GB file from zero. Set on the paths that continue existing work.
         self.resume_partial = False
+        # A subtitle-only retry keeps the completed media path and is durable so
+        # a restart cannot silently turn it into a full media download.
+        self.subtitle_retry = False
         self.status = "pending"
         self.progress = 0.0
         self.speed = ""
@@ -2358,8 +2410,10 @@ class Download:
             "format": self.format, "quality": self.quality,
             "requiresAuth": self.requires_auth,
             "retryable": bool(
-                self.status == 'failed'
-                and self.error_code in DOWNLOAD_RETRYABLE_ERROR_CODES
+                (self.status == 'failed'
+                 and self.error_code in DOWNLOAD_RETRYABLE_ERROR_CODES)
+                or (self.status == 'complete'
+                    and self.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES)
             ),
         }
         if self.error_code:
@@ -2395,7 +2449,7 @@ RETRY_ROLLBACK_FIELDS = (
     'status', 'progress', 'speed', 'eta', 'filename',
     'error', 'error_code', 'error_advice', 'error_action',
     'finished_time', 'start_time', 'queue_order',
-    'requires_auth', '_cookies', 'resume_partial',
+    'requires_auth', '_cookies', 'resume_partial', 'subtitle_retry',
 )
 # start_download() reuses an existing needs-auth record rather than queueing a
 # duplicate, so it overwrites the whole request and must be able to put the
@@ -2464,6 +2518,7 @@ class DownloadQueueStore:
             **({'archiveKey': download.archive_key}
                if download.archive_key else {}),
             **({'subtitlesOnly': True} if download.subtitles_only else {}),
+            **({'subtitleRetry': True} if getattr(download, 'subtitle_retry', False) else {}),
             **({'profileName': getattr(download, 'profile_name', None)}
                if getattr(download, 'profile_name', None) is not None else {}),
             'createdAt': float(download.start_time),
@@ -2489,6 +2544,8 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'CREATE_NO_WINDOW',
     'FFMPEG_PATH',
     'INSTALL_DIR',
+    'WHISPER_BIN_MIN_BYTES',
+    'WHISPER_BIN_PATH',
     'WHISPER_MODEL_MIN_BYTES',
     'WHISPER_MODEL_PATH',
     'YTDLP_PATH',
@@ -2514,6 +2571,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'probe_javascript_runtime',
     'probe_po_token_provider',
     'probe_impersonate_targets',
+    'probe_whisper_runtime',
     'normalize_impersonate_target',
     'quarantined_state_files',
     'spawn_media_process',
@@ -2749,6 +2807,9 @@ class DownloadManagerCore:
                 ),
                 profile_name=profile_name,
             )
+            dl.subtitle_retry = self._dependencies['coerce_bool'](
+                item.get('subtitleRetry'), False
+            )
             dl.status = 'needs-auth' if requires_auth else 'paused'
             dl.error = (
                 'Fresh sign-in is required before this recovered download can run.'
@@ -2843,13 +2904,14 @@ class DownloadManagerCore:
                     dl._credentials = None
                     dl._video_password = ""
                     continue
-                cookies = dl._cookies
+                subtitle_retry = bool(getattr(dl, 'subtitle_retry', False))
+                cookies = None if subtitle_retry else dl._cookies
                 dl._cookies = None
             # A stored site sign-in stands in for the extension's cookie
             # bridge on every site the extension cannot reach. Request-supplied
             # cookies still win: they are fresher than anything on disk.
             site_login_used = False
-            if not cookies:
+            if not subtitle_retry and not cookies:
                 jar_path = self._dependencies['INSTALL_DIR']() / f".cookies.{dl.id}.txt"
                 # One lookup, not two: the stored site-login jar is the
                 # fallback identity for every target, including YouTube
@@ -2866,14 +2928,14 @@ class DownloadManagerCore:
                     # explicit fallback for browsers it cannot read.
                     dl._credentials = self.site_logins.credentials_for_url(dl.url)
                     site_login_used = bool(dl._credentials)
-            if cookies:
+            if not subtitle_retry and cookies:
                 jar_path = self._dependencies['INSTALL_DIR']() / f".cookies.{dl.id}.txt"
                 dl.cookies_file = write_cookies_netscape(
                     cookies, jar_path,
                     logger=self._dependencies['write_persistent_log'],
                 )
                 dl.cookies_scope = 'youtube' if dl.cookies_file else ''
-            if cookies or site_login_used:
+            if not subtitle_retry and (cookies or site_login_used):
                 with self._lock:
                     if dl.status != 'queued':
                         # Cancelled while the jar was being written. cancel()
@@ -3678,8 +3740,21 @@ class DownloadManagerCore:
             candidate = root / f'download-{suffix}'
         return candidate
 
+    def _mark_transcription_failure(self, dl, error_code, error):
+        """Keep the downloaded media complete when its optional sidecar fails."""
+        if dl.status == 'cancelled':
+            return
+        dl.status = 'complete'
+        apply_download_failure_classification(dl, error_code, error=error)
+
     def _run_local_subtitles(self, dl, effective_config):
-        """Transcribe a successful video into an atomic SRT sidecar."""
+        """Transcribe a successful video into an atomic SRT sidecar.
+
+        FFmpeg only prepares the PCM input. The transcription capability is
+        the pinned whisper.cpp sidecar, so an ffmpeg update cannot silently
+        remove the feature. A sidecar failure annotates the completed media;
+        it never turns a successful download into a failed full re-download.
+        """
         if not should_generate_local_subtitles(effective_config, dl):
             return True
 
@@ -3688,36 +3763,49 @@ class DownloadManagerCore:
             model_path, self._dependencies['WHISPER_MODEL_MIN_BYTES']()
         )
         if model_state != 'ok':
-            dl.status = 'failed'
-            dl.error = (
+            self._mark_transcription_failure(
+                dl,
+                'transcription-model-missing',
                 'Local subtitle generation needs the Whisper model, but the '
-                'model is missing or damaged.'
+                'model is missing or damaged.',
             )
-            apply_download_failure_classification(
-                dl, 'transcription-model-missing', error=dl.error
+            return False
+
+        whisper_path = Path(self._dependencies['WHISPER_BIN_PATH']())
+        runtime = self._dependencies['probe_whisper_runtime'](
+            whisper_path, self._dependencies['WHISPER_BIN_MIN_BYTES']()
+        )
+        if not runtime.get('usable'):
+            self._mark_transcription_failure(
+                dl,
+                'transcription-runtime-missing',
+                'Local subtitle generation needs the whisper.cpp runtime, but '
+                'it is missing or cannot provide SRT output.',
             )
             return False
 
         media_path = Path(dl.filename)
         output_path = local_subtitle_output_path(media_path)
-        temporary = output_path.with_name(
-            f'.{output_path.name}.{uuid.uuid4().hex}.tmp'
+        token = uuid.uuid4().hex
+        temporary_audio = output_path.with_name(f'.{output_path.name}.{token}.wav')
+        temporary_base = output_path.with_name(f'.{output_path.name}.{token}')
+        temporary_srt = Path(f'{temporary_base}.srt')
+        language = subtitle_language_for_transcription(effective_config)
+        ffmpeg_args = build_whisper_audio_args(
+            self._dependencies['FFMPEG_PATH'](), media_path, temporary_audio,
         )
-        args = build_local_subtitle_args(
-            self._dependencies['FFMPEG_PATH'](),
-            media_path,
-            model_path,
-            temporary,
-            language=subtitle_language_for_transcription(effective_config),
+        whisper_args = build_whisper_transcription_args(
+            whisper_path, model_path, temporary_audio, temporary_base,
+            language=language,
         )
         dl.status = 'transcribing'
         dl.speed = 'local transcription'
         dl.eta = ''
         dl.progress = min(99.0, max(0.0, float(dl.progress or 0.0)))
         self.progress_updated.emit()
-        proc = None
         output_lines = []
-        try:
+
+        def run_process(args):
             proc = self._dependencies['spawn_media_process'](
                 args,
                 stdout=subprocess.PIPE,
@@ -3732,73 +3820,108 @@ class DownloadManagerCore:
                 env=self._dependencies['_build_subprocess_env'](),
             )
             dl.process = proc
-            with self._lock:
-                cancelled_pre_spawn = dl.status == 'cancelled'
-            if cancelled_pre_spawn:
-                self._dependencies['terminate_process_tree'](proc)
-            for raw_line in getattr(proc, 'stdout', ()):
-                line = str(raw_line or '').strip()
-                if not line:
-                    continue
-                output_lines.append(line)
-                if len(output_lines) > 30:
-                    output_lines = output_lines[-30:]
-                if line.startswith('out_time_ms='):
-                    # FFmpeg's filter does not expose the input duration on
-                    # the progress pipe. Report an active stage immediately,
-                    # then reserve 100 for an atomically committed SRT.
-                    dl.progress = max(1.0, min(99.0, float(dl.progress or 0.0)))
-                    self.progress_updated.emit()
-                elif line == 'progress=end':
-                    dl.progress = 99.0
-                    self.progress_updated.emit()
-            proc.wait()
-            if dl.status == 'cancelled':
-                return False
-            if proc.returncode == 0 and temporary.is_file():
-                try:
-                    if temporary.stat().st_size > 0:
-                        os.replace(temporary, output_path)
-                        dl.status = 'complete'
-                        dl.progress = 100.0
-                        dl.speed = ''
-                        dl.eta = ''
+            try:
+                with self._lock:
+                    cancelled_pre_spawn = dl.status == 'cancelled'
+                if cancelled_pre_spawn:
+                    self._dependencies['terminate_process_tree'](proc)
+                for raw_line in getattr(proc, 'stdout', ()):
+                    line = str(raw_line or '').strip()
+                    if not line:
+                        continue
+                    output_lines.append(line)
+                    if len(output_lines) > 40:
+                        del output_lines[:-40]
+                    if line.startswith('out_time_ms='):
+                        dl.progress = max(1.0, min(99.0, float(dl.progress or 0.0)))
                         self.progress_updated.emit()
-                        return True
-                except OSError:
-                    # Fall through to the same actionable failure as a
-                    # transcription process that produced no output.
-                    # reason: the destination can be locked or removed
-                    # between the size check and the atomic replacement
+                proc.wait()
+                return proc.returncode
+            finally:
+                dl.process = None
+                try:
+                    if getattr(proc, 'stdout', None) is not None:
+                        proc.stdout.close()
+                except Exception:
+                    # reason: cleanup must not replace a completed transcription
                     pass
+                if proc.poll() is None:
+                    try:
+                        self._dependencies['terminate_process_tree'](proc)
+                    except Exception as error:
+                        self._dependencies['write_persistent_log'](
+                            f'WARNING: local subtitle termination failed: {error}'
+                        )
+
+        try:
+            if run_process(ffmpeg_args) != 0:
+                if dl.status == 'cancelled':
+                    return False
+                detail = ' '.join(
+                    line for line in output_lines
+                    if 'error' in line.lower() or 'failed' in line.lower()
+                )[-240:]
+                self._mark_transcription_failure(
+                    dl,
+                    'transcription-failed',
+                    'ffmpeg could not prepare audio for local subtitles.' + (
+                        f' {detail}' if detail else ''
+                    ),
+                )
+                return False
             if dl.status == 'cancelled':
                 return False
-            detail = ' '.join(
-                line for line in output_lines
-                if 'error' in line.lower() or 'failed' in line.lower()
-            )[-240:]
-            dl.status = 'failed'
-            dl.error = 'ffmpeg could not generate local subtitles.' + (
-                f' {detail}' if detail else ''
-            )
-            apply_download_failure_classification(
-                dl, 'transcription-failed', error=dl.error
+            dl.progress = max(50.0, min(80.0, float(dl.progress or 0.0)))
+            self.progress_updated.emit()
+            if run_process(whisper_args) != 0:
+                if dl.status == 'cancelled':
+                    return False
+                detail = ' '.join(
+                    line for line in output_lines
+                    if 'error' in line.lower() or 'failed' in line.lower()
+                )[-240:]
+                self._mark_transcription_failure(
+                    dl,
+                    'transcription-failed',
+                    'whisper.cpp could not generate local subtitles.' + (
+                        f' {detail}' if detail else ''
+                    ),
+                )
+                return False
+            if dl.status == 'cancelled':
+                return False
+            if temporary_srt.is_file() and temporary_srt.stat().st_size > 0:
+                os.replace(temporary_srt, output_path)
+                dl.status = 'complete'
+                dl.progress = 100.0
+                dl.speed = ''
+                dl.eta = ''
+                dl.error = ''
+                dl.error_code = ''
+                dl.error_advice = ''
+                dl.error_action = ''
+                self.progress_updated.emit()
+                return True
+            self._mark_transcription_failure(
+                dl,
+                'transcription-failed',
+                'whisper.cpp completed without producing an SRT sidecar.',
             )
             return False
         except FileNotFoundError:
             if dl.status != 'cancelled':
-                dl.status = 'failed'
-                dl.error = 'ffmpeg not found. Run setup first.'
-                apply_download_failure_classification(
-                    dl, 'transcription-failed', error=dl.error
+                self._mark_transcription_failure(
+                    dl,
+                    'transcription-runtime-missing',
+                    'The local transcription runtime is unavailable. Run setup first.',
                 )
             return False
         except Exception as error:
             if dl.status != 'cancelled':
-                dl.status = 'failed'
-                dl.error = 'Unexpected local subtitle error. Check Astra Downloader logs.'
-                apply_download_failure_classification(
-                    dl, 'transcription-failed', error=dl.error
+                self._mark_transcription_failure(
+                    dl,
+                    'transcription-failed',
+                    'Unexpected local subtitle error. Check Astra Downloader logs.',
                 )
                 self._dependencies['write_persistent_log'](
                     f'Local subtitles for {dl.id} failed: '
@@ -3806,25 +3929,51 @@ class DownloadManagerCore:
                 )
             return False
         finally:
-            dl.process = None
-            try:
-                if getattr(proc, 'stdout', None) is not None:
-                    proc.stdout.close()
-            except Exception:
-                # reason: cleanup must not replace a completed transcription
-                pass
-            if proc is not None and proc.poll() is None:
+            for path in (temporary_audio, temporary_srt):
                 try:
-                    self._dependencies['terminate_process_tree'](proc)
-                except Exception as error:
-                    self._dependencies['write_persistent_log'](
-                        f'WARNING: local subtitle termination failed: {error}'
-                    )
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                # reason: a locked partial transcript is safe to retry later
-                pass
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    # reason: a locked partial transcript is safe to retry later
+                    pass
+
+    def _record_terminal_download(self, dl):
+        """Persist history and emit completion after any terminal worker path."""
+        dl.mark_terminal()
+        if dl.status == "complete":
+            self._sweep_download_intermediates(dl)
+            self.total_completed += 1
+        # History is the durable record of every terminal outcome, not just a
+        # successful file write. The queue intentionally evicts old terminal
+        # objects, so omitting failures here made an overnight failure vanish
+        # with no way to explain or retry it later.
+        duration = int(time.time() - dl.start_time)
+        recorded = self.history.add({
+            "id": dl.id, "url": dl.url, "title": dl.title,
+            "filename": dl.filename, "format": dl.format,
+            "quality": dl.quality, "audioOnly": dl.audio_only,
+            "section": dict(dl.section) if dl.section else None,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "duration": duration,
+            "status": dl.status,
+            "errorCode": dl.error_code,
+            "error": dl.error,
+        })
+        with self._lock:
+            if recorded:
+                self._history_error = ""
+            else:
+                self._history_error = (
+                    "The last download finished but could not be added to "
+                    "History. Check free disk space and folder permissions."
+                )
+        if not recorded:
+            self._dependencies['write_persistent_log'](
+                f"Download {dl.id} reached {dl.status} but its history entry "
+                "could not be saved."
+            )
+
+        self.progress_updated.emit()
+        self.download_completed.emit(dl.id)
 
     def _run_download(self, dl):
         with self._lock:
@@ -3839,12 +3988,32 @@ class DownloadManagerCore:
             dl.status = "downloading"
         self.progress_updated.emit()
 
-        ytdlp = str(self._dependencies['YTDLP_PATH']())
-        ffmpeg_dir = str(self._dependencies['FFMPEG_PATH']().parent)
-        is_playlist = is_playlist_url(dl.url)
         effective_config = self._effective_config_for_url(
             dl.url, getattr(dl, 'profile_name', None)
         )
+
+        if getattr(dl, 'subtitle_retry', False):
+            try:
+                self._run_local_subtitles(dl, effective_config)
+            except Exception as error:
+                if dl.status != 'cancelled':
+                    self._mark_transcription_failure(
+                        dl,
+                        'transcription-failed',
+                        'Unexpected local subtitle error. Check Astra Downloader logs.',
+                    )
+                    self._dependencies['write_persistent_log'](
+                        f'Subtitle-only retry for {dl.id} failed: '
+                        f'{_redact_download_secrets(error, dl)}'
+                    )
+            finally:
+                dl.subtitle_retry = False
+            self._record_terminal_download(dl)
+            return
+
+        ytdlp = str(self._dependencies['YTDLP_PATH']())
+        ffmpeg_dir = str(self._dependencies['FFMPEG_PATH']().parent)
+        is_playlist = is_playlist_url(dl.url)
 
         # Output template. A user-configured template (already validated by
         # config.normalize_output_template — allowlisted fields, no traversal,
@@ -4423,47 +4592,12 @@ class DownloadManagerCore:
                     # reason: cookie cleanup is idempotent after worker failure or cancellation
                     pass
                 dl.cookies_file = None
-            if dl.error_code == 'rate-limited':
-                self._record_host_backoff(
-                    dl.url, parse_retry_after_seconds(last_lines)
-                )
-
-        dl.mark_terminal()
-        if dl.status == "complete":
-            self._sweep_download_intermediates(dl)
-            self.total_completed += 1
-        # History is the durable record of every terminal outcome, not just a
-        # successful file write. The queue intentionally evicts old terminal
-        # objects, so omitting failures here made an overnight failure vanish
-        # with no way to explain or retry it later.
-        duration = int(time.time() - dl.start_time)
-        recorded = self.history.add({
-            "id": dl.id, "url": dl.url, "title": dl.title,
-            "filename": dl.filename, "format": dl.format,
-            "quality": dl.quality, "audioOnly": dl.audio_only,
-            "section": dict(dl.section) if dl.section else None,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "duration": duration,
-            "status": dl.status,
-            "errorCode": dl.error_code,
-            "error": dl.error,
-        })
-        with self._lock:
-            if recorded:
-                self._history_error = ""
-            else:
-                self._history_error = (
-                    "The last download finished but could not be added to "
-                    "History. Check free disk space and folder permissions."
-                )
-        if not recorded:
-            self._dependencies['write_persistent_log'](
-                f"Download {dl.id} reached {dl.status} but its history entry "
-                "could not be saved."
+        if dl.error_code == 'rate-limited':
+            self._record_host_backoff(
+                dl.url, parse_retry_after_seconds(last_lines)
             )
 
-        self.progress_updated.emit()
-        self.download_completed.emit(dl.id)
+        self._record_terminal_download(dl)
 
     def pause_intake(self):
         with self._lock:
@@ -4559,7 +4693,11 @@ class DownloadManagerCore:
             # `skipped` is retryable by definition: nothing was written, and
             # the fix (raise the size limit, sign in, pick another link) is a
             # setting change followed by exactly this action.
-            if dl.status not in ('failed', 'skipped'):
+            subtitle_retry = (
+                dl.status == 'complete'
+                and dl.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES
+            )
+            if dl.status not in ('failed', 'skipped') and not subtitle_retry:
                 return False, 'Only failed or skipped downloads can be retried.'
             if dl.status == 'failed' and dl.error_code not in DOWNLOAD_RETRYABLE_ERROR_CODES:
                 # Not "never retryable" — "not yet". Re-check the thing the
@@ -4580,7 +4718,35 @@ class DownloadManagerCore:
                     "Cancel a pending item or wait for a running download to finish, then retry."
                 )
             previous = snapshot_download_fields(dl, RETRY_ROLLBACK_FIELDS)
-            if dl.requires_auth and not cookies:
+            if subtitle_retry:
+                try:
+                    media_path = Path(dl.filename).resolve(strict=True)
+                    output_root = Path(dl.output_dir).resolve(strict=True)
+                    if media_path != output_root and not media_path.is_relative_to(output_root):
+                        raise ValueError
+                except (OSError, RuntimeError, ValueError):
+                    return False, 'The completed media file is no longer available for subtitle retry.'
+                dl.status = 'pending'
+                dl.progress = 0.0
+                dl.speed = ''
+                dl.eta = ''
+                dl.error = ''
+                dl.error_code = ''
+                dl.error_advice = ''
+                dl.error_action = ''
+                dl.finished_time = None
+                dl.start_time = time.time()
+                dl.resume_partial = False
+                dl.subtitle_retry = True
+                self._next_order += 1
+                dl.queue_order = self._next_order
+                if not self._persist_locked():
+                    restore_download_fields(dl, previous)
+                    return False, self._persistence_error
+                # The completed media remains in place. This job deliberately
+                # bypasses cookie preparation and yt-dlp in _run_download.
+                pass
+            elif dl.requires_auth and not cookies:
                 dl.status = 'needs-auth'
                 dl.error = (
                     'Fresh YouTube authentication is required before this download can retry.'
@@ -4598,27 +4764,28 @@ class DownloadManagerCore:
                     'Fresh YouTube cookies are required. Retry from Astra Deck so the '
                     'browser can authorize this download.'
                 )
-            if cookies:
+            if not subtitle_retry and cookies:
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
-            dl.status = 'pending'
-            dl.progress = 0.0
-            dl.speed = ''
-            dl.eta = ''
-            dl.filename = ''
-            dl.error = ''
-            dl.error_code = ''
-            dl.error_advice = ''
-            dl.error_action = ''
-            dl.finished_time = None
-            dl.start_time = time.time()
-            # A retry continues whatever the failed attempt left on disk.
-            dl.resume_partial = True
-            self._next_order += 1
-            dl.queue_order = self._next_order
-            if not self._persist_locked():
-                restore_download_fields(dl, previous)
-                return False, self._persistence_error
+            if not subtitle_retry:
+                dl.status = 'pending'
+                dl.progress = 0.0
+                dl.speed = ''
+                dl.eta = ''
+                dl.filename = ''
+                dl.error = ''
+                dl.error_code = ''
+                dl.error_advice = ''
+                dl.error_action = ''
+                dl.finished_time = None
+                dl.start_time = time.time()
+                # A retry continues whatever the failed attempt left on disk.
+                dl.resume_partial = True
+                self._next_order += 1
+                dl.queue_order = self._next_order
+                if not self._persist_locked():
+                    restore_download_fields(dl, previous)
+                    return False, self._persistence_error
         self.progress_updated.emit()
         self._schedule()
         return True, None
@@ -5348,6 +5515,11 @@ class DownloadManagerCore:
     def is_retryable(self, dl):
         """Whether Retry would be accepted for this download right now."""
         if dl.status == 'skipped':
+            return True
+        if (
+            dl.status == 'complete'
+            and dl.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES
+        ):
             return True
         if dl.status != 'failed':
             return False
