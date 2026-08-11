@@ -30,11 +30,15 @@ test('requirements stay pinned for local companion dependency review', () => {
     const pins = constraints.split(/\r?\n/)
         .map((line) => line.replace(/#.*/, '').trim())
         .filter(Boolean);
-    assert.ok(pins.length >= 30, 'the reviewed release graph must include direct and transitive packages');
+    assert.ok(pins.length >= 28, 'the reviewed release graph must include direct and transitive packages');
     assert.ok(pins.every((line) => /^[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+$/.test(line)),
         'every release constraint must be an exact name==version pin');
-    assert.match(constraints, /^pyinstaller==6\.21\.0$/m,
+    assert.match(constraints, /^pyinstaller==6\.22\.0$/m,
         'the ambient PyInstaller version must be part of the reviewed graph');
+    for (const retired of ['rich', 'markdown-it-py', 'Pygments', 'mdurl']) {
+        assert.doesNotMatch(constraints, new RegExp(`^${retired}==`, 'mi'),
+            `${retired} should not remain in the curl_cffi runtime graph`);
+    }
 });
 
 test('Python companion audit emits release-review JSON and fails closed', () => {
