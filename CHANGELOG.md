@@ -40,6 +40,10 @@ repository's git log.
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
   gate and is covered by a planted-component regression test.
+- **Download staging is now volume-aware and self-cleaning.** Known-size
+  preflight names a short output or staging volume; failed and cancelled jobs
+  remove private scratch data, and startup removes orphaned staging IDs while
+  preserving recovered queue work.
 
 ## [2.6.0] - 2026-08-09
 

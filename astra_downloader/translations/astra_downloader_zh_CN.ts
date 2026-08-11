@@ -951,8 +951,8 @@
       <translation>Keep intermediate files</translation>
     </message>
     <message>
-      <source>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.</source>
-      <translation>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after a successful download.</translation>
+      <source>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after the download reaches a terminal state.</source>
+      <translation>Put .part, .f### and .ytdl files beside the output and keep them for diagnosis. Off by default: they use a private temporary folder and are removed after the download reaches a terminal state.</translation>
     </message>
     <message>
       <source>Write info JSON sidecar</source>

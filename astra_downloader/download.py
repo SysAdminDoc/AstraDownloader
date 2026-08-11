@@ -1936,12 +1936,46 @@ def estimate_download_bytes(summary, *, audio_only=False, quality='best'):
     return max(muxed, separate)
 
 
-def check_download_disk_space(path, required_bytes, *, reserve_bytes=DOWNLOAD_DISK_SPACE_RESERVE_BYTES):
-    """Return a classified failure when a destination cannot hold a download.
+def _check_one_download_volume(path, required, reserve, label):
+    """Check one volume and identify the path that will consume its space."""
+    target = Path(path or '.').expanduser()
+    while not target.exists() and target != target.parent:
+        target = target.parent
+    try:
+        free = int(shutil.disk_usage(str(target)).free)
+    except (OSError, ValueError) as exc:
+        return download_error_payload(
+            'insufficient-disk-space',
+            error=(
+                f'Could not check free disk space on the {label} volume '
+                f'before downloading: {exc}'
+            ),
+        )
+    needed = required + reserve
+    if free >= needed:
+        return None
+    return download_error_payload(
+        'insufficient-disk-space',
+        error=(
+            f'Not enough free disk space on the {label} volume: the estimate '
+            f'is {_format_byte_count(required)}, only {_format_byte_count(free)} '
+            f'is free, and the download is short by '
+            f'{_format_byte_count(needed - free)}.'
+        ),
+    )
 
-    The nearest existing ancestor is used so a not-yet-created output folder
-    is checked on the same volume. Disk-usage failures are fail-closed: an
-    unknown free-space value must not turn a preflight into a false pass.
+
+def check_download_disk_space(
+    path, required_bytes, *, reserve_bytes=DOWNLOAD_DISK_SPACE_RESERVE_BYTES,
+    staging_path=None,
+):
+    """Check the output volume and, when supplied, the staging volume.
+
+    The nearest existing ancestor is used so a not-yet-created folder is
+    checked on the same volume. ``yt-dlp`` writes the estimate once to its
+    private staging path and then moves it to the output path, so both volumes
+    must have room. Disk-usage failures are fail-closed: an unknown free-space
+    value must not turn a preflight into a false pass.
     """
     try:
         required = max(0, int(required_bytes or 0))
@@ -1953,27 +1987,20 @@ def check_download_disk_space(path, required_bytes, *, reserve_bytes=DOWNLOAD_DI
         )
     if required <= 0:
         return None
-    target = Path(path or '.').expanduser()
-    while not target.exists() and target != target.parent:
-        target = target.parent
-    try:
-        free = int(shutil.disk_usage(str(target)).free)
-    except (OSError, ValueError) as exc:
-        return download_error_payload(
-            'insufficient-disk-space',
-            error=f'Could not check free disk space before downloading: {exc}',
-        )
-    needed = required + reserve
-    if free >= needed:
+    checks = [('output', path)]
+    if staging_path is not None:
+        checks.append(('staging', staging_path))
+    failures = [
+        failure for label, target in checks
+        if (failure := _check_one_download_volume(target, required, reserve, label))
+    ]
+    if not failures:
         return None
+    if len(failures) == 1:
+        return failures[0]
     return download_error_payload(
         'insufficient-disk-space',
-        error=(
-            f'Not enough free disk space: the estimate is '
-            f'{_format_byte_count(required)}, only {_format_byte_count(free)} '
-            f'is free, and the download is short by '
-            f'{_format_byte_count(needed - free)}.'
-        ),
+        error=' '.join(failure['error'] for failure in failures),
     )
 
 
@@ -2665,6 +2692,7 @@ class DownloadManagerCore:
         # that needed them.
         self._dependencies['cleanup_stale_cookie_jars']()
         self._restore_pending_queue()
+        self._sweep_orphaned_download_intermediates()
 
     def _effective_config_for_url(self, url, profile_name=None):
         """Return global settings overlaid with the URL's site profile."""
@@ -2906,10 +2934,15 @@ class DownloadManagerCore:
                     dl._cookies = None
                     dl._credentials = None
                     dl._video_password = ""
-                    continue
-                subtitle_retry = bool(getattr(dl, 'subtitle_retry', False))
-                cookies = None if subtitle_retry else dl._cookies
-                dl._cookies = None
+                    skip_launch = True
+                else:
+                    skip_launch = False
+                    subtitle_retry = bool(getattr(dl, 'subtitle_retry', False))
+                    cookies = None if subtitle_retry else dl._cookies
+                    dl._cookies = None
+            if skip_launch:
+                self._sweep_download_intermediates(dl)
+                continue
             # A stored site sign-in stands in for the extension's cookie
             # bridge on every site the extension cannot reach. Request-supplied
             # cookies still win: they are fresher than anything on disk.
@@ -2939,6 +2972,7 @@ class DownloadManagerCore:
                 )
                 dl.cookies_scope = 'youtube' if dl.cookies_file else ''
             if not subtitle_retry and (cookies or site_login_used):
+                cancelled_during_prep = False
                 with self._lock:
                     if dl.status != 'queued':
                         # Cancelled while the jar was being written. cancel()
@@ -2955,7 +2989,10 @@ class DownloadManagerCore:
                             except Exception:
                                 # reason: cancellation cleanup races with the jar writer and is idempotent
                                 pass
-                        continue
+                        cancelled_during_prep = True
+                if cancelled_during_prep:
+                    self._sweep_download_intermediates(dl)
+                    continue
                 # Only a requested cookie jar is mandatory. A stored site
                 # sign-in that cannot be exported (none saved, all expired) is
                 # not a failure — the download proceeds signed-out and, if the
@@ -2968,6 +3005,7 @@ class DownloadManagerCore:
                         apply_download_failure_classification(dl, 'cookie-jar-failed')
                         dl.mark_terminal()
                         self._persist_locked()
+                    self._sweep_download_intermediates(dl)
                     self.progress_updated.emit()
                     self.download_completed.emit(dl.id)
                     continue
@@ -2996,6 +3034,7 @@ class DownloadManagerCore:
                     dl._video_password = ""
                     self._persist_locked()
                 self._dependencies['write_persistent_log'](f"Download worker {dl.id} failed to start: {exc}")
+                self._sweep_download_intermediates(dl)
                 self.progress_updated.emit()
                 self.download_completed.emit(dl.id)
         # A worker preparation failure frees a slot synchronously.
@@ -3003,6 +3042,7 @@ class DownloadManagerCore:
             self._schedule()
 
     def _worker_entry(self, dl):
+        escaped = False
         try:
             self._run_download(dl)
         except Exception as exc:
@@ -3012,6 +3052,7 @@ class DownloadManagerCore:
                 dl.status = 'failed'
                 dl.error = 'Unexpected download worker failure. Check Astra Downloader logs.'
                 dl.mark_terminal()
+            escaped = True
             self._dependencies['write_persistent_log'](
                 f"Download worker {dl.id} escaped unexpectedly: "
                 f"{_redact_download_secrets(exc, dl)}"
@@ -3027,7 +3068,10 @@ class DownloadManagerCore:
                     dl.status = 'failed'
                     dl.error = 'Download worker stopped before reporting a result.'
                     dl.mark_terminal()
+                terminal_cleanup = escaped and dl.status in DOWNLOAD_TERMINAL_STATES
                 self._persist_locked()
+            if terminal_cleanup:
+                self._sweep_download_intermediates(dl)
             if not self._closing:
                 self._schedule()
                 # Queue drained to idle: this is the race-free window to
@@ -3942,8 +3986,9 @@ class DownloadManagerCore:
     def _record_terminal_download(self, dl):
         """Persist history and emit completion after any terminal worker path."""
         dl.mark_terminal()
-        if dl.status == "complete":
+        if dl.status in DOWNLOAD_TERMINAL_STATES:
             self._sweep_download_intermediates(dl)
+        if dl.status == "complete":
             self.total_completed += 1
         # History is the durable record of every terminal outcome, not just a
         # successful file write. The queue intentionally evicts old terminal
@@ -4861,12 +4906,17 @@ class DownloadManagerCore:
                         f"WARNING: cancelled-download termination failed: {error}"
                     )
             threading.Thread(target=terminate, daemon=True).start()
+        if not was_running:
+            # No worker will reach _record_terminal_download for a queued or
+            # pending item cancelled before launch.
+            self._sweep_download_intermediates(dl)
         self.progress_updated.emit()
         if not was_running:
             self._schedule()
         return True
 
     def cancel_all(self):
+        to_sweep = []
         with self._lock:
             # Keep the last durable unfinished snapshot intact. A new process
             # will restore those records paused/needs-auth rather than silently
@@ -4884,6 +4934,8 @@ class DownloadManagerCore:
             dl._cookies = None
             dl.mark_terminal()
             proc = dl.process
+            if proc is None and dl.id not in self._running_ids:
+                to_sweep.append(dl)
             if proc and proc.poll() is None:
                 try:
                     self._dependencies['terminate_process_tree'](proc)
@@ -4891,6 +4943,8 @@ class DownloadManagerCore:
                     self._dependencies['write_persistent_log'](
                         f"WARNING: cancel_all termination failed: {e}"
                     )
+        for dl in to_sweep:
+            self._sweep_download_intermediates(dl)
 
     def active_count(self):
         with self._lock:
@@ -5331,14 +5385,65 @@ class DownloadManagerCore:
                 'historyError': self._history_error or None,
             }
 
+    def _sweep_orphaned_download_intermediates(self):
+        """Remove staging directories whose ids are no longer in the queue.
+
+        A process killed during a transfer cannot reach the terminal cleanup
+        below. On the next startup, retain only directories for records that
+        were durably restored; everything else is app-owned scratch. Resolved
+        path checks keep a junction or symlink from turning cleanup into a
+        recursive delete outside the staging root.
+        """
+        if self.config.get("KeepIntermediateFiles", False):
+            return
+        try:
+            root = (
+                Path(self._dependencies['INSTALL_DIR']())
+                / DOWNLOAD_INTERMEDIATE_DIRNAME
+            ).resolve()
+            if not root.is_dir():
+                return
+            protected = {
+                self._download_intermediate_dir(download).resolve()
+                for download in self.downloads.values()
+            }
+            for candidate in root.iterdir():
+                try:
+                    if candidate.is_symlink():
+                        # Do not follow reparse points or links during a
+                        # startup sweep; a human can remove an ambiguous link
+                        # after reviewing the log.
+                        continue
+                    resolved = candidate.resolve()
+                    if resolved.parent != root or resolved in protected:
+                        continue
+                    if not candidate.is_dir():
+                        continue
+                    shutil.rmtree(candidate)
+                    self._dependencies['write_persistent_log'](
+                        f"Removed orphaned download staging directory: {candidate}"
+                    )
+                except (OSError, RuntimeError, ValueError) as error:
+                    # reason: orphan cleanup is best effort and must not keep
+                    # the downloader from starting after a locked stale job
+                    self._dependencies['write_persistent_log'](
+                        f"WARNING: could not remove orphaned download staging "
+                        f"directory {candidate}: {error}"
+                    )
+        except (OSError, RuntimeError, ValueError) as error:
+            # reason: the staging root may not exist or may be unavailable
+            self._dependencies['write_persistent_log'](
+                f"WARNING: could not scan download staging directories: {error}"
+            )
+
     def _sweep_download_intermediates(self, dl):
-        """Leave one file behind for one finished download.
+        """Remove one download's staging and legacy intermediate files.
 
         New runs stage those files in a stable, per-download directory under
-        the app install root. A successful run can remove that whole staging
-        directory; a failed run must leave it because a retry or a recovered
-        queue item resumes from its `.part`. The legacy destination sweep stays
-        in place for intermediates created by older versions of the app.
+        the app install root. Every terminal state sweeps that directory unless
+        the user explicitly enabled ``KeepIntermediateFiles`` for diagnosis.
+        The legacy destination sweep stays in place for intermediates created
+        by older versions of the app.
         """
         if self.config.get("KeepIntermediateFiles", False):
             return
