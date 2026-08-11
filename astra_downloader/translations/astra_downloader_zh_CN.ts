@@ -3,6 +3,46 @@
   <context>
     <name>AstraDownloader</name>
     <message>
+      <source>Format</source>
+      <translation>Format</translation>
+    </message>
+    <message>
+      <source>Quality</source>
+      <translation>Quality</translation>
+    </message>
+    <message>
+      <source>Duration</source>
+      <translation>Duration</translation>
+    </message>
+    <message>
+      <source>Saved</source>
+      <translation>Saved</translation>
+    </message>
+    <message>
+      <source>{count} {noun} rejected for {reasons} different reasons. First: {first}</source>
+      <translation>{count} {noun} rejected for {reasons} different reasons. First: {first}</translation>
+    </message>
+    <message>
+      <source>{label}: {value}</source>
+      <translation>{label}: {value}</translation>
+    </message>
+    <message>
+      <source>●  {status}</source>
+      <translation>●  {status}</translation>
+    </message>
+    <message>
+      <source>link</source>
+      <translation>link</translation>
+    </message>
+    <message>
+      <source>links</source>
+      <translation>links</translation>
+    </message>
+    <message>
+      <source>{count} {noun} rejected: {reason}</source>
+      <translation>{count} {noun} rejected: {reason}</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Extension server</translation>
     </message>
@@ -119,6 +159,10 @@
       <translation>Pause intake</translation>
     </message>
     <message>
+      <source>Downloads {kind} in {languages}{format}, without the video. Change this under Settings, Post-processing.</source>
+      <translation>Downloads {kind} in {languages}{format}, without the video. Change this under Settings, Post-processing.</translation>
+    </message>
+    <message>
       <source>Clear history</source>
       <translation>Clear history</translation>
     </message>
@@ -173,6 +217,10 @@
     <message>
       <source>Import cookies.txt</source>
       <translation>Import cookies.txt</translation>
+    </message>
+    <message>
+      <source>{signed_in} {site} — {count} {stored}.</source>
+      <translation>{signed_in} {site} — {count} {stored}.</translation>
     </message>
     <message>
       <source>The subscription was restored.</source>
@@ -323,12 +371,48 @@
       <translation>Undo defaults</translation>
     </message>
     <message>
+      <source>{label} could not be read and was set aside as {backup}. Restore puts the original back and reloads it.</source>
+      <translation>{label} could not be read and was set aside as {backup}. Restore puts the original back and reloads it.</translation>
+    </message>
+    <message>
       <source>Settings from before Restore defaults were restored.</source>
       <translation>Settings from before Restore defaults were restored.</translation>
     </message>
     <message>
+      <source>Exported {settings} settings and {subscriptions} subscriptions.</source>
+      <translation>Exported {settings} settings and {subscriptions} subscriptions.</translation>
+    </message>
+    <message>
+      <source>Imported {count} changed settings</source>
+      <translation>Imported {count} changed settings</translation>
+    </message>
+    <message>
+      <source>Download history cleared. Downloaded files were not removed.</source>
+      <translation>Download history cleared. Downloaded files were not removed.</translation>
+    </message>
+    <message>
+      <source>Restored {count} download history {entry_label}.</source>
+      <translation>Restored {count} download history {entry_label}.</translation>
+    </message>
+    <message>
+      <source>Link copied.</source>
+      <translation>Link copied.</translation>
+    </message>
+    <message>
+      <source>Error copied.</source>
+      <translation>Error copied.</translation>
+    </message>
+    <message>
+      <source>Link ready. Check the options, then choose Download.</source>
+      <translation>Link ready. Check the options, then choose Download.</translation>
+    </message>
+    <message>
       <source>Unsaved changes</source>
       <translation>Unsaved changes</translation>
+    </message>
+    <message>
+      <source>yt-dlp {yt}    •    ffmpeg {ffmpeg}</source>
+      <translation>yt-dlp {yt}    •    ffmpeg {ffmpeg}</translation>
     </message>
     <message>
       <source>Checking yt-dlp. The verified current copy stays available until the update passes.</source>
@@ -369,6 +453,130 @@
     <message>
       <source>Companion pages</source>
       <translation>Companion pages</translation>
+    </message>
+    <message>
+      <source>Show Astra Downloader</source>
+      <translation>Show Astra Downloader</translation>
+    </message>
+    <message>
+      <source>Stop server</source>
+      <translation>Stop server</translation>
+    </message>
+    <message>
+      <source>Open Downloads Folder</source>
+      <translation>Open Downloads Folder</translation>
+    </message>
+    <message>
+      <source>Quit Astra Downloader</source>
+      <translation>Quit Astra Downloader</translation>
+    </message>
+    <message>
+      <source>{app} - {status}</source>
+      <translation>{app} - {status}</translation>
+    </message>
+    <message>
+      <source>MP3</source>
+      <translation>MP3</translation>
+    </message>
+    <message>
+      <source>M4A</source>
+      <translation>M4A</translation>
+    </message>
+    <message>
+      <source>Opus</source>
+      <translation>Opus</translation>
+    </message>
+    <message>
+      <source>FLAC</source>
+      <translation>FLAC</translation>
+    </message>
+    <message>
+      <source>WAV</source>
+      <translation>WAV</translation>
+    </message>
+    <message>
+      <source>MP4</source>
+      <translation>MP4</translation>
+    </message>
+    <message>
+      <source>MKV</source>
+      <translation>MKV</translation>
+    </message>
+    <message>
+      <source>WebM</source>
+      <translation>WebM</translation>
+    </message>
+    <message>
+      <source>Failed</source>
+      <translation>Failed</translation>
+    </message>
+    <message>
+      <source>Cancelled</source>
+      <translation>Cancelled</translation>
+    </message>
+    <message>
+      <source>Nothing downloaded</source>
+      <translation>Nothing downloaded</translation>
+    </message>
+    <message>
+      <source>All subscriptions</source>
+      <translation>All subscriptions</translation>
+    </message>
+    <message>
+      <source>Disabled</source>
+      <translation>Disabled</translation>
+    </message>
+    <message>
+      <source>Needs attention</source>
+      <translation>Needs attention</translation>
+    </message>
+    <message>
+      <source>All sign-ins</source>
+      <translation>All sign-ins</translation>
+    </message>
+    <message>
+      <source>Stored and valid</source>
+      <translation>Stored and valid</translation>
+    </message>
+    <message>
+      <source>Expired</source>
+      <translation>Expired</translation>
+    </message>
+    <message>
+      <source>Missing on disk</source>
+      <translation>Missing on disk</translation>
+    </message>
+    <message>
+      <source>Creator, else auto-generated</source>
+      <translation>Creator, else auto-generated</translation>
+    </message>
+    <message>
+      <source>Creator only</source>
+      <translation>Creator only</translation>
+    </message>
+    <message>
+      <source>Auto-generated only</source>
+      <translation>Auto-generated only</translation>
+    </message>
+    <message>
+      <source>Same as source</source>
+      <translation>Same as source</translation>
+    </message>
+    <message>
+      <source>SRT</source>
+      <translation>SRT</translation>
+    </message>
+    <message>
+      <source>WebVTT</source>
+      <translation>WebVTT</translation>
+    </message>
+    <message>
+      <source>ASS</source>
+      <translation>ASS</translation>
+    </message>
+    <message>
+      <source>LRC</source>
+      <translation>LRC</translation>
     </message>
     <message>
       <source>Missing</source>
@@ -579,12 +787,32 @@
       <translation>Pause starting pending downloads. Downloads already running will continue.</translation>
     </message>
     <message>
+      <source>creator subtitles, falling back to auto-generated</source>
+      <translation>creator subtitles, falling back to auto-generated</translation>
+    </message>
+    <message>
+      <source>as {format}</source>
+      <translation>as {format}</translation>
+    </message>
+    <message>
       <source>No profile (one-off)</source>
       <translation>No profile (one-off)</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
       <translation>No site profile for this download.</translation>
+    </message>
+    <message>
+      <source>Confirm your download folder before adding a download.</source>
+      <translation>Confirm your download folder before adding a download.</translation>
+    </message>
+    <message>
+      <source>Paste a video link first.</source>
+      <translation>Paste a video link first.</translation>
+    </message>
+    <message>
+      <source>Save this download to</source>
+      <translation>Save this download to</translation>
     </message>
     <message>
       <source>History</source>
@@ -605,6 +833,10 @@
     <message>
       <source>Search download history</source>
       <translation>Search download history</translation>
+    </message>
+    <message>
+      <source>Search title or filename</source>
+      <translation>Search title or filename</translation>
     </message>
     <message>
       <source>History status</source>
@@ -699,6 +931,10 @@
       <translation>Subscriptions are unavailable in this session.</translation>
     </message>
     <message>
+      <source>{total} configured · {archived} archived · {queued} queued</source>
+      <translation>{total} configured · {archived} archived · {queued} queued</translation>
+    </message>
+    <message>
       <source>Scan now</source>
       <translation>Scan now</translation>
     </message>
@@ -783,8 +1019,16 @@
       <translation>Test</translation>
     </message>
     <message>
+      <source>{signed_in} {site} — {stored}</source>
+      <translation>{signed_in} {site} — {stored}</translation>
+    </message>
+    <message>
       <source>Reading cookies from the browser…</source>
       <translation>Reading cookies from the browser…</translation>
+    </message>
+    <message>
+      <source>Select the exported cookies.txt</source>
+      <translation>Select the exported cookies.txt</translation>
     </message>
     <message>
       <source>The sign-in was restored.</source>
@@ -793,6 +1037,10 @@
     <message>
       <source>Testing the stored sign-in…</source>
       <translation>Testing the stored sign-in…</translation>
+    </message>
+    <message>
+      <source>Added {title}. The first scan is scheduled now.</source>
+      <translation>Added {title}. The first scan is scheduled now.</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -901,6 +1149,10 @@
     <message>
       <source>Leave blank to use the video folder.</source>
       <translation>Leave blank to use the video folder.</translation>
+    </message>
+    <message>
+      <source>Same as video folder</source>
+      <translation>Same as video folder</translation>
     </message>
     <message>
       <source>Filename template</source>
@@ -1099,6 +1351,10 @@
       <translation>Optional, such as 500K or 2M.</translation>
     </message>
     <message>
+      <source>No limit</source>
+      <translation>No limit</translation>
+    </message>
+    <message>
       <source>Throttle floor</source>
       <translation>Throttle floor</translation>
     </message>
@@ -1195,10 +1451,6 @@
       <translation>Max file size in megabytes</translation>
     </message>
     <message>
-      <source>No limit</source>
-      <translation>No limit</translation>
-    </message>
-    <message>
       <source>Proxy</source>
       <translation>Proxy</translation>
     </message>
@@ -1229,6 +1481,18 @@
     <message>
       <source>Auto</source>
       <translation>Auto</translation>
+    </message>
+    <message>
+      <source>Deno</source>
+      <translation>Deno</translation>
+    </message>
+    <message>
+      <source>Node 22+</source>
+      <translation>Node 22+</translation>
+    </message>
+    <message>
+      <source>QuickJS</source>
+      <translation>QuickJS</translation>
     </message>
     <message>
       <source>yt-dlp update channel</source>
@@ -1355,12 +1619,28 @@
       <translation>Restore the settings from before Restore defaults was used.</translation>
     </message>
     <message>
+      <source>Your server token was regenerated, so the browser extension needs pairing again.</source>
+      <translation>Your server token was regenerated, so the browser extension needs pairing again.</translation>
+    </message>
+    <message>
       <source>Starting</source>
       <translation>Starting</translation>
     </message>
     <message>
       <source>Cancel</source>
       <translation>Cancel</translation>
+    </message>
+    <message>
+      <source>{total} / {limit} jobs</source>
+      <translation>{total} / {limit} jobs</translation>
+    </message>
+    <message>
+      <source>Export Settings</source>
+      <translation>Export Settings</translation>
+    </message>
+    <message>
+      <source>Import Settings</source>
+      <translation>Import Settings</translation>
     </message>
     <message>
       <source>Could not save the imported settings. Check disk space and permissions, then retry.</source>
@@ -1375,8 +1655,48 @@
       <translation>Settings import undone.</translation>
     </message>
     <message>
+      <source>No filtered history rows are available to export.</source>
+      <translation>No filtered history rows are available to export.</translation>
+    </message>
+    <message>
+      <source>Export Download History</source>
+      <translation>Export Download History</translation>
+    </message>
+    <message>
+      <source>Exported {count} filtered history row(s) to {path}</source>
+      <translation>Exported {count} filtered history row(s) to {path}</translation>
+    </message>
+    <message>
       <source>Loading history…</source>
       <translation>Loading history…</translation>
+    </message>
+    <message>
+      <source>Download history is already clear.</source>
+      <translation>Download history is already clear.</translation>
+    </message>
+    <message>
+      <source>Could not prepare the history undo snapshot. The existing history was preserved; check disk permissions and retry.</source>
+      <translation>Could not prepare the history undo snapshot. The existing history was preserved; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>Could not clear download history. The existing history was preserved; check disk permissions and retry.</source>
+      <translation>Could not clear download history. The existing history was preserved; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>No cleared history entries to restore.</source>
+      <translation>No cleared history entries to restore.</translation>
+    </message>
+    <message>
+      <source>Could not restore download history. The Undo snapshot is still available; check disk permissions and retry.</source>
+      <translation>Could not restore download history. The Undo snapshot is still available; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>Retry queued: {title}</source>
+      <translation>Retry queued: {title}</translation>
+    </message>
+    <message>
+      <source>Download resumed.</source>
+      <translation>Download resumed.</translation>
     </message>
     <message>
       <source>Play</source>
@@ -1399,12 +1719,24 @@
       <translation>Download again</translation>
     </message>
     <message>
+      <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
+      <translation>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</translation>
+    </message>
+    <message>
       <source>Install yt-dlp before checking for updates.</source>
       <translation>Install yt-dlp before checking for updates.</translation>
     </message>
     <message>
       <source>Wait for active downloads to finish before updating yt-dlp.</source>
       <translation>Wait for active downloads to finish before updating yt-dlp.</translation>
+    </message>
+    <message>
+      <source>Checking…</source>
+      <translation>Checking…</translation>
+    </message>
+    <message>
+      <source>Check yt-dlp Update</source>
+      <translation>Check yt-dlp Update</translation>
     </message>
     <message>
       <source>Setup is already running.</source>
@@ -1467,8 +1799,8 @@
       <translation>Settings saved and server restarted.</translation>
     </message>
     <message>
-      <source>Saved</source>
-      <translation>Saved</translation>
+      <source>Select Folder</source>
+      <translation>Select Folder</translation>
     </message>
     <message>
       <source>Best</source>
@@ -1479,12 +1811,32 @@
       <translation>Looking up available formats…</translation>
     </message>
     <message>
+      <source>Copied video link staged. Review the options, then choose Add to queue.</source>
+      <translation>Copied video link staged. Review the options, then choose Add to queue.</translation>
+    </message>
+    <message>
+      <source>Endpoint copied.</source>
+      <translation>Endpoint copied.</translation>
+    </message>
+    <message>
       <source>Copied token cleared from the clipboard.</source>
       <translation>Copied token cleared from the clipboard.</translation>
     </message>
     <message>
+      <source>Review Diagnostics</source>
+      <translation>Review Diagnostics</translation>
+    </message>
+    <message>
       <source>Redacted diagnostics preview</source>
       <translation>Redacted diagnostics preview</translation>
+    </message>
+    <message>
+      <source>Save diagnostics</source>
+      <translation>Save diagnostics</translation>
+    </message>
+    <message>
+      <source>Copy to Clipboard</source>
+      <translation>Copy to Clipboard</translation>
     </message>
     <message>
       <source>Installing required download tools...</source>
@@ -1497,6 +1849,14 @@
     <message>
       <source>Status</source>
       <translation>Status</translation>
+    </message>
+    <message>
+      <source>{name} {page}</source>
+      <translation>{name} {page}</translation>
+    </message>
+    <message>
+      <source>{open_label} {name}</source>
+      <translation>{open_label} {name}</translation>
     </message>
     <message>
       <source>Unavailable</source>
@@ -1535,6 +1895,22 @@
       <translation>Video passwords are available for a single link only.</translation>
     </message>
     <message>
+      <source>Clip ranges apply to a single link. Remove the extra links or clear the clip range.</source>
+      <translation>Clip ranges apply to a single link. Remove the extra links or clear the clip range.</translation>
+    </message>
+    <message>
+      <source>Queued {id}{suffix}.</source>
+      <translation>Queued {id}{suffix}.</translation>
+    </message>
+    <message>
+      <source>Queued {count} downloads.</source>
+      <translation>Queued {count} downloads.</translation>
+    </message>
+    <message>
+      <source>{label}: {path}</source>
+      <translation>{label}: {path}</translation>
+    </message>
+    <message>
       <source>Subscriptions unavailable</source>
       <translation>Subscriptions unavailable</translation>
     </message>
@@ -1551,12 +1927,24 @@
       <translation>Add a YouTube channel or playlist above. New uploads will be queued on its interval.</translation>
     </message>
     <message>
+      <source>{label} {title}</source>
+      <translation>{label} {title}</translation>
+    </message>
+    <message>
+      <source>Every {minutes} min · next scan {next_scan}</source>
+      <translation>Every {minutes} min · next scan {next_scan}</translation>
+    </message>
+    <message>
       <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
       <translation>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</translation>
     </message>
     <message>
       <source>Read from</source>
       <translation>Read from</translation>
+    </message>
+    <message>
+      <source>{browser} — {warning}</source>
+      <translation>{browser} — {warning}</translation>
     </message>
     <message>
       <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
@@ -1583,12 +1971,28 @@
       <translation>cookies stored</translation>
     </message>
     <message>
+      <source>{count} {discarded}</source>
+      <translation>{count} {discarded}</translation>
+    </message>
+    <message>
+      <source>That cookie file is too large to be a browser export.</source>
+      <translation>That cookie file is too large to be a browser export.</translation>
+    </message>
+    <message>
       <source>No sign-in removal is available to undo.</source>
       <translation>No sign-in removal is available to undo.</translation>
     </message>
     <message>
+      <source>{label}: {error}</source>
+      <translation>{label}: {error}</translation>
+    </message>
+    <message>
       <source>Test passed</source>
       <translation>Test passed</translation>
+    </message>
+    <message>
+      <source>Start the local companion before adding a subscription.</source>
+      <translation>Start the local companion before adding a subscription.</translation>
     </message>
     <message>
       <source>Subscription scan started. This row will update when it finishes.</source>
@@ -1597,6 +2001,30 @@
     <message>
       <source>No subscription removal is available to undo.</source>
       <translation>No subscription removal is available to undo.</translation>
+    </message>
+    <message>
+      <source>{label}: {language}</source>
+      <translation>{label}: {language}</translation>
+    </message>
+    <message>
+      <source>{label} could not be restored. Its backup is at {backup}.</source>
+      <translation>{label} could not be restored. Its backup is at {backup}.</translation>
+    </message>
+    <message>
+      <source>Destination confirmed: {folder}. Setup can continue in the background.</source>
+      <translation>Destination confirmed: {folder}. Setup can continue in the background.</translation>
+    </message>
+    <message>
+      <source>Confirm a folder before your first download.</source>
+      <translation>Confirm a folder before your first download.</translation>
+    </message>
+    <message>
+      <source>The download folder validator is unavailable. Check the log and retry.</source>
+      <translation>The download folder validator is unavailable. Check the log and retry.</translation>
+    </message>
+    <message>
+      <source>Could not save the download folder. Check disk permissions and retry.</source>
+      <translation>Could not save the download folder. Check disk permissions and retry.</translation>
     </message>
     <message>
       <source>Server status indicator: Starting</source>
@@ -1625,6 +2053,18 @@
     <message>
       <source>Running</source>
       <translation>Running</translation>
+    </message>
+    <message>
+      <source>Next: {action}</source>
+      <translation>Next: {action}</translation>
+    </message>
+    <message>
+      <source>ETA {eta}</source>
+      <translation>ETA {eta}</translation>
+    </message>
+    <message>
+      <source>Preparing download</source>
+      <translation>Preparing download</translation>
     </message>
     <message>
       <source>Up</source>
@@ -1675,8 +2115,24 @@
       <translation>The Undo record is still available; clear it before closing.</translation>
     </message>
     <message>
+      <source>{count} stored sign-ins are listed by site only — add them again after importing.</source>
+      <translation>{count} stored sign-ins are listed by site only — add them again after importing.</translation>
+    </message>
+    <message>
       <source>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</source>
       <translation>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>{added} subscriptions added, {skipped} already present</source>
+      <translation>{added} subscriptions added, {skipped} already present</translation>
+    </message>
+    <message>
+      <source>sign-ins still needed for {sites}</source>
+      <translation>sign-ins still needed for {sites}</translation>
+    </message>
+    <message>
+      <source>not carried: {settings}</source>
+      <translation>not carried: {settings}</translation>
     </message>
     <message>
       <source>The import stopped before all subscriptions were added.</source>
@@ -1701,6 +2157,14 @@
     <message>
       <source>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</source>
       <translation>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</translation>
+    </message>
+    <message>
+      <source>{start}–{end} of {filtered} filtered · {total} retained</source>
+      <translation>{start}–{end} of {filtered} filtered · {total} retained</translation>
+    </message>
+    <message>
+      <source>0 of {filtered} filtered · {total} retained</source>
+      <translation>0 of {filtered} filtered · {total} retained</translation>
     </message>
     <message>
       <source>No downloads yet</source>
@@ -1731,6 +2195,10 @@
       <translation>Retry</translation>
     </message>
     <message>
+      <source>yt-dlp {version} is ready.</source>
+      <translation>yt-dlp {version} is ready.</translation>
+    </message>
+    <message>
       <source>Preview unavailable until the template is valid.</source>
       <translation>Preview unavailable until the template is valid.</translation>
     </message>
@@ -1749,6 +2217,14 @@
     <message>
       <source>Settings saved.</source>
       <translation>Settings saved.</translation>
+    </message>
+    <message>
+      <source>{quality}p</source>
+      <translation>{quality}p</translation>
+    </message>
+    <message>
+      <source>Video link staged. Open Downloads to review it before adding it to the queue.</source>
+      <translation>Video link staged. Open Downloads to review it before adding it to the queue.</translation>
     </message>
     <message>
       <source>Hide</source>
@@ -1783,12 +2259,68 @@
       <translation>Installing yt-dlp...</translation>
     </message>
     <message>
+      <source>ffmpeg refresh complete.</source>
+      <translation>ffmpeg refresh complete.</translation>
+    </message>
+    <message>
+      <source>Setup complete.</source>
+      <translation>Setup complete.</translation>
+    </message>
+    <message>
+      <source>ffmpeg refresh failed. The previous copy is still installed.</source>
+      <translation>ffmpeg refresh failed. The previous copy is still installed.</translation>
+    </message>
+    <message>
+      <source>Setup failed. Check the log for details.</source>
+      <translation>Setup failed. Check the log for details.</translation>
+    </message>
+    <message>
       <source>{label} status indicator: {value}</source>
       <translation>{label} status indicator: {value}</translation>
     </message>
     <message>
       <source>{label} status: {value}</source>
       <translation>{label} status: {value}</translation>
+    </message>
+    <message>
+      <source>mp3</source>
+      <translation>mp3</translation>
+    </message>
+    <message>
+      <source>m4a</source>
+      <translation>m4a</translation>
+    </message>
+    <message>
+      <source>opus</source>
+      <translation>opus</translation>
+    </message>
+    <message>
+      <source>flac</source>
+      <translation>flac</translation>
+    </message>
+    <message>
+      <source>wav</source>
+      <translation>wav</translation>
+    </message>
+    <message>
+      <source>mp4</source>
+      <translation>mp4</translation>
+    </message>
+    <message>
+      <source>mkv</source>
+      <translation>mkv</translation>
+    </message>
+    <message>
+      <source>webm</source>
+      <translation>webm</translation>
+    </message>
+    <message>
+      <source>—</source>
+      <translation>—</translation>
+    </message>
+    <message>
+      <source>{target} (unavailable)</source>
+      <translation>{target} (unavailable)</translation>
     </message>
     <message>
       <source>Repair needed</source>
@@ -1807,12 +2339,28 @@
       <translation>Required</translation>
     </message>
     <message>
+      <source>creator subtitles only</source>
+      <translation>creator subtitles only</translation>
+    </message>
+    <message>
+      <source>auto-generated subtitles only</source>
+      <translation>auto-generated subtitles only</translation>
+    </message>
+    <message>
+      <source>Saving to {path}.</source>
+      <translation>Saving to {path}.</translation>
+    </message>
+    <message>
       <source>No subscriptions match these filters</source>
       <translation>No subscriptions match these filters</translation>
     </message>
     <message>
       <source>Try a different search or choose All subscriptions.</source>
       <translation>Try a different search or choose All subscriptions.</translation>
+    </message>
+    <message>
+      <source>Could not read stored sign-ins: {error}</source>
+      <translation>Could not read stored sign-ins: {error}</translation>
     </message>
     <message>
       <source>No stored sign-ins</source>
@@ -1839,12 +2387,20 @@
       <translation>username/password</translation>
     </message>
     <message>
-      <source>cookies for other sites were discarded.</source>
-      <translation>cookies for other sites were discarded.</translation>
+      <source>{count} {auth} · {from_label} {source} · {state}</source>
+      <translation>{count} {auth} · {from_label} {source} · {state}</translation>
     </message>
     <message>
       <source>username/password stored securely.</source>
       <translation>username/password stored securely.</translation>
+    </message>
+    <message>
+      <source>Could not read that file: {error}</source>
+      <translation>Could not read that file: {error}</translation>
+    </message>
+    <message>
+      <source>{removed} {site}.</source>
+      <translation>{removed} {site}.</translation>
     </message>
     <message>
       <source>Could not restore the stored sign-in.</source>
@@ -1887,10 +2443,6 @@
       <translation>Extension server status indicator: Online</translation>
     </message>
     <message>
-      <source>Stop server</source>
-      <translation>Stop server</translation>
-    </message>
-    <message>
       <source>Local only · start before downloading</source>
       <translation>Local only · start before downloading</translation>
     </message>
@@ -1927,12 +2479,28 @@
       <translation>Paste a link</translation>
     </message>
     <message>
+      <source>Download complete</source>
+      <translation>Download complete</translation>
+    </message>
+    <message>
       <source>SponsorBlock categories</source>
       <translation>SponsorBlock categories</translation>
     </message>
     <message>
       <source>Settings restored and server restarted.</source>
       <translation>Settings restored and server restarted.</translation>
+    </message>
+    <message>
+      <source>Could not write the bundle: {error}</source>
+      <translation>Could not write the bundle: {error}</translation>
+    </message>
+    <message>
+      <source>Could not read that bundle: {error}</source>
+      <translation>Could not read that bundle: {error}</translation>
+    </message>
+    <message>
+      <source>Could not export download history: {error}</source>
+      <translation>Could not export download history: {error}</translation>
     </message>
     <message>
       <source>History could not be read</source>
@@ -1947,12 +2515,24 @@
       <translation>Open diagnostics</translation>
     </message>
     <message>
+      <source>entry</source>
+      <translation>entry</translation>
+    </message>
+    <message>
+      <source>entries</source>
+      <translation>entries</translation>
+    </message>
+    <message>
       <source>Settings status: {message}</source>
       <translation>Settings status: {message}</translation>
     </message>
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>This link tops out at {height}p.</translation>
+    </message>
+    <message>
+      <source>Still running in the tray so Astra Deck can keep sending downloads.</source>
+      <translation>Still running in the tray so Astra Deck can keep sending downloads.</translation>
     </message>
     <message>
       <source>Installing ffmpeg...</source>
@@ -1991,6 +2571,10 @@
       <translation>likely unreadable on Windows 127+</translation>
     </message>
     <message>
+      <source>cookie session expired</source>
+      <translation>cookie session expired</translation>
+    </message>
+    <message>
       <source>Missing on disk — import it again</source>
       <translation>Missing on disk — import it again</translation>
     </message>
@@ -2001,6 +2585,10 @@
     <message>
       <source>cookies</source>
       <translation>cookies</translation>
+    </message>
+    <message>
+      <source>cookies for other sites were discarded.</source>
+      <translation>cookies for other sites were discarded.</translation>
     </message>
     <message>
       <source>Test failed</source>
@@ -2035,10 +2623,6 @@
       <translation>No current message</translation>
     </message>
     <message>
-      <source>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</source>
-      <translation>Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.</translation>
-    </message>
-    <message>
       <source>Reserved Windows name in preview: {name}.</source>
       <translation>Reserved Windows name in preview: {name}.</translation>
     </message>
@@ -2059,8 +2643,8 @@
       <translation>Preparing transcription model...</translation>
     </message>
     <message>
-      <source>cookie session expired</source>
-      <translation>cookie session expired</translation>
+      <source>{label} {date}</source>
+      <translation>{label} {date}</translation>
     </message>
     <message>
       <source>Session cookies — valid until the site signs you out</source>
@@ -2097,6 +2681,10 @@
     <message>
       <source>Finishing setup...</source>
       <translation>Finishing setup...</translation>
+    </message>
+    <message>
+      <source>for an accurate ffmpeg clip</source>
+      <translation>for an accurate ffmpeg clip</translation>
     </message>
     <message>
       <source>unknown</source>

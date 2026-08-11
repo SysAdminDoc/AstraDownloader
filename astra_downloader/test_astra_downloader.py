@@ -13436,9 +13436,24 @@ class TranslationCoverageTests(unittest.TestCase):
             "Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.",
             "Review the redacted support payload before copying it.",
             "{label} status indicator: {value}",
+            "Format",
+            "Quality",
+            "Duration",
+            "Search title or filename",
+            "Show Astra Downloader",
+            "Review Diagnostics",
+            "{total} configured · {archived} archived · {queued} queued",
+            "Added {title}. The first scan is scheduled now.",
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, strings)
+        for data in (
+            "YYYY-MM-DD",
+            "%(title)s.%(ext)s",
+            "https://proxy.example:8080",
+        ):
+            with self.subTest(data=data):
+                self.assertNotIn(data, strings)
 
     def test_an_undeclared_string_is_not_counted_as_translated(self):
         # The measurement itself: the builder writes a missing entry out as

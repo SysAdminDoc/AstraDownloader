@@ -1293,6 +1293,205 @@ CATALOGS = {
 }
 
 
+# These entries were added when the extractor began following Qt setters and
+# constant picker loops. Keep the German catalogue complete so the advertised
+# locale remains a genuinely translated build rather than an English fallback.
+CATALOGS["de"].update({
+    "Format": "Format",
+    "Quality": "Qualität",
+    "Duration": "Dauer",
+    "{count} {noun} rejected for {reasons} different reasons. First: {first}":
+        "{count} {noun} aus {reasons} verschiedenen Gründen abgelehnt. Zuerst: {first}",
+    "{label}: {value}": "{label}: {value}",
+    "●  {status}": "●  {status}",
+    "link": "Link",
+    "links": "Links",
+    "{count} {noun} rejected: {reason}":
+        "{count} {noun} abgelehnt: {reason}",
+    "Downloads {kind} in {languages}{format}, without the video. Change this under Settings, Post-processing.":
+        "Lädt {kind} in {languages}{format} ohne Video herunter. Ändern Sie das unter Einstellungen, Nachbearbeitung.",
+    "{signed_in} {site} — {count} {stored}.":
+        "{signed_in} {site} — {count} {stored}.",
+    "{label} could not be read and was set aside as {backup}. Restore puts the original back and reloads it.":
+        "{label} konnte nicht gelesen werden und wurde als {backup} beiseitegelegt. Die Wiederherstellung legt das Original zurück und lädt es neu.",
+    "Exported {settings} settings and {subscriptions} subscriptions.":
+        "{settings} Einstellungen und {subscriptions} Abonnements exportiert.",
+    "Imported {count} changed settings":
+        "{count} geänderte Einstellungen importiert",
+    "Download history cleared. Downloaded files were not removed.":
+        "Downloadverlauf gelöscht. Heruntergeladene Dateien wurden nicht entfernt.",
+    "Restored {count} download history {entry_label}.":
+        "{count} Einträge des Downloadverlaufs wiederhergestellt.",
+    "entry": "Eintrag",
+    "entries": "Einträge",
+    "Link copied.": "Link kopiert.",
+    "Error copied.": "Fehler kopiert.",
+    "Link ready. Check the options, then choose Download.":
+        "Link bereit. Prüfen Sie die Optionen und wählen Sie dann Herunterladen.",
+    "yt-dlp {yt}    •    ffmpeg {ffmpeg}":
+        "yt-dlp {yt}    •    ffmpeg {ffmpeg}",
+    "Show Astra Downloader": "Astra Downloader anzeigen",
+    "Open Downloads Folder": "Downloads-Ordner öffnen",
+    "Quit Astra Downloader": "Astra Downloader beenden",
+    "{app} - {status}": "{app} – {status}",
+    "MP3": "MP3",
+    "M4A": "M4A",
+    "Opus": "Opus",
+    "FLAC": "FLAC",
+    "WAV": "WAV",
+    "MP4": "MP4",
+    "MKV": "MKV",
+    "WebM": "WebM",
+    "Failed": "Fehlgeschlagen",
+    "Cancelled": "Abgebrochen",
+    "Nothing downloaded": "Nichts heruntergeladen",
+    "All subscriptions": "Alle Abonnements",
+    "Disabled": "Deaktiviert",
+    "Needs attention": "Aufmerksamkeit erforderlich",
+    "All sign-ins": "Alle Anmeldungen",
+    "Stored and valid": "Gespeichert und gültig",
+    "Expired": "Abgelaufen",
+    "Missing on disk": "Auf Datenträger nicht vorhanden",
+    "Creator, else auto-generated": "Vom Ersteller, sonst automatisch erzeugt",
+    "Creator only": "Nur vom Ersteller",
+    "Auto-generated only": "Nur automatisch erzeugt",
+    "Same as source": "Wie Quelle",
+    "SRT": "SRT",
+    "WebVTT": "WebVTT",
+    "ASS": "ASS",
+    "LRC": "LRC",
+    "creator subtitles, falling back to auto-generated":
+        "Untertitel vom Ersteller, sonst automatisch erzeugte",
+    "as {format}": "als {format}",
+    "Confirm your download folder before adding a download.":
+        "Bestätigen Sie den Downloadordner, bevor Sie einen Download hinzufügen.",
+    "Paste a video link first.": "Fügen Sie zuerst einen Videolink ein.",
+    "Save this download to": "Diesen Download speichern unter",
+    "Search title or filename": "Titel oder Dateiname suchen",
+    "{total} configured · {archived} archived · {queued} queued":
+        "{total} konfiguriert · {archived} archiviert · {queued} eingereiht",
+    "{signed_in} {site} — {stored}": "{signed_in} {site} — {stored}",
+    "Select the exported cookies.txt": "Exportierte cookies.txt auswählen",
+    "Added {title}. The first scan is scheduled now.":
+        "{title} hinzugefügt. Der erste Scan ist jetzt geplant.",
+    "Same as video folder": "Wie Videoordner",
+    "Deno": "Deno",
+    "Node 22+": "Node 22+",
+    "QuickJS": "QuickJS",
+    "Your server token was regenerated, so the browser extension needs pairing again.":
+        "Ihr Servertoken wurde neu erzeugt. Die Browsererweiterung muss erneut gekoppelt werden.",
+    "{total} / {limit} jobs": "{total} / {limit} Aufträge",
+    "Export Settings": "Einstellungen exportieren",
+    "Import Settings": "Einstellungen importieren",
+    "No filtered history rows are available to export.":
+        "Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.",
+    "Export Download History": "Downloadverlauf exportieren",
+    "Exported {count} filtered history row(s) to {path}":
+        "{count} gefilterte Verlaufseinträge nach {path} exportiert",
+    "Download history is already clear.": "Der Downloadverlauf ist bereits leer.",
+    "Could not prepare the history undo snapshot. The existing history was preserved; check disk permissions and retry.":
+        "Der Rückgängig-Schnappschuss für den Verlauf konnte nicht vorbereitet werden. Der vorhandene Verlauf blieb erhalten. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+    "Could not clear download history. The existing history was preserved; check disk permissions and retry.":
+        "Der Downloadverlauf konnte nicht gelöscht werden. Der vorhandene Verlauf blieb erhalten. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+    "No cleared history entries to restore.":
+        "Keine gelöschten Verlaufseinträge zum Wiederherstellen vorhanden.",
+    "Could not restore download history. The Undo snapshot is still available; check disk permissions and retry.":
+        "Der Downloadverlauf konnte nicht wiederhergestellt werden. Der Rückgängig-Schnappschuss ist noch verfügbar. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+    "Retry queued: {title}": "Erneuter Versuch eingereiht: {title}",
+    "Download resumed.": "Download fortgesetzt.",
+    "Checking…": "Wird geprüft …",
+    "Check yt-dlp Update": "yt-dlp-Update prüfen",
+    "Select Folder": "Ordner auswählen",
+    "Copied video link staged. Review the options, then choose Add to queue.":
+        "Kopierter Videolink vorgemerkt. Prüfen Sie die Optionen und wählen Sie Zur Warteschlange hinzufügen.",
+    "Endpoint copied.": "Endpunkt kopiert.",
+    "Review Diagnostics": "Diagnose prüfen",
+    "Save diagnostics": "Diagnose speichern",
+    "Copy to Clipboard": "In Zwischenablage kopieren",
+    "{name} {page}": "{name} {page}",
+    "{open_label} {name}": "{open_label} {name}",
+    "Clip ranges apply to a single link. Remove the extra links or clear the clip range.":
+        "Clipbereiche gelten für einen einzelnen Link. Entfernen Sie die zusätzlichen Links oder löschen Sie den Clipbereich.",
+    "Queued {id}{suffix}.": "{id}{suffix} eingereiht.",
+    "Queued {count} downloads.": "{count} Downloads eingereiht.",
+    "{label}: {path}": "{label}: {path}",
+    "{label} {title}": "{label} {title}",
+    "Every {minutes} min · next scan {next_scan}":
+        "Alle {minutes} Min. · nächster Scan {next_scan}",
+    "{browser} — {warning}": "{browser} — {warning}",
+    "{count} {discarded}": "{count} {discarded}",
+    "That cookie file is too large to be a browser export.":
+        "Diese Cookie-Datei ist zu groß für einen Browserexport.",
+    "{label}: {error}": "{label}: {error}",
+    "Start the local companion before adding a subscription.":
+        "Starten Sie den lokalen Begleiter, bevor Sie ein Abonnement hinzufügen.",
+    "{label}: {language}": "{label}: {language}",
+    "{label} could not be restored. Its backup is at {backup}.":
+        "{label} konnte nicht wiederhergestellt werden. Die Sicherung befindet sich unter {backup}.",
+    "Destination confirmed: {folder}. Setup can continue in the background.":
+        "Ziel bestätigt: {folder}. Die Einrichtung kann im Hintergrund fortgesetzt werden.",
+    "Confirm a folder before your first download.":
+        "Bestätigen Sie vor dem ersten Download einen Ordner.",
+    "The download folder validator is unavailable. Check the log and retry.":
+        "Die Prüfung des Downloadordners ist nicht verfügbar. Prüfen Sie das Protokoll und versuchen Sie es erneut.",
+    "Could not save the download folder. Check disk permissions and retry.":
+        "Der Downloadordner konnte nicht gespeichert werden. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
+    "Next: {action}": "Nächster Schritt: {action}",
+    "ETA {eta}": "Restzeit {eta}",
+    "Preparing download": "Download wird vorbereitet",
+    "{count} stored sign-ins are listed by site only — add them again after importing.":
+        "{count} gespeicherte Anmeldungen sind nur nach Website aufgeführt — fügen Sie sie nach dem Import erneut hinzu.",
+    "{added} subscriptions added, {skipped} already present":
+        "{added} Abonnements hinzugefügt, {skipped} bereits vorhanden",
+    "sign-ins still needed for {sites}": "Anmeldungen weiterhin erforderlich für {sites}",
+    "not carried: {settings}": "nicht übernommen: {settings}",
+    "{start}–{end} of {filtered} filtered · {total} retained":
+        "{start}–{end} von {filtered} gefiltert · {total} behalten",
+    "0 of {filtered} filtered · {total} retained":
+        "0 von {filtered} gefiltert · {total} behalten",
+    "yt-dlp {version} is ready.": "yt-dlp {version} ist bereit.",
+    "{quality}p": "{quality}p",
+    "Video link staged. Open Downloads to review it before adding it to the queue.":
+        "Videolink vorgemerkt. Öffnen Sie Downloads, um ihn vor dem Einreihen zu prüfen.",
+    "ffmpeg refresh complete.": "ffmpeg-Aktualisierung abgeschlossen.",
+    "Setup complete.": "Einrichtung abgeschlossen.",
+    "ffmpeg refresh failed. The previous copy is still installed.":
+        "Die ffmpeg-Aktualisierung ist fehlgeschlagen. Die vorherige Version ist weiterhin installiert.",
+    "Setup failed. Check the log for details.":
+        "Die Einrichtung ist fehlgeschlagen. Details finden Sie im Protokoll.",
+    "mp3": "mp3",
+    "m4a": "m4a",
+    "opus": "opus",
+    "flac": "flac",
+    "wav": "wav",
+    "mp4": "mp4",
+    "mkv": "mkv",
+    "webm": "webm",
+    "—": "—",
+    "{target} (unavailable)": "{target} (nicht verfügbar)",
+    "creator subtitles only": "nur Untertitel vom Ersteller",
+    "auto-generated subtitles only": "nur automatisch erzeugte Untertitel",
+    "Saving to {path}.": "Speichern unter {path}.",
+    "Could not read stored sign-ins: {error}":
+        "Gespeicherte Anmeldungen konnten nicht gelesen werden: {error}",
+    "{count} {auth} · {from_label} {source} · {state}":
+        "{count} {auth} · {from_label} {source} · {state}",
+    "Could not read that file: {error}": "Datei konnte nicht gelesen werden: {error}",
+    "{removed} {site}.": "{removed} {site}.",
+    "Download complete": "Download abgeschlossen",
+    "Could not write the bundle: {error}":
+        "Das Paket konnte nicht geschrieben werden: {error}",
+    "Could not read that bundle: {error}":
+        "Das Paket konnte nicht gelesen werden: {error}",
+    "Could not export download history: {error}":
+        "Downloadverlauf konnte nicht exportiert werden: {error}",
+    "Still running in the tray so Astra Deck can keep sending downloads.":
+        "Läuft weiterhin im Infobereich, damit Astra Deck Downloads senden kann.",
+    "{label} {date}": "{label} {date}",
+    "for an accurate ffmpeg clip": "für einen präzisen ffmpeg-Clip",
+})
+
+
 def catalogue_coverage():
     """Report how many source strings each catalogue actually declares.
 
