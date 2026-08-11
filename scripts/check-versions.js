@@ -30,6 +30,69 @@ function match(relativePath, pattern, label) {
     return record(label, found && found[1]);
 }
 
+function checkWingetManifest(version) {
+    const manifestRoot = path.join(
+        ROOT, 'packaging', 'winget', 'manifests', 's', 'SysAdminDoc', 'AstraDownloader'
+    );
+    let versionDirectories;
+    try {
+        versionDirectories = fs.readdirSync(manifestRoot, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && /^\d+\.\d+\.\d+$/.test(entry.name))
+            .map((entry) => entry.name)
+            .sort();
+    } catch (error) {
+        failures.push(`winget manifest: could not read ${manifestRoot}: ${error.message}`);
+        return null;
+    }
+    if (versionDirectories.length !== 1 || versionDirectories[0] !== version) {
+        failures.push(
+            `winget manifest directories must contain only ${version}; found ` +
+            (versionDirectories.join(', ') || 'none')
+        );
+        return null;
+    }
+
+    const directory = path.join(manifestRoot, version);
+    const files = fs.readdirSync(directory)
+        .filter((name) => name.endsWith('.yaml'))
+        .sort();
+    if (files.length !== 3) {
+        failures.push(`winget manifest ${version}: expected three YAML files, found ${files.length}`);
+    }
+    const contents = files.map((name) => ({ name, text: fs.readFileSync(path.join(directory, name), 'utf8') }));
+    for (const { name, text } of contents) {
+        const packageVersion = text.match(/^PackageVersion:\s*([^\s#]+)/m);
+        if (!packageVersion || packageVersion[1] !== version) {
+            failures.push(`winget ${name}: PackageVersion must be ${version}`);
+        }
+    }
+
+    const installer = contents.find(({ name }) => name.endsWith('.installer.yaml'));
+    if (!installer) {
+        failures.push(`winget manifest ${version}: installer manifest is missing`);
+    } else {
+        const expectedUrl = `https://github.com/SysAdminDoc/AstraDownloader/releases/download/v${version}/AstraDownloader.exe`;
+        const installerUrl = installer.text.match(/^\s+InstallerUrl:\s*(\S+)/m);
+        const checksum = installer.text.match(/^\s+InstallerSha256:\s*([0-9a-f]{64})\s*$/im);
+        if (!installerUrl || installerUrl[1] !== expectedUrl) {
+            failures.push(`winget ${installer.name}: InstallerUrl must target v${version}`);
+        }
+        if (!checksum) {
+            failures.push(`winget ${installer.name}: InstallerSha256 must be a 64-digit hex digest`);
+        }
+    }
+
+    const locale = contents.find(({ name }) => name.endsWith('.locale.en-US.yaml'));
+    if (locale) {
+        const releaseNotesUrl = locale.text.match(/^ReleaseNotesUrl:\s*(\S+)/m);
+        const expectedReleaseNotes = `https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v${version}`;
+        if (!releaseNotesUrl || releaseNotesUrl[1] !== expectedReleaseNotes) {
+            failures.push(`winget ${locale.name}: ReleaseNotesUrl must target v${version}`);
+        }
+    }
+    return record('winget manifest PackageVersion', version);
+}
+
 const sources = [
     record('package.json', JSON.parse(read('package.json')).version),
     match('astra_downloader/astra_downloader.py', /^APP_VERSION = "([^"]+)"/m,
@@ -39,6 +102,12 @@ const sources = [
     match('CHANGELOG.md', /^## \[([0-9]+\.[0-9]+\.[0-9]+)\]/m,
         'CHANGELOG newest entry'),
 ].filter(Boolean);
+
+const appVersion = sources.find((source) => source.label.includes('APP_VERSION'));
+if (appVersion) {
+    const winget = checkWingetManifest(appVersion.value);
+    if (winget) sources.push(winget);
+}
 
 const versions = new Set(sources.map((source) => source.value));
 if (versions.size > 1) {
@@ -58,7 +127,6 @@ for (const source of sources) {
 // If the pin's name and the constant drift apart the pin still passes while
 // naming the wrong release, which is exactly the failure this gate exists
 // to catch.
-const appVersion = sources.find((source) => source.label.includes('APP_VERSION'));
 if (appVersion) {
     const pinName = `test_app_version_bumped_to_${appVersion.value.replace(/\./g, '_')}`;
     if (!read('astra_downloader/test_astra_downloader.py').includes(pinName)) {

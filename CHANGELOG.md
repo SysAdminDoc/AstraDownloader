@@ -92,6 +92,8 @@ repository's git log.
 - **Release artifacts now share build provenance.** The one-folder archive carries
   the same version and one-file analysis ID as the executable metadata; staging
   rejects mismatches and builds remove stale root artifacts first.
+- **The winget manifest now follows the shipped version gate.** Its directory,
+  package fields, release links, and installer checksum target v2.6.0 together.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
