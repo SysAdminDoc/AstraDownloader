@@ -448,6 +448,13 @@ SERVICE_ID = "astra-downloader"
 # requires on YouTube extractions. Older clients ignore unknown keys, so
 # the major version stays at 2 (additive, backward-compatible).
 SERVICE_API_VERSION = 2
+# The oldest client wire version this build still answers. Astra Deck and this
+# program version independently and share only a port catalogue, so without a
+# floor there is nothing to compare an old extension against: it just gets
+# increasingly wrong answers. A client that sends X-MDL-Api below this is told
+# so by name; one that sends nothing is served exactly as before, because the
+# shipped extension does not send it yet.
+SERVICE_API_MINIMUM_CLIENT = 1
 INSTANCE_CONTROL_HOST = '127.0.0.1'
 DIAGNOSTIC_LOG_ENTRY_LIMIT = 30
 DIAGNOSTIC_TEXT_LIMIT = 600
@@ -4589,6 +4596,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS': COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS,
         'SERVER_PORT': SERVER_PORT,
         'SERVICE_API_VERSION': SERVICE_API_VERSION,
+        'SERVICE_API_MINIMUM_CLIENT': SERVICE_API_MINIMUM_CLIENT,
         'SERVICE_ID': SERVICE_ID,
         'YTDLP_PATH': YTDLP_PATH,
         '_folder_pick_q': _folder_pick_q,

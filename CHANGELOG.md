@@ -26,6 +26,27 @@ repository's git log.
 
 ### Fixed
 
+- **The download cookie cap matches the store that accepts them.** `/download`
+  truncated to a hardcoded 200 while the sign-in store keeps 400, so a jar the
+  store held whole was halved on the way to yt-dlp and the only symptom was a
+  failed sign-in. The bound is now the store's, and a truncated request says so
+  in its response.
+- **Subscription schedules no longer drift.** The next scan is anchored to when
+  the previous one started rather than when it finished, so a two-minute scan on
+  an hourly subscription no longer slips about 48 minutes a day; a scan that
+  outruns its own interval still schedules forward instead of queueing a
+  backlog.
+- **A retry-exhausted candidate reads one archive entry.** It deep-copied the
+  entire 20,000-entry archive under the store lock, once per candidate, to read
+  two fields.
+- **Expired recovery-precondition entries are dropped.** The cache kept one
+  entry per URL for the life of a process that runs for days.
+- **The local API version is a contract rather than a number.** `/health` now
+  advertises the oldest client wire version this build serves, and a client that
+  sends `X-MDL-Api` below it gets a named 426 with a remediation instead of
+  drifting into wrong answers. A client that sends no version — which is every
+  shipped Astra Deck today — is served exactly as before.
+
 - **A release carries a lock file and an SBOM.** `npm run release:provenance`
   writes a CycloneDX 1.6 document carrying the fields CISA's 2026 minimum
   elements require, and a PEP 751 `pylock.toml` resolved against PyPI with a

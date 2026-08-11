@@ -760,7 +760,18 @@ class SubscriptionStore:
             record["lastQueued"] = _safe_nonnegative_int(queued)
             record["lastSkipped"] = _safe_nonnegative_int(skipped)
             record["lastError"] = self._clean(error, "", 500)
-            record["nextScanAt"] = now + record["intervalMinutes"] * 60
+            # Anchor the next run to when this scan began. Measuring from the
+            # finish adds the scan duration to every cycle, so an hourly
+            # subscription whose scan takes two minutes slips about 48 minutes
+            # a day. If the anchor is missing or already in the past, fall
+            # forward from now so a long outage cannot queue a backlog of
+            # immediately-due scans.
+            # begin_scan stamps lastScanAt and finish_scan never rewrites it,
+            # so it is the start of the scan now finishing.
+            started_at = _finite_timestamp(record.get("lastScanAt"), 0.0) or 0.0
+            interval_seconds = record["intervalMinutes"] * 60
+            due = started_at + interval_seconds if started_at else now + interval_seconds
+            record["nextScanAt"] = due if due > now else now + interval_seconds
             record["updatedAt"] = now
             if not self._save_locked():
                 record.clear()
@@ -926,6 +937,17 @@ class SubscriptionStore:
     def archive_entries(self):
         with self._lock:
             return _copy(self._data["archive"])
+
+    def archive_entry(self, key):
+        """Return one archive entry.
+
+        `archive_entries()` deep-copies the whole archive under the store lock.
+        Callers that want two fields of one record were paying that for every
+        candidate in a scan, blocking every other store operation - including
+        /health - for the duration.
+        """
+        with self._lock:
+            return _copy(self._data["archive"].get(str(key), {}))
 
     def reset_archive_retries(self, subscription_id, now=None):
         """Clear failed-candidate retry state for an explicit manual rescan."""
@@ -1228,7 +1250,7 @@ class SubscriptionManager:
                     continue
                 if reserved == RESERVE_RETRY_EXHAUSTED:
                     skipped += 1
-                    entry = self.store.archive_entries().get(key, {})
+                    entry = self.store.archive_entry(key)
                     attempts = max(
                         1,
                         _safe_nonnegative_int(entry.get("attempts")),

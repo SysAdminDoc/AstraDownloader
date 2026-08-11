@@ -6863,6 +6863,17 @@ class DownloadManagerCore:
             return cached[1]
         answer = self._evaluate_recovery_precondition(dl, requirement)
         with self._precondition_cache_lock:
+            # Drop anything past its TTL on the way in. Without this the map
+            # keeps one entry per URL that ever produced a precondition answer
+            # for the life of the process, and this is a tray app that runs for
+            # days. The sweep is bounded by the number of expired keys, and the
+            # TTL is 2 s, so in practice it touches a handful.
+            expired = [
+                key for key, (stamp, _value) in self._precondition_cache.items()
+                if now - stamp >= self._PRECONDITION_TTL_SECONDS
+            ]
+            for key in expired:
+                self._precondition_cache.pop(key, None)
             self._precondition_cache[cache_key] = (now, answer)
         return answer
 
