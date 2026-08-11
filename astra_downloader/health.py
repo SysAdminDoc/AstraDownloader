@@ -542,7 +542,11 @@ def build_youtube_extractor_args(url, po_token_provider=None,
     """
     if not is_youtube_url(url):
         return []
-    args = ['--extractor-args', 'youtube:formats=duplicate']
+    args = [
+        '--extractor-args', 'youtube:formats=duplicate',
+        '--extractor-args', 'youtube:skip=translated_subs',
+        '--extractor-args', 'youtube-ejs:jitless=true',
+    ]
     # The default web/mweb clients need GVS proof-of-origin tokens and
     # otherwise return SABR-only formats or HTTP 403. Use only the client
     # chain this plugin-free build has verified as token-exempt: bare `web` is

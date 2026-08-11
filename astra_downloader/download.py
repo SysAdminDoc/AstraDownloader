@@ -31,9 +31,13 @@ except ImportError:  # Flat source-path compatibility.
 try:
     from .config import (
         DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS,
+        normalize_sublangs,
     )
 except ImportError:  # Flat source-path compatibility.
-    from config import DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS
+    from config import (
+        DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS,
+        normalize_sublangs,
+    )
 
 
 __all__ = (
@@ -51,7 +55,8 @@ __all__ = (
     "HOST_CIRCUIT_COOLDOWN_SECONDS",
     "build_impersonate_args",
     "build_network_workaround_args",
-    "build_subtitle_args", "build_local_subtitle_args",
+    "build_subtitle_args", "build_download_section_args",
+    "build_local_subtitle_args",
     "build_whisper_audio_args", "build_whisper_transcription_args",
     "local_subtitle_output_path", "local_subtitle_sidecar_exists",
     "should_generate_local_subtitles", "subtitle_language_for_transcription",
@@ -2119,7 +2124,9 @@ def build_format_sort_args(config):
     read = getattr(config, 'get', None)
     if not callable(read):
         return []
-    fields = []
+    # yt-dlp's documented `channels` and `lang` fields prefer a richer audio
+    # stream and original-language audio without making either a hard filter.
+    fields = ['channels', 'lang']
     video = str(read('VideoCodecPreference') or 'auto').strip().lower()
     if video in FORMAT_SORT_VIDEO_FIELDS:
         fields.append(FORMAT_SORT_VIDEO_FIELDS[video])
@@ -2134,8 +2141,6 @@ def build_format_sort_args(config):
         # `~` is "closest to", so an unavailable 60fps falls back to what
         # exists rather than failing the format selection outright.
         fields.append(f'fps~{frame_rate}')
-    if not fields:
-        return []
     return ['--format-sort', ','.join(['res'] + fields)]
 
 
@@ -2269,8 +2274,14 @@ def build_subtitle_args(config, subtitles_only=False):
     if embed and not subtitles_only:
         args.append('--embed-subs')
     args += list(SUBTITLE_WRITE_FLAGS[mode])
-    langs = re.sub(r'[^a-zA-Z0-9,\-]', '', str(read('SubLangs') or 'en')) or 'en'
+    langs = normalize_sublangs(read('SubLangs'))
     args += ['--sub-langs', langs]
+    try:
+        subtitle_sleep = float(read('SubtitleSleepSeconds') or 0)
+    except (TypeError, ValueError, OverflowError):
+        subtitle_sleep = 0.0
+    if math.isfinite(subtitle_sleep) and 0 < subtitle_sleep <= 60:
+        args += ['--sleep-subtitles', f'{subtitle_sleep:g}']
     fmt = str(read('SubtitleFormat') or '').strip().lower()
     if fmt and fmt in SUBTITLE_CONVERT_FORMATS:
         args += ['--convert-subs', fmt]
@@ -2405,6 +2416,31 @@ def build_whisper_transcription_args(whisper_path, model_path, audio_path,
         '-l', language, '-t', str(threads), '-ml', str(max_len),
         '-sow', '-osrt', '-of', str(output_base), '-pp', '-ng',
     ]
+
+
+def build_download_section_args(section):
+    """Compile yt-dlp-native clip selectors for the special quick actions.
+
+    The established positive start/end range still uses the post-download
+    frame-accurate ffmpeg path. Native selectors are reserved for yt-dlp's
+    URL-timestamp and negative-tail forms, which cannot be represented by
+    that postprocessor without downloading the entire source first.
+    """
+    if not isinstance(section, dict):
+        return []
+    start = str(section.get('start', '') or '').strip().lower()
+    end = str(section.get('end', '') or '').strip().lower()
+    if start == '*from-url' and end == 'inf':
+        return ['--download-sections', '*from-url']
+    if end != 'inf' or not re.fullmatch(r'\*-\d+(?:\.\d+)?', start):
+        return []
+    try:
+        seconds = float(start[2:])
+    except (TypeError, ValueError, OverflowError):
+        return []
+    if not math.isfinite(seconds) or not 0 < seconds <= 86400:
+        return []
+    return ['--download-sections', f'{start}-inf']
 
 
 _WHISPER_PROGRESS_RE = re.compile(
@@ -4359,6 +4395,11 @@ class DownloadManagerCore:
         """Replace a completed file with a frame-accurate ffmpeg re-cut."""
         if not dl.section:
             return True
+        # yt-dlp owns its URL-relative and negative-tail selectors. They have
+        # already been applied during the download and do not have numeric
+        # start/end values for the post-download ffmpeg path.
+        if build_download_section_args(dl.section):
+            return True
         input_path = Path(dl.filename or "")
         try:
             input_path = input_path.resolve(strict=True)
@@ -5147,7 +5188,8 @@ class DownloadManagerCore:
         # Build args. v1.2.0: emit progress as JSON alongside the legacy MDLP
         # line so we can parse robustly when yt-dlp tweaks its human-readable
         # format. We keep the legacy line as a fallback.
-        args = [ytdlp, '--ignore-config', '--newline', '--progress', '--no-colors',
+        args = [ytdlp, '--ignore-config', '--newline', '--progress',
+                '--color', 'no_color',
                 '--trim-filenames', '180',
                 '--replace-in-metadata', 'title,playlist_title',
                 '[\":<>|*?/\\\\]', '_',
@@ -5194,6 +5236,7 @@ class DownloadManagerCore:
         if wait_for_video > 0:
             args += ['--wait-for-video', str(wait_for_video)]
         args += build_subtitle_args(effective_config, subtitles_only=subtitles_only)
+        args += build_download_section_args(dl.section)
         if subtitles_only:
             args.append('--skip-download')
         # SponsorBlock has YouTube-only segment data; passing it for any other
@@ -6210,7 +6253,7 @@ class DownloadManagerCore:
 
     def _list_formats_gated(self, url, timeout):
         ytdlp = str(self._dependencies['YTDLP_PATH']())
-        args = [ytdlp, '--ignore-config', '--no-colors', '--no-warnings',
+        args = [ytdlp, '--ignore-config', '--color', 'no_color', '--no-warnings',
                 '--no-playlist', '-J', '--skip-download']
         args += self._dependencies['build_youtube_extractor_args'](url)
         runtime = self._dependencies['probe_javascript_runtime'](
@@ -6277,7 +6320,7 @@ class DownloadManagerCore:
         staging = install_dir / f".cookies.import.{uuid.uuid4().hex}.txt"
         args = [
             str(self._dependencies['YTDLP_PATH']()), '--ignore-config',
-            '--no-colors', '--skip-download', '--simulate', '--no-playlist',
+            '--color', 'no_color', '--skip-download', '--simulate', '--no-playlist',
         ]
         args += browser_args
         args += ['--cookies', str(staging), f'https://{key}/']
@@ -6365,7 +6408,7 @@ class DownloadManagerCore:
             )
             args = [
                 str(self._dependencies['YTDLP_PATH']()), '--ignore-config',
-                '--no-colors', '--no-warnings', '--skip-download', '--simulate',
+                '--color', 'no_color', '--no-warnings', '--skip-download', '--simulate',
                 '--dump-single-json', '--no-playlist', '--socket-timeout', '10',
                 '--retries', '1', '--fragment-retries', '1',
                 '--extractor-retries', '1', *auth_args,
@@ -6498,7 +6541,7 @@ class DownloadManagerCore:
     def _preview_playlist_gated(self, url, timeout):
         ytdlp = str(self._dependencies['YTDLP_PATH']())
         args = [
-            ytdlp, '--ignore-config', '--no-colors', '--no-warnings',
+            ytdlp, '--ignore-config', '--color', 'no_color', '--no-warnings',
             '--flat-playlist', '--dump-single-json', '--skip-download',
             '--playlist-end', str(PLAYLIST_PREVIEW_LIMIT + 1),
         ]

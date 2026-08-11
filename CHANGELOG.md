@@ -14,6 +14,11 @@ repository's git log.
 
 ### Changed
 
+- **yt-dlp capability gaps are now covered.** Subtitle requests can exclude
+  live chat and translated catalogues, pause between tracks, and use the
+  safer JavaScript and color argv defaults; format sorting prefers richer and
+  original-language audio, while the clip controls add URL-relative and
+  last-30-second selectors.
 - **Release dependencies now follow the current secure graph.** PyInstaller,
   curl_cffi, certifi, PyQt6_sip, cffi, and packaging are refreshed; curl_cffi's
   CLI-only Rich stack is no longer carried by the release environment, while

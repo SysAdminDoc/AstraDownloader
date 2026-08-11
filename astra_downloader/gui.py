@@ -2180,15 +2180,18 @@ class MainWindowCore(
             else:
                 queued.append(dl_id)
 
+        clip_suffix = ""
+        if section:
+            if str(section.get("start", "")).startswith("*"):
+                clip_suffix = " " + tr("for a yt-dlp clip")
+            else:
+                clip_suffix = " " + tr("for an accurate ffmpeg clip")
         if queued:
             if len(queued) == 1:
                 message = tr_format(
                     "Queued {id}{suffix}.",
                     id=queued[0],
-                    suffix=(
-                        " " + tr("for an accurate ffmpeg clip")
-                        if section else ""
-                    ),
+                    suffix=clip_suffix,
                 )
             else:
                 message = tr_format(
@@ -4247,6 +4250,7 @@ class MainWindowCore(
         ("cfg_outtmpl", "OutputTemplate", "text"),
         ("cfg_windows_filenames", "WindowsFilenames", "check"),
         ("cfg_sublangs", "SubLangs", "text"),
+        ("cfg_subtitle_sleep", "SubtitleSleepSeconds", "decimal"),
         ("cfg_ratelimit", "RateLimit", "text"),
         ("cfg_throttled", "ThrottledRate", "text"),
         ("cfg_proxy", "Proxy", "text"),
@@ -4315,6 +4319,7 @@ class MainWindowCore(
             "text": "textChanged",
             "check": "toggled",
             "number": "valueChanged",
+            "decimal": "valueChanged",
             "combo": "currentIndexChanged",
         }
         for attribute, _key, kind in self._SETTINGS_FORM_FIELDS:
@@ -4349,6 +4354,8 @@ class MainWindowCore(
                     widget.setChecked(bool(value))
                 elif kind == "number":
                     widget.setValue(int(value or 0))
+                elif kind == "decimal":
+                    widget.setValue(float(value or 0))
                 elif kind == "combo":
                     index = widget.findData(value)
                     if index >= 0:
@@ -5702,6 +5709,12 @@ class MainWindowCore(
                 self.config.get(key, 0) or 0
             )
 
+        def decimal_setting(attribute, key):
+            widget = getattr(self, attribute, None)
+            return widget.value() if widget is not None else float(
+                self.config.get(key, 0) or 0
+            )
+
         saved = self.config.update({
             "ServerPort": new_port,
             "ServerToken": new_token,
@@ -5753,6 +5766,9 @@ class MainWindowCore(
             "PacingJitterPercent": self.cfg_pacing_jitter.value(),
             "SleepRequestsSeconds": self.cfg_sleep_requests.value(),
             "SubLangs": sublangs,
+            "SubtitleSleepSeconds": decimal_setting(
+                "cfg_subtitle_sleep", "SubtitleSleepSeconds"
+            ),
             "SubtitleMode": self._dependencies['normalize_subtitle_mode'](
                 self.cfg_subtitle_mode.currentData()
             ),
@@ -5878,6 +5894,23 @@ class MainWindowCore(
         self._clipboard_staged_url = ""
         self.quick_download_status.hide()
 
+    def _set_quick_clip_selector(self, start, end):
+        """Set one of yt-dlp's URL-relative quick clip selectors."""
+        if getattr(self, "_sabr_limited", False):
+            self._set_quick_download_status(
+                tr("Clip ranges are unavailable for this SABR-only link."),
+                "warning",
+            )
+            return
+        self.quick_download_start.setText(start)
+        self.quick_download_end.setText(end)
+
+    def _set_quick_clip_from_url(self):
+        self._set_quick_clip_selector("*from-url", "inf")
+
+    def _set_quick_clip_last_30(self):
+        self._set_quick_clip_selector("*-30", "inf")
+
     # ── Format probing ───────────────────────────────────────────────────
     # The picker is a fixed ladder that knows nothing about the pasted link,
     # so a user can ask for 2160p on a 720p video and only learn the truth
@@ -5909,10 +5942,17 @@ class MainWindowCore(
         if getattr(self, "_sabr_limited", None) == limited:
             return
         self._sabr_limited = limited
-        for field in (self.quick_download_start, self.quick_download_end):
+        for field in (
+            self.quick_download_start, self.quick_download_end,
+            getattr(self, "btn_quick_clip_from_url", None),
+            getattr(self, "btn_quick_clip_last_30", None),
+        ):
+            if field is None:
+                continue
             field.setEnabled(not limited)
             if limited:
-                field.clear()
+                if hasattr(field, "clear"):
+                    field.clear()
         if limited:
             notice = tr(self._value('SABR_LIMITED_NOTICE')).format(
                 options=self._dependencies['describe_sabr_voided_options']()

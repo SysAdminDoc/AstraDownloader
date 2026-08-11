@@ -235,6 +235,26 @@ class DownloadPageMixin:
         self.quick_download_end.setPlaceholderText("1:30")
         self.quick_download_end.setMaximumWidth(84)
         clip_row.addWidget(self.quick_download_end)
+        self.btn_quick_clip_from_url = self._make_tool_button(
+            "From link", "ghost"
+        )
+        self.btn_quick_clip_from_url.setToolTip(tr(
+            "Use the timestamp in the pasted link as the clip start."
+        ))
+        self.btn_quick_clip_from_url.clicked.connect(
+            self._set_quick_clip_from_url
+        )
+        clip_row.addWidget(self.btn_quick_clip_from_url)
+        self.btn_quick_clip_last_30 = self._make_tool_button(
+            "Last 30 s", "ghost"
+        )
+        self.btn_quick_clip_last_30.setToolTip(tr(
+            "Download only the last 30 seconds using yt-dlp."
+        ))
+        self.btn_quick_clip_last_30.clicked.connect(
+            self._set_quick_clip_last_30
+        )
+        clip_row.addWidget(self.btn_quick_clip_last_30)
         clip_row.addStretch(1)
         options_layout.addWidget(clip_row_widget)
         quick_layout.addWidget(self.quick_download_options_container)

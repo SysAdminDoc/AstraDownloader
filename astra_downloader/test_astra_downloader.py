@@ -133,6 +133,29 @@ class NormalizationTests(unittest.TestCase):
         self.assertFalse(cfg["EmbedMetadata"])
         self.assertFalse(cfg["LegacyHealthTokenEcho"])
         self.assertEqual(cfg["SubLangs"], "en,esbad")
+        self.assertEqual(
+            ad.sanitize_config({"SubLangs": "all,live_chat"})["SubLangs"],
+            "all,-live_chat",
+        )
+        self.assertEqual(
+            ad.sanitize_config({"SubLangs": "en,live_chat,es"})["SubLangs"],
+            "en,es",
+        )
+        self.assertEqual(ad.sanitize_config({})["SubtitleSleepSeconds"], 1.0)
+        self.assertEqual(
+            ad.sanitize_config({"SubtitleSleepSeconds": 99})[
+                "SubtitleSleepSeconds"
+            ],
+            60.0,
+        )
+        for value in (True, "invalid", float("inf"), -1):
+            with self.subTest(subtitle_sleep=value):
+                self.assertEqual(
+                    ad.sanitize_config({"SubtitleSleepSeconds": value})[
+                        "SubtitleSleepSeconds"
+                    ],
+                    0.0,
+                )
         self.assertGreaterEqual(len(cfg["ServerToken"]), 16)
         self.assertEqual(
             ad.sanitize_config({})["HistoryRetentionLimit"],
@@ -3969,7 +3992,7 @@ class TransferReliabilityArgvTests(unittest.TestCase):
         self.addCleanup(ad.reset_ffmpeg_capabilities_cache)
         self.addCleanup(ad.reset_po_token_provider_cache)
 
-    def _argv(self, overrides):
+    def _argv(self, overrides, section=None):
         captured = []
 
         class Proc:
@@ -3998,7 +4021,7 @@ class TransferReliabilityArgvTests(unittest.TestCase):
             settings.update(overrides)
             manager = ad.DownloadManager(FakeConfig(settings), FakeHistory())
             download = ad.Download("dl_reliability", "https://example.com/video",
-                                   output_dir=tmpdir)
+                                   output_dir=tmpdir, section=section)
             download.status = "queued"
             with mock.patch.object(ad.subprocess, "Popen", Proc), \
                  mock.patch.object(ad, "probe_po_token_provider", return_value=None), \
@@ -4014,16 +4037,37 @@ class TransferReliabilityArgvTests(unittest.TestCase):
             "PreferredFrameRate": 60,
         })
         self.assertEqual(
-            argv[argv.index("--format-sort") + 1], "res,vcodec:h264,fps~60"
+            argv[argv.index("--format-sort") + 1],
+            "res,channels,lang,vcodec:h264,fps~60",
         )
 
-    def test_defaults_add_none_of_the_new_flags(self):
+    def test_defaults_include_soft_audio_sort_and_quiet_colors(self):
         argv = self._argv({})
+        self.assertEqual(
+            argv[argv.index("--format-sort") + 1], "res,channels,lang"
+        )
+        self.assertEqual(argv[argv.index("--color") + 1], "no_color")
         for flag in ("--throttled-rate", "--socket-timeout",
-                     "--extractor-retries", "--check-formats",
-                     "--format-sort"):
+                     "--extractor-retries", "--check-formats"):
             with self.subTest(flag=flag):
                 self.assertNotIn(flag, argv, "defaults must not change the argv")
+
+    def test_native_clip_selectors_reach_yt_dlp_argv(self):
+        for section, expected in (
+            (
+                {"start": "*from-url", "end": "inf"},
+                "*from-url",
+            ),
+            (
+                {"start": "*-30", "end": "inf"},
+                "*-30-inf",
+            ),
+        ):
+            with self.subTest(section=section):
+                argv = self._argv({}, section=section)
+                self.assertEqual(
+                    argv[argv.index("--download-sections") + 1], expected
+                )
 
     def test_configured_values_compile_into_the_argv(self):
         argv = self._argv({
@@ -6210,12 +6254,35 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertIsNone(err)
         self.assertIsNone(code)
 
+    def test_download_request_body_allows_yt_dlp_native_clip_selectors(self):
+        for section, expected in (
+            (
+                {"start": "*from-url", "end": "inf"},
+                {"start": "*from-url", "end": "inf"},
+            ),
+            (
+                {"start": "*-30", "end": "inf"},
+                {"start": "*-30", "end": "inf"},
+            ),
+        ):
+            with self.subTest(section=section):
+                validated, err, code = ad.validate_download_request_body({
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "section": section,
+                })
+                self.assertEqual(validated["section"], expected)
+                self.assertIsNone(err)
+                self.assertIsNone(code)
+
     def test_download_request_body_rejects_invalid_clip_ranges(self):
         invalid_sections = (
             {"start": "", "end": "1:00"},
             {"start": "1:00", "end": "0:59"},
             {"start": "0:00", "end": "25:00:00"},
             {"start": "0:00", "end": "1:00", "args": "--copy"},
+            {"start": "*-0", "end": "inf"},
+            {"start": "*-86400.1", "end": "inf"},
+            {"start": "*from-url", "end": "0"},
             ["0:00", "1:00"],
         )
         for section in invalid_sections:
@@ -8696,6 +8763,13 @@ class PoTokenProviderTests(unittest.TestCase):
                 self.assertIn('youtube:formats=duplicate', args)
                 idx = args.index('youtube:formats=duplicate')
                 self.assertEqual(args[idx - 1], '--extractor-args')
+                for extractor_arg in (
+                    'youtube:skip=translated_subs',
+                    'youtube-ejs:jitless=true',
+                ):
+                    self.assertIn(extractor_arg, args)
+                    extractor_idx = args.index(extractor_arg)
+                    self.assertEqual(args[extractor_idx - 1], '--extractor-args')
 
     def test_build_youtube_extractor_args_includes_only_sabr_when_provider_absent(self):
         # Validates that PO token routing is gated on provider availability
@@ -13953,6 +14027,40 @@ class QuickDownloadBatchTests(unittest.TestCase):
         self.assertIn("Queued dl_1", window.quick_download_status.text())
         self.assertEqual(window.quick_download_url.text(), "")
 
+    def test_native_clip_shortcuts_fill_the_queue_section(self):
+        gui = gui_module_for_tests()
+        for method_name, expected in (
+            (
+                "_set_quick_clip_from_url",
+                {"start": "*from-url", "end": "inf"},
+            ),
+            (
+                "_set_quick_clip_last_30",
+                {"start": "*-30", "end": "inf"},
+            ),
+        ):
+            with self.subTest(method=method_name):
+                window, calls = self._window(
+                    "https://vimeo.com/1", [("dl_1", None)]
+                )
+                window._sabr_limited = False
+                for name in (
+                    "_set_quick_clip_selector",
+                    "_set_quick_clip_from_url",
+                    "_set_quick_clip_last_30",
+                ):
+                    setattr(
+                        window,
+                        name,
+                        types.MethodType(
+                            getattr(gui.MainWindowCore, name), window
+                        ),
+                    )
+                getattr(window, method_name)()
+                with mock.patch.object(gui, "repolish"):
+                    ad.MainWindow._start_quick_download(window)
+                self.assertEqual(calls[0]["section"], expected)
+
     def test_probed_size_can_refuse_a_quick_download_before_queueing(self):
         window, calls = self._window(
             "https://vimeo.com/1", [("dl_1", None)]
@@ -14897,12 +15005,13 @@ class DiskSpacePreflightTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 class FormatSortTests(unittest.TestCase):
-    """Codec and frame-rate preferences compile to one --format-sort."""
+    """Audio richness and codec/frame-rate preferences compile to one --format-sort."""
 
-    def test_no_preference_sends_no_flag(self):
-        # The default must leave the argv byte-identical: a preference nobody
-        # expressed has no business changing every download.
-        self.assertEqual(ad.build_format_sort_args(ad.sanitize_config({})), [])
+    def test_defaults_prefer_audio_richness_and_original_language(self):
+        self.assertEqual(
+            ad.build_format_sort_args(ad.sanitize_config({})),
+            ["--format-sort", "res,channels,lang"],
+        )
 
     def test_resolution_always_leads_the_sort(self):
         # yt-dlp puts the given fields ahead of its own defaults, so naming
@@ -14910,7 +15019,9 @@ class FormatSortTests(unittest.TestCase):
         # Verified against the real binary: `--format-sort vcodec:h264` on a
         # 4K source selects 1080p, `res,vcodec:h264` keeps 2160p.
         args = ad.build_format_sort_args({"VideoCodecPreference": "h264"})
-        self.assertEqual(args, ["--format-sort", "res,vcodec:h264"])
+        self.assertEqual(
+            args, ["--format-sort", "res,channels,lang,vcodec:h264"]
+        )
 
     def test_every_preference_compiles_into_one_flag(self):
         args = ad.build_format_sort_args({
@@ -14919,7 +15030,9 @@ class FormatSortTests(unittest.TestCase):
             "PreferredFrameRate": 60,
         })
         self.assertEqual(
-            args, ["--format-sort", "res,vcodec:av01,acodec:opus,fps~60"]
+            args,
+            ["--format-sort",
+             "res,channels,lang,vcodec:av01,acodec:opus,fps~60"],
         )
 
     def test_frame_rate_is_a_target_not_a_requirement(self):
@@ -14935,7 +15048,11 @@ class FormatSortTests(unittest.TestCase):
             {"PreferredFrameRate": "nonsense"},
             {"PreferredFrameRate": 0},
         ):
-            self.assertEqual(ad.build_format_sort_args(config), [], config)
+            self.assertEqual(
+                ad.build_format_sort_args(config),
+                ["--format-sort", "res,channels,lang"],
+                config,
+            )
 
     def test_the_two_modules_share_one_vocabulary(self):
         # config.py owns the schema, download.py owns the argv mapping, and
@@ -16943,7 +17060,9 @@ class SettingsFormReloadTests(unittest.TestCase):
         gui = gui_module_for_tests()
         kinds = {kind for _name, _key, kind
                  in gui.MainWindowCore._SETTINGS_FORM_FIELDS}
-        self.assertEqual(kinds, {"text", "check", "number", "combo"})
+        self.assertEqual(
+            kinds, {"text", "check", "number", "decimal", "combo"}
+        )
 
 
 class SettingsNavigationTests(unittest.TestCase):
@@ -17139,6 +17258,13 @@ class SettingsNavigationTests(unittest.TestCase):
                     value = widget.value()
                     widget.setValue(
                         value + 1 if value < widget.maximum() else value - 1
+                    )
+                elif kind == "decimal":
+                    value = widget.value()
+                    widget.setValue(
+                        value + widget.singleStep()
+                        if value < widget.maximum()
+                        else value - widget.singleStep()
                     )
                 elif kind == "combo":
                     self.assertGreater(widget.count(), 1)
@@ -17893,6 +18019,7 @@ class SubtitleRequestTests(unittest.TestCase):
 
     def _config(self, **overrides):
         config = ad.sanitize_config({"EmbedSubs": True})
+        config["SubtitleSleepSeconds"] = 0
         config.update(overrides)
         return config
 
@@ -17972,6 +18099,24 @@ class SubtitleRequestTests(unittest.TestCase):
             self._config(SubLangs="en,es,zh-Hans"))
         self.assertIn("--sub-langs", args)
         self.assertEqual(args[args.index("--sub-langs") + 1], "en,es,zh-Hans")
+
+    def test_all_languages_use_the_live_chat_exclusion_idiom(self):
+        args = ad.build_subtitle_args(
+            self._config(SubLangs="all,live_chat"))
+        self.assertEqual(
+            args[args.index("--sub-langs") + 1], "all,-live_chat"
+        )
+
+    def test_subtitle_request_delay_is_bounded_and_optional(self):
+        delayed = ad.build_subtitle_args(
+            self._config(SubtitleSleepSeconds=1.25))
+        self.assertEqual(
+            delayed[delayed.index("--sleep-subtitles") + 1], "1.25"
+        )
+        self.assertNotIn(
+            "--sleep-subtitles",
+            ad.build_subtitle_args(self._config(SubtitleSleepSeconds=0)),
+        )
 
     def test_a_language_string_cannot_smuggle_an_argument(self):
         args = ad.build_subtitle_args(
@@ -18841,7 +18986,7 @@ class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
             info_path = tmp / "p.info.json"
             info_path.write_text(json.dumps(info), encoding="utf-8")
             args = [str(ytdlp), "--ignore-config", "--load-info-json",
-                    str(info_path), "--skip-download", "--no-colors",
+                    str(info_path), "--skip-download", "--color", "no_color",
                     "-o", str(tmp / "%(title)s.%(ext)s")]
             args += [
                 arg for arg in ad.build_subtitle_args(
@@ -18862,6 +19007,7 @@ class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
 
     def _config(self, **overrides):
         config = ad.sanitize_config({"EmbedSubs": True, "SubLangs": "en,es"})
+        config["SubtitleSleepSeconds"] = 0
         config.update(overrides)
         return config
 
@@ -18890,6 +19036,16 @@ class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr[:400])
         self.assertEqual(sorted(written), ["fixture.en.srt", "fixture.es.srt"])
         self.assertEqual(written["fixture.en.srt"], "MANUAL-TRACK")
+
+    def test_all_language_selection_is_accepted_by_the_offline_fixture(self):
+        proc, written = self._run(
+            self._config(SubLangs="all,live_chat"), subtitles_only=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr[:400])
+        self.assertEqual(
+            written,
+            {"fixture.en.vtt": "MANUAL-TRACK",
+             "fixture.es.vtt": "AUTO-ES"},
+        )
 
     def test_a_subtitles_only_run_writes_no_media(self):
         proc, written = self._run(
