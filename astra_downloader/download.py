@@ -114,6 +114,22 @@ DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES = frozenset({
 
 DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
 
+
+def _stored_schema_version(value):
+    """Parse a JSON schema marker without treating booleans as integers."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) and value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return None
+
 DOWNLOAD_FAILURE_RECOVERY = {
     'po-token-required': {
         'error': (
@@ -2576,13 +2592,32 @@ class DownloadQueueStore:
         self._clean_path_text = clean_path_text
         self.schema_version = int(schema_version)
         self.max_records = max(1, int(max_records))
+        self.incompatibility_error = ""
 
     def load(self):
         raw = self._reader(self.path, {})
         if not isinstance(raw, dict):
             return {}, True
-        compatible = not raw or raw.get('schemaVersion') == self.schema_version
-        return raw, compatible
+        stored_version = _stored_schema_version(raw.get('schemaVersion'))
+        if raw and stored_version is not None and stored_version > self.schema_version:
+            self.incompatibility_error = (
+                "The pending queue was created by a newer, incompatible Astra "
+                f"Downloader version (schema {stored_version}; this build reads "
+                f"{self.schema_version}). Update Astra Downloader before "
+                "resuming it."
+            )
+            self._logger(self.incompatibility_error)
+            return raw, False
+        if raw and (stored_version is None or stored_version < self.schema_version):
+            previous = (
+                str(stored_version) if stored_version is not None else "missing or invalid"
+            )
+            self._logger(
+                f"Migrating download queue schema {previous} to "
+                f"{self.schema_version} on the next save."
+            )
+        self.incompatibility_error = ""
+        return raw, True
 
     def serialize(self, downloads, intake_paused=False):
         unfinished = sorted(
@@ -2838,7 +2873,8 @@ class DownloadManagerCore:
         if not compatible:
             self._persistence_compatible = False
             self._persistence_error = (
-                'The pending queue was created by an incompatible Astra Downloader version.'
+                self._queue_store.incompatibility_error
+                or 'The pending queue was created by an incompatible Astra Downloader version.'
             )
             self._dependencies['write_persistent_log'](
                 'Download queue schema is incompatible; preserving the file without changes.'

@@ -873,6 +873,83 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(restored.archive_summary()["complete"], 1)
             self.assertEqual(restored.archive_entries()[key]["status"], "complete")
 
+    def test_missing_and_older_subscription_schemas_migrate_on_save(self):
+        for stored_version in (None, ad.SUBSCRIPTION_SCHEMA_VERSION - 1):
+            with self.subTest(stored_version=stored_version), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "legacy-subscriptions.json"
+                payload = {
+                    "subscriptions": [{
+                        "id": "legacy-subscription",
+                        "url": "https://www.youtube.com/@legacy",
+                        "enabled": False,
+                    }],
+                    "archive": {},
+                }
+                if stored_version is not None:
+                    payload["schemaVersion"] = stored_version
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                logs = []
+                store = ad.SubscriptionStore(
+                    path=path,
+                    reader=ad.load_json_file,
+                    writer=ad.atomic_write_json,
+                    logger=logs.append,
+                )
+
+                self.assertEqual(len(store.list_subscriptions()), 1)
+                updated, error = store.update_subscription(
+                    "legacy-subscription", title="Migrated"
+                )
+
+                self.assertIsNotNone(updated)
+                self.assertIsNone(error)
+                self.assertEqual(
+                    json.loads(path.read_text(encoding="utf-8"))["schemaVersion"],
+                    ad.SUBSCRIPTION_SCHEMA_VERSION,
+                )
+                self.assertTrue(any("Migrating subscription state" in message for message in logs))
+
+    def test_newer_subscription_schema_is_read_only_and_names_the_real_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "future-subscriptions.json"
+            future = {
+                "schemaVersion": ad.SUBSCRIPTION_SCHEMA_VERSION + 1,
+                "futureOnly": {"preserve": True},
+                "subscriptions": [],
+                "archive": {},
+            }
+            path.write_text(json.dumps(future), encoding="utf-8")
+            store = ad.SubscriptionStore(
+                path=path,
+                reader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                logger=lambda _message: None,
+            )
+
+            record, error = store.add_subscription("https://www.youtube.com/@future")
+            self.assertIsNone(record)
+            self.assertIn("newer, incompatible Astra Downloader version", error)
+            self.assertNotIn("disk space", error)
+            self.assertEqual(
+                store.remove_subscription("future-subscription")[1], error
+            )
+            self.assertEqual(
+                store.reserve_archive(
+                    "id:future", {
+                        "id": "future", "url": "https://www.youtube.com/watch?v=future"
+                    }, "future-subscription"
+                ),
+                subscriptions_module().RESERVE_SAVE_FAILED,
+            )
+            manager = subscriptions_module().SubscriptionManager(
+                store=store,
+                probe=lambda _url: ([], None),
+                enqueue=lambda *_args: (None, None),
+            )
+            result = manager.scan_subscription("future-subscription")
+            self.assertIn("newer, incompatible Astra Downloader version", result["error"])
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), future)
+
     def test_begin_scan_moves_a_due_subscription_to_its_next_interval(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self._store(Path(tmp) / "schedule.json")
@@ -4456,6 +4533,34 @@ class DownloadManagerTests(unittest.TestCase):
             self.assertIn('incompatible Astra Downloader version', err)
             self.assertEqual(json.loads(queue_path.read_text(encoding='utf-8')), future)
             self.assertIn('incompatible', manager.queue_payload()['persistenceError'])
+
+    def test_missing_and_older_queue_schemas_are_accepted_and_normalized_on_save(self):
+        for stored_version in (None, ad.DOWNLOAD_QUEUE_SCHEMA_VERSION - 1):
+            with self.subTest(stored_version=stored_version):
+                payload = {"downloads": [], "intakePaused": False}
+                if stored_version is not None:
+                    payload["schemaVersion"] = stored_version
+                writes = []
+                logs = []
+                store = ad.DownloadQueueStore(
+                    path=Path("unused.json"),
+                    reader=lambda *_args, payload=payload: payload,
+                    writer=lambda _path, data: writes.append(data),
+                    logger=logs.append,
+                    clean_text=ad.clean_text,
+                    clean_path_text=ad.clean_path_text,
+                )
+
+                loaded, compatible = store.load()
+
+                self.assertEqual(loaded, payload)
+                self.assertTrue(compatible)
+                self.assertTrue(store.save([], False))
+                self.assertEqual(
+                    writes[-1]["schemaVersion"],
+                    ad.DOWNLOAD_QUEUE_SCHEMA_VERSION,
+                )
+                self.assertTrue(any("Migrating download queue schema" in message for message in logs))
 
     def test_only_classified_transient_failures_can_retry(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
