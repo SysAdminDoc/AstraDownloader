@@ -3670,7 +3670,9 @@ class MainWindowCore(
 
     def _download_recovery_text(self, dl):
         recovery_text = tr(dl.error_advice)
-        if dl.error_code == "rate-limited":
+        if dl.error_code in {
+            "rate-limited", "sign-in-required", "blocked-by-site",
+        }:
             seconds = self._download_host_backoff_seconds(dl)
             if seconds:
                 recovery_text = (

@@ -47,6 +47,8 @@ __all__ = (
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "HOST_BACKOFF_BASE_SECONDS", "HOST_BACKOFF_MAX_SECONDS",
     "HOST_BACKOFF_MAX_ENTRIES", "parse_retry_after_seconds",
+    "HOST_CIRCUIT_FAILURE_CODES", "HOST_CIRCUIT_FAILURE_THRESHOLD",
+    "HOST_CIRCUIT_COOLDOWN_SECONDS",
     "build_impersonate_args",
     "build_network_workaround_args",
     "build_subtitle_args", "build_local_subtitle_args",
@@ -93,6 +95,16 @@ MAX_QUEUED_TOTAL = 200
 HOST_BACKOFF_BASE_SECONDS = 60
 HOST_BACKOFF_MAX_SECONDS = 30 * 60
 HOST_BACKOFF_MAX_ENTRIES = 64
+# A repeated bot/sign-in refusal is different from a transient 429: retrying
+# every queued item only adds more reputation strikes. Keep the circuit
+# session-local, just like the rate-limit backoff, so a restart never carries
+# a stale server decision into a new process.
+HOST_CIRCUIT_FAILURE_CODES = frozenset({
+    'sign-in-required',
+    'blocked-by-site',
+})
+HOST_CIRCUIT_FAILURE_THRESHOLD = 3
+HOST_CIRCUIT_COOLDOWN_SECONDS = 15 * 60
 DOWNLOAD_STALL_TIMEOUT_SECONDS = 1800
 # `--wait-for-video` is an interval between retries, not a process deadline.
 # Keep a never-started live event from holding a worker slot indefinitely even
@@ -3348,6 +3360,10 @@ class DownloadManagerCore:
         # queue record. The map is session-only: a restart restores the queue
         # but never silently carries a stale server-imposed wait forward.
         self._host_backoffs = {}
+        # Consecutive refusal counts are separate from 429 backoffs so a
+        # different failure class resets the circuit rather than inheriting a
+        # rate-limit counter.
+        self._host_circuits = {}
         self._host_backoff_timer = None
         self._host_backoff_timer_due = 0.0
         # Bound concurrent `yt-dlp -J` format probes: each one holds a
@@ -3870,10 +3886,40 @@ class DownloadManagerCore:
             return 0.0
         return remaining
 
+    def _host_circuit_remaining_locked(self, url):
+        key = self._host_backoff_key(url)
+        if not key:
+            return 0.0
+        state = self._host_circuits.get(key)
+        if not state:
+            return 0.0
+        try:
+            failures = int(state.get('failures', 0) or 0)
+            until = float(state.get('until', 0.0) or 0.0)
+        except (TypeError, ValueError, OverflowError):
+            self._host_circuits.pop(key, None)
+            return 0.0
+        remaining = until - time.monotonic()
+        if failures >= HOST_CIRCUIT_FAILURE_THRESHOLD and remaining <= 0:
+            self._host_circuits.pop(key, None)
+            return 0.0
+        return max(0.0, remaining)
+
+    def _host_pause_remaining_locked(self, url):
+        """Return the longer of a 429 backoff and a refusal circuit pause."""
+        return max(
+            self._host_backoff_remaining_locked(url),
+            self._host_circuit_remaining_locked(url),
+        )
+
     def host_backoff_remaining(self, url):
-        """Return the live host pause in seconds for a queue item's URL."""
+        """Return the live host pause in seconds for a queue item's URL.
+
+        The historical name is retained for GUI/API compatibility; this also
+        reports a refusal circuit opened after repeated bot/sign-in failures.
+        """
         with self._lock:
-            return self._host_backoff_remaining_locked(url)
+            return self._host_pause_remaining_locked(url)
 
     def _pacing_jitter_multiplier(self):
         try:
@@ -3941,6 +3987,81 @@ class DownloadManagerCore:
         self._arm_host_backoff_wakeup(remaining)
         return remaining
 
+    def _record_host_circuit_failure(self, url, error_code):
+        """Count one refusal and open a bounded per-domain circuit at N."""
+        if error_code not in HOST_CIRCUIT_FAILURE_CODES:
+            return 0.0
+        key = self._host_backoff_key(url)
+        if not key:
+            return 0.0
+        now = time.monotonic()
+        opened = False
+        with self._lock:
+            previous = self._host_circuits.get(key)
+            try:
+                previous_failures = int(
+                    previous.get('failures', 0) or 0
+                ) if previous else 0
+                previous_until = float(
+                    previous.get('until', 0.0) or 0.0
+                ) if previous else 0.0
+            except (AttributeError, TypeError, ValueError, OverflowError):
+                previous_failures = 0
+                previous_until = 0.0
+            same_class = bool(
+                previous
+                and previous.get('error_code') == error_code
+                and (
+                    previous_failures < HOST_CIRCUIT_FAILURE_THRESHOLD
+                    or previous_until > now
+                )
+            )
+            failures = previous_failures + 1 if same_class else 1
+            if not same_class:
+                previous_until = 0.0
+            was_open = previous_until > now and failures >= HOST_CIRCUIT_FAILURE_THRESHOLD
+            until = (
+                max(previous_until, now + HOST_CIRCUIT_COOLDOWN_SECONDS)
+                if failures >= HOST_CIRCUIT_FAILURE_THRESHOLD else 0.0
+            )
+            opened = failures >= HOST_CIRCUIT_FAILURE_THRESHOLD and not was_open
+            self._host_circuits[key] = {
+                'error_code': error_code,
+                'failures': failures,
+                'until': until,
+                'updated_at': now,
+            }
+            if len(self._host_circuits) > HOST_BACKOFF_MAX_ENTRIES:
+                oldest = sorted(
+                    self._host_circuits.items(),
+                    key=lambda item: float(item[1].get('updated_at', 0.0)),
+                )
+                for old_key, _state in oldest[:-HOST_BACKOFF_MAX_ENTRIES]:
+                    self._host_circuits.pop(old_key, None)
+            remaining = max(0.0, until - now)
+        if opened:
+            self._dependencies['write_persistent_log'](
+                f"Host refusal circuit opened for {key} after {failures} "
+                f"consecutive {error_code} failures; retry in "
+                f"{math.ceil(remaining)}s"
+            )
+            self._arm_host_backoff_wakeup(remaining)
+        return remaining
+
+    def _record_host_circuit_outcome(self, dl):
+        """Advance or reset a domain circuit after a terminal result."""
+        if dl.status == 'failed' and dl.error_code in HOST_CIRCUIT_FAILURE_CODES:
+            self._record_host_circuit_failure(dl.url, dl.error_code)
+            return
+        if dl.status in {'complete', 'skipped'} or (
+            dl.status == 'failed'
+            and dl.error_code not in HOST_CIRCUIT_FAILURE_CODES
+        ):
+            key = self._host_backoff_key(dl.url)
+            if key:
+                with self._lock:
+                    self._host_circuits.pop(key, None)
+
     def _arm_host_backoff_wakeup(self, delay):
         """Wake the scheduler at the earliest blocked-host expiry."""
         try:
@@ -4007,7 +4128,7 @@ class DownloadManagerCore:
             for dl in self._ordered_pending_locked():
                 if dl.status != 'pending':
                     continue
-                remaining = self._host_backoff_remaining_locked(dl.url)
+                remaining = self._host_pause_remaining_locked(dl.url)
                 if remaining > 0:
                     wake_delay = remaining if wake_delay is None else min(wake_delay, remaining)
                     continue
@@ -4916,6 +5037,7 @@ class DownloadManagerCore:
     def _record_terminal_download(self, dl):
         """Persist history and emit completion after any terminal worker path."""
         dl.mark_terminal()
+        self._record_host_circuit_outcome(dl)
         if dl.status in DOWNLOAD_TERMINAL_STATES:
             self._sweep_download_intermediates(dl)
         if dl.status == "complete":
@@ -5806,10 +5928,17 @@ class DownloadManagerCore:
     def _retry_locked(self, dl, cookies, subtitle_retry):
         """Apply a validated retry while ``self._lock`` is held."""
         if dl.status == 'failed' and dl.error_code == 'rate-limited':
-            remaining = self._host_backoff_remaining_locked(dl.url)
+            remaining = self._host_pause_remaining_locked(dl.url)
             if remaining > 0:
                 return False, (
                     'This site is still rate-limited; retry in '
+                    f'{math.ceil(remaining)} seconds.'
+                )
+        elif dl.status == 'failed' and dl.error_code in HOST_CIRCUIT_FAILURE_CODES:
+            remaining = self._host_circuit_remaining_locked(dl.url)
+            if remaining > 0:
+                return False, (
+                    'This site is temporarily refusing requests; retry in '
                     f'{math.ceil(remaining)} seconds.'
                 )
         if self._capacity_locked()['total'] >= MAX_QUEUED_TOTAL:
