@@ -1529,8 +1529,39 @@ def sanitize_config(raw):
     return data
 
 
-def atomic_write_json(path, data):
-    """Durably replace a JSON document without exposing partial contents."""
+def _replace_file(source, destination, *, durable=False):
+    """Atomically replace a file, optionally flushing the rename to storage."""
+    source = str(source)
+    destination = str(destination)
+    if not durable:
+        os.replace(source, destination)
+        return
+    if os.name == "nt":
+        move_file_ex = ctypes.WinDLL("kernel32", use_last_error=True).MoveFileExW
+        move_file_ex.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+        move_file_ex.restype = ctypes.c_bool
+        flags = 0x00000001 | 0x00000008  # MOVEFILE_REPLACE_EXISTING | WRITE_THROUGH
+        if not move_file_ex(source, destination, flags):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return
+    os.replace(source, destination)
+    try:
+        directory_fd = os.open(str(Path(destination).parent), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def atomic_write_json(path, data, *, durable=False):
+    """Durably replace a JSON document without exposing partial contents.
+
+    ``durable`` is reserved for recovery markers and other state whose loss
+    after a successful replacement would make the next launch ambiguous.
+    Normal application state keeps the lighter atomic-visibility path.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
@@ -1540,7 +1571,7 @@ def atomic_write_json(path, data):
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        _replace_file(temporary, path, durable=durable)
     finally:
         try:
             if temporary.exists():

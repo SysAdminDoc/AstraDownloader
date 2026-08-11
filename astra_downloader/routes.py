@@ -144,6 +144,9 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS',
     'RATE_LIMIT_PICKFOLDER_MAX',
     'RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS',
+    'RATE_LIMIT_UPDATE_MAX',
+    'RATE_LIMIT_UPDATE_WINDOW_SECONDS',
+    'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS',
     'SERVER_PORT',
     'SERVICE_API_VERSION',
     'SERVICE_ID',
@@ -195,6 +198,9 @@ def create_api(config, dl_manager, history, *, dependencies):
     RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS = dependencies['RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS']
     RATE_LIMIT_PICKFOLDER_MAX = dependencies['RATE_LIMIT_PICKFOLDER_MAX']
     RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS = dependencies['RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS']
+    RATE_LIMIT_UPDATE_MAX = dependencies['RATE_LIMIT_UPDATE_MAX']
+    RATE_LIMIT_UPDATE_WINDOW_SECONDS = dependencies['RATE_LIMIT_UPDATE_WINDOW_SECONDS']
+    COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS = dependencies['COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS']
     SERVER_PORT = dependencies['SERVER_PORT']
     SERVICE_API_VERSION = dependencies['SERVICE_API_VERSION']
     SERVICE_ID = dependencies['SERVICE_ID']
@@ -256,6 +262,35 @@ def create_api(config, dl_manager, history, *, dependencies):
         max_events=RATE_LIMIT_PICKFOLDER_MAX,
         window_seconds=RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS,
     )
+    companion_update_rate_limiter = RateLimiter(
+        max_events=RATE_LIMIT_UPDATE_MAX,
+        window_seconds=RATE_LIMIT_UPDATE_WINDOW_SECONDS,
+    )
+    companion_update_backoff_lock = threading.Lock()
+    companion_update_backoff = {'until': 0.0}
+
+    def companion_update_gate():
+        now = time.monotonic()
+        with companion_update_backoff_lock:
+            retry_after = max(0.0, companion_update_backoff['until'] - now)
+        if retry_after:
+            return False, retry_after, 'update-backoff'
+        allowed, retry_after = companion_update_rate_limiter.allow('companion-update')
+        return allowed, retry_after, 'update-rate-limited'
+
+    def record_companion_update_result(result):
+        now = time.monotonic()
+        if result.get('ok'):
+            with companion_update_backoff_lock:
+                companion_update_backoff['until'] = 0.0
+            return
+        if result.get('error_code') in {'downloads-in-flight', 'update-in-progress'}:
+            return
+        with companion_update_backoff_lock:
+            companion_update_backoff['until'] = max(
+                companion_update_backoff['until'],
+                now + COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS,
+            )
 
     def check_auth():
         provided = request.headers.get("X-Auth-Token", "")
@@ -1184,6 +1219,19 @@ def create_api(config, dl_manager, history, *, dependencies):
         """
         if not check_auth():
             return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        allowed, retry_after, gate_code = companion_update_gate()
+        if not allowed:
+            message = (
+                "The companion updater is backing off after a failed attempt. "
+                "Please wait before trying again."
+                if gate_code == 'update-backoff'
+                else "Too many companion update requests in a short period. Please wait a moment."
+            )
+            return cors_response(
+                {"error": message, "ok": False, "error_code": gate_code},
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
         in_flight = dl_manager.active_count()
         if in_flight > 0:
             return cors_response(
@@ -1196,6 +1244,7 @@ def create_api(config, dl_manager, history, *, dependencies):
                 409,
             )
         result = _run_companion_self_update(restart=True, dl_manager=dl_manager)
+        record_companion_update_result(result)
         if result.get('ok'):
             return cors_response(result, 200)
         if result.get('error_code') == 'downloads-in-flight':

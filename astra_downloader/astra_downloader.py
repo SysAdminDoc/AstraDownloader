@@ -9,7 +9,7 @@ First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, hashlib, struct, math, stat
 import queue
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
 
 # The pinned yt-dlp (2026.7.4) requires Python 3.11; on 3.10 the install of
@@ -535,6 +535,12 @@ RATE_LIMIT_DOWNLOAD_MAX = 30
 RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS = 60
 RATE_LIMIT_PICKFOLDER_MAX = 5
 RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS = 60
+# Companion release checks hit both GitHub's API and a raw source endpoint.
+# Keep a small legitimate retry allowance while preventing a broken release
+# from turning one impatient click into a repeated multi-megabyte download.
+RATE_LIMIT_UPDATE_MAX = 3
+RATE_LIMIT_UPDATE_WINDOW_SECONDS = 60
+COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS = 300
 # Scheduled scans only need the newest bounded window. The archive store is
 # the authority for dedupe; this cap keeps one slow channel from monopolizing
 # a waitress worker or filling the local state document.
@@ -960,6 +966,30 @@ def install_unhandled_exception_hooks(notify=None):
         args.exc_type, args.exc_value, args.exc_traceback
     )
     return hook
+
+
+def _durable_replace(source, destination):
+    """Replace a file and flush the rename when it carries update state."""
+    source = Path(source)
+    destination = Path(destination)
+    if os.name == 'nt':
+        import ctypes
+        move_file_ex = ctypes.WinDLL('kernel32', use_last_error=True).MoveFileExW
+        move_file_ex.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+        move_file_ex.restype = ctypes.c_bool
+        flags = 0x00000001 | 0x00000008  # MOVEFILE_REPLACE_EXISTING | WRITE_THROUGH
+        if not move_file_ex(str(source), str(destination), flags):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return
+    os.replace(source, destination)
+    try:
+        directory_fd = os.open(str(destination.parent), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def atomic_copy_verified(source, destination):
@@ -1903,16 +1933,71 @@ def _companion_update_state_path():
     return INSTALL_DIR / 'companion-update-state.json'
 
 
+_UPDATE_SCRATCH_PREFIXES = (
+    '.AstraDownloader.update.',
+    '..AstraDownloader.update.',
+    '.AstraDownloader.apply-update.',
+    '.yt-dlp.update.',
+    '..yt-dlp.update.',
+)
+
+
+def cleanup_update_scratch_files():
+    """Remove update artifacts left behind by a killed updater process."""
+    root = Path(INSTALL_DIR)
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return 0
+    removed = 0
+    for child in children:
+        if not any(child.name.startswith(prefix) for prefix in _UPDATE_SCRATCH_PREFIXES):
+            continue
+        try:
+            if child.is_symlink() or not child.is_file():
+                continue
+            child.unlink(missing_ok=True)
+            removed += 1
+        except OSError as error:
+            write_persistent_log(f'Could not remove stale update scratch {child}: {error}')
+    if removed:
+        write_persistent_log(f'Removed {removed} stale update scratch file(s) at startup.')
+    return removed
+
+
 def _read_update_state(path):
     data = load_json_file(path, {})
     return data if isinstance(data, dict) else {}
 
 
+def _utc_timestamp():
+    return datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+
+def _parse_update_timestamp(value):
+    """Parse current UTC markers and legacy local-naive markers safely."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        stamp = datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        try:
+            stamp = datetime.strptime(text, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return None
+    if stamp.tzinfo is None:
+        # State written before UTC markers used the machine's local wall clock.
+        # Attach the local zone before comparing it with an aware UTC value.
+        stamp = stamp.astimezone()
+    return stamp.astimezone(timezone.utc)
+
+
 def _write_update_state(path, **fields):
     state = _read_update_state(path)
     state.update(fields)
-    state['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    atomic_write_json(path, state)
+    state['updated_at'] = _utc_timestamp()
+    atomic_write_json(path, state, durable=True)
     return state
 
 
@@ -1922,16 +2007,10 @@ def _reconcile_stale_companion_activation():
     state = _read_update_state(path)
     if state.get('status') != 'activation-pending':
         return state
-    updated_at = state.get('updated_at')
-    stale = True
-    if isinstance(updated_at, str):
-        try:
-            stamp = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
-            stale = (datetime.now() - stamp).total_seconds() > COMPANION_UPDATE_TIMEOUT_SECONDS
-        except ValueError:
-            # A pending marker with an unreadable timestamp cannot be safely
-            # kept pending across restarts; fail closed and invite a retry.
-            stale = True
+    stamp = _parse_update_timestamp(state.get('updated_at'))
+    stale = stamp is None or (
+        datetime.now(timezone.utc) - stamp
+    ).total_seconds() > COMPANION_UPDATE_TIMEOUT_SECONDS
     if not stale:
         return state
     reconciled = _write_update_state(
@@ -2186,7 +2265,7 @@ def _run_ytdlp_self_update(config, source_tag):
         staged_digest = _compute_sha256(stage_path)
         if not staged_digest:
             raise RuntimeError('The staged yt-dlp update could not be hashed.')
-        os.replace(stage_path, YTDLP_PATH)
+        _durable_replace(stage_path, YTDLP_PATH)
         active_version = _probe_ytdlp_binary(YTDLP_PATH)
         active_digest = _compute_sha256(YTDLP_PATH)
         if active_version != staged_version or active_digest != staged_digest:
@@ -2469,7 +2548,7 @@ def record_last_installed_update_sha256(digest):
         _write_update_state(
             _companion_update_state_path(),
             sha256=str(digest).strip().lower(),
-            recorded_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            recorded_at=_utc_timestamp(),
             app_version=APP_VERSION,
         )
     except Exception as e:  # noqa: BLE001
@@ -2586,12 +2665,20 @@ function Write-RecoveryState([string] $Status, [string] $ActiveVersion, [string]
         active_version = $ActiveVersion
         rollback_version = $RollbackVersion
         error_code = $ErrorCode
-        updated_at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        updated_at = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
     }
     $temp = "$StatePath.$([Guid]::NewGuid().ToString('N')).tmp"
     $json = $state | ConvertTo-Json
-    [IO.File]::WriteAllText($temp, $json + [Environment]::NewLine, (New-Object Text.UTF8Encoding($false)))
-    Move-Item -LiteralPath $temp -Destination $StatePath -Force
+    $encoding = New-Object Text.UTF8Encoding($false)
+    $bytes = $encoding.GetBytes($json + [Environment]::NewLine)
+    $stream = [IO.File]::Open($temp, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally {
+        $stream.Dispose()
+    }
+    Move-Replace $temp $StatePath
 }
 
 $activated = $false
@@ -2654,6 +2741,7 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 
 pid = int(sys.argv[1])
 source = sys.argv[2]
@@ -2672,12 +2760,23 @@ def digest(path):
             h.update(chunk)
     return h.hexdigest().lower()
 
+def durable_replace(source_path, destination_path):
+    os.replace(source_path, destination_path)
+    try:
+        directory_fd = os.open(os.path.dirname(destination_path) or '.', os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
 def atomic_copy(source_path, destination_path):
     temp = destination_path + '.' + uuid.uuid4().hex + '.tmp'
     shutil.copyfile(source_path, temp)
     if digest(source_path) != digest(temp):
         raise RuntimeError('Retained backup digest mismatch')
-    os.replace(temp, destination_path)
+    durable_replace(temp, destination_path)
 
 def healthy(path, version):
     return subprocess.run(
@@ -2691,7 +2790,7 @@ def write_state(status, active_version, rollback_version, error_code):
         'app_version': expected_version,
         'status': status, 'active_version': active_version,
         'rollback_version': rollback_version, 'error_code': error_code,
-        'updated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'updated_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
     }
     temp = state_path + '.' + uuid.uuid4().hex + '.tmp'
     with open(temp, 'w', encoding='utf-8') as stream:
@@ -2699,7 +2798,7 @@ def write_state(status, active_version, rollback_version, error_code):
         stream.write('\n')
         stream.flush()
         os.fsync(stream.fileno())
-    os.replace(temp, state_path)
+    durable_replace(temp, state_path)
 
 deadline = time.time() + 45
 while time.time() < deadline:
@@ -2713,7 +2812,7 @@ try:
     if digest(source) != expected_sha256.lower() or not healthy(source, expected_version):
         raise RuntimeError('Staged companion verification failed')
     atomic_copy(target, backup)
-    os.replace(source, target)
+    durable_replace(source, target)
     activated = True
     if digest(target) != expected_sha256.lower() or not healthy(target, expected_version):
         raise RuntimeError('Post-update companion health check failed')
@@ -2970,14 +3069,39 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
         restart_args = ['--start-server']
         if is_portable_mode():
             restart_args.append('--portable')
-        schedule = schedule_companion_update_restart(
-            update_path, install_target_exe(), restart_args,
-            expected_sha256=downloaded_digest,
-            expected_version=latest_version,
-            previous_version=current_version,
-        )
-        if restart:
-            schedule_companion_process_exit()
+        try:
+            schedule = schedule_companion_update_restart(
+                update_path, install_target_exe(), restart_args,
+                expected_sha256=downloaded_digest,
+                expected_version=latest_version,
+                previous_version=current_version,
+            )
+            if restart:
+                schedule_companion_process_exit()
+        except Exception as schedule_error:  # noqa: BLE001
+            write_persistent_log(f"Companion update scheduling failed: {schedule_error}")
+            try:
+                _write_update_state(
+                    _companion_update_state_path(), status='activation-failed',
+                    active_version=current_version, rollback_version=current_version,
+                    active_sha256='', rollback_sha256='', error_code='schedule-failed',
+                )
+            except Exception as state_error:  # noqa: BLE001
+                write_persistent_log(
+                    f"Could not persist failed companion update scheduling state: {state_error}"
+                )
+            try:
+                update_path.unlink(missing_ok=True)
+            except Exception:
+                # reason: failed scheduling cleanup is best-effort after the terminal state is recorded
+                pass
+            return {
+                'ok': False,
+                'error': 'Could not schedule Astra Downloader to restart for the update.',
+                'error_code': 'schedule-failed',
+                'current_version': current_version,
+                'latest_version': latest_version,
+            }
         write_persistent_log(
             f"Companion update scheduled ({current_version} -> {latest_version}) via {update_path}"
         )
@@ -3936,6 +4060,9 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS': RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS,
         'RATE_LIMIT_PICKFOLDER_MAX': RATE_LIMIT_PICKFOLDER_MAX,
         'RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS': RATE_LIMIT_PICKFOLDER_WINDOW_SECONDS,
+        'RATE_LIMIT_UPDATE_MAX': RATE_LIMIT_UPDATE_MAX,
+        'RATE_LIMIT_UPDATE_WINDOW_SECONDS': RATE_LIMIT_UPDATE_WINDOW_SECONDS,
+        'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS': COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS,
         'SERVER_PORT': SERVER_PORT,
         'SERVICE_API_VERSION': SERVICE_API_VERSION,
         'SERVICE_ID': SERVICE_ID,
@@ -4871,6 +4998,7 @@ def main():
     startup_command = startup_command_from_argv()
     start_minimized = '-Background' in sys.argv or '--background' in sys.argv or startup_command == 'start'
     seed_log_ring()
+    cleanup_update_scratch_files()
     _reconcile_stale_companion_activation()
     log_update_recovery_status()
 
