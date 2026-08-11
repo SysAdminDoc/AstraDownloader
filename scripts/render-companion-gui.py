@@ -78,7 +78,7 @@ def main():
         sys.path.insert(0, str(ROOT))
 
         from astra_downloader import astra_downloader as app_module
-        from PyQt6.QtCore import Qt, QTimer
+        from PyQt6.QtCore import QPoint, QRect, Qt, QTimer
         from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QImage
         from PyQt6.QtTest import QTest
         from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea
@@ -203,6 +203,58 @@ def main():
             for nav_button in window.nav_buttons:
                 if not window.sidebar.rect().contains(nav_button.geometry()):
                     raise RuntimeError(f"Navigation control escaped the native rail on {page_name}")
+
+        def assert_download_options_reflow(window):
+            """Pin the minimum-size fixture's option rows, not its screenshot."""
+            container = window.quick_download_options_container
+            if window.quick_download_options_layout.count() < 2:
+                raise RuntimeError("Download options did not wrap into multiple rows")
+            controls = [
+                window.quick_download_profile,
+                window.quick_download_type,
+                window.quick_download_format,
+                window.quick_download_quality,
+                window.btn_quick_download_dest,
+                window.quick_download_start,
+                window.quick_download_end,
+            ]
+            rects = []
+            common_parent = container.parentWidget()
+            container_rect = container.geometry()
+            for control in controls:
+                if not control.isVisible():
+                    raise RuntimeError(
+                        f"Download option is hidden: {control.objectName() or type(control).__name__}"
+                    )
+                top_left = control.mapTo(common_parent, QPoint(0, 0))
+                rect = QRect(top_left, control.size())
+                rects.append(rect)
+                if not (
+                    container_rect.contains(rect.topLeft())
+                    and container_rect.contains(rect.bottomRight())
+                ):
+                    raise RuntimeError(
+                        f"Download option escaped its row container: {type(control).__name__} "
+                        f"rect={rect}, container={container_rect}"
+                    )
+                if hasattr(control, "currentText"):
+                    text = control.currentText()
+                    reserved = 44  # padding plus the native drop-down arrow
+                else:
+                    text = control.text()
+                    reserved = 26  # horizontal stylesheet padding
+                if text and control.fontMetrics().horizontalAdvance(text) > max(
+                    0, control.width() - reserved
+                ):
+                    raise RuntimeError(
+                        f"Download option text is clipped: {text!r} in {control.width()}px"
+                    )
+            for index, rect in enumerate(rects):
+                for other in rects[index + 1:]:
+                    if rect.intersects(other):
+                        raise RuntimeError(
+                            "Download option controls overlap at the minimum size"
+                        )
 
         def scroll_current_page_to_bottom(window):
             current = window.tabs.currentWidget()
@@ -600,6 +652,7 @@ def main():
                     app.processEvents()
                     if window.size().width() != 900 or window.size().height() != 620:
                         raise RuntimeError("Companion minimum-size fixture did not reach 900x620")
+                    assert_download_options_reflow(window)
                 scroll_current_page_to_top(window)
                 if scenario == "downloads-recovery-terminal":
                     assert_visible_text(

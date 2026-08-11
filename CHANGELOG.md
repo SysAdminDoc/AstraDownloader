@@ -17,6 +17,9 @@ repository's git log.
 - **Interactive control boundaries now meet the non-text contrast floor.**
   Resting, disabled, hover, input, menu, text-edit, ghost-button, and
   checkbox boundaries are declared against their actual stylesheet fills.
+- **Download options reflow at the minimum window size.** Profile, media,
+  destination, and clip controls use readable rows inside a scrollable page;
+  the headless large-font fixture now checks their bounds, overlap, and text.
 - **Local transcription uses a verified whisper.cpp sidecar.** Setup now fetches
   the pinned CLI and sibling DLLs, probes the SRT capability, and reports a
   missing runtime before a job starts; successful media stays complete when
