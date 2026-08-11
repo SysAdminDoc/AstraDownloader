@@ -2720,12 +2720,20 @@ def read_last_installed_update_sha256():
     return None
 
 
-def record_last_installed_update_sha256(digest):
-    """Persist an activated update digest when a caller has verified it."""
+def record_last_installed_update_sha256(digest, *, status='active'):
+    """Persist an update digest with an explicit activation status.
+
+    The detached helper changes ``activation-pending`` to ``active`` only
+    after replacement and a post-activation health probe. Recording the
+    verified digest before detaching keeps one state writer in the normal
+    production path without making a merely scheduled update suppress a
+    retry.
+    """
     try:
         _write_update_state(
             _companion_update_state_path(),
             sha256=str(digest).strip().lower(),
+            status=str(status or 'active').strip().lower(),
             recorded_at=_utc_timestamp(),
             app_version=APP_VERSION,
         )
@@ -2822,11 +2830,28 @@ function Test-Companion([string] $Path, [string] $Version) {
     $probe = Start-Process -FilePath $Path -ArgumentList @('--update-health-check', $Version) -WindowStyle Hidden -PassThru
     $probeFinished = $false
     try {
-        Wait-Process -Id $probe.Id -Timeout 30 -ErrorAction Stop | Out-Null
+        # A very short health probe can exit between Start-Process and
+        # Wait-Process. In that race Wait-Process reports "process not found"
+        # even though the probe completed successfully. Read live state first
+        # and re-check it after any wait failure before declaring a bad build.
         $probe.Refresh()
-        $probeFinished = $probe.HasExited
+        if ($probe.HasExited) {
+            $probeFinished = $true
+        } else {
+            Wait-Process -Id $probe.Id -Timeout 30 -ErrorAction Stop | Out-Null
+            $probe.Refresh()
+            $probeFinished = $probe.HasExited
+        }
     } catch {
-        $probeFinished = $false
+        try {
+            $probe.Refresh()
+            $probeFinished = $probe.HasExited
+        } catch {
+            # The process object can lose its handle after a fast exit. A
+            # missing live process is still a completed probe; its ExitCode
+            # remains available on the original Process object when possible.
+            $probeFinished = $null -eq (Get-Process -Id $probe.Id -ErrorAction SilentlyContinue)
+        }
     }
     if (-not $probeFinished) {
         try { Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -3253,6 +3278,13 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
                 expected_sha256=downloaded_digest,
                 expected_version=latest_version,
                 previous_version=current_version,
+            )
+            # The detached helper is still authoritative for the final
+            # ``active`` state, but production records the verified digest
+            # before it exits so an interrupted handoff is diagnosable and
+            # cannot be mistaken for an already-installed release.
+            record_last_installed_update_sha256(
+                downloaded_digest, status='activation-pending'
             )
             if restart:
                 schedule_companion_process_exit()

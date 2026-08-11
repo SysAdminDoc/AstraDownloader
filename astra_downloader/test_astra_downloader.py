@@ -12225,6 +12225,8 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         self.assertIn('-WindowStyle Hidden', helper_source)
         self.assertIn('Wait-Process -Id $probe.Id -Timeout 30', helper_source)
         self.assertIn('$probeFinished = $probe.HasExited', helper_source)
+        self.assertIn('$probe.Refresh()\n        if ($probe.HasExited)', helper_source)
+        self.assertIn('Get-Process -Id $probe.Id -ErrorAction SilentlyContinue', helper_source)
         self.assertIn('Stop-Process -Id $probe.Id -Force', helper_source)
         self.assertIn('$MOVEFILE_WRITE_THROUGH = 0x8', helper_source)
         self.assertIn('$stream.Flush($true)', helper_source)
@@ -12404,6 +12406,9 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             self.assertEqual(schedule.call_count, 1)
             self.assertIsNone(ad.read_last_installed_update_sha256(),
                 "a scheduled update must not suppress retries before activation")
+            pending_state = ad._read_update_state(ad._companion_update_state_path())
+            self.assertEqual(pending_state.get("status"), "activation-pending")
+            self.assertEqual(pending_state.get("sha256"), hash_a)
 
             ad._write_update_state(
                 ad._companion_update_state_path(), status='active',
