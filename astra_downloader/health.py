@@ -4,7 +4,7 @@ import re
 import subprocess
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -40,6 +40,8 @@ __all__ = (
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",
     "probe_javascript_execution", "evaluate_javascript_runtime",
+    "REQUIRED_FFMPEG_FILTERS", "missing_ffmpeg_filters",
+    "YTDLP_STALE_AFTER_DAYS", "evaluate_preflight_checks",
 )
 
 YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
@@ -51,6 +53,12 @@ NODE_MIN_VERSION = "22.0.0"
 # ships, because that is the only one this project has verified end-to-end —
 # a test keeps the two in step.
 QUICKJS_MIN_VERSION = "0.16.1"
+
+# The local transcription path normalises input audio through this filter.
+# Keep the pre-flight requirement deliberately small: the rest of the media
+# path delegates format selection to yt-dlp and does not need a filter audit.
+REQUIRED_FFMPEG_FILTERS = ("aformat",)
+YTDLP_STALE_AFTER_DAYS = 30
 
 # The runtimes yt-dlp accepts that this app knows how to probe and select.
 # yt-dlp also lists `bun`; it is absent here because nothing provisions it and
@@ -129,6 +137,253 @@ def evaluate_sabr_support(ytdlp_version):
     if not SABR_NATIVE_MIN_VERSION or not ytdlp_version:
         return "limited"
     return "supported" if _compare_semver(str(ytdlp_version), SABR_NATIVE_MIN_VERSION) >= 0 else "limited"
+
+
+def missing_ffmpeg_filters(output, required=REQUIRED_FFMPEG_FILTERS):
+    """Return required FFmpeg filters absent from ``-filters`` output.
+
+    FFmpeg prints a three-character capability flag followed by the filter
+    name. Parse only that stable table shape so banners, build metadata, and
+    arbitrary stderr text cannot accidentally count as a filter.
+    """
+    available = set()
+    for line in str(output or "").splitlines():
+        fields = line.strip().split()
+        if len(fields) < 2 or not re.fullmatch(r"[TSC.]{3}", fields[0]):
+            continue
+        name = fields[1].strip()
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name):
+            available.add(name)
+    return [name for name in required if str(name) not in available]
+
+
+def _preflight_now_date(value):
+    if value is None:
+        return date.today()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            # reason: malformed injected test/adapter time falls back to today
+            pass
+    return date.today()
+
+
+def _preflight_check(check_id, name, status, action, message, **details):
+    return {
+        "id": check_id,
+        "name": name,
+        "status": status,
+        "action": action,
+        "message": str(message or "")[:240],
+        "details": details,
+    }
+
+
+def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
+                              javascript_runtime=None, sign_in_entries=None,
+                              github_api_budget=None, po_token_provider=None,
+                              now=None):
+    """Classify known download prerequisites without performing I/O.
+
+    Callers own the slow probes and pass their bounded results here. The
+    returned IDs and actions are stable API values; ``details`` contains only
+    counts, versions, and booleans, never paths, site names, tokens, or cookie
+    contents. ``warning`` and ``unknown`` conditions are actionable but do
+    not block a download; ``error`` identifies a prerequisite that is known
+    to be unusable.
+    """
+    today = _preflight_now_date(now)
+    checks = []
+
+    release_date = _parse_ytdlp_release_date(ytdlp_version)
+    if release_date is None:
+        checks.append(_preflight_check(
+            "ytdlp-freshness", "yt-dlp freshness", "error", "refresh-ytdlp",
+            "yt-dlp is missing or its release date could not be verified.",
+            version=str(ytdlp_version or ""),
+            maxAgeDays=YTDLP_STALE_AFTER_DAYS,
+        ))
+    else:
+        try:
+            release = date(*release_date)
+            age_days = max(0, (today - release).days)
+        except ValueError:
+            age_days = YTDLP_STALE_AFTER_DAYS + 1
+        stale = age_days > YTDLP_STALE_AFTER_DAYS
+        checks.append(_preflight_check(
+            "ytdlp-freshness", "yt-dlp freshness",
+            "warning" if stale else "ok", "refresh-ytdlp",
+            (
+                f"Installed yt-dlp is {age_days} days old; refresh it before "
+                "starting a download."
+                if stale else "Installed yt-dlp is within the freshness window."
+            ),
+            version=str(ytdlp_version), ageDays=age_days,
+            maxAgeDays=YTDLP_STALE_AFTER_DAYS,
+        ))
+
+    runtime = javascript_runtime if isinstance(javascript_runtime, dict) else {}
+    if not runtime.get("ytdlpNeedsRuntime"):
+        checks.append(_preflight_check(
+            "javascript-runtime", "JavaScript runtime", "not-applicable",
+            "provision-runtime",
+            "The installed yt-dlp does not require an external JavaScript runtime.",
+        ))
+    elif runtime.get("supported") is True and runtime.get("ejsReady") is True:
+        checks.append(_preflight_check(
+            "javascript-runtime", "JavaScript runtime", "ok",
+            "provision-runtime", "A supported JavaScript runtime passed its execution check.",
+            runtime=str(runtime.get("runtime") or ""),
+            version=str(runtime.get("version") or ""),
+        ))
+    else:
+        checks.append(_preflight_check(
+            "javascript-runtime", "JavaScript runtime", "error",
+            "provision-runtime",
+            "yt-dlp needs a supported JavaScript runtime, but it is missing or not ready.",
+            runtime=str(runtime.get("runtime") or ""),
+            reason=str(runtime.get("reason") or "runtime-not-ready"),
+            minVersion=str(runtime.get("minVersion") or ""),
+        ))
+
+    ffmpeg = ffmpeg_capabilities if isinstance(ffmpeg_capabilities, dict) else {}
+    missing_filters = [
+        str(value) for value in (ffmpeg.get("missingFilters") or [])
+        if str(value)
+    ]
+    filter_checked = ffmpeg.get("filterCheck") is True
+    if missing_filters:
+        checks.append(_preflight_check(
+            "ffmpeg-capabilities", "FFmpeg security and filters", "error",
+            "refresh-ffmpeg",
+            "FFmpeg is missing a filter required by local transcription.",
+            missingFilters=missing_filters,
+        ))
+    elif ffmpeg.get("current") is False:
+        checks.append(_preflight_check(
+            "ffmpeg-capabilities", "FFmpeg security and filters", "error",
+            "refresh-ffmpeg",
+            str(ffmpeg.get("message") or "FFmpeg is below the verified security floor."),
+            current=False,
+            majorVersion=ffmpeg.get("majorVersion"),
+        ))
+    elif ffmpeg.get("current") is True and filter_checked:
+        checks.append(_preflight_check(
+            "ffmpeg-capabilities", "FFmpeg security and filters", "ok",
+            "refresh-ffmpeg", "FFmpeg meets the security floor and filter requirements.",
+            current=True,
+        ))
+    else:
+        checks.append(_preflight_check(
+            "ffmpeg-capabilities", "FFmpeg security and filters", "unknown",
+            "refresh-ffmpeg",
+            "FFmpeg security or filter capability could not be verified yet.",
+            current=ffmpeg.get("current"),
+            filterChecked=filter_checked,
+        ))
+
+    entries = sign_in_entries if isinstance(sign_in_entries, (list, tuple)) else []
+    expired_count = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            cookie_count = max(0, int(entry.get("cookies") or 0))
+        except (TypeError, ValueError, OverflowError):
+            cookie_count = 0
+        if (
+            entry.get("expired") is True and cookie_count > 0
+            and (entry.get("stored") is not False)
+        ):
+            expired_count += 1
+    if expired_count:
+        checks.append(_preflight_check(
+            "sign-in-expiry", "Stored sign-in expiry", "warning",
+            "refresh-sign-in",
+            f"{expired_count} stored sign-in session(s) have expired cookies.",
+            expiredCount=expired_count,
+        ))
+    elif entries:
+        checks.append(_preflight_check(
+            "sign-in-expiry", "Stored sign-in expiry", "ok", "refresh-sign-in",
+            "Stored sign-in sessions have no expired cookie jars.", expiredCount=0,
+        ))
+    else:
+        checks.append(_preflight_check(
+            "sign-in-expiry", "Stored sign-in expiry", "not-applicable",
+            "refresh-sign-in", "No stored sign-in cookie jars need checking.",
+            expiredCount=0,
+        ))
+
+    budget = github_api_budget if isinstance(github_api_budget, dict) else {}
+    raw_remaining = budget.get("remaining")
+    try:
+        remaining = max(0, int(raw_remaining)) if raw_remaining is not None else None
+    except (TypeError, ValueError, OverflowError):
+        remaining = None
+    if remaining is None:
+        checks.append(_preflight_check(
+            "github-api-budget", "Anonymous GitHub API budget", "unknown",
+            "retry-github",
+            "The anonymous GitHub API budget has not been measured yet.",
+        ))
+    elif remaining == 0:
+        checks.append(_preflight_check(
+            "github-api-budget", "Anonymous GitHub API budget", "error",
+            "retry-github",
+            "The anonymous GitHub API budget is exhausted; retry after reset.",
+            remaining=0, resetAt=budget.get("resetAt"),
+        ))
+    else:
+        checks.append(_preflight_check(
+            "github-api-budget", "Anonymous GitHub API budget",
+            "warning" if remaining <= 5 else "ok", "retry-github",
+            (
+                f"Only {remaining} anonymous GitHub API request(s) remain."
+                if remaining <= 5 else "The anonymous GitHub API budget is available."
+            ),
+            remaining=remaining, limit=budget.get("limit"),
+            resetAt=budget.get("resetAt"),
+        ))
+
+    if po_token_provider is None:
+        checks.append(_preflight_check(
+            "po-token-provider", "Proof-of-origin token provider", "not-applicable",
+            "use-sign-in",
+            "The plugin-free client chain does not require a token provider.",
+        ))
+    elif isinstance(po_token_provider, dict) and po_token_provider.get("ok"):
+        provider_stale = bool(po_token_provider.get("stale"))
+        checks.append(_preflight_check(
+            "po-token-provider", "Proof-of-origin token provider",
+            "warning" if provider_stale else "ok", "use-sign-in",
+            "The proof-of-origin token provider is stale." if provider_stale
+            else "The proof-of-origin token provider is ready.",
+            stale=provider_stale,
+        ))
+    else:
+        checks.append(_preflight_check(
+            "po-token-provider", "Proof-of-origin token provider", "warning",
+            "use-sign-in",
+            "The proof-of-origin token provider cannot mint a session-bound token; use a site sign-in or retry later.",
+        ))
+
+    blocking = [item["id"] for item in checks if item["status"] == "error"]
+    attention = [
+        item["id"] for item in checks
+        if item["status"] in {"warning", "unknown"}
+    ]
+    return {
+        "status": "blocked" if blocking else "attention" if attention else "ready",
+        "blocking": blocking,
+        "attention": attention,
+        "checks": checks,
+    }
 
 
 # Antivirus removing a managed binary is the single largest support burden
@@ -675,6 +930,8 @@ _OWNED_EXPORTS = {
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",
     "probe_javascript_execution", "evaluate_javascript_runtime",
+    "REQUIRED_FFMPEG_FILTERS", "YTDLP_STALE_AFTER_DAYS",
+    "missing_ffmpeg_filters", "evaluate_preflight_checks",
 }
 _resolve_legacy = make_legacy_resolver(
     name for name in __all__ if name not in _OWNED_EXPORTS

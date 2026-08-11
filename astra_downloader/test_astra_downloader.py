@@ -8551,6 +8551,135 @@ class FfmpegCapabilitiesTests(unittest.TestCase):
             self.assertIn(key, caps)
 
 
+class PreflightHealthTests(unittest.TestCase):
+    """The download failure taxonomy is named before a job starts."""
+
+    @staticmethod
+    def _base(**overrides):
+        values = {
+            'ytdlp_version': '2026.08.01',
+            'ffmpeg_capabilities': {
+                'current': True,
+                'filterCheck': True,
+                'missingFilters': [],
+            },
+            'javascript_runtime': {'ytdlpNeedsRuntime': False},
+            'sign_in_entries': [],
+            'github_api_budget': {'remaining': 20, 'limit': 60},
+            'po_token_provider': None,
+            'now': '2026-08-11',
+        }
+        values.update(overrides)
+        return ad.evaluate_preflight_checks(**values)
+
+    def _check(self, result, check_id):
+        return next(item for item in result['checks'] if item['id'] == check_id)
+
+    def test_ytdlp_freshness_names_stale_release_and_refresh_action(self):
+        check = self._check(
+            self._base(ytdlp_version='2026.06.01'), 'ytdlp-freshness'
+        )
+        self.assertEqual(check['status'], 'warning')
+        self.assertEqual(check['action'], 'refresh-ytdlp')
+        self.assertEqual(check['details']['ageDays'], 71)
+
+    def test_javascript_runtime_names_missing_external_runtime(self):
+        check = self._check(self._base(
+            javascript_runtime={
+                'ytdlpNeedsRuntime': True,
+                'supported': False,
+                'ejsReady': False,
+                'reason': 'runtime-not-installed',
+            },
+        ), 'javascript-runtime')
+        self.assertEqual(check['status'], 'error')
+        self.assertEqual(check['action'], 'provision-runtime')
+
+    def test_ffmpeg_filter_gap_is_a_named_repair(self):
+        check = self._check(self._base(
+            ffmpeg_capabilities={
+                'current': True,
+                'filterCheck': True,
+                'missingFilters': ['aformat'],
+            },
+        ), 'ffmpeg-capabilities')
+        self.assertEqual(check['status'], 'error')
+        self.assertEqual(check['action'], 'refresh-ffmpeg')
+        self.assertEqual(check['details']['missingFilters'], ['aformat'])
+
+    def test_expired_sign_in_is_aggregate_and_never_exposes_site_names(self):
+        result = self._base(sign_in_entries=[{
+            'site': 'private.example', 'cookies': 4, 'expired': True,
+            'stored': True,
+        }])
+        check = self._check(result, 'sign-in-expiry')
+        self.assertEqual(check['status'], 'warning')
+        self.assertEqual(check['action'], 'refresh-sign-in')
+        self.assertEqual(check['details']['expiredCount'], 1)
+        self.assertNotIn('private.example', json.dumps(result))
+
+    def test_exhausted_github_budget_is_blocking_and_retryable(self):
+        check = self._check(
+            self._base(github_api_budget={'remaining': 0, 'resetAt': 123}),
+            'github-api-budget',
+        )
+        self.assertEqual(check['status'], 'error')
+        self.assertEqual(check['action'], 'retry-github')
+        self.assertIn('github-api-budget', self._base(
+            github_api_budget={'remaining': 0}
+        )['blocking'])
+
+    def test_failed_token_provider_names_the_sign_in_fallback(self):
+        check = self._check(self._base(
+            po_token_provider={'ok': False, 'reason': 'mint-failed'},
+        ), 'po-token-provider')
+        self.assertEqual(check['status'], 'warning')
+        self.assertEqual(check['action'], 'use-sign-in')
+
+    def test_filter_parser_accepts_ffmpeg_table_and_ignores_banners(self):
+        output = """
+        ffmpeg version 8.1.2
+        Filters:
+          T.. aformat      A->A       Convert the input audio format
+          ... scale        V->V       Scale the input video
+        """
+        self.assertEqual(ad.missing_ffmpeg_filters(output), [])
+        self.assertEqual(
+            ad.missing_ffmpeg_filters("Filters:\n  ... scale V->V Scale"),
+            ['aformat'],
+        )
+
+    def test_health_exposes_preflight_without_network_or_site_metadata(self):
+        config = FakeConfig({'ServerToken': 'p' * 32})
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad, 'get_ytdlp_version', return_value='2026.08.01'), \
+                mock.patch.object(ad, 'get_ffmpeg_version', return_value='8.1.2'), \
+                mock.patch.object(ad, 'probe_javascript_runtime', return_value={
+                    'ytdlpNeedsRuntime': False,
+                }), \
+                mock.patch.object(ad, 'get_preflight_ffmpeg_capabilities', return_value={
+                    'current': True, 'filterCheck': True, 'missingFilters': [],
+                }), \
+                mock.patch.object(ad, 'get_github_api_budget', return_value={
+                    'remaining': 42, 'limit': 60,
+                }):
+            api = ad.create_api(config, manager, FakeHistory())
+            body = api.test_client().get(
+                '/health', headers={'X-MDL-Client': 'MediaDL'},
+            ).get_json()
+        self.assertIn('preflight', body)
+        self.assertEqual(body['preflight']['status'], 'ready')
+        self.assertEqual(
+            {item['id'] for item in body['preflight']['checks']},
+            {
+                'ytdlp-freshness', 'javascript-runtime',
+                'ffmpeg-capabilities', 'sign-in-expiry',
+                'github-api-budget', 'po-token-provider',
+            },
+        )
+        self.assertNotIn('site', json.dumps(body['preflight']))
+
+
 class HealthPoTokenSurfaceTests(unittest.TestCase):
     def setUp(self):
         ad.reset_po_token_provider_cache()

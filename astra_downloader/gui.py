@@ -578,7 +578,9 @@ class ReadinessProbe(QObject):
     def __init__(self, configured_runtime='auto', *, runtime_probe,
                  provider_probe, ytdlp_version, ffmpeg_version, logger,
                  impersonate_targets=None, whisper_model_state=None,
-                 whisper_runtime_state=None, readiness_sink=None):
+                 whisper_runtime_state=None, readiness_sink=None,
+                 preflight_evaluator=None, ffmpeg_capabilities=None,
+                 sign_in_entries=None, github_api_budget=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -590,6 +592,10 @@ class ReadinessProbe(QObject):
         self._whisper_model_state = whisper_model_state
         self._whisper_runtime_state = whisper_runtime_state
         self._readiness_sink = readiness_sink
+        self._preflight_evaluator = preflight_evaluator
+        self._ffmpeg_capabilities = ffmpeg_capabilities
+        self._sign_in_entries = sign_in_entries
+        self._github_api_budget = github_api_budget
 
     def run(self):
         try:
@@ -617,6 +623,46 @@ class ReadinessProbe(QObject):
                 "whisperModel": whisper_model,
                 "whisperRuntime": whisper_runtime,
             }
+            if self._preflight_evaluator is not None:
+                ffmpeg_capabilities = None
+                sign_in_entries = None
+                github_api_budget = None
+                if self._ffmpeg_capabilities is not None:
+                    try:
+                        ffmpeg_capabilities = self._ffmpeg_capabilities()
+                    except Exception as error:
+                        self._logger(f"FFmpeg capability pre-flight failed: {error}")
+                if self._sign_in_entries is not None:
+                    try:
+                        sign_in_entries = self._sign_in_entries()
+                    except Exception as error:
+                        self._logger(f"Sign-in pre-flight failed: {error}")
+                if self._github_api_budget is not None:
+                    try:
+                        github_api_budget = self._github_api_budget()
+                    except Exception as error:
+                        self._logger(f"GitHub budget pre-flight failed: {error}")
+                try:
+                    preflight = self._preflight_evaluator(
+                        ytdlp_version=payload["ytDlp"],
+                        ffmpeg_capabilities=ffmpeg_capabilities,
+                        javascript_runtime=runtime,
+                        sign_in_entries=sign_in_entries,
+                        github_api_budget=github_api_budget,
+                        po_token_provider=provider,
+                    )
+                except Exception as error:
+                    self._logger(f"Pre-flight evaluation failed: {error}")
+                    preflight = {
+                        "status": "unknown",
+                        "blocking": [],
+                        "attention": [],
+                        "checks": [],
+                        "error": "preflight-evaluation-failed",
+                    }
+                payload["ffmpegCapabilities"] = ffmpeg_capabilities or {}
+                payload["githubApiBudget"] = github_api_budget or {}
+                payload["preflight"] = preflight
         except Exception as error:
             self._logger(f"Readiness probe failed: {error}")
             payload = {
@@ -632,6 +678,16 @@ class ReadinessProbe(QObject):
             except Exception as error:
                 self._logger(f"Readiness cache update failed: {error}")
         self.completed.emit(payload)
+
+
+_PREFLIGHT_ROW_SPECS = (
+    ("ytdlp-freshness", "yt-dlp freshness", "refresh-ytdlp"),
+    ("javascript-runtime", "JavaScript runtime", "provision-runtime"),
+    ("ffmpeg-capabilities", "FFmpeg security and filters", "refresh-ffmpeg"),
+    ("sign-in-expiry", "Stored sign-in expiry", "refresh-sign-in"),
+    ("github-api-budget", "Anonymous GitHub API budget", "retry-github"),
+    ("po-token-provider", "Proof-of-origin token provider", "use-sign-in"),
+)
 
 
 class FolderPickerService(QObject):
@@ -1475,6 +1531,8 @@ class MainWindowCore(QMainWindow):
         # row, so it has to exist before the first _build_* call rather
         # than inside whichever page happened to be built first.
         self.readiness_values = {}
+        self.preflight_values = {}
+        self._preflight_actions = {}
         self._build_download()
         self._build_history()
         self._build_site_logins()
@@ -1915,12 +1973,139 @@ class MainWindowCore(QMainWindow):
         dot.setToolTip(translated_tooltip)
         repolish(dot)
 
+    def _make_preflight_row(self, key, label_text, action_text):
+        row = QFrame()
+        row.setProperty("class", "readinessRow")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(8)
+        dot = make_label("●", "readinessDot")
+        dot.setProperty("tone", "neutral")
+        dot.setProperty("statusLabel", label_text)
+        name = make_label(label_text, "fieldHint")
+        detail = make_label("Checking", "readinessValue")
+        detail.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        button = self._make_tool_button(action_text, "ghost", label_text)
+        button.clicked.connect(
+            lambda _checked=False, check_key=key: self._run_preflight_action(check_key)
+        )
+        row_layout.addWidget(dot)
+        row_layout.addWidget(name, 1)
+        row_layout.addWidget(detail)
+        row_layout.addWidget(button)
+        self.preflight_values[key] = (dot, detail, button)
+        self._preflight_actions[key] = action_text
+        self._set_preflight_row(key, "unknown", "Checking", action_text)
+        return row
+
+    def _set_preflight_row(self, key, status, message="", action=""):
+        widgets = self.preflight_values.get(key)
+        if not widgets:
+            return
+        dot, detail, button = widgets
+        status = str(status or "unknown").strip().lower()
+        tone = {
+            "ok": "success",
+            "not-applicable": "neutral",
+            "warning": "warning",
+            "unknown": "warning",
+            "error": "danger",
+        }.get(status, "neutral")
+        status_text = {
+            "ok": "Ready",
+            "not-applicable": "Not needed",
+            "warning": "Attention",
+            "unknown": "Checking",
+            "error": "Repair needed",
+        }.get(status, "Checking")
+        dot.setProperty("tone", tone)
+        dot.setAccessibleName(
+            tr("{label} status indicator: {value}").format(
+                label=tr(str(dot.property("statusLabel") or key)),
+                value=tr(status_text),
+            )
+        )
+        detail.setText(tr(status_text))
+        detail.setAccessibleName(
+            tr("{label} status: {value}").format(
+                label=tr(str(dot.property("statusLabel") or key)),
+                value=tr(status_text),
+            )
+        )
+        detail.setToolTip(str(message or ""))
+        dot.setToolTip(str(message or ""))
+        if action:
+            self._preflight_actions[key] = str(action)
+            action_labels = {
+                "refresh-ytdlp": "Refresh yt-dlp",
+                "provision-runtime": "Provision runtime",
+                "refresh-ffmpeg": "Refresh FFmpeg",
+                "refresh-sign-in": "Open sign-ins",
+                "retry-github": "Try again later",
+                "use-sign-in": "Open sign-ins",
+            }
+            button.setText(tr(action_labels.get(str(action), "Fix")))
+        button.setEnabled(status not in {"ok", "not-applicable"})
+        button.setAccessibleName(
+            tr("{action} for {label}").format(
+                action=button.text(),
+                label=tr(str(dot.property("statusLabel") or key)),
+            )
+        )
+        repolish(dot)
+
+    def _apply_preflight(self, payload):
+        payload = payload if isinstance(payload, dict) else {}
+        checks = payload.get("checks")
+        by_id = {
+            str(item.get("id")): item
+            for item in checks or ()
+            if isinstance(item, dict) and item.get("id")
+        }
+        for key, _label, fallback_action in _PREFLIGHT_ROW_SPECS:
+            item = by_id.get(key) or {}
+            self._set_preflight_row(
+                key,
+                item.get("status", "unknown"),
+                item.get("message", ""),
+                item.get("action", fallback_action),
+            )
+
+    def _run_preflight_action(self, key):
+        action = self._preflight_actions.get(key, "")
+        if action == "refresh-ytdlp":
+            if self._value('YTDLP_PATH').exists():
+                self._force_ytdlp_update()
+            else:
+                self._run_setup()
+            return
+        if action == "refresh-ffmpeg":
+            self._reinstall_ffmpeg()
+            return
+        if action == "provision-runtime":
+            self._run_setup()
+            return
+        if action in {"refresh-sign-in", "use-sign-in"}:
+            self._nav_click("Sign-ins")
+            return
+        if action == "retry-github":
+            self._show_settings_status(
+                tr("GitHub's anonymous budget is exhausted; retry after its reset."),
+                "warning",
+            )
+            self._append_log("GitHub API budget is exhausted; retry after reset.")
+
     def _start_readiness_probe(self):
         if self.readiness_thread is not None:
             return
         self.readiness_thread = QThread(self)
         readiness_args = {
             'impersonate_targets': self._dependencies['probe_impersonate_targets'],
+            'sign_in_entries': lambda: (
+                self.dl_manager.site_logins.entries()
+                if getattr(self.dl_manager, 'site_logins', None) is not None
+                else []
+            ),
         }
         readiness_sink = getattr(self.dl_manager, 'update_readiness_snapshot', None)
         if callable(readiness_sink):
@@ -1998,6 +2183,9 @@ class MainWindowCore(QMainWindow):
         )
         if payload.get("error"):
             self._apply_impersonate_targets([])
+            apply_preflight = getattr(self, "_apply_preflight", None)
+            if callable(apply_preflight):
+                apply_preflight(payload.get("preflight") or {})
             for key in ("ytDlp", "ffmpeg", "deno", "provider"):
                 self._set_readiness(key, "Unavailable", "danger")
             self._set_readiness(
@@ -2011,6 +2199,9 @@ class MainWindowCore(QMainWindow):
         ffmpeg = payload.get("ffmpeg")
         runtime = payload.get("runtime") or payload.get("deno") or {}
         provider = payload.get("provider") or {}
+        apply_preflight = getattr(self, "_apply_preflight", None)
+        if callable(apply_preflight):
+            apply_preflight(payload.get("preflight") or {})
         self._apply_impersonate_targets(payload.get("impersonateTargets"))
         self._set_tool_readiness("ytDlp", yt_dlp, self._value('YTDLP_PATH'))
         self._set_tool_readiness("ffmpeg", ffmpeg, self._value('FFMPEG_PATH'))
@@ -2491,6 +2682,26 @@ class MainWindowCore(QMainWindow):
                 line.addStretch(1)
             tools_grid.addLayout(line)
         layout.addLayout(tools_grid)
+
+        preflight_panel = QFrame()
+        preflight_panel.setProperty("class", "readiness")
+        preflight_layout = QVBoxLayout(preflight_panel)
+        preflight_layout.setContentsMargins(18, 10, 18, 8)
+        preflight_layout.setSpacing(1)
+        preflight_header = QHBoxLayout()
+        preflight_header.addWidget(make_label("Pre-flight", "panelTitle"))
+        preflight_header.addStretch()
+        preflight_layout.addLayout(preflight_header)
+        preflight_layout.addWidget(make_label(
+            "Checks known download failure causes before a job starts. Each row names the remedy.",
+            "fieldHint", word_wrap=True,
+        ))
+        for key, label_text, action_text in _PREFLIGHT_ROW_SPECS:
+            preflight_layout.addWidget(
+                self._make_preflight_row(key, label_text, action_text)
+            )
+        self.preflight_panel = preflight_panel
+        layout.addWidget(preflight_panel)
 
         # Durability problems that no other surface can report: a completed
         # download whose history entry could not be written, or a queue that

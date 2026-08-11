@@ -23,6 +23,30 @@
       <translation>{count} {noun} aus {reasons} verschiedenen Gründen abgelehnt. Zuerst: {first}</translation>
     </message>
     <message>
+      <source>yt-dlp freshness</source>
+      <translation>Aktualität von yt-dlp</translation>
+    </message>
+    <message>
+      <source>JavaScript runtime</source>
+      <translation>JavaScript-Laufzeitumgebung</translation>
+    </message>
+    <message>
+      <source>FFmpeg security and filters</source>
+      <translation>FFmpeg-Sicherheit und Filter</translation>
+    </message>
+    <message>
+      <source>Stored sign-in expiry</source>
+      <translation>Ablauf gespeicherter Anmeldungen</translation>
+    </message>
+    <message>
+      <source>Anonymous GitHub API budget</source>
+      <translation>Anonymes GitHub-API-Budget</translation>
+    </message>
+    <message>
+      <source>Proof-of-origin token provider</source>
+      <translation>Proof-of-Origin-Token-Anbieter</translation>
+    </message>
+    <message>
       <source>{label}: {value}</source>
       <translation>{label}: {value}</translation>
     </message>
@@ -43,12 +67,40 @@
       <translation>{count} {noun} abgelehnt: {reason}</translation>
     </message>
     <message>
+      <source>refresh-ytdlp</source>
+      <translation>yt-dlp aktualisieren</translation>
+    </message>
+    <message>
+      <source>provision-runtime</source>
+      <translation>Laufzeit bereitstellen</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
+    </message>
+    <message>
+      <source>refresh-sign-in</source>
+      <translation>Anmeldung aktualisieren</translation>
+    </message>
+    <message>
+      <source>retry-github</source>
+      <translation>GitHub erneut versuchen</translation>
+    </message>
+    <message>
+      <source>use-sign-in</source>
+      <translation>Anmeldung verwenden</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Erweiterungsserver</translation>
     </message>
     <message>
       <source>Stopped</source>
       <translation>Gestoppt</translation>
+    </message>
+    <message>
+      <source>Checking</source>
+      <translation>Wird geprüft</translation>
     </message>
     <message>
       <source>Removed?</source>
@@ -771,6 +823,14 @@
       <translation>Fortschritt der Download-Tool-Einrichtung</translation>
     </message>
     <message>
+      <source>Pre-flight</source>
+      <translation>Vorabprüfung</translation>
+    </message>
+    <message>
+      <source>Checks known download failure causes before a job starts. Each row names the remedy.</source>
+      <translation>Prüft bekannte Downloadfehler, bevor ein Auftrag startet. Jede Zeile nennt die Lösung.</translation>
+    </message>
+    <message>
       <source>Storage problem</source>
       <translation>Speicherproblem</translation>
     </message>
@@ -1491,10 +1551,6 @@
       <translation>Installierte yt-dlp-Version wird geprüft…</translation>
     </message>
     <message>
-      <source>JavaScript runtime</source>
-      <translation>JavaScript-Laufzeitumgebung</translation>
-    </message>
-    <message>
       <source>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</source>
       <translation>Automatisch bevorzugt Deno, dann Node 22+, dann die QuickJS-Laufzeitumgebung, die die App selbst herunterlädt (2 MB).</translation>
     </message>
@@ -1877,6 +1933,10 @@
     <message>
       <source>{open_label} {name}</source>
       <translation>{open_label} {name}</translation>
+    </message>
+    <message>
+      <source>GitHub's anonymous budget is exhausted; retry after its reset.</source>
+      <translation>Das anonyme GitHub-Budget ist erschöpft; versuchen Sie es nach dem Zurücksetzen erneut.</translation>
     </message>
     <message>
       <source>Unavailable</source>
@@ -2301,6 +2361,10 @@
     <message>
       <source>{label} status: {value}</source>
       <translation>{label} Status: {value}</translation>
+    </message>
+    <message>
+      <source>{action} for {label}</source>
+      <translation>{action} für {label}</translation>
     </message>
     <message>
       <source>mp3</source>
@@ -2833,10 +2897,6 @@
     <message>
       <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
       <translation>Öffnen Sie Astra Downloader und aktualisieren Sie ffmpeg, bevor Sie es erneut versuchen.</translation>
-    </message>
-    <message>
-      <source>refresh-ffmpeg</source>
-      <translation>refresh-ffmpeg</translation>
     </message>
     <message>
       <source>Astra Downloader could not reach the site or a required provider.</source>

@@ -23,6 +23,30 @@
       <translation>{count} {noun} rejected for {reasons} different reasons. First: {first}</translation>
     </message>
     <message>
+      <source>yt-dlp freshness</source>
+      <translation>yt-dlp freshness</translation>
+    </message>
+    <message>
+      <source>JavaScript runtime</source>
+      <translation>JavaScript runtime</translation>
+    </message>
+    <message>
+      <source>FFmpeg security and filters</source>
+      <translation>FFmpeg security and filters</translation>
+    </message>
+    <message>
+      <source>Stored sign-in expiry</source>
+      <translation>Stored sign-in expiry</translation>
+    </message>
+    <message>
+      <source>Anonymous GitHub API budget</source>
+      <translation>Anonymous GitHub API budget</translation>
+    </message>
+    <message>
+      <source>Proof-of-origin token provider</source>
+      <translation>Proof-of-origin token provider</translation>
+    </message>
+    <message>
       <source>{label}: {value}</source>
       <translation>{label}: {value}</translation>
     </message>
@@ -43,12 +67,40 @@
       <translation>{count} {noun} rejected: {reason}</translation>
     </message>
     <message>
+      <source>refresh-ytdlp</source>
+      <translation>refresh-ytdlp</translation>
+    </message>
+    <message>
+      <source>provision-runtime</source>
+      <translation>provision-runtime</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
+    </message>
+    <message>
+      <source>refresh-sign-in</source>
+      <translation>refresh-sign-in</translation>
+    </message>
+    <message>
+      <source>retry-github</source>
+      <translation>retry-github</translation>
+    </message>
+    <message>
+      <source>use-sign-in</source>
+      <translation>use-sign-in</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Extension server</translation>
     </message>
     <message>
       <source>Stopped</source>
       <translation>Stopped</translation>
+    </message>
+    <message>
+      <source>Checking</source>
+      <translation>Checking</translation>
     </message>
     <message>
       <source>Removed?</source>
@@ -771,6 +823,14 @@
       <translation>Download tool setup progress</translation>
     </message>
     <message>
+      <source>Pre-flight</source>
+      <translation>Pre-flight</translation>
+    </message>
+    <message>
+      <source>Checks known download failure causes before a job starts. Each row names the remedy.</source>
+      <translation>Checks known download failure causes before a job starts. Each row names the remedy.</translation>
+    </message>
+    <message>
       <source>Storage problem</source>
       <translation>Storage problem</translation>
     </message>
@@ -1491,10 +1551,6 @@
       <translation>Checking installed yt-dlp…</translation>
     </message>
     <message>
-      <source>JavaScript runtime</source>
-      <translation>JavaScript runtime</translation>
-    </message>
-    <message>
       <source>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</source>
       <translation>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</translation>
     </message>
@@ -1877,6 +1933,10 @@
     <message>
       <source>{open_label} {name}</source>
       <translation>{open_label} {name}</translation>
+    </message>
+    <message>
+      <source>GitHub's anonymous budget is exhausted; retry after its reset.</source>
+      <translation>GitHub's anonymous budget is exhausted; retry after its reset.</translation>
     </message>
     <message>
       <source>Unavailable</source>
@@ -2301,6 +2361,10 @@
     <message>
       <source>{label} status: {value}</source>
       <translation>{label} status: {value}</translation>
+    </message>
+    <message>
+      <source>{action} for {label}</source>
+      <translation>{action} for {label}</translation>
     </message>
     <message>
       <source>mp3</source>
@@ -2833,10 +2897,6 @@
     <message>
       <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
       <translation>Open Astra Downloader and refresh ffmpeg before retrying.</translation>
-    </message>
-    <message>
-      <source>refresh-ffmpeg</source>
-      <translation>refresh-ffmpeg</translation>
     </message>
     <message>
       <source>Astra Downloader could not reach the site or a required provider.</source>

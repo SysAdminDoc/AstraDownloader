@@ -54,9 +54,11 @@ pasting a link never needs it.
 - **Preview Windows-safe names.** Settings renders an example output path,
   flags reserved names and overlong paths before saving, and enables yt-dlp's
   Windows filename sanitization by default.
-- **It tells you why.** A failure names its cause — missing JavaScript
-  runtime, expired sign-in, size cap, SABR-limited formats, a site refusing
-  the request — and offers the control that fixes it.
+- **It tells you why before it fails.** The Download page pre-flight panel
+  names stale yt-dlp, missing JavaScript runtime, stale or incomplete FFmpeg,
+  expired sign-ins, GitHub API exhaustion, and token-provider trouble, with a
+  repair action for each condition. Download failures retain the same named
+  causes and recovery guidance.
 - **Get past a block.** Imitate a real browser's TLS fingerprint, chosen from
   the targets your yt-dlp actually ships, for sites that answer 403.
 - **Work around network geography.** Force IPv4 or IPv6, bind a source address,
