@@ -32,6 +32,10 @@ repository's git log.
 - **Keyboard traversal now leaves hidden navigation and the Site-profiles
   editor.** The page stack no longer traps focus in its hidden tab bar, and
   Tab in the JSON editor advances through Settings without changing its text.
+- **Settings bundles keep machine-local network state local.** Proxy
+  credentials, site profiles, network identity and extra output roots are
+  excluded on export and ignored on import; the Settings status now lists the
+  names of fields it changed.
 
 ## [2.6.0] - 2026-08-09
 

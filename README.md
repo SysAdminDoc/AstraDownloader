@@ -71,7 +71,9 @@ pasting a link never needs it.
   itself current.
 - **Move it, or put it back.** Export settings and subscriptions to one JSON
   bundle and import it on another machine. Stored sign-ins are listed by site
-  but never exported; cookies stay where they are.
+  but never exported; cookies stay where they are. Proxy credentials, network
+  identity, site profiles and extra output roots stay local, and an import
+  reports the setting names it changed.
 - **Stays out of the way.** Tray icon, optional logon start, Start Menu and
   desktop entries, and a clipboard watcher that can stage copied links.
   Queue progress shows on the taskbar button, and a completion notification

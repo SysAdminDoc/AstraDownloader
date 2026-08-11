@@ -46,27 +46,6 @@ Actionable work only. Historical and completed roadmap material is archived in C
   never the empty state; tests drive a raising store for both pages.
   Complexity: S
 
-- [ ] P0 — Keep proxy credentials out of the settings bundle, and name what an import changes
-  Why: The bundle is designed to be shared between machines, and it currently
-  carries credentials out and widens a filesystem write allow-list on the way in,
-  behind a confirmation that reports only a count.
-  Evidence: `BUNDLE_EXCLUDED_SETTINGS` (`config.py:1254-1264`) omits `Proxy`,
-  `GeoVerificationProxy`, `SourceAddress`, `Xff` and `SiteProfiles`, and
-  `normalize_proxy` (`:413-422`) returns the string verbatim, so
-  `http://user:pass@host:3128` round-trips. The docstring at `:1276` excludes
-  cookies precisely because "a bundle is … the kind of file that gets emailed
-  around". On import, `ExtraOutputRoots` — which extends `allowed_output_roots`
-  (`:1170-1180`), the allow-list gating where the loopback API may write — is
-  applied with no GUI surface anywhere, and `gui.py:6077` reports only
-  `Imported N changed settings`; the key names from `describe_bundle_changes`
-  go to the log panel on a different page.
-  Touches: `astra_downloader/config.py`, `astra_downloader/gui.py`
-  Acceptance: credential-bearing and allow-list settings are excluded from export
-  and ignored on import (or surfaced for explicit per-key confirmation); the
-  import result names the settings it changed on the Settings page; tests pin the
-  exclusion set against `DEFAULT_CONFIG` so a new key cannot be added silently.
-  Complexity: M
-
 - [ ] P1 — Make the license gate run the inspection it exists for
   Why: The gate that is supposed to enforce the license policy only asserts that
   the SBOM is non-empty, so 37 real policy issues ship green.
