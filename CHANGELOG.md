@@ -42,6 +42,9 @@ repository's git log.
 - **Settings search preserves deliberate visibility.** Clearing a search no
   longer resurrects the unavailable import-undo action or a hidden session
   fallback hint.
+- **Retry checks now honor site profiles.** Geo and browser-refusal recovery
+  uses the URL's effective profile settings, so a profile-provided workaround
+  can actually unlock Retry.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the
