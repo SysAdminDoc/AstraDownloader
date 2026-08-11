@@ -54,10 +54,15 @@ repository's git log.
 - **The default pytest command now preserves its own result summary.** Tests
   use an ignored project-local base directory, so stale account-wide temp
   permissions cannot replace a green run with a teardown traceback.
+- **The Qt companion shell is split by page boundary.** Download, History,
+  Sign-ins, Subscriptions, Browser extension, and Settings builders now live in
+  focused mixin modules, while shared visual primitives and the injected core
+  contract remain centralized. Cross-module translation discovery keeps the
+  German catalogue complete across all 759 companion strings.
 - **Companion translation extraction now follows the UI boundary.** Qt setter
   roots, constant picker loops, tray/dialog copy, and dynamic status templates
   are catalogued together; the shipped German catalogue remains complete and
-  the translation gate now covers 755 companion strings.
+  the translation gate now covers 759 companion strings.
 - **The language picker now advertises only usable translations.** English and
   German clear the 80% coverage floor; partial catalogues remain available for
   legacy configurations and RTL compatibility, but are no longer presented as

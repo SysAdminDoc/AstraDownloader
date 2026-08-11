@@ -35,6 +35,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FILES = (
     ROOT / "astra_downloader" / "gui.py",
+    ROOT / "astra_downloader" / "gui_support.py",
+    ROOT / "astra_downloader" / "gui_download_page.py",
+    ROOT / "astra_downloader" / "gui_history_page.py",
+    ROOT / "astra_downloader" / "gui_site_logins_page.py",
+    ROOT / "astra_downloader" / "gui_subscriptions_page.py",
+    ROOT / "astra_downloader" / "gui_extension_page.py",
+    ROOT / "astra_downloader" / "gui_settings_page.py",
     ROOT / "astra_downloader" / "download.py",
     ROOT / "astra_downloader" / "health.py",
 )
@@ -282,10 +289,11 @@ def _loop_string_bindings(tree, assignments):
     return bindings
 
 
-def extract_from_source(text):
+def extract_from_source(text, translating_calls=None):
     """Return the translatable literals in one Python source file, in order."""
     tree = ast.parse(text)
-    table = discover_translating_calls(tree)
+    table = (discover_translating_calls(tree)
+             if translating_calls is None else translating_calls)
     assignments = _static_assignments(tree)
     loop_bindings = _loop_string_bindings(tree, assignments)
     found = _runtime_literals(tree)
@@ -314,9 +322,20 @@ def extract_from_source(text):
 
 def extract_all(paths=GUI_SOURCES):
     """Every translatable literal across the GUI sources, deduplicated."""
+    texts = [Path(path).read_text(encoding="utf-8") for path in paths]
+    # Page mixins live in separate modules from the composition root, while
+    # their controls still call helpers such as ``_make_page_header`` and
+    # ``_make_tool_button``. Discover the forwarding fixpoint across the
+    # complete GUI boundary so extracting a page does not lose its labels.
+    trees = [ast.parse(text) for text in texts]
+    combined = ast.Module(
+        body=[node for tree in trees for node in tree.body],
+        type_ignores=[],
+    )
+    translating_calls = discover_translating_calls(combined)
     seen = []
-    for path in paths:
-        for value in extract_from_source(Path(path).read_text(encoding="utf-8")):
+    for text in texts:
+        for value in extract_from_source(text, translating_calls):
             if value not in seen:
                 seen.append(value)
     return seen
