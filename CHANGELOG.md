@@ -39,6 +39,9 @@ repository's git log.
 - **Every editable setting now reports unsaved changes.** Dirty-state wiring is
   derived from the settings form registry, including all SponsorBlock category
   checkboxes, so newly registered controls cannot silently discard edits.
+- **Settings search preserves deliberate visibility.** Clearing a search no
+  longer resurrects the unavailable import-undo action or a hidden session
+  fallback hint.
 - **The companion license gate now enforces its inspection.** Release-scoped
   components are checked for resolved licenses, policy decisions, obligations,
   pinned runtime downloads and artifact linkage; unresolved inventory fails the

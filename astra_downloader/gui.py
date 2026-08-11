@@ -1616,13 +1616,22 @@ class MainWindowCore(QMainWindow):
     def _set_settings_item_visible(self, item, visible):
         widget = item.widget()
         if widget is not None:
-            widget.setVisible(bool(visible))
+            if bool(widget.property("settingsFilterHidden")):
+                widget.setVisible(False)
+            else:
+                widget.setVisible(bool(visible))
             return
         layout = item.layout()
         if layout is None:
             return
         for index in range(layout.count()):
             self._set_settings_item_visible(layout.itemAt(index), visible)
+
+    @staticmethod
+    def _set_settings_filter_hidden(widget, hidden):
+        """Keep a control's own hidden state outside search filtering."""
+        widget.setProperty("settingsFilterHidden", bool(hidden))
+        widget.setVisible(not hidden)
 
     def _filter_settings(self, query):
         """Show only matching settings rows while keeping their group visible."""
@@ -3835,7 +3844,7 @@ class MainWindowCore(QMainWindow):
         # conflict is a session-only fallback. Without this line the spinbox
         # silently disagreed with it.
         self.cfg_port_session_hint = make_label("", "fieldHint", word_wrap=True)
-        self.cfg_port_session_hint.setVisible(False)
+        self._set_settings_filter_hidden(self.cfg_port_session_hint, True)
         port_copy.addWidget(self.cfg_port_session_hint)
         port_row.addLayout(port_copy, 1)
         self.cfg_port = QSpinBox()
@@ -4790,7 +4799,7 @@ class MainWindowCore(QMainWindow):
             "Restore settings and subscriptions changed by the last import."
         ))
         self.btn_undo_settings_import.clicked.connect(self._undo_settings_import)
-        self.btn_undo_settings_import.hide()
+        self._set_settings_filter_hidden(self.btn_undo_settings_import, True)
         bundle_row.addWidget(self.btn_undo_settings_import)
         bundle_row.addStretch()
         transfer_l.addLayout(bundle_row)
@@ -6205,7 +6214,7 @@ class MainWindowCore(QMainWindow):
             "settings": previous_settings,
             "subscriptionIds": added_subscription_ids,
         }
-        self.btn_undo_settings_import.show()
+        self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
         changed_labels = []
         for key in changes["settings"]:
             attribute = next(
@@ -6248,7 +6257,7 @@ class MainWindowCore(QMainWindow):
     def _undo_settings_import(self):
         snapshot = self._settings_import_undo
         if not snapshot:
-            self.btn_undo_settings_import.hide()
+            self._set_settings_filter_hidden(self.btn_undo_settings_import, True)
             self._show_settings_status(
                 tr("No settings import is available to undo."), "warning"
             )
@@ -6273,17 +6282,17 @@ class MainWindowCore(QMainWindow):
                 "still available; check disk space and permissions, then retry.",
                 "error",
             )
-            self.btn_undo_settings_import.show()
+            self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
             return
         if remaining:
             self._show_settings_status(
                 tr("Settings were restored, but some imported subscriptions remain."),
                 "warning",
             )
-            self.btn_undo_settings_import.show()
+            self._set_settings_filter_hidden(self.btn_undo_settings_import, False)
         else:
             self._settings_import_undo = None
-            self.btn_undo_settings_import.hide()
+            self._set_settings_filter_hidden(self.btn_undo_settings_import, True)
             self._show_settings_status(tr("Settings import undone."), "success")
         self._reload_settings_form()
         self._refresh_subscriptions(force=True)
@@ -6710,7 +6719,7 @@ class MainWindowCore(QMainWindow):
                 f"fallback port {port} for this session. Restart to retry {configured}."
             )
             hint.setText(message)
-            hint.setVisible(True)
+            self._set_settings_filter_hidden(hint, False)
             self.cfg_port.setAccessibleDescription(
                 tr(
                     "Port {configured} was unavailable at startup; bound to fallback "
@@ -6719,7 +6728,7 @@ class MainWindowCore(QMainWindow):
             )
         else:
             hint.setText("")
-            hint.setVisible(False)
+            self._set_settings_filter_hidden(hint, True)
             self.cfg_port.setAccessibleDescription("")
 
     # ── Tools: yt-dlp / ffmpeg maintenance (v1.2.0) ──
