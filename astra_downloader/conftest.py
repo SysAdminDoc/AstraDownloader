@@ -24,7 +24,16 @@ own machine happened to have a runtime provisioned — a test asserting "no
 runtime is available" passed only because this box had none.
 """
 
+import os
+
 import pytest
+
+
+# The suite constructs real windows as part of its GUI coverage. Keep those
+# windows off the operator's display by default; an explicit opt-out is useful
+# when a maintainer is deliberately checking native platform rendering.
+if not os.environ.get("ASTRA_DOWNLOADER_ALLOW_ONSCREEN"):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 # Module globals the suite redirects, and the subdirectory each one takes
