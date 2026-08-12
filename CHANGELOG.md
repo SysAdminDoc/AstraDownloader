@@ -10,6 +10,13 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased]
+
+### Fixed
+
+- GUI tests now default to Qt's offscreen platform, with an explicit
+  `ASTRA_DOWNLOADER_ALLOW_ONSCREEN=1` opt-out for native-display checks.
+
 ## [2.7.0] - 2026-08-11
 
 ### Changed
