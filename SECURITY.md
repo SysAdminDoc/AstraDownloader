@@ -50,6 +50,16 @@ These are known and accepted properties, not vulnerabilities:
 
 - **Anything on the machine that can read the token can drive the server.**
   The trust boundary is the local user account, not the process.
+- **Stored site credentials travel to yt-dlp on its command line.**
+  `--username`/`--password`/`--video-password` are visible in
+  `Win32_Process.CommandLine` to any process running as the same user, and
+  to endpoint software that records command lines. This is a deliberate
+  consequence of the boundary above: the alternatives all hand the secret to
+  something worse — the `--netrc` family is refused at the spawn boundary
+  because a netrc file is a durable, format-ambiguous credential store, and
+  yt-dlp offers no stdin credential channel. The store itself is ACL'd to
+  the owner and the values are redacted from history, diagnostics, logs, the
+  API, and the in-app command inspector.
 - **URL policy is literal-only.** Private-network targets are refused by
   inspecting the URL, not by resolving it: resolving at validation time proves
   nothing about resolution a millisecond later. The accepted residual is a

@@ -83,13 +83,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the release build runs on 3.13.15; 964 tests and 54 render captures pass; the 3.11 source floor is unchanged; every `py -3.12` reference in scripts and docs is updated together.
   Complexity: M
 
-- [ ] P1 — AD-21 — Decide the argv-credential question and write it down
-  Why: `build_site_login_credential_args` emits `--username`/`--password`/`--video-password`, which are visible in `Win32_Process.CommandLine` to any process running as the same user and are captured by command-line-recording EDR. The store is ACL'd and redacted everywhere else. `SECURITY.md`'s accepted-properties list does not mention it. Open across five passes.
-  Evidence: `astra_downloader/download.py` `build_site_login_credential_args`; `SECURITY.md` §Scope Notes (absent).
-  Touches: `astra_downloader/download.py`, `SECURITY.md`, `docs/`
-  Acceptance: either `--password -` on stdin (with the netrc family still denied) or an explicit accepted-property entry in `SECURITY.md` naming command-line visibility, pinned by test either way.
-  Complexity: M
-
 - [ ] P1 — AD-23 — Make `SERVICE_API_VERSION` a real handshake
   Why: the version is advertised in `/health` and read nowhere — zero hits for `apiVersion`/`api_version` anywhere in the Astra Deck extension. Two independently versioned products share a gate-checked port catalogue with no compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
   Evidence: `astra_downloader/astra_downloader.py:450`, `routes.py:477, 506`; grep of `~/repos/Astra-Deck/extension/`.
