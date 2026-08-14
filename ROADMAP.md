@@ -126,7 +126,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 - [ ] P1 — AD-17 — Stop the language picker offering locales that are 0.6 % translated
   Why: eleven locales are advertised; German is 783/783 and the other nine are **5/783** — five nav strings and nothing else. `check:translations` passes because it counts *declared* keys, and the generator writes a missing entry out as its own English source. Selecting Japanese today produces an English UI with a Japanese sidebar.
-  Evidence: `py -3.12 scripts/build-companion-translations.py` coverage output, measured 2026-08-11; `astra_downloader/i18n.py` `ADVERTISED_LOCALES`; `Roadmap_Blocked.md` §"Translate the nine incomplete locales".
+  Evidence: `py -3.12 scripts/build-companion-translations.py` coverage output, measured 2026-08-14; `astra_downloader/i18n.py` `ADVERTISED_LOCALES`; `Roadmap_Blocked.md` §"Translate the nine incomplete locales".
   Touches: `astra_downloader/i18n.py`, `astra_downloader/gui_settings_page.py`, `scripts/check-companion-translations.py`
   Acceptance: a locale below a stated coverage threshold is either withheld or labelled "partial" in the picker; the threshold is enforced by the gate so a regressing catalogue fails the suite.
   Complexity: S
@@ -240,7 +240,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 - [ ] P2 — AD-33 — Split the test monolith and run it in parallel
   Why: `test_astra_downloader.py` is 21,137 lines holding 951 of 964 tests, and the suite runs 964 tests + 610 subtests in 545 s serially with no `pytest-xdist`. Every change pays that.
-  Evidence: measured 2026-08-11; `pytest.ini` has no parallel configuration.
+  Evidence: measured 2026-08-14; `pytest.ini` has no parallel configuration.
   Touches: `astra_downloader/test_*.py`, `pytest.ini`, `astra_downloader/conftest.py`, `requirements.txt`
   Acceptance: tests are split by domain (download / gui / routes / subscriptions / health / config / build); `-n auto` is the default and the suite is green under it; wall-clock is recorded in CLAUDE.md.
   Complexity: L
