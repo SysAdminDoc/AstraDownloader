@@ -36,6 +36,12 @@ repository's git log.
 
 ### Changed
 
+- **HTTP dependency floors raised and certifi declared.** Werkzeug's floor
+  moves to 3.1.8 (quoted list-header parsing, Transfer-Encoding as a set,
+  host validation, empty `Request.host` on an invalid header), requests to
+  the maintained 2.34 line, and certifi — a trust store, not a library — is
+  now declared explicitly instead of riding transitively at whatever version
+  the resolver picked. The dependency-policy gate pins all three floors.
 - **Deno now has a security floor separate from its runtime floor.** A
   provisioned Deno below 2.8.1 (the release that closes the 2026-05-27
   advisory batch) is refreshed even though yt-dlp would still accept it, and
