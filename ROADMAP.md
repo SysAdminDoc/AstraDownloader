@@ -111,13 +111,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: either `--password -` on stdin (with the netrc family still denied) or an explicit accepted-property entry in `SECURITY.md` naming command-line visibility, pinned by test either way.
   Complexity: M
 
-- [ ] P1 — AD-22 — Lock the two unsynchronised mutations in the download manager
-  Why: `self.total_completed += 1` is a read-modify-write executed on up to `MAX_CONCURRENT` worker threads, ten lines above `self._history_error` which *is* written under the lock; and `cancel_all` writes `dl.status`, `dl.error`, `dl._cookies` and calls `mark_terminal()` after the `with self._lock:` block exits, while `_worker_entry`'s `finally` mutates the same records under it.
-  Evidence: `astra_downloader/download.py:5110`, `:5127`, `:6215-6226`, `:3892-3902`.
-  Touches: `astra_downloader/download.py`
-  Acceptance: both mutations happen under `_lock`; a test drives concurrent completions and asserts the counter is exact.
-  Complexity: S
-
 - [ ] P1 — AD-23 — Make `SERVICE_API_VERSION` a real handshake
   Why: the version is advertised in `/health` and read nowhere — zero hits for `apiVersion`/`api_version` anywhere in the Astra Deck extension. Two independently versioned products share a gate-checked port catalogue with no compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
   Evidence: `astra_downloader/astra_downloader.py:450`, `routes.py:477, 506`; grep of `~/repos/Astra-Deck/extension/`.
