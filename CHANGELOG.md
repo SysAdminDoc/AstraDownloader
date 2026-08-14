@@ -35,6 +35,11 @@ repository's git log.
 
 ### Fixed
 
+- **Concurrent subscription scans are capped.** Requesting a scan spawned an
+  unbounded thread per subscription, each running its own yt-dlp probe — at
+  the 100-subscription cap, "Scan now" down the list could hold 100
+  concurrent processes. A bounded gate now allows two at a time; the rest
+  wait their turn and none are dropped.
 - **The winget manifest digest is generated, and the gate compares it.** The
   2.7.0 manifest carried an `InstallerSha256` that matched no artifact in
   existence, and `check:versions` only confirmed it was 64 hex digits.

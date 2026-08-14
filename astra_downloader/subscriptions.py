@@ -32,6 +32,7 @@ __all__ = (
     "SUBSCRIPTION_RETRY_BASE_SECONDS",
     "SUBSCRIPTION_MAX_RECORDS",
     "SUBSCRIPTION_MAX_ARCHIVE_ENTRIES",
+    "SUBSCRIPTION_SCAN_MAX_CONCURRENT",
     "RESERVE_OK",
     "RESERVE_ALREADY_PRESENT",
     "RESERVE_RETRY_BACKOFF",
@@ -51,6 +52,13 @@ SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS = 3
 SUBSCRIPTION_RETRY_BASE_SECONDS = SUBSCRIPTION_MIN_INTERVAL_MINUTES * 60
 SUBSCRIPTION_MAX_RECORDS = 100
 SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000
+# Every scan spawns a yt-dlp process. The per-id dedup in `_scan_ids` stops a
+# double scan of one subscription, but nothing else bounded the total: at the
+# 100-record cap, "Scan now" down the list (or the API's 30-per-minute
+# allowance) could hold 100 concurrent threads each running yt-dlp. The
+# sibling paths are all gated (`_formats_gate` at 2, transcription at 1,
+# downloads at 3); scans get the formats gate's width.
+SUBSCRIPTION_SCAN_MAX_CONCURRENT = 2
 # reserve_archive outcomes. "already present" and "retry backoff" are ordinary
 # nothing-to-do cases; "retry exhausted" is surfaced with the candidate's last
 # error, while "save failed" means the archive could not be written.
@@ -1048,6 +1056,10 @@ class SubscriptionManager:
         self._tick_seconds = max(1.0, float(tick_seconds))
         self._lock = threading.RLock()
         self._scan_ids = set()
+        # Bounds concurrent yt-dlp scan processes across every entry path
+        # (scheduler, GUI "Scan now", API). Waiting requests hold a thread but
+        # no subprocess, and none are dropped.
+        self._scan_gate = threading.BoundedSemaphore(SUBSCRIPTION_SCAN_MAX_CONCURRENT)
         self._stop = threading.Event()
         self._thread = None
 
@@ -1190,6 +1202,10 @@ class SubscriptionManager:
                 if sub_id in self._scan_ids:
                     return {"id": sub_id, "queued": 0, "skipped": 0, "scanning": True}
                 self._scan_ids.add(sub_id)
+        # Acquired after the per-id claim so a duplicate request still gets its
+        # fast "scanning" answer, and released by the finally below on every
+        # path, including a propagating exception.
+        self._scan_gate.acquire()
         activity_token = None
         if self._activity_registry is not None:
             try:
@@ -1316,6 +1332,7 @@ class SubscriptionManager:
                 "error": error,
             }
         finally:
+            self._scan_gate.release()
             if activity_token is not None:
                 try:
                     self._activity_registry.end_activity(activity_token)
