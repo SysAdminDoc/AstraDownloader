@@ -111,13 +111,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the extension reads `api` from `/health` and shows a named "companion too old / too new" state; a minimum-supported version is declared on both sides and gate-checked like the port catalogue.
   Complexity: M
 
-- [ ] P1 — AD-24 — Render icons at the display's device pixel ratio
-  Why: `make_line_icon` builds `QPixmap(size, size)` and never calls `setDevicePixelRatio`, so at 125 % (this machine), 150 % or 200 % scaling every one of ~54 icons is an 18 px bitmap upscaled by Qt.
-  Evidence: `astra_downloader/gui_support.py:169-177`; no `devicePixelRatio` call exists outside `scripts/render-companion-gui.py`.
-  Touches: `astra_downloader/gui_support.py`
-  Acceptance: the pixmap is allocated at `size * dpr` with `setDevicePixelRatio(dpr)`; a test at 2× asserts the backing pixmap dimensions; the existing HiDPI render capture is re-taken.
-  Complexity: S
-
 ### P2
 
 - [ ] P2 — AD-25 — Turn subscriptions into an archive manager

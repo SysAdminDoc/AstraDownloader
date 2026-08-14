@@ -185,10 +185,21 @@ def make_state_label(text, tone="neutral"):
     return label
 
 
-def make_line_icon(name, size=18):
-    """Draw the rail icons from one quiet monochrome system."""
+def make_line_icon(name, size=18, dpr=None):
+    """Draw the rail icons from one quiet monochrome system.
+
+    The backing pixmap is allocated at the device pixel ratio — at 125/150/200
+    percent scaling an 18 px allocation would otherwise be upscaled by Qt and
+    every stroke goes soft. ``dpr`` is overridable for tests; the default asks
+    the running application.
+    """
     key = str(name).lower()
-    pixmap = QPixmap(size, size)
+    if dpr is None:
+        app = QApplication.instance()
+        dpr = float(app.devicePixelRatio()) if app is not None else 1.0
+    dpr = max(1.0, float(dpr))
+    pixmap = QPixmap(round(size * dpr), round(size * dpr))
+    pixmap.setDevicePixelRatio(dpr)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
