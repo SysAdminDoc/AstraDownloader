@@ -52,8 +52,15 @@ These are known and accepted properties, not vulnerabilities:
   The trust boundary is the local user account, not the process.
 - **URL policy is literal-only.** Private-network targets are refused by
   inspecting the URL, not by resolving it: resolving at validation time proves
-  nothing about resolution a millisecond later. See
+  nothing about resolution a millisecond later. The accepted residual is a
+  public DNS name pointed at a private address — DNS itself is not a boundary
+  the local user account model defends. See
   [`docs/yt-dlp-cookie-threat-model.md`](docs/yt-dlp-cookie-threat-model.md).
+- **Client-supplied output paths are confined.** A `/download` request may
+  name an output directory, but it is accepted only inside the configured
+  download roots (plus the reviewed extra roots), resolved through symlinks
+  and checked before any directory is created — a compromised extension
+  cannot hand the server an arbitrary absolute path and watch it write there.
 - **The executable is unsigned by design.** Verify the published SHA-256
   sidecar against the downloaded binary rather than relying on a signature.
   SmartScreen will warn on first run; that is expected, not a compromise

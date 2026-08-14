@@ -1195,7 +1195,11 @@ def media_url_block_reason(url):
     Deliberately literal-only: no DNS resolution happens here, because a name
     that resolves privately at validation time can resolve publicly a
     millisecond later (and vice versa). The residual — a public DNS name
-    pointed at a private address — is documented in HARDENING.md.
+    pointed at a private address — is an accepted property recorded in
+    SECURITY.md ("URL policy is literal-only"): resolving at validation time
+    proves nothing about resolution when yt-dlp actually connects, so the
+    check refuses what it can see and accepts that DNS itself is not a
+    boundary the local user account model defends.
     """
     normalized, error = normalize_url(url)
     if error or not normalized:
