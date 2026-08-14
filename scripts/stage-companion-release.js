@@ -254,6 +254,76 @@ function readValidatedOnedirArchive(filePath) {
     }
 }
 
+const WINGET_MANIFEST_ROOT = path.join(
+    REPO_ROOT, 'packaging', 'winget', 'manifests', 's', 'SysAdminDoc', 'AstraDownloader'
+);
+
+function wingetInstallerManifestPath(version) {
+    return path.join(
+        WINGET_MANIFEST_ROOT, version, 'SysAdminDoc.AstraDownloader.installer.yaml'
+    );
+}
+
+function readWingetInstallerSha256(manifestText) {
+    const match = String(manifestText).match(/^\s*InstallerSha256:\s*([0-9a-fA-F]{64})\s*$/m);
+    return match ? match[1].toLowerCase() : null;
+}
+
+// The digest in the winget manifest is generated from the staged artifact,
+// never written by hand: a hand-typed digest once shipped that matched no
+// artifact in existence, and the version gate only checked that it was 64 hex
+// digits. Staging writes it; the gate compares it (wingetDigestFailures).
+function updateWingetManifestDigest(version, digest,
+                                    manifestPath = wingetInstallerManifestPath(version)) {
+    let text;
+    try {
+        text = fs.readFileSync(manifestPath, 'utf8');
+    } catch (error) {
+        throw new Error(
+            `winget installer manifest for ${version} is missing: ${manifestPath}`
+        );
+    }
+    if (!readWingetInstallerSha256(text)) {
+        throw new Error(
+            `winget installer manifest carries no InstallerSha256 field: ${manifestPath}`
+        );
+    }
+    const updated = text.replace(
+        /^(\s*InstallerSha256:\s*)[0-9a-fA-F]{64}\s*$/m,
+        `$1${String(digest).toLowerCase()}`
+    );
+    fs.writeFileSync(manifestPath, updated, 'utf8');
+    return manifestPath;
+}
+
+// Shared with check-versions.js so the gate and the writer agree by
+// construction. `stagedMetadata` is build/companion-build-metadata.json; a
+// missing or different-version build means there is nothing to compare, which
+// is not a failure — the staging path above guarantees the digest is written
+// whenever a release is actually staged.
+function wingetDigestFailures(manifestText, version, stagedMetadata) {
+    const declared = readWingetInstallerSha256(manifestText);
+    if (!declared) {
+        return ['winget installer manifest: InstallerSha256 must be a 64-digit hex digest'];
+    }
+    const metadata = stagedMetadata && typeof stagedMetadata === 'object' ? stagedMetadata : null;
+    if (!metadata || metadata.version !== version) {
+        return [];
+    }
+    const stagedDigest = metadata.artifact && metadata.artifact.sha256;
+    if (typeof stagedDigest !== 'string' || !/^[0-9a-f]{64}$/i.test(stagedDigest)) {
+        return [];
+    }
+    if (declared !== stagedDigest.toLowerCase()) {
+        return [
+            `winget InstallerSha256 (${declared.slice(0, 12)}…) does not match the staged ` +
+            `AstraDownloader.exe (${stagedDigest.slice(0, 12).toLowerCase()}…) for v${version}; ` +
+            'run `npm run release:stage` to regenerate it from the artifact'
+        ];
+    }
+    return [];
+}
+
 function assertBuildDirExists() {
     let stat;
     try {
@@ -411,7 +481,9 @@ function stageCompanionRelease(
         throw new Error(`build/${LOCK_NAME} is empty; regenerate it with \`npm run release:provenance\``);
     }
 
+    const wingetManifest = updateWingetManifestDigest(metadata.version, stagedArtifactSha256);
     console.log(`Staged companion EXE: build/AstraDownloader.exe (${companionExe.length} bytes)`);
+    console.log(`Updated winget InstallerSha256: ${path.relative(REPO_ROOT, wingetManifest)}`);
     console.log(`Staged release SBOM: build/${SBOM_NAME}`);
     console.log(`Staged release lock: build/${LOCK_NAME}`);
     console.log(`Staged companion inventory input: build/${COMPANION_BUILD_METADATA_NAME}`);
@@ -435,5 +507,9 @@ module.exports = {
     readEmbeddedBuildMetadata,
     readValidatedSidecar,
     validateSharedBuildMetadata,
-    stageCompanionRelease
+    stageCompanionRelease,
+    wingetInstallerManifestPath,
+    readWingetInstallerSha256,
+    updateWingetManifestDigest,
+    wingetDigestFailures
 };
