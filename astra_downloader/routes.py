@@ -1110,7 +1110,12 @@ def create_api(config, dl_manager, history, *, dependencies):
         history_entries = history.load()
         archive_entries = None
         if subscription_manager is not None:
-            archive_reader = getattr(subscription_manager, 'archive_entries', None)
+            # Prefer the scalar projection over the full deep copy — see
+            # SubscriptionStore.archive_history_view.
+            archive_reader = (
+                getattr(subscription_manager, 'archive_history_view', None)
+                or getattr(subscription_manager, 'archive_entries', None)
+            )
             if callable(archive_reader):
                 try:
                     archive_entries = archive_reader()

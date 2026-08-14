@@ -48,13 +48,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: one scan performs O(1) persists, not O(candidates); a test counts `atomic_write_json` calls across a 50-candidate scan and asserts the bound; crash-safety of the reservation is preserved (a killed scan must not leak reserved keys).
   Complexity: M
 
-- [ ] P1 — AD-12 — Stop deep-copying the archive on the Qt main thread
-  Why: `_history_query` calls `archive_entries()`, which `json`-roundtrips up to 20,000 records under the store lock. `subscriptions.py:941-949` documents this exact trap and ships `archive_entry(key)` as the fix; the GUI caller was never converted. The same function also re-reads and re-sanitises the whole history file per invocation.
-  Evidence: `astra_downloader/gui.py:4230-4240`; `subscriptions.py:937-949`, `:1059`; `config.py:2451-2453`.
-  Touches: `astra_downloader/gui.py`, `astra_downloader/subscriptions.py`
-  Acceptance: the history view reads only the archive records it displays; a test with 20,000 archive entries asserts no full copy occurs on the query path.
-  Complexity: M
-
 - [ ] P1 — AD-13 — Widen the catch-reason gate beyond pass-only handlers
   Why: `check-python-catch-reasons.js:42` requires `all(isinstance(statement, ast.Pass) …)`, so any handler that swallows via `return None` / `return ''` / `continue` is never examined. 65 broad handlers currently swallow with no log, no re-raise and no reason (`download.py` 26, `gui.py` 20, `astra_downloader.py` 10, `health.py` 4, `routes.py` 3, `subscriptions.py` 2). CLAUDE.md documents a shipped bug from exactly this class.
   Evidence: `scripts/check-python-catch-reasons.js:38-50`; `CLAUDE.md` §2026-08-06 "A bare `except` around a probe hid a name error".

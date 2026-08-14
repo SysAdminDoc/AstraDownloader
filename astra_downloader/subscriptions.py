@@ -942,6 +942,35 @@ class SubscriptionStore:
                     counts[status] += 1
             return {"total": sum(counts.values()), **counts}
 
+    # The scalar fields History rows and URL lookup actually read. Kept as an
+    # explicit tuple so the projection below cannot silently start carrying a
+    # nested payload again.
+    _ARCHIVE_HISTORY_FIELDS = (
+        "url", "title", "status", "lastError", "subscriptionId",
+        "completedAt", "updatedAt", "createdAt",
+    )
+
+    def archive_history_view(self):
+        """Project the archive into the scalar fields History displays.
+
+        ``archive_entries()`` deep-copies every record under the store lock —
+        at the 20,000-entry cap that is a multi-megabyte copy the Qt main
+        thread paid on every History refresh, while every other store
+        operation (including /health) waited on the lock. Search still needs
+        every row, so the win is copying eight scalars per record instead of
+        the whole document.
+        """
+        with self._lock:
+            return {
+                key: {
+                    field: entry.get(field)
+                    for field in self._ARCHIVE_HISTORY_FIELDS
+                    if field in entry
+                }
+                for key, entry in self._data["archive"].items()
+                if isinstance(entry, dict)
+            }
+
     def archive_entries(self):
         with self._lock:
             return _copy(self._data["archive"])
@@ -1069,6 +1098,10 @@ class SubscriptionManager:
     def archive_entries(self):
         """Return the durable archive for unified history lookup."""
         return self.store.archive_entries()
+
+    def archive_history_view(self):
+        """Return the cheap scalar projection History merges into its rows."""
+        return self.store.archive_history_view()
 
     def snapshot(self):
         with self._lock:
