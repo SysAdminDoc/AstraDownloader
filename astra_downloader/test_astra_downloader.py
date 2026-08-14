@@ -3539,7 +3539,7 @@ class UninstallCleanupTests(unittest.TestCase):
                 args = popen.call_args.args[0]
 
         script = args[-1]
-        self.assertEqual(args[0], "powershell")
+        self.assertEqual(args[0], ad.system32_command("powershell"))
         self.assertNotIn("$args", script)
         self.assertIn(str(awkward.resolve()).replace("'", "''"), script)
         self.assertNotIn("cmd", args)
@@ -7526,6 +7526,51 @@ class CookieJarTests(unittest.TestCase):
             # httpOnly cookie gets the #HttpOnly_ prefix yt-dlp expects.
             self.assertIn("#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t1700000000\tSID\tabc", body)
             self.assertIn("youtube.com\tFALSE\t/\tFALSE\t0\tPREF\ttz=UTC", body)
+
+    def test_system_binaries_resolve_through_system32(self):
+        # CreateProcess searches the CWD before %PATH% for a bare argv[0], so
+        # `icacls`/`powershell`/`schtasks` by name can be shadowed by a file
+        # dropped where the app runs — and the icacls call is the one applying
+        # the cookie-jar ACL. Pin the absolute resolutions.
+        root = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+        self.assertEqual(
+            ad.system32_command('powershell').lower(),
+            str(root / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe').lower(),
+        )
+        self.assertEqual(
+            ad.system32_command('schtasks').lower(),
+            str(root / 'System32' / 'schtasks.exe').lower(),
+        )
+        import download as _download_module
+        self.assertEqual(
+            _download_module._system32_icacls().lower(),
+            str(root / 'System32' / 'icacls.exe').lower(),
+        )
+        # No bare-name spawn may come back: every subprocess.run in the
+        # package must also carry a timeout.
+        module_dir = Path(ad.__file__).resolve().parent
+        for name in ("astra_downloader.py", "download.py", "health.py",
+                     "gui.py", "config.py", "subscriptions.py", "routes.py"):
+            tree = ast.parse((module_dir / name).read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if (isinstance(func, ast.Attribute) and func.attr == "run"
+                        and isinstance(func.value, ast.Name)
+                        and func.value.id == "subprocess"):
+                    self.assertIn(
+                        "timeout", {k.arg for k in node.keywords},
+                        f"{name}:{node.lineno} subprocess.run has no timeout",
+                    )
+                first = node.args[0] if node.args else None
+                if isinstance(first, ast.List) and first.elts:
+                    head = first.elts[0]
+                    if isinstance(head, ast.Constant) and isinstance(head.value, str):
+                        self.assertNotIn(
+                            head.value.lower(), ("icacls", "powershell", "schtasks"),
+                            f"{name}:{node.lineno} spawns {head.value} by bare name",
+                        )
 
     @unittest.skipUnless(os.name == 'nt', 'Windows ACLs are only available on Windows')
     def test_cookie_jar_has_no_inherited_broad_acl(self):
@@ -15945,7 +15990,7 @@ class SiteLoginDownloadTests(unittest.TestCase):
         real_popen = ad.subprocess.Popen
 
         def popen(args, **kwargs):
-            if args and str(args[0]).lower().endswith('icacls'):
+            if args and str(args[0]).lower().endswith(('icacls', 'icacls.exe')):
                 return real_popen(args, **kwargs)
             if '--ignore-config' not in args:
                 return self._FakeProc([], 0)
@@ -16319,7 +16364,7 @@ class SiteLoginBrowserImportTests(unittest.TestCase):
 
         def popen(args, **kwargs):
             # icacls protects the stored jar through this same Popen.
-            if args and str(args[0]).lower().endswith('icacls'):
+            if args and str(args[0]).lower().endswith(('icacls', 'icacls.exe')):
                 return real_popen(args, **kwargs)
             jar = Path(args[args.index('--cookies') + 1])
             staged['path'] = jar

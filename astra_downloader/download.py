@@ -861,6 +861,13 @@ def _windows_cookie_identity():
     return user
 
 
+def _system32_icacls():
+    """Absolute icacls path — this call APPLIES the cookie-jar ACL, so a
+    CWD-shadowed `icacls` would silently degrade the protection it grants."""
+    root = os.environ.get('SystemRoot', r'C:\Windows')
+    return os.path.join(root, 'System32', 'icacls.exe')
+
+
 def _apply_cookie_jar_acl(target_path):
     """Apply a fail-closed owner-only ACL before cookie bytes are written."""
     target_path = Path(target_path)
@@ -876,7 +883,7 @@ def _apply_cookie_jar_acl(target_path):
     try:
         result = subprocess.run(
             [
-                'icacls', str(target_path),
+                _system32_icacls(), str(target_path),
                 '/inheritance:r',
                 '/grant:r', f'{identity}:F',
             ],
@@ -884,6 +891,7 @@ def _apply_cookie_jar_acl(target_path):
             text=True,
             check=False,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as error:
         raise PermissionError(f'icacls could not protect cookie jar: {error}') from error
@@ -896,11 +904,12 @@ def _apply_cookie_jar_acl(target_path):
     # a policy or localized account lookup leaves a broad inherited grant.
     try:
         verify = subprocess.run(
-            ['icacls', str(target_path)],
+            [_system32_icacls(), str(target_path)],
             capture_output=True,
             text=True,
             check=False,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as error:
         raise PermissionError(f'icacls ACL verification failed: {error}') from error

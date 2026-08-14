@@ -682,6 +682,23 @@ _DENO_RUNTIME_CACHE_TTL_SECONDS = 60
 JS_RUNTIME_CAPABILITY_MARKER = "ASTRA_EJS_RUNTIME_OK"
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def system32_command(name):
+    """Absolute path for a Windows system binary, immune to CWD/PATH shadowing.
+
+    CreateProcess resolves a bare argv[0] through the process's current
+    working directory before %PATH%, so `powershell` or `schtasks` invoked by
+    name can be shadowed by a file dropped where the app happens to run.
+    Every managed binary here is already absolute; system binaries must be
+    too. PowerShell lives one level deeper than the rest of System32.
+    """
+    root = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+    if name.lower().startswith('powershell'):
+        return str(root / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe')
+    if not name.lower().endswith('.exe'):
+        name = f'{name}.exe'
+    return str(root / 'System32' / name)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 CONTROL_CHARS_RE = re.compile(r'[\x00-\x1f\x7f]')
 MAX_TEXT_FIELD = 500
@@ -2984,7 +3001,7 @@ try {
 }
 '''.lstrip(), encoding='utf-8')
         args = [
-            'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            system32_command('powershell'), '-NoProfile', '-ExecutionPolicy', 'Bypass',
             '-File', str(script),
             '-ProcessId', str(current_pid),
             '-SourcePath', str(update),
@@ -3733,10 +3750,11 @@ def _write_shortcut(lnk_path, target, base_args, label):
     lnk_path = Path(lnk_path)
     lnk_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ['powershell', '-NoProfile', '-Command',
+        [system32_command('powershell'), '-NoProfile', '-Command',
          build_shortcut_command(lnk_path, target, base_args)],
         capture_output=True,
         creationflags=CREATE_NO_WINDOW,
+        timeout=60,
     )
     if not lnk_path.exists():
         write_persistent_log(f"{label} shortcut was not created at {lnk_path}")
@@ -3771,9 +3789,9 @@ def register_startup_task(target, base_args):
     try:
         task_cmd = command_line([target] + list(base_args) + ['-Background'])
         subprocess.run([
-            'schtasks', '/Create', '/TN', 'AstraDownloader',
+            system32_command('schtasks'), '/Create', '/TN', 'AstraDownloader',
             '/TR', task_cmd, '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F'
-        ], capture_output=True, creationflags=CREATE_NO_WINDOW)
+        ], capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=60)
     except Exception as e:
         write_persistent_log(f"Startup task registration failed: {e}")
 
@@ -4878,8 +4896,8 @@ def run_uninstall():
         sys.exit(0)
 
     # Remove scheduled task
-    subprocess.run(['schtasks', '/Delete', '/TN', 'AstraDownloader', '/F'],
-                   capture_output=True, creationflags=CREATE_NO_WINDOW)
+    subprocess.run([system32_command('schtasks'), '/Delete', '/TN', 'AstraDownloader', '/F'],
+                   capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=60)
 
     # Remove registry entries
     try:
@@ -4983,7 +5001,7 @@ def spawn_delayed_install_dir_removal(path=INSTALL_DIR):
         quoted = "'" + target.replace("'", "''") + "'"
         script = f"Start-Sleep -Seconds 2; Remove-Item -LiteralPath {quoted} -Recurse -Force"
         subprocess.Popen(
-            ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+            [system32_command('powershell'), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=CREATE_NO_WINDOW,
