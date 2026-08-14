@@ -1621,6 +1621,28 @@ CATALOGS["de"].update({
         "Die konfigurierte Deno-Laufzeit liegt unter der Sicherheitsuntergrenze von Astra Downloader.",
     "Update Deno to the security floor shown in the readiness panel, then retry.":
         "Deno auf die im Bereitschaftsbereich angezeigte Sicherheitsuntergrenze aktualisieren und erneut versuchen.",
+    # Chrome/Edge native-host pairing (2026-08-14).
+    "That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.":
+        "Das ist keine Chrome-Erweiterungs-ID. Die 32-Buchstaben-ID von chrome://extensions kopieren.",
+    "Could not save the extension IDs. Check disk permissions and retry.":
+        "Die Erweiterungs-IDs konnten nicht gespeichert werden. Datenträgerberechtigungen prüfen und erneut versuchen.",
+    "Chrome and Edge are paired. Reload the extension once and its download button can hand off.":
+        "Chrome und Edge sind gekoppelt. Die Erweiterung einmal neu laden, dann kann ihr Download-Button übergeben.",
+    "Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.":
+        "Gespeichert. Diese Kopie registriert keine Browser-Hosts (portabel oder Quellstart) — von einer installierten Kopie aus koppeln.",
+    "Chrome and Edge pairing cleared.": "Kopplung mit Chrome und Edge aufgehoben.",
+    "Cleared. This copy registers no browser hosts.":
+        "Entfernt. Diese Kopie registriert keine Browser-Hosts.",
+    "Register": "Registrieren",
+    "Chrome and Edge pairing": "Kopplung mit Chrome und Edge",
+    "Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.":
+        "Firefox wird automatisch registriert. Für Chrome und Edge muss die Erweiterungs-ID von chrome://extensions einmal eingetragen werden.",
+    "32-letter extension ID — several separated by commas":
+        "Erweiterungs-ID aus 32 Buchstaben — mehrere durch Kommas getrennt",
+    "Chrome and Edge extension IDs": "Erweiterungs-IDs für Chrome und Edge",
+    "Write the Chrome and Edge native-messaging registration for these IDs.":
+        "Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.",
+    "Chrome pairing status": "Status der Chrome-Kopplung",
 })
 
 

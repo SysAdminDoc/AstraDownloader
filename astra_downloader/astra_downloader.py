@@ -4010,6 +4010,24 @@ def register_native_messaging_hosts(target, base_args, config):
         write_persistent_log(f"Native messaging host registration failed: {e}")
 
 
+def refresh_native_messaging_registration():
+    """Re-run browser native-host registration for the current install layout.
+
+    The GUI calls this when the configured Chrome/Edge extension IDs change so
+    the registry pointers and manifest follow the setting immediately instead
+    of waiting for the next launch. Returns False when nothing was (or can be)
+    registered: portable copies deliberately register no browser hosts, and a
+    source run has no executable wrapper for the host to launch.
+    """
+    if is_portable_mode():
+        return False
+    target, base_args = launch_command_parts(prefer_installed=True)
+    if base_args:
+        return False
+    register_native_messaging_hosts(target, base_args, Config())
+    return True
+
+
 def ensure_system_integrations(prefer_installed=True, force=False):
     """Register shortcut / startup task / protocol handlers / uninstall entry.
 
@@ -4593,6 +4611,8 @@ class DownloadManager(DownloadManagerCore):
                 # startup, now opens the update window.
                 'maybe_auto_update_ytdlp': lambda *args, **kwargs: maybe_auto_update_ytdlp(*args, **kwargs),
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
+                'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
+                'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
@@ -5144,6 +5164,8 @@ class MainWindow(MainWindowCore):
                 'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
                 'maybe_auto_update_ytdlp': lambda *args, **kwargs: maybe_auto_update_ytdlp(*args, **kwargs),
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
+                'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
+                'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),

@@ -101,6 +101,40 @@ class ExtensionPageMixin:
 
         layout.addWidget(make_divider())
 
+        pairing_header = QHBoxLayout()
+        pairing_header.setSpacing(12)
+        pairing_header.addWidget(make_label("Chrome and Edge pairing", "panelTitle"))
+        pairing_header.addWidget(make_label(
+            "Firefox is registered automatically. Chrome and Edge need the "
+            "extension's ID from chrome://extensions entered once.",
+            "fieldHint",
+            word_wrap=True,
+        ), 1)
+        layout.addLayout(pairing_header)
+        chrome_row = QHBoxLayout()
+        chrome_row.setSpacing(8)
+        self.cfg_native_chrome_ids = QLineEdit(
+            str(self.config.get("NativeChromeExtensionIds", "") or "")
+        )
+        self.cfg_native_chrome_ids.setPlaceholderText(
+            tr("32-letter extension ID — several separated by commas")
+        )
+        self.cfg_native_chrome_ids.setAccessibleName(tr("Chrome and Edge extension IDs"))
+        chrome_row.addWidget(self.cfg_native_chrome_ids, 1)
+        self.btn_register_chrome_host = self._make_tool_button("Register", "secondary")
+        self.btn_register_chrome_host.setToolTip(
+            tr("Write the Chrome and Edge native-messaging registration for these IDs.")
+        )
+        self.btn_register_chrome_host.clicked.connect(self._apply_native_chrome_ids)
+        chrome_row.addWidget(self.btn_register_chrome_host)
+        layout.addLayout(chrome_row)
+        self.native_pairing_status = make_label("", "fieldHint", word_wrap=True)
+        self.native_pairing_status.setAccessibleName(tr("Chrome pairing status"))
+        self.native_pairing_status.hide()
+        layout.addWidget(self.native_pairing_status)
+
+        layout.addWidget(make_divider())
+
         # Metrics — one strip, with rhythm supplied by separators rather than cards.
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(0)

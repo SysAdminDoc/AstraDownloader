@@ -14,6 +14,14 @@ repository's git log.
 
 ### Added
 
+- **Chrome and Edge can pair from the Browser extension page.** The Astra
+  Deck handoff was dead on every Chromium browser: the native-messaging
+  host is the only token channel, and the extension-ID setting that
+  registration requires had no input anywhere in the GUI. The Extension page
+  now takes the ID from chrome://extensions, validates it before it can
+  reach a manifest's `allowed_origins`, registers the Chrome and Edge hosts
+  immediately on save, and revokes them when cleared. Firefox remains
+  registered automatically.
 - **A playlist can be reviewed before anything downloads.** A pasted playlist
   URL shows a Review playlist button that previews the items and lets you
   select which ones to queue; only the committed selection enters the queue.

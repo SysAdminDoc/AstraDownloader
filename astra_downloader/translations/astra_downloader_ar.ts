@@ -579,6 +579,18 @@
       <translation>Endpoint copied.</translation>
     </message>
     <message>
+      <source>That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.</source>
+      <translation>That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.</translation>
+    </message>
+    <message>
+      <source>Could not save the extension IDs. Check disk permissions and retry.</source>
+      <translation>Could not save the extension IDs. Check disk permissions and retry.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge are paired. Reload the extension once and its download button can hand off.</source>
+      <translation>Chrome and Edge are paired. Reload the extension once and its download button can hand off.</translation>
+    </message>
+    <message>
       <source>Copied token cleared from the clipboard.</source>
       <translation>Copied token cleared from the clipboard.</translation>
     </message>
@@ -1047,6 +1059,10 @@
       <translation>Video link staged. Open Downloads to review it before adding it to the queue.</translation>
     </message>
     <message>
+      <source>Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.</source>
+      <translation>Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.</translation>
+    </message>
+    <message>
       <source>Reveal</source>
       <translation>Reveal</translation>
     </message>
@@ -1373,6 +1389,14 @@
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>This link tops out at {height}p.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge pairing cleared.</source>
+      <translation>Chrome and Edge pairing cleared.</translation>
+    </message>
+    <message>
+      <source>Cleared. This copy registers no browser hosts.</source>
+      <translation>Cleared. This copy registers no browser hosts.</translation>
     </message>
     <message>
       <source>Still running in the tray so Astra Deck can keep sending downloads.</source>
@@ -2163,6 +2187,10 @@
       <translation>Open folder</translation>
     </message>
     <message>
+      <source>Register</source>
+      <translation>Register</translation>
+    </message>
+    <message>
       <source>In progress</source>
       <translation>In progress</translation>
     </message>
@@ -2205,6 +2233,30 @@
     <message>
       <source>The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.</source>
       <translation>The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge pairing</source>
+      <translation>Chrome and Edge pairing</translation>
+    </message>
+    <message>
+      <source>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</source>
+      <translation>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</translation>
+    </message>
+    <message>
+      <source>32-letter extension ID — several separated by commas</source>
+      <translation>32-letter extension ID — several separated by commas</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge extension IDs</source>
+      <translation>Chrome and Edge extension IDs</translation>
+    </message>
+    <message>
+      <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
+      <translation>Write the Chrome and Edge native-messaging registration for these IDs.</translation>
+    </message>
+    <message>
+      <source>Chrome pairing status</source>
+      <translation>Chrome pairing status</translation>
     </message>
     <message>
       <source>Server log</source>
