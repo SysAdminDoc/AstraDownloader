@@ -47,7 +47,8 @@ __all__ = (
     "cleanup_stale_cookie_jars", "DOWNLOAD_ACTIVE_STATES",
     "DOWNLOAD_RUNNING_STATES", "DOWNLOAD_PENDING_STATES",
     "DOWNLOAD_TERMINAL_STATES", "DOWNLOAD_RETRYABLE_ERROR_CODES",
-    "DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES",
+    "DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES", "DOWNLOAD_PIPELINE_STEPS",
+    "format_redacted_command_args",
     "DOWNLOAD_QUEUE_PATH", "MAX_CONCURRENT", "MAX_QUEUED_TOTAL",
     "HOST_BACKOFF_BASE_SECONDS", "HOST_BACKOFF_MAX_SECONDS",
     "HOST_BACKOFF_MAX_ENTRIES", "parse_retry_after_seconds",
@@ -93,6 +94,12 @@ __all__ = (
     "SITE_LOGIN_CREDENTIAL_SUFFIX", "SITE_LOGIN_UNSUPPORTED_CREDENTIAL_SITES",
     "SITE_LOGIN_TEST_TIMEOUT_SECONDS",
     "default_download_path",
+)
+
+DOWNLOAD_PIPELINE_STEPS = (
+    'pending', 'queued', 'fetching', 'downloading', 'merging',
+    'extracting', 'embedding', 'transcribing', 'complete', 'failed',
+    'cancelled', 'skipped',
 )
 
 MAX_CONCURRENT = 3
@@ -687,6 +694,11 @@ DOWNLOAD_FAILURE_RECOVERY = {
     'js-runtime-unsupported': {
         'error': "The configured JavaScript runtime is below yt-dlp's supported floor.",
         'advice': 'Upgrade to Deno 2.3+ or Node 22+, then retry.',
+        'next_action': 'upgrade-javascript-runtime',
+    },
+    'js-runtime-security-floor': {
+        'error': "The configured Deno runtime is below Astra Downloader's security floor.",
+        'advice': 'Update Deno to the security floor shown in the readiness panel, then retry.',
         'next_action': 'upgrade-javascript-runtime',
     },
     'ejs-runtime-not-ready': {
@@ -2909,6 +2921,72 @@ def summarize_ytdlp_playlist(info, limit=PLAYLIST_PREVIEW_LIMIT):
     }
 
 
+def format_redacted_command_args(args, download=None, secrets=None):
+    """Return a copy of the argv with credentials, tokens, and cookie paths safely redacted."""
+    if not args:
+        return []
+    sensitive_flags = {
+        '--username', '-u',
+        '--password', '-p',
+        '--video-password',
+        '--cookies',
+        '--cookies-from-browser',
+    }
+    extracted_secrets = set(secrets or ())
+    if download is not None:
+        creds = getattr(download, '_credentials', None)
+        if isinstance(creds, dict):
+            if creds.get('username'):
+                extracted_secrets.add(str(creds['username']))
+            if creds.get('password'):
+                extracted_secrets.add(str(creds['password']))
+        vid_pwd = getattr(download, '_video_password', '')
+        if vid_pwd:
+            extracted_secrets.add(str(vid_pwd))
+
+    redacted = []
+    skip_next = False
+    for i, raw_arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        arg = str(raw_arg)
+        low = arg.lower()
+        if low in sensitive_flags:
+            redacted.append(arg)
+            if i + 1 < len(args):
+                redacted.append('[redacted]')
+                skip_next = True
+            continue
+        if any(low.startswith(f"{flag}=") for flag in sensitive_flags):
+            prefix = arg.split('=', 1)[0]
+            redacted.append(f"{prefix}=[redacted]")
+            continue
+        if low.startswith('--add-header') or low == '--header':
+            if '=' in arg:
+                redacted.append('--add-header=[redacted header]')
+            else:
+                redacted.append(arg)
+                if i + 1 < len(args):
+                    redacted.append('[redacted header]')
+                    skip_next = True
+            continue
+        if 'po_token' in low or 'visitor_data' in low:
+            arg = re.sub(r'po_token=[^:;,\s]+', 'po_token=[redacted]', arg, flags=re.IGNORECASE)
+            arg = re.sub(r'visitor_data=[^:;,\s]+', 'visitor_data=[redacted]', arg, flags=re.IGNORECASE)
+        for secret in extracted_secrets:
+            if secret and secret in arg:
+                arg = arg.replace(secret, '[redacted]')
+        try:
+            home = str(Path.home())
+            if home and home in arg:
+                arg = arg.replace(home, '%USERPROFILE%')
+        except Exception:
+            pass  # reason: Path.home() can raise on headless/sandboxed systems; redaction is best-effort.
+        redacted.append(arg)
+    return redacted
+
+
 def _redact_download_secrets(value, download):
     """Remove auth values before error text can reach history or diagnostics."""
     secrets = []
@@ -3148,6 +3226,8 @@ class Download:
         # a restart cannot silently turn it into a full media download.
         self.subtitle_retry = False
         self.status = "pending"
+        self.step = "pending"
+        self.command_args = []
         self.progress = 0.0
         self.speed = ""
         self.eta = ""
@@ -3172,7 +3252,8 @@ class Download:
     def to_dict(self):
         payload = {
             "id": self.id, "url": self.url, "title": self.title,
-            "status": self.status, "progress": round(self.progress, 1),
+            "status": self.status, "step": self.step,
+            "progress": round(self.progress, 1),
             "speed": self.speed, "eta": self.eta, "filename": self.filename,
             "error": self.error, "audioOnly": self.audio_only,
             "format": self.format, "quality": self.quality,
@@ -3184,6 +3265,8 @@ class Download:
                     and self.error_code in DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES)
             ),
         }
+        if self.command_args:
+            payload["commandArgs"] = list(self.command_args)
         if self.error_code:
             payload["error_code"] = self.error_code
             payload["advice"] = self.error_advice
@@ -3212,11 +3295,11 @@ class Download:
 # Naming the fields makes the snapshot and the restore the same list by
 # construction, so they cannot disagree again.
 RESUME_ROLLBACK_FIELDS = (
-    'status', 'error', 'error_code', 'error_advice', 'error_action',
+    'status', 'step', 'error', 'error_code', 'error_advice', 'error_action',
     'requires_auth', '_cookies', 'resume_partial',
 )
 RETRY_ROLLBACK_FIELDS = (
-    'status', 'progress', 'speed', 'eta', 'filename',
+    'status', 'step', 'command_args', 'progress', 'speed', 'eta', 'filename',
     'error', 'error_code', 'error_advice', 'error_action',
     'finished_time', 'start_time', 'queue_order',
     'requires_auth', '_cookies', 'resume_partial', 'subtitle_retry',
@@ -4580,6 +4663,7 @@ class DownloadManagerCore:
             # parsing fails.
             if line.startswith('MDLP_JSON '):
                 _mark_live_transfer_started()
+                dl.step = "downloading"
                 try:
                     payload = json.loads(line[len('MDLP_JSON '):])
                     total = payload.get('total_bytes') or payload.get('total_bytes_estimate') or 0
@@ -4626,6 +4710,7 @@ class DownloadManagerCore:
             m = re.match(r'^MDLP\s+(\d+\.?\d*)%?\s+(\S+)\s+(\S+)', line)
             if m:
                 _mark_live_transfer_started()
+                dl.step = "downloading"
                 dl.progress = float(m.group(1))
                 spd, eta = m.group(2), m.group(3)
                 if spd not in ('NA', 'Unknown'):
@@ -4639,6 +4724,7 @@ class DownloadManagerCore:
             m = re.match(r'\[download\]\s+(\d+\.?\d*)%', line)
             if m:
                 _mark_live_transfer_started()
+                dl.step = "downloading"
                 dl.progress = float(m.group(1))
                 m2 = re.search(r'at\s+(\S+)\s+ETA\s+(\S+)', line)
                 if m2:
@@ -4666,10 +4752,16 @@ class DownloadManagerCore:
             elif '[Merger]' in line or 'Merging formats' in line:
                 _mark_live_transfer_started()
                 dl.status = "merging"
+                dl.step = "merging"
                 self.progress_updated.emit()
             elif '[ExtractAudio]' in line or '[extract]' in line:
                 _mark_live_transfer_started()
                 dl.status = "extracting"
+                dl.step = "extracting"
+                self.progress_updated.emit()
+            elif any(marker in line for marker in ('[EmbedSubtitle]', '[Metadata]', '[Thumbnails]', '[EmbedThumbnail]', 'Embedding')):
+                _mark_live_transfer_started()
+                dl.step = "embedding"
                 self.progress_updated.emit()
 
             # Filename detection
@@ -5152,6 +5244,7 @@ class DownloadManagerCore:
                 # re-schedules; nothing else to tear down here.
                 return
             dl.status = "downloading"
+            dl.step = "fetching"
         self.progress_updated.emit()
 
         effective_config = self._effective_config_for_url(
@@ -5160,6 +5253,7 @@ class DownloadManagerCore:
 
         if getattr(dl, 'subtitle_retry', False):
             try:
+                dl.step = "transcribing"
                 self._run_local_subtitles(dl, effective_config)
             except Exception as error:
                 if dl.status != 'cancelled':
@@ -5424,6 +5518,7 @@ class DownloadManagerCore:
         args += build_impersonate_args(effective_config, available_targets)
 
         args.append(dl.url)
+        dl.command_args = format_redacted_command_args(args, dl)
 
         # Watchdog sentinels declared before the try so the finally can stop the
         # thread even if Popen() raises before the watchdog is created.
@@ -5523,9 +5618,11 @@ class DownloadManagerCore:
 
             if dl.status != "complete":
                 if dl.status == "cancelled":
+                    dl.step = "cancelled"
                     dl.error = dl.error or "Cancelled by user."
                 elif watchdog_killed['value'] == 'live-wait-timeout':
                     dl.status = "failed"
+                    dl.step = "failed"
                     dl.error = (
                         "Live video did not start within "
                         f"{DOWNLOAD_LIVE_WAIT_MAX_SECONDS // 60} minutes and was stopped."
@@ -5535,6 +5632,7 @@ class DownloadManagerCore:
                     )
                 elif watchdog_killed['value'] == 'stall':
                     dl.status = "failed"
+                    dl.step = "failed"
                     dl.error = (
                         "Download stalled (no progress for "
                         f"{DOWNLOAD_STALL_TIMEOUT_SECONDS // 60} minutes) and was stopped."
@@ -5552,13 +5650,16 @@ class DownloadManagerCore:
                     skip_reason = self._empty_result_reason(dl)
                     if skip_reason:
                         dl.status = "skipped"
+                        dl.step = "skipped"
                         dl.progress = 0
                         dl.error = skip_reason
                     else:
                         dl.status = "complete"
+                        dl.step = "complete"
                         dl.progress = 100
                 else:
                     dl.status = "failed"
+                    dl.step = "failed"
                     # Audit pass: truncate the last ERROR line like the
                     # fallback branch already does. yt-dlp ERROR lines can
                     # carry a full Python traceback; an untruncated value used

@@ -679,6 +679,8 @@ def create_api(config, dl_manager, history, *, dependencies):
             reason = runtime.get('reason')
             if reason == 'runtime-not-installed':
                 error_code = 'js-runtime-missing'
+            elif reason == 'runtime-version-below-security-floor':
+                error_code = 'js-runtime-security-floor'
             elif reason == 'runtime-version-unsupported':
                 error_code = 'js-runtime-unsupported'
             elif reason in {'runtime-version-unparseable', 'runtime-probe-failed'}:
@@ -941,6 +943,19 @@ def create_api(config, dl_manager, history, *, dependencies):
         if payload is None:
             return cors_response({"error": "Download no longer exists in the active queue."}, 404)
         return cors_response(payload)
+
+    @api.route('/downloads/<dl_id>/command', methods=['GET'])
+    def download_command(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        payload = dl_manager.snapshot_of(dl_id)
+        if payload is None:
+            return cors_response({"error": "Download no longer exists in the active queue."}, 404)
+        return cors_response({
+            "id": dl_id,
+            "commandArgs": payload.get("commandArgs") or [],
+            "command": " ".join(payload.get("commandArgs") or []),
+        })
 
     # NOTE: must not be named `queue` — a nested function named `queue` would
     # shadow the stdlib `queue` module for every sibling closure in create_api

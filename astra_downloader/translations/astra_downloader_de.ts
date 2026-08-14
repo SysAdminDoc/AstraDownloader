@@ -3,6 +3,10 @@
   <context>
     <name>AstraDownloader</name>
     <message>
+      <source>{count} videos</source>
+      <translation>{count} Videos</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Erweiterungsserver</translation>
     </message>
@@ -63,6 +67,14 @@
       <translation>Fehler kopiert.</translation>
     </message>
     <message>
+      <source>Copy command</source>
+      <translation>Befehl kopieren</translation>
+    </message>
+    <message>
+      <source>Close</source>
+      <translation>Schließen</translation>
+    </message>
+    <message>
       <source>Link ready. Check the options, then choose Download.</source>
       <translation>Link bereit. Prüfen Sie die Optionen und wählen Sie dann Herunterladen.</translation>
     </message>
@@ -101,6 +113,42 @@
     <message>
       <source>New token ready. Save settings to apply it.</source>
       <translation>Neues Token bereit. Speichern Sie die Einstellungen, um es anzuwenden.</translation>
+    </message>
+    <message>
+      <source>Review Playlist</source>
+      <translation>Playlist überprüfen</translation>
+    </message>
+    <message>
+      <source>(untitled playlist)</source>
+      <translation>(unbenannte Playlist)</translation>
+    </message>
+    <message>
+      <source>Select all</source>
+      <translation>Alle auswählen</translation>
+    </message>
+    <message>
+      <source>Deselect all</source>
+      <translation>Alle abwählen</translation>
+    </message>
+    <message>
+      <source>Invert</source>
+      <translation>Umkehren</translation>
+    </message>
+    <message>
+      <source>Cancel</source>
+      <translation>Abbrechen</translation>
+    </message>
+    <message>
+      <source>Download selected</source>
+      <translation>Auswahl herunterladen</translation>
+    </message>
+    <message>
+      <source>{selected} of {total} selected</source>
+      <translation>{selected} von {total} ausgewählt</translation>
+    </message>
+    <message>
+      <source>Download selected ({count})</source>
+      <translation>Auswahl herunterladen ({count})</translation>
     </message>
     <message>
       <source>Server status indicator: Stopped</source>
@@ -327,10 +375,6 @@
       <translation>●  {status}</translation>
     </message>
     <message>
-      <source>Cancel</source>
-      <translation>Abbrechen</translation>
-    </message>
-    <message>
       <source>{total} / {limit} jobs</source>
       <translation>{total} / {limit} Aufträge</translation>
     </message>
@@ -417,6 +461,14 @@
     <message>
       <source>Download again</source>
       <translation>Erneut herunterladen</translation>
+    </message>
+    <message>
+      <source>yt-dlp Command</source>
+      <translation>yt-dlp-Befehl</translation>
+    </message>
+    <message>
+      <source>Scanning playlist items...</source>
+      <translation>Playlist-Einträge werden gelesen...</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -553,6 +605,10 @@
     <message>
       <source>Setting Up</source>
       <translation>Einrichtung</translation>
+    </message>
+    <message>
+      <source>(untitled)</source>
+      <translation>(ohne Titel)</translation>
     </message>
     <message>
       <source>{name} {page}</source>
@@ -927,6 +983,30 @@
       <translation>Wiederholen</translation>
     </message>
     <message>
+      <source>View yt-dlp command</source>
+      <translation>yt-dlp-Befehl anzeigen</translation>
+    </message>
+    <message>
+      <source>Command for {title}</source>
+      <translation>Befehl für {title}</translation>
+    </message>
+    <message>
+      <source>This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.</source>
+      <translation>Dies ist die exakte Befehlszeile dieses Auftrags; Zugangsdaten, Token und Cookie-Pfade sind geschwärzt.</translation>
+    </message>
+    <message>
+      <source>No command recorded.</source>
+      <translation>Kein Befehl aufgezeichnet.</translation>
+    </message>
+    <message>
+      <source>Paste a playlist link first.</source>
+      <translation>Zuerst einen Playlist-Link einfügen.</translation>
+    </message>
+    <message>
+      <source>Enter a playlist URL to review.</source>
+      <translation>Zum Überprüfen eine Playlist-URL eingeben.</translation>
+    </message>
+    <message>
       <source>yt-dlp {version} is ready.</source>
       <translation>yt-dlp {version} ist bereit.</translation>
     </message>
@@ -1055,8 +1135,8 @@
       <translation>Führen Sie die Einrichtung aus, um das lokale Whisper-Modell und die whisper.cpp-Laufzeit vor dem Download bereitzustellen.</translation>
     </message>
     <message>
-      <source>Required</source>
-      <translation>Erforderlich</translation>
+      <source>Security floor</source>
+      <translation>Sicherheitsuntergrenze</translation>
     </message>
     <message>
       <source>creator subtitles only</source>
@@ -1191,6 +1271,10 @@
       <translation>Indikator für Erweiterungsserverstatus: Offline</translation>
     </message>
     <message>
+      <source>Fetching metadata</source>
+      <translation>Metadaten werden abgerufen</translation>
+    </message>
+    <message>
       <source>{title} status: {status}</source>
       <translation>{title} Status: {status}</translation>
     </message>
@@ -1271,6 +1355,18 @@
       <translation>Einträge</translation>
     </message>
     <message>
+      <source>Could not preview playlist.</source>
+      <translation>Playlist-Vorschau nicht möglich.</translation>
+    </message>
+    <message>
+      <source>No playlist items selected.</source>
+      <translation>Keine Playlist-Einträge ausgewählt.</translation>
+    </message>
+    <message>
+      <source>Queued {count} items from playlist.</source>
+      <translation>{count} Einträge aus der Playlist eingereiht.</translation>
+    </message>
+    <message>
       <source>Settings status: {message}</source>
       <translation>Einstellungsstatus: {message}</translation>
     </message>
@@ -1293,6 +1389,10 @@
     <message>
       <source>Open</source>
       <translation>Öffnen</translation>
+    </message>
+    <message>
+      <source>Runtime floor</source>
+      <translation>Laufzeituntergrenze</translation>
     </message>
     <message>
       <source>Using site profile: {name}.</source>
@@ -1337,6 +1437,10 @@
     <message>
       <source>Test failed</source>
       <translation>Test fehlgeschlagen</translation>
+    </message>
+    <message>
+      <source>Embedding metadata</source>
+      <translation>Metadaten werden eingebettet</translation>
     </message>
     <message>
       <source>Download</source>
@@ -1391,6 +1495,14 @@
       <translation>Transkriptionsmodell wird vorbereitet…</translation>
     </message>
     <message>
+      <source>{runtime} {version} is below the security floor {floor}; update it before downloading.</source>
+      <translation>{runtime} {version} liegt unter der Sicherheitsuntergrenze {floor}; vor dem Herunterladen aktualisieren.</translation>
+    </message>
+    <message>
+      <source>Required</source>
+      <translation>Erforderlich</translation>
+    </message>
+    <message>
       <source>{label} {date}</source>
       <translation>{label} {date}</translation>
     </message>
@@ -1409,6 +1521,10 @@
     <message>
       <source>This host is paused — retry in {duration}.</source>
       <translation>Dieser Host ist pausiert — erneut versuchen in {duration}.</translation>
+    </message>
+    <message>
+      <source>Generating subtitles</source>
+      <translation>Untertitel werden erzeugt</translation>
     </message>
     <message>
       <source>Host paused · retry in {duration}</source>
@@ -1433,6 +1549,14 @@
     <message>
       <source>unknown</source>
       <translation>unbekannt</translation>
+    </message>
+    <message>
+      <source>required</source>
+      <translation>erforderlich</translation>
+    </message>
+    <message>
+      <source>{runtime} {version} is below the runtime floor {floor}; update it before downloading.</source>
+      <translation>{runtime} {version} liegt unter der Laufzeituntergrenze {floor}; vor dem Herunterladen aktualisieren.</translation>
     </message>
     <message>
       <source>First cookie expires</source>
@@ -1473,6 +1597,10 @@
     <message>
       <source>Open extension pairing</source>
       <translation>Erweiterungskopplung öffnen</translation>
+    </message>
+    <message>
+      <source>Review playlist</source>
+      <translation>Playlist überprüfen</translation>
     </message>
     <message>
       <source>From link</source>
@@ -1545,6 +1673,10 @@
     <message>
       <source>Paste a video link, or several at once</source>
       <translation>Videolink einfügen, auch mehrere auf einmal</translation>
+    </message>
+    <message>
+      <source>Preview and select videos in this playlist before downloading.</source>
+      <translation>Videos dieser Playlist vor dem Herunterladen ansehen und auswählen.</translation>
     </message>
     <message>
       <source>One-link video password</source>
@@ -2985,6 +3117,14 @@
     <message>
       <source>upgrade-javascript-runtime</source>
       <translation>upgrade-javascript-runtime</translation>
+    </message>
+    <message>
+      <source>The configured Deno runtime is below Astra Downloader's security floor.</source>
+      <translation>Die konfigurierte Deno-Laufzeit liegt unter der Sicherheitsuntergrenze von Astra Downloader.</translation>
+    </message>
+    <message>
+      <source>Update Deno to the security floor shown in the readiness panel, then retry.</source>
+      <translation>Deno auf die im Bereitschaftsbereich angezeigte Sicherheitsuntergrenze aktualisieren und erneut versuchen.</translation>
     </message>
     <message>
       <source>The configured runtime could not execute the yt-dlp EJS capability probe.</source>

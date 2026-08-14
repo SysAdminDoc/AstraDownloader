@@ -1578,6 +1578,49 @@ CATALOGS["de"].update({
     "Pause between subtitle requests": "Pause zwischen Untertitelanfragen",
     "Seconds between subtitle-track requests. Helps avoid subtitle rate limits; 0 disables it.":
         "Sekunden zwischen Anfragen für Untertitelspuren. Hilft, Ratenbegrenzungen für Untertitel zu vermeiden; 0 deaktiviert die Pause.",
+    # Playlist staging, pipeline steps, command inspector and the Deno
+    # security floor (2026-08-14).
+    "{count} videos": "{count} Videos",
+    "Copy command": "Befehl kopieren",
+    "Close": "Schließen",
+    "Review Playlist": "Playlist überprüfen",
+    "(untitled playlist)": "(unbenannte Playlist)",
+    "Select all": "Alle auswählen",
+    "Deselect all": "Alle abwählen",
+    "Invert": "Umkehren",
+    "Download selected": "Auswahl herunterladen",
+    "{selected} of {total} selected": "{selected} von {total} ausgewählt",
+    "Download selected ({count})": "Auswahl herunterladen ({count})",
+    "yt-dlp Command": "yt-dlp-Befehl",
+    "Scanning playlist items...": "Playlist-Einträge werden gelesen...",
+    "(untitled)": "(ohne Titel)",
+    "View yt-dlp command": "yt-dlp-Befehl anzeigen",
+    "Command for {title}": "Befehl für {title}",
+    "This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.":
+        "Dies ist die exakte Befehlszeile dieses Auftrags; Zugangsdaten, Token und Cookie-Pfade sind geschwärzt.",
+    "No command recorded.": "Kein Befehl aufgezeichnet.",
+    "Paste a playlist link first.": "Zuerst einen Playlist-Link einfügen.",
+    "Enter a playlist URL to review.": "Zum Überprüfen eine Playlist-URL eingeben.",
+    "Security floor": "Sicherheitsuntergrenze",
+    "Fetching metadata": "Metadaten werden abgerufen",
+    "Could not preview playlist.": "Playlist-Vorschau nicht möglich.",
+    "No playlist items selected.": "Keine Playlist-Einträge ausgewählt.",
+    "Queued {count} items from playlist.": "{count} Einträge aus der Playlist eingereiht.",
+    "Runtime floor": "Laufzeituntergrenze",
+    "Embedding metadata": "Metadaten werden eingebettet",
+    "{runtime} {version} is below the security floor {floor}; update it before downloading.":
+        "{runtime} {version} liegt unter der Sicherheitsuntergrenze {floor}; vor dem Herunterladen aktualisieren.",
+    "Generating subtitles": "Untertitel werden erzeugt",
+    "required": "erforderlich",
+    "{runtime} {version} is below the runtime floor {floor}; update it before downloading.":
+        "{runtime} {version} liegt unter der Laufzeituntergrenze {floor}; vor dem Herunterladen aktualisieren.",
+    "Review playlist": "Playlist überprüfen",
+    "Preview and select videos in this playlist before downloading.":
+        "Videos dieser Playlist vor dem Herunterladen ansehen und auswählen.",
+    "The configured Deno runtime is below Astra Downloader's security floor.":
+        "Die konfigurierte Deno-Laufzeit liegt unter der Sicherheitsuntergrenze von Astra Downloader.",
+    "Update Deno to the security floor shown in the readiness panel, then retry.":
+        "Deno auf die im Bereitschaftsbereich angezeigte Sicherheitsuntergrenze aktualisieren und erneut versuchen.",
 })
 
 

@@ -12,10 +12,35 @@ repository's git log.
 
 ## [Unreleased]
 
+### Added
+
+- **A playlist can be reviewed before anything downloads.** A pasted playlist
+  URL shows a Review playlist button that previews the items and lets you
+  select which ones to queue; only the committed selection enters the queue.
+- **Every job can show the exact command it ran.** The queue context menu's
+  "View yt-dlp command" opens the argv the job executed with credentials,
+  tokens, PO tokens, and cookie paths redacted, and the redacted diagnostics
+  bundle carries the same command line for recent finished jobs.
+- **Progress names the pipeline step.** Queue rows report fetching metadata,
+  downloading, merging, extracting, embedding metadata, and generating
+  subtitles as distinct stages, and `/queue` and `/status/<id>` expose the
+  step so the extension can show it too.
+
+### Changed
+
+- **Deno now has a security floor separate from its runtime floor.** A
+  provisioned Deno below 2.8.1 (the release that closes the 2026-05-27
+  advisory batch) is refreshed even though yt-dlp would still accept it, and
+  the readiness panel names which floor was missed.
+
 ### Fixed
 
 - GUI tests now default to Qt's offscreen platform, with an explicit
   `ASTRA_DOWNLOADER_ALLOW_ONSCREEN=1` opt-out for native-display checks.
+- A JavaScript-runtime version-parser fault is no longer reported as a probe
+  failure: only the subprocess call sits inside the probe's exception
+  handler, so a parser bug surfaces loudly instead of masquerading as
+  `runtime-probe-failed`.
 
 ## [2.7.0] - 2026-08-11
 

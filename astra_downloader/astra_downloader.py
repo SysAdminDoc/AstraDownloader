@@ -145,9 +145,10 @@ try:
         SABR_LIMITED_NOTICE, describe_sabr_voided_options, sabr_only_formats,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
+        format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
     from .health import (
-        DENO_MIN_VERSION, NODE_MIN_VERSION,
+        DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
@@ -160,6 +161,7 @@ try:
         MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
         managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
+        javascript_runtime_security_supported as _owned_javascript_runtime_security_supported,
         parse_ffmpeg_major, parse_ffmpeg_snapshot_date, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
         parse_ytdlp_version_output,
@@ -186,6 +188,7 @@ try:
     from .gui import (
         FolderPickerService as _OwnedFolderPickerService,
         MainWindowCore,
+        PlaylistStagingDialog,
         ReadinessProbe as _OwnedReadinessProbe,
         SetupWorkerCore,
         download_status_tone, format_duration, human_status, make_card,
@@ -283,9 +286,10 @@ except ImportError:  # Direct script / flat source-path compatibility.
         SABR_LIMITED_NOTICE, describe_sabr_voided_options, sabr_only_formats,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
+        format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
     from health import (
-        DENO_MIN_VERSION, NODE_MIN_VERSION,
+        DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
@@ -298,6 +302,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
         managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
+        javascript_runtime_security_supported as _owned_javascript_runtime_security_supported,
         parse_ffmpeg_major, parse_ffmpeg_snapshot_date, parse_ffmpeg_version_output,
         parse_javascript_runtime_version as _owned_parse_javascript_runtime_version,
         parse_ytdlp_version_output,
@@ -324,6 +329,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
     from gui import (
         FolderPickerService as _OwnedFolderPickerService,
         MainWindowCore,
+        PlaylistStagingDialog,
         ReadinessProbe as _OwnedReadinessProbe,
         SetupWorkerCore,
         download_status_tone, format_duration, human_status, make_card,
@@ -457,6 +463,10 @@ SERVICE_API_VERSION = 2
 SERVICE_API_MINIMUM_CLIENT = 1
 INSTANCE_CONTROL_HOST = '127.0.0.1'
 DIAGNOSTIC_LOG_ENTRY_LIMIT = 30
+# Redacted yt-dlp command lines carried in the diagnostics bundle. Few and
+# short: the value is "what argv did the failing job run", not a full history.
+DIAGNOSTIC_COMMAND_ENTRY_LIMIT = 5
+DIAGNOSTIC_COMMAND_MAX_CHARS = 2000
 DIAGNOSTIC_TEXT_LIMIT = 600
 # Stall watchdog for the download subprocess. `for line in proc.stdout` blocks
 # forever if yt-dlp wedges on a dead socket — there is no other timeout on the
@@ -946,8 +956,20 @@ def redact_diagnostic_text(value, secrets=None):
 
 
 def build_diagnostics_bundle(server_running=False, endpoint='', active_downloads=0,
-                             completed_downloads=0, recent_logs=None, secrets=None):
+                             completed_downloads=0, recent_logs=None, secrets=None,
+                             recent_commands=None):
     """Build the allowlisted, redacted diagnostics payload shown before copy."""
+    safe_commands = []
+    for entry in list(recent_commands or [])[-DIAGNOSTIC_COMMAND_ENTRY_LIMIT:]:
+        if not isinstance(entry, dict):
+            continue
+        command = redact_diagnostic_text(entry.get('command', ''), secrets=secrets)
+        if not command:
+            continue
+        safe_commands.append({
+            'status': clean_text(entry.get('status'), '', 24),
+            'command': command[:DIAGNOSTIC_COMMAND_MAX_CHARS],
+        })
     safe_logs = []
     for entry in list(recent_logs or [])[-DIAGNOSTIC_LOG_ENTRY_LIMIT:]:
         if not isinstance(entry, dict):
@@ -977,6 +999,7 @@ def build_diagnostics_bundle(server_running=False, endpoint='', active_downloads
             'denoInstalled': DENO_PATH.exists() or bool(shutil.which('deno')),
         },
         'recentLog': safe_logs,
+        'recentCommands': safe_commands,
     }
 
 
@@ -1578,7 +1601,21 @@ def _parse_deno_version(output):
 def _is_deno_version_supported(version):
     return _owned_javascript_runtime_supported(
         'deno', version, deno_min=DENO_MIN_VERSION, node_min=NODE_MIN_VERSION
+    ) and _owned_javascript_runtime_security_supported(
+        'deno', version, deno_security_min=DENO_SECURITY_MIN_VERSION,
     )
+
+
+def _deno_version_floor_reason(version):
+    if not _owned_javascript_runtime_supported(
+        'deno', version, deno_min=DENO_MIN_VERSION, node_min=NODE_MIN_VERSION
+    ):
+        return 'runtime'
+    if not _owned_javascript_runtime_security_supported(
+        'deno', version, deno_security_min=DENO_SECURITY_MIN_VERSION,
+    ):
+        return 'security'
+    return None
 
 
 def _probe_deno_binary_version(deno_path):
@@ -1637,6 +1674,7 @@ def _evaluate_javascript_runtime(runtime, path, source):
         timeout=DENO_RUNTIME_PROBE_TIMEOUT,
         deno_min=DENO_MIN_VERSION,
         node_min=NODE_MIN_VERSION,
+        deno_security_min=DENO_SECURITY_MIN_VERSION,
     )
 
 
@@ -1649,10 +1687,12 @@ def provision_deno():
     _set_deno_provision_error()
     if DENO_PATH.exists():
         version = _probe_deno_binary_version(DENO_PATH)
-        if _is_deno_version_supported(version):
+        floor_reason = _deno_version_floor_reason(version)
+        if floor_reason is None:
             return str(DENO_PATH)
+        floor_label = 'security' if floor_reason == 'security' else 'runtime'
         write_persistent_log(
-            f"Bundled Deno {version or 'unknown'} is below required {DENO_MIN_VERSION}; refreshing"
+            f"Bundled Deno {version or 'unknown'} is below the {floor_label} floor; refreshing"
         )
     DENO_DIR.mkdir(parents=True, exist_ok=True)
     tmp_zip = DENO_DIR / f'.deno.{uuid.uuid4().hex}.zip'
@@ -1690,7 +1730,8 @@ def provision_deno():
             tmp_zip, DENO_PATH, 'deno.exe', max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
         )
         installed_version = _probe_deno_binary_version(DENO_PATH)
-        if not _is_deno_version_supported(installed_version):
+        floor_reason = _deno_version_floor_reason(installed_version)
+        if floor_reason is not None:
             try:
                 DENO_PATH.unlink(missing_ok=True)
             except OSError:
@@ -1700,7 +1741,7 @@ def provision_deno():
                 'deno-runtime-unsupported',
                 (
                     f"Provisioned Deno {installed_version or 'unknown'} is below "
-                    f"the required {DENO_MIN_VERSION} runtime floor."
+                    f"the {floor_reason} floor."
                 ),
             )
         reset_deno_runtime_cache()
@@ -1915,6 +1956,10 @@ def probe_deno_runtime(force=False, configured_runtime='auto'):
             'minVersion': {
                 'node': NODE_MIN_VERSION, 'quickjs': QUICKJS_MIN_VERSION,
             }.get(preference, DENO_MIN_VERSION),
+            'securityMinVersion': (
+                DENO_SECURITY_MIN_VERSION
+                if preference in {'auto', 'deno'} else None
+            ),
             'reason': 'runtime-not-installed',
         }
 
@@ -1926,6 +1971,12 @@ def probe_deno_runtime(force=False, configured_runtime='auto'):
         advice = (
             'No configured JavaScript runtime was found. Select Auto or Deno and click '
             'Provision Deno, or select Node after installing Node 22 or newer.'
+        )
+    elif needs_runtime and selected['reason'] == 'runtime-version-below-security-floor':
+        advice = (
+            f"{runtime_label} {selected.get('version') or 'unknown'} is below the "
+            f"security floor {selected.get('securityMinVersion') or DENO_SECURITY_MIN_VERSION}. "
+            'Update it, then retry.'
         )
     elif needs_runtime and selected['reason'] == 'runtime-version-unsupported':
         advice = (
@@ -5046,6 +5097,8 @@ class MainWindow(MainWindowCore):
                 'SITE_LOGIN_BROWSERS': lambda: SITE_LOGIN_BROWSERS,
                 'describe_browser_cookie_readiness': lambda *args, **kwargs: describe_browser_cookie_readiness(*args, **kwargs),
                 'QUALITY_LADDER': lambda: QUALITY_LADDER,
+                'DOWNLOAD_PIPELINE_STEPS': lambda: DOWNLOAD_PIPELINE_STEPS,
+                'format_redacted_command_args': lambda *args, **kwargs: format_redacted_command_args(*args, **kwargs),
                 'is_playlist_url': lambda *args, **kwargs: is_playlist_url(*args, **kwargs),
                 'is_youtube_url': lambda *args, **kwargs: is_youtube_url(*args, **kwargs),
                 'probed_video_heights': lambda *args, **kwargs: probed_video_heights(*args, **kwargs),

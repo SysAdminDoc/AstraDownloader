@@ -3,6 +3,10 @@
   <context>
     <name>AstraDownloader</name>
     <message>
+      <source>{count} videos</source>
+      <translation>{count} videos</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Extension server</translation>
     </message>
@@ -63,6 +67,14 @@
       <translation>Error copied.</translation>
     </message>
     <message>
+      <source>Copy command</source>
+      <translation>Copy command</translation>
+    </message>
+    <message>
+      <source>Close</source>
+      <translation>Close</translation>
+    </message>
+    <message>
       <source>Link ready. Check the options, then choose Download.</source>
       <translation>Link ready. Check the options, then choose Download.</translation>
     </message>
@@ -101,6 +113,42 @@
     <message>
       <source>New token ready. Save settings to apply it.</source>
       <translation>New token ready. Save settings to apply it.</translation>
+    </message>
+    <message>
+      <source>Review Playlist</source>
+      <translation>Review Playlist</translation>
+    </message>
+    <message>
+      <source>(untitled playlist)</source>
+      <translation>(untitled playlist)</translation>
+    </message>
+    <message>
+      <source>Select all</source>
+      <translation>Select all</translation>
+    </message>
+    <message>
+      <source>Deselect all</source>
+      <translation>Deselect all</translation>
+    </message>
+    <message>
+      <source>Invert</source>
+      <translation>Invert</translation>
+    </message>
+    <message>
+      <source>Cancel</source>
+      <translation>Cancel</translation>
+    </message>
+    <message>
+      <source>Download selected</source>
+      <translation>Download selected</translation>
+    </message>
+    <message>
+      <source>{selected} of {total} selected</source>
+      <translation>{selected} of {total} selected</translation>
+    </message>
+    <message>
+      <source>Download selected ({count})</source>
+      <translation>Download selected ({count})</translation>
     </message>
     <message>
       <source>Server status indicator: Stopped</source>
@@ -327,10 +375,6 @@
       <translation>●  {status}</translation>
     </message>
     <message>
-      <source>Cancel</source>
-      <translation>Cancel</translation>
-    </message>
-    <message>
       <source>{total} / {limit} jobs</source>
       <translation>{total} / {limit} jobs</translation>
     </message>
@@ -417,6 +461,14 @@
     <message>
       <source>Download again</source>
       <translation>Download again</translation>
+    </message>
+    <message>
+      <source>yt-dlp Command</source>
+      <translation>yt-dlp Command</translation>
+    </message>
+    <message>
+      <source>Scanning playlist items...</source>
+      <translation>Scanning playlist items...</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -553,6 +605,10 @@
     <message>
       <source>Setting Up</source>
       <translation>Setting Up</translation>
+    </message>
+    <message>
+      <source>(untitled)</source>
+      <translation>(untitled)</translation>
     </message>
     <message>
       <source>{name} {page}</source>
@@ -927,6 +983,30 @@
       <translation>Retry</translation>
     </message>
     <message>
+      <source>View yt-dlp command</source>
+      <translation>View yt-dlp command</translation>
+    </message>
+    <message>
+      <source>Command for {title}</source>
+      <translation>Command for {title}</translation>
+    </message>
+    <message>
+      <source>This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.</source>
+      <translation>This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.</translation>
+    </message>
+    <message>
+      <source>No command recorded.</source>
+      <translation>No command recorded.</translation>
+    </message>
+    <message>
+      <source>Paste a playlist link first.</source>
+      <translation>Paste a playlist link first.</translation>
+    </message>
+    <message>
+      <source>Enter a playlist URL to review.</source>
+      <translation>Enter a playlist URL to review.</translation>
+    </message>
+    <message>
       <source>yt-dlp {version} is ready.</source>
       <translation>yt-dlp {version} is ready.</translation>
     </message>
@@ -1055,8 +1135,8 @@
       <translation>Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.</translation>
     </message>
     <message>
-      <source>Required</source>
-      <translation>Required</translation>
+      <source>Security floor</source>
+      <translation>Security floor</translation>
     </message>
     <message>
       <source>creator subtitles only</source>
@@ -1191,6 +1271,10 @@
       <translation>Extension server status indicator: Offline</translation>
     </message>
     <message>
+      <source>Fetching metadata</source>
+      <translation>Fetching metadata</translation>
+    </message>
+    <message>
       <source>{title} status: {status}</source>
       <translation>{title} status: {status}</translation>
     </message>
@@ -1271,6 +1355,18 @@
       <translation>entries</translation>
     </message>
     <message>
+      <source>Could not preview playlist.</source>
+      <translation>Could not preview playlist.</translation>
+    </message>
+    <message>
+      <source>No playlist items selected.</source>
+      <translation>No playlist items selected.</translation>
+    </message>
+    <message>
+      <source>Queued {count} items from playlist.</source>
+      <translation>Queued {count} items from playlist.</translation>
+    </message>
+    <message>
       <source>Settings status: {message}</source>
       <translation>Settings status: {message}</translation>
     </message>
@@ -1293,6 +1389,10 @@
     <message>
       <source>Open</source>
       <translation>Open</translation>
+    </message>
+    <message>
+      <source>Runtime floor</source>
+      <translation>Runtime floor</translation>
     </message>
     <message>
       <source>Using site profile: {name}.</source>
@@ -1337,6 +1437,10 @@
     <message>
       <source>Test failed</source>
       <translation>Test failed</translation>
+    </message>
+    <message>
+      <source>Embedding metadata</source>
+      <translation>Embedding metadata</translation>
     </message>
     <message>
       <source>Download</source>
@@ -1391,6 +1495,14 @@
       <translation>Preparing transcription model...</translation>
     </message>
     <message>
+      <source>{runtime} {version} is below the security floor {floor}; update it before downloading.</source>
+      <translation>{runtime} {version} is below the security floor {floor}; update it before downloading.</translation>
+    </message>
+    <message>
+      <source>Required</source>
+      <translation>Required</translation>
+    </message>
+    <message>
       <source>{label} {date}</source>
       <translation>{label} {date}</translation>
     </message>
@@ -1409,6 +1521,10 @@
     <message>
       <source>This host is paused — retry in {duration}.</source>
       <translation>This host is paused — retry in {duration}.</translation>
+    </message>
+    <message>
+      <source>Generating subtitles</source>
+      <translation>Generating subtitles</translation>
     </message>
     <message>
       <source>Host paused · retry in {duration}</source>
@@ -1433,6 +1549,14 @@
     <message>
       <source>unknown</source>
       <translation>unknown</translation>
+    </message>
+    <message>
+      <source>required</source>
+      <translation>required</translation>
+    </message>
+    <message>
+      <source>{runtime} {version} is below the runtime floor {floor}; update it before downloading.</source>
+      <translation>{runtime} {version} is below the runtime floor {floor}; update it before downloading.</translation>
     </message>
     <message>
       <source>First cookie expires</source>
@@ -1473,6 +1597,10 @@
     <message>
       <source>Open extension pairing</source>
       <translation>Open extension pairing</translation>
+    </message>
+    <message>
+      <source>Review playlist</source>
+      <translation>Review playlist</translation>
     </message>
     <message>
       <source>From link</source>
@@ -1545,6 +1673,10 @@
     <message>
       <source>Paste a video link, or several at once</source>
       <translation>Paste a video link, or several at once</translation>
+    </message>
+    <message>
+      <source>Preview and select videos in this playlist before downloading.</source>
+      <translation>Preview and select videos in this playlist before downloading.</translation>
     </message>
     <message>
       <source>One-link video password</source>
@@ -2985,6 +3117,14 @@
     <message>
       <source>upgrade-javascript-runtime</source>
       <translation>upgrade-javascript-runtime</translation>
+    </message>
+    <message>
+      <source>The configured Deno runtime is below Astra Downloader's security floor.</source>
+      <translation>The configured Deno runtime is below Astra Downloader's security floor.</translation>
+    </message>
+    <message>
+      <source>Update Deno to the security floor shown in the readiness panel, then retry.</source>
+      <translation>Update Deno to the security floor shown in the readiness panel, then retry.</translation>
     </message>
     <message>
       <source>The configured runtime could not execute the yt-dlp EJS capability probe.</source>

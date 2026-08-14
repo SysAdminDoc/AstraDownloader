@@ -24,7 +24,7 @@ __all__ = (
     "probe_javascript_runtime", "build_javascript_runtime_args",
     "reset_deno_runtime_cache", "provision_deno", "_parse_ytdlp_release_date",
     "ytdlp_needs_external_runtime", "YTDLP_EXTERNAL_RUNTIME_CUTOFF",
-    "DENO_MIN_VERSION", "NODE_MIN_VERSION", "parse_ffmpeg_major",
+    "DENO_MIN_VERSION", "DENO_SECURITY_MIN_VERSION", "NODE_MIN_VERSION", "parse_ffmpeg_major",
     "parse_ffmpeg_snapshot_date", "probe_whisper_runtime",
     "check_ffmpeg_capabilities", "reset_ffmpeg_capabilities_cache",
     "build_youtube_extractor_args", "is_youtube_url", "should_check_ytdlp_update",
@@ -39,6 +39,7 @@ __all__ = (
     "parse_ffmpeg_version_output",
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",
+    "javascript_runtime_security_supported",
     "probe_javascript_execution", "evaluate_javascript_runtime",
     "REQUIRED_FFMPEG_FILTERS", "missing_ffmpeg_filters",
     "YTDLP_STALE_AFTER_DAYS", "evaluate_preflight_checks",
@@ -46,6 +47,10 @@ __all__ = (
 
 YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
 DENO_MIN_VERSION = "2.3.0"
+# Deno's functional floor is set by yt-dlp's EJS support. Keep the security
+# floor separate so an installed runtime that still works is refreshed when it
+# falls behind a known-fixed release.
+DENO_SECURITY_MIN_VERSION = "2.8.1"
 NODE_MIN_VERSION = "22.0.0"
 # QuickJS is the smallest runtime yt-dlp accepts and the one this app can
 # provision without asking the user to install anything: a 2 MB executable
@@ -242,13 +247,31 @@ def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
             version=str(runtime.get("version") or ""),
         ))
     else:
+        runtime_reason = str(runtime.get("reason") or "runtime-not-ready")
+        runtime_label = str(runtime.get("runtime") or "JavaScript runtime").title()
+        runtime_version = str(runtime.get("version") or "unknown")
+        if runtime_reason == "runtime-version-below-security-floor":
+            runtime_message = (
+                f"{runtime_label} {runtime_version} is below the security floor "
+                f"{runtime.get('securityMinVersion') or 'required'}; update it before downloading."
+            )
+        elif runtime_reason == "runtime-version-unsupported":
+            runtime_message = (
+                f"{runtime_label} {runtime_version} is below the runtime floor "
+                f"{runtime.get('minVersion') or 'required'}; update it before downloading."
+            )
+        else:
+            runtime_message = (
+                "yt-dlp needs a supported JavaScript runtime, but it is missing or not ready."
+            )
         checks.append(_preflight_check(
             "javascript-runtime", "JavaScript runtime", "error",
             "provision-runtime",
-            "yt-dlp needs a supported JavaScript runtime, but it is missing or not ready.",
+            runtime_message,
             runtime=str(runtime.get("runtime") or ""),
-            reason=str(runtime.get("reason") or "runtime-not-ready"),
+            reason=runtime_reason,
             minVersion=str(runtime.get("minVersion") or ""),
+            securityMinVersion=str(runtime.get("securityMinVersion") or ""),
         ))
 
     ffmpeg = ffmpeg_capabilities if isinstance(ffmpeg_capabilities, dict) else {}
@@ -610,6 +633,17 @@ def javascript_runtime_supported(runtime, version, *, deno_min=DENO_MIN_VERSION,
     return _compare_semver(version, minimum) >= 0
 
 
+def javascript_runtime_security_supported(
+    runtime, version, *, deno_security_min=DENO_SECURITY_MIN_VERSION,
+):
+    """Return whether a runtime meets this app's security floor."""
+    if runtime != 'deno':
+        return True
+    if not isinstance(version, str) or not re.fullmatch(r'\d+\.\d+\.\d+', version.strip()):
+        return False
+    return _compare_semver(version, deno_security_min) >= 0
+
+
 def probe_javascript_execution(runtime, executable, *, runner, marker,
                                timeout=1.5):
     if runtime == 'deno':
@@ -630,21 +664,25 @@ def probe_javascript_execution(runtime, executable, *, runner, marker,
 def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
                                 timeout=1.5, deno_min=DENO_MIN_VERSION,
                                 node_min=NODE_MIN_VERSION,
+                                deno_security_min=DENO_SECURITY_MIN_VERSION,
                                 quickjs_min=QUICKJS_MIN_VERSION):
     minimum = _runtime_minimum(runtime, deno_min, node_min, quickjs_min)
+    security_minimum = deno_security_min if runtime == 'deno' else None
     try:
         output = runner([str(path), '--version'], timeout=timeout)
-        version = parse_javascript_runtime_version(runtime, output)
     except Exception:
         return {
             'runtime': runtime, 'version': None, 'path': path, 'source': source,
             'supported': False, 'ejsReady': False, 'minVersion': minimum,
+            'securityMinVersion': security_minimum,
             'reason': 'runtime-probe-failed',
         }
+    version = parse_javascript_runtime_version(runtime, output)
     if not version:
         return {
             'runtime': runtime, 'version': None, 'path': path, 'source': source,
             'supported': False, 'ejsReady': False, 'minVersion': minimum,
+            'securityMinVersion': security_minimum,
             'reason': 'runtime-version-unparseable',
         }
     supported = javascript_runtime_supported(
@@ -655,7 +693,17 @@ def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
         return {
             'runtime': runtime, 'version': version, 'path': path, 'source': source,
             'supported': False, 'ejsReady': False, 'minVersion': minimum,
+            'securityMinVersion': security_minimum,
             'reason': 'runtime-version-unsupported',
+        }
+    if not javascript_runtime_security_supported(
+        runtime, version, deno_security_min=deno_security_min,
+    ):
+        return {
+            'runtime': runtime, 'version': version, 'path': path, 'source': source,
+            'supported': False, 'ejsReady': False, 'minVersion': minimum,
+            'securityMinVersion': security_minimum,
+            'reason': 'runtime-version-below-security-floor',
         }
     try:
         ejs_ready = probe_javascript_execution(
@@ -666,6 +714,7 @@ def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
     return {
         'runtime': runtime, 'version': version, 'path': path, 'source': source,
         'supported': True, 'ejsReady': ejs_ready, 'minVersion': minimum,
+        'securityMinVersion': security_minimum,
         'reason': 'ready' if ejs_ready else 'runtime-execution-failed',
     }
 
@@ -920,7 +969,8 @@ class FfmpegCapabilitiesProbe:
 
 
 _OWNED_EXPORTS = {
-    "YTDLP_EXTERNAL_RUNTIME_CUTOFF", "DENO_MIN_VERSION", "NODE_MIN_VERSION",
+    "YTDLP_EXTERNAL_RUNTIME_CUTOFF", "DENO_MIN_VERSION", "DENO_SECURITY_MIN_VERSION",
+    "NODE_MIN_VERSION",
     "is_youtube_url", "_compare_semver", "_parse_ytdlp_release_date",
     "evaluate_sabr_support", "SABR_NATIVE_MIN_VERSION",
     "ytdlp_needs_external_runtime", "build_javascript_runtime_args",
@@ -933,6 +983,7 @@ _OWNED_EXPORTS = {
     "probe_whisper_runtime",
     "FfmpegCapabilitiesProbe",
     "parse_javascript_runtime_version", "javascript_runtime_supported",
+    "javascript_runtime_security_supported",
     "probe_javascript_execution", "evaluate_javascript_runtime",
     "REQUIRED_FFMPEG_FILTERS", "YTDLP_STALE_AFTER_DAYS",
     "missing_ffmpeg_filters", "evaluate_preflight_checks",
