@@ -116,7 +116,7 @@ try:
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
-        set_line_icon, tr, tr_format,
+        set_line_icon, set_status_tone, tr, tr_format,
     )
 except ImportError:  # Flat source-path compatibility.
     import gui_support as _gui_support
@@ -128,7 +128,7 @@ except ImportError:  # Flat source-path compatibility.
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
-        set_line_icon, tr, tr_format,
+        set_line_icon, set_status_tone, tr, tr_format,
     )
 
 # Keep the legacy module's private theme probe stable for the renderer and
@@ -2553,8 +2553,8 @@ class MainWindowCore(
 
     def _set_quick_download_status(self, message, state):
         self.quick_download_status.setText(tr(message))
-        self.quick_download_status.setProperty("state", state)
         self.quick_download_status.show()
+        set_status_tone(self.quick_download_status, state)
         repolish(self.quick_download_status)
 
 
@@ -2607,7 +2607,7 @@ class MainWindowCore(
         self._clear_layout(self.subscription_container)
         if manager is None:
             self.subscription_status.setText(load_error)
-            self.subscription_status.setProperty("state", "error")
+            set_status_tone(self.subscription_status, "error")
             repolish(self.subscription_status)
             self.subscription_container.addWidget(make_empty_state(
                 "Subscriptions unavailable",
@@ -2619,7 +2619,7 @@ class MainWindowCore(
             return
         if load_error:
             self.subscription_status.setText(load_error)
-            self.subscription_status.setProperty("state", "error")
+            set_status_tone(self.subscription_status, "error")
             repolish(self.subscription_status)
             self.subscription_container.addWidget(make_empty_state(
                 "Subscriptions unavailable",
@@ -2650,7 +2650,7 @@ class MainWindowCore(
                 queued=archive.get("queued", 0),
             )
         )
-        self.subscription_status.setProperty("state", "neutral")
+        set_status_tone(self.subscription_status, "neutral", announce=False)
         repolish(self.subscription_status)
         if not records:
             self.subscription_container.addWidget(make_empty_state(
@@ -2891,15 +2891,15 @@ class MainWindowCore(
     def _show_history_status(self, message, state="neutral"):
         """Report a History action on the History page, and in the log."""
         self.history_page_status.setText(tr(message))
-        self.history_page_status.setProperty("state", state)
         self.history_page_status.show()
+        set_status_tone(self.history_page_status, state)
         repolish(self.history_page_status)
         self._append_log(message)
 
     def _show_site_login_status(self, message, state="neutral"):
         self.site_login_status.setText(tr(message))
-        self.site_login_status.setProperty("state", state)
         self.site_login_status.show()
+        set_status_tone(self.site_login_status, state)
         repolish(self.site_login_status)
 
     def _apply_site_login_result(self, result, error):
@@ -3450,13 +3450,14 @@ class MainWindowCore(
                     folder=path,
                 )
             )
-            self.first_run_status.setProperty("state", "success")
+            set_status_tone(self.first_run_status, "success")
+            repolish(self.first_run_status)
         else:
             self.first_run_status.setText(
                 tr("Confirm a folder before your first download.")
             )
-            self.first_run_status.setProperty("state", "warning")
-        repolish(self.first_run_status)
+            set_status_tone(self.first_run_status, "warning")
+            repolish(self.first_run_status)
 
     def _confirm_first_run_destination(self):
         if not self._first_run:
@@ -3469,7 +3470,7 @@ class MainWindowCore(
                     "Check the log and retry."
                 )
             )
-            self.first_run_status.setProperty("state", "error")
+            set_status_tone(self.first_run_status, "error")
             repolish(self.first_run_status)
             return False
         normalized, error = normalize(
@@ -3478,7 +3479,7 @@ class MainWindowCore(
         )
         if error:
             self.first_run_status.setText(error)
-            self.first_run_status.setProperty("state", "error")
+            set_status_tone(self.first_run_status, "error")
             repolish(self.first_run_status)
             self.first_run_destination.setFocus(Qt.FocusReason.OtherFocusReason)
             return False
@@ -3493,7 +3494,7 @@ class MainWindowCore(
                     "Check disk permissions and retry."
                 )
             )
-            self.first_run_status.setProperty("state", "error")
+            set_status_tone(self.first_run_status, "error")
             repolish(self.first_run_status)
             return False
         self.first_run_destination.setText(normalized)
@@ -5856,7 +5857,7 @@ class MainWindowCore(
         )
         if not report.get("valid"):
             label.setText(tr("Preview unavailable until the template is valid."))
-            label.setProperty("state", "error")
+            set_status_tone(label, "error")
             repolish(label)
             return
         warnings = []
@@ -5874,7 +5875,8 @@ class MainWindowCore(
             ))
         if warnings:
             label.setText(" ".join(warnings))
-            label.setProperty("state", "error")
+            set_status_tone(label, "error")
+            repolish(label)
         else:
             label.setText(tr(
                 "Preview: {path} ({length} characters)."
@@ -5882,8 +5884,8 @@ class MainWindowCore(
                 path=report.get("path"),
                 length=report.get("length"),
             ))
-            label.setProperty("state", "neutral")
-        repolish(label)
+            set_status_tone(label, "neutral", announce=False)
+            repolish(label)
 
     def _save_settings(self):
         site_profiles_field = getattr(self, "cfg_site_profiles", None)
@@ -6438,8 +6440,8 @@ class MainWindowCore(
                 "Copied video link staged. Review the options, then choose Add to queue."
             )
         )
-        self.quick_download_status.setProperty("state", "success")
         self.quick_download_status.show()
+        set_status_tone(self.quick_download_status, "success")
         repolish(self.quick_download_status)
         self._append_log("Staged a copied video link for review.")
         if hasattr(self, "tray"):

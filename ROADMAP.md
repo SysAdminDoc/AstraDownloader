@@ -16,13 +16,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Note: `Roadmap_Blocked.md` files this as blocked on the PyQt distribution decision. AD-08 removes that dependency; if AD-08 is deferred, AD-01 stays blocked and the blocked entry stands.
   Complexity: S
 
-- [ ] P0 — AD-06 — Make status messages carry a visible tone
-  Why: `_set_quick_download_status` sets `setProperty("state", …)` and calls `repolish()`, but `STYLESHEET` has no `QLabel[class="fieldHint"][state=…]` rule — only a flat `color: #8d97a4`. "Download queue is full (200/200)" therefore renders identically to "Clip ranges apply to a single link." Four more status labels set the same dead property. In a product whose thesis is diagnosis, the diagnosis is invisible.
-  Evidence: `astra_downloader/gui.py:2400-2404`; `astra_downloader.py:4017` vs the working `tone` rules at `:3997-4035`; `build/companion-ui-smoke/downloads-queue-full.png`; `subscription_status`, `history_page_status`, `site_login_status`, `first_run_status`.
-  Touches: `astra_downloader/astra_downloader.py` (STYLESHEET), `gui.py`, `gui_download_page.py`, `gui_history_page.py`, `gui_site_logins_page.py`, `gui_subscriptions_page.py`
-  Acceptance: one convention survives (`tone`); success/warning/error each render a distinct colour on all five status labels; a test asserts every `setProperty` tone/state value used has a matching stylesheet rule, so the next unmatched value fails the suite.
-  Complexity: M
-
 - [ ] P0 — AD-07 — Invoke Windows system binaries by absolute path, with timeouts
   Why: `icacls`, `powershell` and `schtasks` are passed as bare argv[0]. `CreateProcess` searches the current working directory ahead of `%PATH%`, and the two `icacls` calls are the ones applying the restrictive ACL to the cookie jar — a shadowed `icacls` degrades that hardening silently. Three of the calls also pass no `timeout=`, unlike every other `subprocess.run` in the tree.
   Evidence: `astra_downloader/download.py:867, 887`; `astra_downloader.py:2936, 3685, 3723, 4819, 4924`; missing timeouts at `:3684, :3722, :4819`.
@@ -59,6 +52,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Evidence: repo-wide grep for `QAccessible`/`updateAccessibility` returns nothing; the five status labels listed in AD-06.
   Touches: `astra_downloader/gui_support.py`, `gui.py`
   Acceptance: a helper raises `QAccessible.Event.Alert` (or `NameChanged`) whenever a status label's text changes; every status setter routes through it; a test asserts the event fires.
+  Note (2026-08-14): depends on AD-08 — PyQt6 does not bind QAccessible/QAccessibleEvent at all (verified against PyQt6 6.11: no such names in QtGui/QtCore/QtWidgets); PySide6 binds both. The setters already route through `set_status_tone`, whose `announce` flag marks where the event belongs, so this becomes a ~10-line change once AD-08 lands.
   Complexity: S
 
 - [ ] P1 — AD-11 — Stop the subscription scan from fsyncing the whole archive per candidate

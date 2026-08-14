@@ -4066,6 +4066,17 @@ QLabel[class="settingsSection"] {
 }
 QLabel[class="fieldLabel"] { color: #f1eeea; font-size: 13px; font-weight: 600; }
 QLabel[class="fieldHint"] { color: #8d97a4; font-size: 12px; }
+/* Status labels carry a tone so a refusal is visibly different from a hint.
+   These mirror the settingsStatus palette — one convention for every status
+   surface; the old `state` property had no rule behind it at all. */
+QLabel[class="fieldHint"][tone="neutral"] { color: #8d97a4; }
+QLabel[class="fieldHint"][tone="success"] { color: #75dcb1; }
+QLabel[class="fieldHint"][tone="warning"] { color: #edbd76; }
+QLabel[class="fieldHint"][tone="danger"] { color: #ff8d82; }
+QLabel[class="toolbarMeta"][tone="neutral"] { color: #9ca5b0; }
+QLabel[class="toolbarMeta"][tone="success"] { color: #75dcb1; }
+QLabel[class="toolbarMeta"][tone="warning"] { color: #edbd76; }
+QLabel[class="toolbarMeta"][tone="danger"] { color: #ff8d82; }
 QLabel[class="toolbarMeta"], QLabel[class="columnLabel"], QLabel[class="tableValue"] {
     color: #aab2bd;
     font-size: 13px;
