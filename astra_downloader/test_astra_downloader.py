@@ -9881,7 +9881,13 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_7_0(self):
+    def test_app_version_bumped_to_2_8_0(self):
+        # v2.8.0: playlists stage for review before queueing, progress names
+        # its pipeline step, every job records a redacted argv (queue menu,
+        # API, diagnostics), Chrome/Edge pair from the Extension page, Deno
+        # gains a security floor, status labels carry a visible tone, system
+        # binaries spawn by absolute path, and the winget digest is generated
+        # from the staged artifact.
         # v2.7.0: a download can carry its own file name, downloads can inherit
         # the proxy Windows is configured with, a release ships a CycloneDX SBOM
         # and a PEP 751 lock beside the binary, every check gate reports its own
@@ -9894,7 +9900,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.7.0")
+        self.assertEqual(ad.APP_VERSION, "2.8.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
