@@ -90,13 +90,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: with one active download, the queue's first row is visible at 1120×760 without scrolling; the readiness strip and pre-flight panel collapse to a one-line summary when nothing is wrong and expand on a failing check; `DownloaderFirstLayoutTests` pins the new order.
   Complexity: M
 
-- [ ] P1 — AD-19 — Raise the HTTP dependency floors and pin certifi
-  Why: `werkzeug>=3.1.6` misses 3.1.7's `parse_list_header` quoting fix, `Transfer-Encoding` set parsing and host character validation, and 3.1.8's `Request.host` returning `""` on an invalid header — all on the HTTP surface this app exposes. `requests>=2.33.0` is two releases behind 2.34.2. `certifi` is transitive, which means the CA bundle version is whatever the resolver picked.
-  Evidence: Werkzeug changelog (3.1.7 2026-03-23, 3.1.8 2026-04-02); `astra_downloader/requirements.txt`, `constraints-release.txt`.
-  Touches: `astra_downloader/requirements.txt`, `astra_downloader/constraints-release.txt`, `build/pylock.toml`
-  Acceptance: floors are `werkzeug>=3.1.8`, `requests>=2.34.2`, `certifi>=2026.7.22` declared explicitly; `npm run audit:python` and the suite stay green.
-  Complexity: S
-
 - [ ] P1 — AD-20 — Move the build interpreter to Python 3.13.15
   Why: python.org shipped no Windows installer after **3.12.10 (2025-04-08)**; 3.12.11/12/13 are source-only and the devguide marks 3.12 `security` ("no more binaries are released"). The build interpreter is frozen ~16 months behind CPython security fixes. PyQt6, PySide6, PyInstaller 6.22 and yt-dlp all ship the identical `cp310-abi3-win_amd64` wheels on 3.13.
   Evidence: https://www.python.org/downloads/release/python-31213/; https://devguide.python.org/versions/.

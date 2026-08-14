@@ -19,10 +19,14 @@ test('requirements stay pinned for local companion dependency review', () => {
         'yt-dlp must remain exactly pinned for reviewed local updates');
     assert.match(requirements, /^curl_cffi==\d+\.\d+\.\d+$/m,
         'curl_cffi must remain exactly pinned for reviewed local updates');
-    assert.match(requirements, /^requests>=2\.33\.0,<3$/m,
-        'Requests must exclude the vulnerable pre-2.33.0 range');
+    assert.match(requirements, /^requests>=2\.34\.2,<3$/m,
+        'Requests must exclude the vulnerable pre-2.33.0 range and track the maintained 2.34 line');
     assert.match(requirements, /^waitress>=3\.0\.2,<4$/m,
         'Waitress must exclude the vulnerable 3.0.0 and 3.0.1 releases');
+    assert.match(requirements, /^werkzeug>=3\.1\.8,<4$/m,
+        'Werkzeug must carry the 3.1.7/3.1.8 HTTP-parsing hardening');
+    assert.match(requirements, /^certifi>=\d{4}\.\d+\.\d+,<\d{4}$/m,
+        'certifi is a trust store and must be declared, never left transitive');
 
     const constraints = fs.readFileSync(
         path.join(repoRoot, 'astra_downloader', 'constraints-release.txt'), 'utf8'
