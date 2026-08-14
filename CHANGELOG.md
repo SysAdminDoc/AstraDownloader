@@ -35,6 +35,11 @@ repository's git log.
 
 ### Fixed
 
+- **The winget manifest digest is generated, and the gate compares it.** The
+  2.7.0 manifest carried an `InstallerSha256` that matched no artifact in
+  existence, and `check:versions` only confirmed it was 64 hex digits.
+  `npm run release:stage` now writes the staged executable's digest into the
+  manifest, and the version gate fails when the two differ.
 - GUI tests now default to Qt's offscreen platform, with an explicit
   `ASTRA_DOWNLOADER_ALLOW_ONSCREEN=1` opt-out for native-display checks.
 - A JavaScript-runtime version-parser fault is no longer reported as a probe

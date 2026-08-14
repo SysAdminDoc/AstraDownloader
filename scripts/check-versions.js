@@ -11,6 +11,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+const { wingetDigestFailures } = require('./stage-companion-release');
+
 const ROOT = path.join(__dirname, '..');
 const failures = [];
 
@@ -80,6 +82,17 @@ function checkWingetManifest(version) {
         }
         if (!checksum) {
             failures.push(`winget ${installer.name}: InstallerSha256 must be a 64-digit hex digest`);
+        } else {
+            // A well-formed digest is not a correct one: 2.7.0 shipped a
+            // manifest digest that matched no artifact in existence. Compare
+            // against the staged build whenever one exists for this version.
+            let stagedMetadata = null;
+            try {
+                stagedMetadata = JSON.parse(read('build/companion-build-metadata.json'));
+            } catch (error) {
+                stagedMetadata = null;
+            }
+            failures.push(...wingetDigestFailures(installer.text, version, stagedMetadata));
         }
     }
 
