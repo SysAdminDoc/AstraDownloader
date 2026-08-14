@@ -264,6 +264,18 @@ def make_line_icon(name, size=18):
         painter.drawLine(3, 10, 3, 16)
         painter.drawLine(3, 16, 15, 16)
         painter.drawLine(15, 16, 15, 10)
+    elif any(word in key for word in ("command", "terminal", "inspect")):
+        painter.drawRoundedRect(2, 3, 14, 12, 1, 1)
+        painter.drawLine(5, 7, 7, 9)
+        painter.drawLine(7, 9, 5, 11)
+        painter.drawLine(9, 11, 12, 11)
+    elif any(word in key for word in ("playlist", "stage", "staging", "items")):
+        painter.drawEllipse(3, 4, 2, 2)
+        painter.drawEllipse(3, 8, 2, 2)
+        painter.drawEllipse(3, 12, 2, 2)
+        painter.drawLine(7, 5, 15, 5)
+        painter.drawLine(7, 9, 15, 9)
+        painter.drawLine(7, 13, 15, 13)
     else:
         painter.drawLine(2, 5, 16, 5)
         painter.drawLine(2, 9, 16, 9)
@@ -398,7 +410,9 @@ def human_status(status):
     return {
         "queued": "Queued", "pending": "Pending", "paused": "Paused",
         "needs-auth": "Needs sign-in", "downloading": "Downloading",
+        "fetching": "Fetching metadata",
         "merging": "Merging", "extracting": "Extracting", "trimming": "Trimming",
+        "embedding": "Embedding metadata",
         "transcribing": "Generating subtitles", "complete": "Complete",
         "failed": "Failed", "cancelled": "Cancelled", "skipped": "Nothing downloaded",
     }.get(status, str(status).title())

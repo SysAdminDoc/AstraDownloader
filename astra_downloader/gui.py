@@ -904,7 +904,143 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'reset_ffmpeg_capabilities_cache',
     'restore_quarantined_file',
     'write_persistent_log',
+    'DOWNLOAD_PIPELINE_STEPS',
+    'format_redacted_command_args',
 })
+
+
+class PlaylistStagingDialog(QDialog):
+    """Interactive staging dialog to review and select playlist videos before downloading."""
+
+    def __init__(self, parent, playlist_info):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Review Playlist"))
+        self.setMinimumSize(640, 480)
+        self.playlist_info = playlist_info or {}
+        self.items = self.playlist_info.get("items") or []
+        self.checkboxes = []
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
+
+        title_text = self.playlist_info.get("title") or tr("(untitled playlist)")
+        channel_text = self.playlist_info.get("channel") or ""
+        total_count = len(self.items)
+
+        header = QVBoxLayout()
+        header.setSpacing(2)
+        header.addWidget(make_label(title_text, "panelTitle", word_wrap=True))
+        sub_text = tr_format("{count} videos", count=total_count)
+        if channel_text:
+            sub_text = f"{channel_text} · {sub_text}"
+        header.addWidget(make_label(sub_text, "fieldHint", word_wrap=True))
+        layout.addLayout(header)
+
+        # Action toolbar
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+
+        btn_all = QPushButton(tr("Select all"))
+        btn_all.setProperty("class", "ghost")
+        btn_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_line_icon(btn_all, "select", size=15)
+        btn_all.clicked.connect(self._select_all)
+        toolbar.addWidget(btn_all)
+
+        btn_none = QPushButton(tr("Deselect all"))
+        btn_none.setProperty("class", "ghost")
+        btn_none.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_line_icon(btn_none, "clear", size=15)
+        btn_none.clicked.connect(self._deselect_all)
+        toolbar.addWidget(btn_none)
+
+        btn_invert = QPushButton(tr("Invert"))
+        btn_invert.setProperty("class", "ghost")
+        btn_invert.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_line_icon(btn_invert, "update", size=15)
+        btn_invert.clicked.connect(self._invert_selection)
+        toolbar.addWidget(btn_invert)
+
+        toolbar.addStretch()
+        self.lbl_selected_count = make_label("", "fieldHint")
+        toolbar.addWidget(self.lbl_selected_count)
+        layout.addLayout(toolbar)
+
+        # Scrollable items area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        items_widget = QWidget()
+        items_layout = QVBoxLayout(items_widget)
+        items_layout.setContentsMargins(8, 8, 8, 8)
+        items_layout.setSpacing(6)
+
+        for item in self.items:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            cb = QCheckBox()
+            cb.setChecked(True)
+            cb.stateChanged.connect(self._update_count)
+            self.checkboxes.append((cb, item))
+            row.addWidget(cb)
+
+            idx = item.get("index", len(self.checkboxes))
+            item_title = item.get("title") or tr("(untitled)")
+            dur = format_duration(item.get("duration", 0))
+            dur_label = f"  [{dur}]" if dur else ""
+            lbl = make_label(f"#{idx}  {item_title}{dur_label}", "fieldLabel", word_wrap=True)
+            row.addWidget(lbl, 1)
+
+            items_layout.addLayout(row)
+
+        items_layout.addStretch()
+        scroll.setWidget(items_widget)
+        layout.addWidget(scroll, 1)
+
+        # Bottom buttons
+        bottom = QHBoxLayout()
+        btn_cancel = QPushButton(tr("Cancel"))
+        btn_cancel.setProperty("class", "secondary")
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.clicked.connect(self.reject)
+        bottom.addWidget(btn_cancel)
+
+        bottom.addStretch()
+
+        self.btn_download = QPushButton(tr("Download selected"))
+        self.btn_download.setProperty("class", "primary")
+        self.btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_line_icon(self.btn_download, "download", size=15)
+        self.btn_download.clicked.connect(self.accept)
+        bottom.addWidget(self.btn_download)
+
+        layout.addLayout(bottom)
+        self._update_count()
+
+    def _select_all(self):
+        for cb, _ in self.checkboxes:
+            cb.setChecked(True)
+
+    def _deselect_all(self):
+        for cb, _ in self.checkboxes:
+            cb.setChecked(False)
+
+    def _invert_selection(self):
+        for cb, _ in self.checkboxes:
+            cb.setChecked(not cb.isChecked())
+
+    def _update_count(self):
+        selected = sum(1 for cb, _ in self.checkboxes if cb.isChecked())
+        total = len(self.checkboxes)
+        self.lbl_selected_count.setText(tr_format("{selected} of {total} selected", selected=selected, total=total))
+        self.btn_download.setEnabled(selected > 0)
+        self.btn_download.setText(tr_format("Download selected ({count})", count=selected))
+
+    def get_selected_indices(self):
+        """Return 1-based playlist indices of selected items."""
+        return [item.get("index", i + 1) for i, (cb, item) in enumerate(self.checkboxes) if cb.isChecked()]
 
 
 class MainWindowCore(
@@ -1851,6 +1987,24 @@ class MainWindowCore(
         runtime_version = runtime.get("version")
         if runtime.get("supported") and runtime.get('ejsReady'):
             self._set_readiness("deno", f"{runtime_name} {runtime_version or 'ready'}", "success")
+        elif runtime.get("reason") == "runtime-version-below-security-floor":
+            self._set_readiness(
+                "deno", tr("Security floor"), "danger",
+                tr("{runtime} {version} is below the security floor {floor}; update it before downloading.").format(
+                    runtime=runtime_name,
+                    version=runtime_version or tr("unknown"),
+                    floor=runtime.get("securityMinVersion") or tr("required"),
+                ),
+            )
+        elif runtime.get("reason") == "runtime-version-unsupported":
+            self._set_readiness(
+                "deno", tr("Runtime floor"), "danger",
+                tr("{runtime} {version} is below the runtime floor {floor}; update it before downloading.").format(
+                    runtime=runtime_name,
+                    version=runtime_version or tr("unknown"),
+                    floor=runtime.get("minVersion") or tr("required"),
+                ),
+            )
         elif runtime.get("installed"):
             self._set_readiness("deno", f"{runtime_name} {runtime_version or 'repair'}", "warning")
         elif runtime.get("ytdlpNeedsRuntime"):
@@ -3798,6 +3952,13 @@ class MainWindowCore(
     def _download_meta_text(self, dl):
         meta_parts = []
         if dl.status in ("downloading", "merging", "extracting"):
+            step = getattr(dl, 'step', None)
+            if step == 'fetching':
+                meta_parts.append(tr("Fetching metadata"))
+            elif step == 'embedding':
+                meta_parts.append(tr("Embedding metadata"))
+            elif step == 'transcribing':
+                meta_parts.append(tr("Generating subtitles"))
             meta_parts.append(f"{dl.progress:.1f}%")
         if dl.speed:
             meta_parts.append(dl.speed)
@@ -3836,7 +3997,9 @@ class MainWindowCore(
             else tr("Preparing download")
         )
         state_label = refs["state"]
-        translated_status = tr(human_status(dl.status))
+        active_step = getattr(dl, "step", "")
+        status_key = active_step if dl.status == "downloading" and active_step in ("fetching", "embedding", "transcribing") else dl.status
+        translated_status = tr(human_status(status_key))
         state_label.setText(
             tr_format("●  {status}", status=translated_status)
         )
@@ -5356,7 +5519,113 @@ class MainWindowCore(
         again = menu.addAction(tr("Download again"))
         again.setEnabled(bool(url))
         again.triggered.connect(lambda: self._redownload(download))
+        command_args = getattr(download, 'command_args', None)
+        if command_args:
+            menu.addSeparator()
+            view_cmd = menu.addAction(tr("View yt-dlp command"))
+            view_cmd.triggered.connect(lambda: self._show_download_command_dialog(download))
         return menu
+
+    def _show_download_command_dialog(self, download):
+        """Show the sanitized yt-dlp command for this download in a modal dialog."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("yt-dlp Command"))
+        dialog.setMinimumWidth(560)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        title = getattr(download, 'title', '') or 'Download'
+        layout.addWidget(make_label(tr_format("Command for {title}", title=title), "panelTitle", word_wrap=True))
+        layout.addWidget(make_label(
+            tr("This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted."),
+            "fieldHint", word_wrap=True
+        ))
+
+        command_args = getattr(download, 'command_args', []) or []
+        command_text = " ".join(
+            f'"{arg}"' if " " in arg and not (arg.startswith('"') and arg.endswith('"')) else str(arg)
+            for arg in command_args
+        )
+
+        edit = QTextEdit()
+        edit.setReadOnly(True)
+        edit.setPlainText(command_text or tr("No command recorded."))
+        edit.setProperty("class", "monospaceLog")
+        edit.setMinimumHeight(140)
+        layout.addWidget(edit)
+
+        buttons = QHBoxLayout()
+        btn_copy = self._make_tool_button("Copy command", "primary")
+        btn_copy.setEnabled(bool(command_text))
+        btn_copy.clicked.connect(lambda: self._copy_command_to_clipboard(command_text, dialog))
+        buttons.addWidget(btn_copy)
+        buttons.addStretch()
+        btn_close = self._make_tool_button("Close")
+        btn_close.clicked.connect(dialog.accept)
+        buttons.addWidget(btn_close)
+        layout.addLayout(buttons)
+
+        dialog.exec()
+
+    def _copy_command_to_clipboard(self, command_text, dialog=None):
+        QApplication.clipboard().setText(command_text)
+        self._append_log("Copied redacted yt-dlp command to clipboard.")
+        if dialog is not None:
+            dialog.accept()
+
+    def _sync_playlist_staging_button(self):
+        url = self.quick_download_url.text().strip()
+        is_playlist = bool(url and self._dependencies['is_playlist_url'](url))
+        if hasattr(self, 'btn_quick_stage'):
+            self.btn_quick_stage.setVisible(is_playlist)
+
+    def _open_playlist_staging(self):
+        url = self.quick_download_url.text().strip()
+        if not url:
+            self._set_quick_download_status(tr("Paste a playlist link first."), "error")
+            return
+        if not self._dependencies['is_playlist_url'](url):
+            self._set_quick_download_status(tr("Enter a playlist URL to review."), "error")
+            return
+
+        self._set_quick_download_status(tr("Scanning playlist items..."), "neutral")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            preview, err = self.dl_manager.preview_playlist(url)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if err or not preview:
+            self._set_quick_download_status(err or tr("Could not preview playlist."), "error")
+            return
+
+        self.quick_download_status.hide()
+        dialog = PlaylistStagingDialog(self, preview)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_indices = dialog.get_selected_indices()
+            if not selected_indices:
+                self._set_quick_download_status(tr("No playlist items selected."), "warning")
+                return
+            kind = self.quick_download_type.currentData()
+            dl_id, error = self.dl_manager.start_download(
+                url=url,
+                audio_only=kind == "audio",
+                subtitles_only=kind == "subtitles",
+                fmt=self.quick_download_format.currentData(),
+                quality=self.quick_download_quality.currentData() or "best",
+                output_dir=self._quick_download_dir or None,
+                playlist_items=selected_indices,
+            )
+            if error:
+                self._set_quick_download_status(error, "error")
+            else:
+                self._set_quick_download_status(
+                    tr_format("Queued {count} items from playlist.", count=len(selected_indices)),
+                    "success",
+                )
+                self.quick_download_url.clear()
+                self._sync_playlist_staging_button()
 
     def _redownload(self, download):
         """Put a finished download's link back in the paste box, ready to go.
@@ -5958,6 +6227,7 @@ class MainWindowCore(
         """Clear clipboard-specific guidance once the user edits a staged URL."""
         self._sync_quick_download_profile(apply=True)
         self._schedule_format_probe()
+        self._sync_playlist_staging_button()
         if not self._clipboard_staged_url:
             return
         self._clipboard_staged_url = ""
@@ -6246,6 +6516,14 @@ class MainWindowCore(
             self._append_log("Redacted diagnostics copied to clipboard")
 
     def _diagnostics_text(self):
+        recent_commands = []
+        for dl in self.dl_manager.snapshot():
+            command_args = getattr(dl, 'command_args', None) or []
+            if dl.status in ("failed", "complete", "skipped") and command_args:
+                recent_commands.append({
+                    'status': dl.status,
+                    'command': " ".join(str(arg) for arg in command_args),
+                })
         payload = self._dependencies['build_diagnostics_bundle'](
             server_running=self.server_running,
             endpoint=self.dash_endpoint.text(),
@@ -6253,6 +6531,7 @@ class MainWindowCore(
             completed_downloads=self.dl_manager.total_completed,
             recent_logs=self._dependencies['get_recent_log_entries'](),
             secrets=(self.config.get('ServerToken', ''), self.cfg_token.text()),
+            recent_commands=recent_commands,
         )
         return json.dumps(payload, indent=2, ensure_ascii=False)
 

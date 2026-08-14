@@ -3224,6 +3224,13 @@ class DiagnosticsBundleTests(unittest.TestCase):
             }
         ] * (ad.DIAGNOSTIC_LOG_ENTRY_LIMIT + 5)
 
+        commands = [
+            {
+                "status": "failed",
+                "command": f"yt-dlp --password {secret} https://youtube.com/watch?v=private123",
+            }
+        ] * (ad.DIAGNOSTIC_COMMAND_ENTRY_LIMIT + 3)
+
         bundle = ad.build_diagnostics_bundle(
             server_running=True,
             endpoint="http://127.0.0.1:9751",
@@ -3231,13 +3238,18 @@ class DiagnosticsBundleTests(unittest.TestCase):
             completed_downloads=7,
             recent_logs=logs,
             secrets=(secret,),
+            recent_commands=commands,
         )
         serialized = json.dumps(bundle)
 
         self.assertEqual(set(bundle), {
-            "schemaVersion", "application", "service", "dependencies", "recentLog"
+            "schemaVersion", "application", "service", "dependencies",
+            "recentLog", "recentCommands",
         })
         self.assertEqual(len(bundle["recentLog"]), ad.DIAGNOSTIC_LOG_ENTRY_LIMIT)
+        self.assertEqual(
+            len(bundle["recentCommands"]), ad.DIAGNOSTIC_COMMAND_ENTRY_LIMIT)
+        self.assertEqual(bundle["recentCommands"][0]["status"], "failed")
         self.assertEqual(bundle["service"]["activeDownloads"], 2)
         self.assertNotIn(secret, serialized)
         self.assertNotIn("private123", serialized)
@@ -6855,7 +6867,7 @@ runtime = health.evaluate_javascript_runtime(
     "deno",
     "/tools/deno",
     "test",
-    runner=lambda args, timeout: "deno 2.3.0" if "--version" in args else "READY",
+    runner=lambda args, timeout: "deno 2.8.1" if "--version" in args else "READY",
     marker="READY",
 )
 assert runtime["supported"] and runtime["ejsReady"]
@@ -9183,7 +9195,7 @@ class DenoRuntimeProbeTests(unittest.TestCase):
         ad.get_ytdlp_version = lambda force=False: '2026.05.03.233852'
         ad._run_captured = lambda args, timeout=5: (
             ad.JS_RUNTIME_CAPABILITY_MARKER if 'eval' in args
-            else 'deno 2.4.1 (release, x86_64-pc-windows-msvc)\n'
+            else f'deno {ad.DENO_SECURITY_MIN_VERSION} (release, x86_64-pc-windows-msvc)\n'
         )
         try:
             result = ad.probe_deno_runtime(force=True)
@@ -9197,10 +9209,10 @@ class DenoRuntimeProbeTests(unittest.TestCase):
         self.assertEqual(set(result.keys()), {
             'installed', 'version', 'path', 'source', 'supported', 'stale',
             'minVersion', 'ytdlpNeedsRuntime', 'advice', 'runtime', 'ejsReady',
-            'reason', 'configuredRuntime', 'canProvisionDeno'
+            'reason', 'configuredRuntime', 'canProvisionDeno', 'securityMinVersion'
         })
         self.assertTrue(result['installed'])
-        self.assertEqual(result['version'], '2.4.1')
+        self.assertEqual(result['version'], ad.DENO_SECURITY_MIN_VERSION)
         self.assertIn(result['source'], ('bundled', 'system'))
         self.assertTrue(result['supported'])
         self.assertTrue(result['ejsReady'])
@@ -9226,8 +9238,27 @@ class DenoRuntimeProbeTests(unittest.TestCase):
         self.assertTrue(result['installed'])
         self.assertFalse(result['supported'])
         self.assertTrue(result['stale'])
-        self.assertEqual(result['minVersion'], '2.3.0')
-        self.assertIn('2.3.0', result['advice'])
+        self.assertEqual(result['minVersion'], ad.DENO_MIN_VERSION)
+        self.assertIn(ad.DENO_MIN_VERSION, result['advice'])
+
+    def test_probe_deno_runtime_distinguishes_the_security_floor(self):
+        original_which = ad.shutil.which
+        original_get_version = ad.get_ytdlp_version
+        original_run_captured = ad._run_captured
+        ad.shutil.which = lambda binary: '/usr/local/bin/deno' if binary == 'deno' else None
+        ad.get_ytdlp_version = lambda force=False: '2026.06.09'
+        ad._run_captured = lambda args, timeout=5: 'deno 2.7.0\n'
+        try:
+            result = ad.probe_deno_runtime(force=True)
+        finally:
+            ad.shutil.which = original_which
+            ad.get_ytdlp_version = original_get_version
+            ad._run_captured = original_run_captured
+        self.assertFalse(result['supported'])
+        self.assertEqual(result['reason'], 'runtime-version-below-security-floor')
+        self.assertEqual(result['minVersion'], ad.DENO_MIN_VERSION)
+        self.assertEqual(result['securityMinVersion'], ad.DENO_SECURITY_MIN_VERSION)
+        self.assertIn('security floor', result['advice'])
 
     def test_probe_deno_runtime_fails_closed_when_version_cannot_be_verified(self):
         original_which = ad.shutil.which
@@ -9254,7 +9285,9 @@ class DenoRuntimeProbeTests(unittest.TestCase):
             with self.subTest(version=version):
                 self.assertFalse(ad._is_deno_version_supported(version))
         self.assertFalse(ad._is_deno_version_supported('2.2.9'))
-        self.assertTrue(ad._is_deno_version_supported('2.3.0'))
+        self.assertFalse(ad._is_deno_version_supported('2.3.0'))
+        self.assertFalse(ad._is_deno_version_supported('2.7.0'))
+        self.assertTrue(ad._is_deno_version_supported(ad.DENO_SECURITY_MIN_VERSION))
         self.assertTrue(ad._is_deno_version_supported('3.0.0'))
 
     def test_probe_deno_runtime_surfaces_advice_when_needed_and_missing(self):
@@ -9325,7 +9358,7 @@ class DenoRuntimeProbeTests(unittest.TestCase):
                 first_started.set()
                 release_first.wait(timeout=2)
             if '--version' in args:
-                return 'deno 2.4.1\n'
+                return f'deno {ad.DENO_SECURITY_MIN_VERSION}\n'
             return ad.JS_RUNTIME_CAPABILITY_MARKER
 
         with mock.patch.object(
@@ -9383,7 +9416,7 @@ class DenoRuntimeProbeTests(unittest.TestCase):
     def test_supported_version_with_failed_execution_is_not_ejs_ready(self):
         def probe_output(args, timeout=5):
             if '--version' in args:
-                return 'deno 2.7.11'
+                return f'deno {ad.DENO_SECURITY_MIN_VERSION}'
             raise RuntimeError('execution blocked')
 
         with mock.patch.object(ad, 'DENO_PATH', Path(tempfile.gettempdir()) / 'astra-missing-deno-probe.exe'), \
@@ -9527,7 +9560,7 @@ class DenoProvisionTests(unittest.TestCase):
         ad.shutil.which = lambda binary: '/usr/local/bin/deno' if binary == 'deno' else None
         ad.get_ytdlp_version = lambda force=False: '2026.05.03'
         ad._run_captured_orig = ad._run_captured
-        ad._run_captured = lambda args, timeout=5: 'deno 2.4.1\n'
+        ad._run_captured = lambda args, timeout=5: f'deno {ad.DENO_SECURITY_MIN_VERSION}\n'
         original_deno_path = ad.DENO_PATH
         ad.DENO_PATH = Path('/nonexistent/deno.exe')
         try:
