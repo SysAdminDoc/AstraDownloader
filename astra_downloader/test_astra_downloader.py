@@ -11480,6 +11480,19 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(native.actualSize(QSize(36, 36)), QSize(36, 36))
         self.assertFalse(native.pixmap(36, 36).isNull())
 
+    def test_make_line_icon_allocates_the_backing_store_at_the_device_ratio(self):
+        # At 125/150/200 % scaling an 18 px backing pixmap is upscaled by Qt
+        # and every stroke goes soft. The backing store must be allocated at
+        # size × dpr with the ratio stamped on the pixmap.
+        gs = gui_module_for_tests()
+        hidpi = gs.make_line_icon("history", size=18, dpr=2.0)
+        sizes = hidpi.availableSizes()
+        self.assertTrue(sizes, "the icon must expose its pixmap size")
+        self.assertEqual((sizes[0].width(), sizes[0].height()), (36, 36))
+        fractional = gs.make_line_icon("history", size=18, dpr=1.25)
+        sizes = fractional.availableSizes()
+        self.assertEqual((sizes[0].width(), sizes[0].height()), (22, 22))
+
     def test_folder_picker_service_constructs_and_starts_timer(self):
         svc = ad.FolderPickerService()
         try:

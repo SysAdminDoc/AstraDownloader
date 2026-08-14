@@ -49,6 +49,9 @@ repository's git log.
 
 ### Fixed
 
+- **Icons render sharp on scaled displays.** Every line icon was an 18-pixel
+  bitmap upscaled by Qt at 125/150/200 % display scaling. The backing pixmap
+  is now allocated at the device pixel ratio, so strokes stay crisp.
 - **The completion counter and shutdown cancellation are thread-safe.** The
   session's completed-downloads tally was a bare increment shared by all
   worker threads (losing counts under contention), and shutdown mutated
