@@ -877,6 +877,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'managed_binary_usable',
     'maybe_auto_update_ytdlp',
     'normalize_output_dir',
+    'parse_native_extension_ids',
+    'refresh_native_messaging_registration',
     'detect_system_proxy',
     'normalize_download_section',
     'normalize_output_name',
@@ -6460,6 +6462,65 @@ class MainWindowCore(
         old = self.dash_hint.text()
         self.dash_hint.setText(tr("Endpoint copied."))
         QTimer.singleShot(1600, lambda: self.dash_hint.setText(old))
+
+    def _show_native_pairing_status(self, message, state):
+        self.native_pairing_status.setText(tr(message))
+        self.native_pairing_status.show()
+        set_status_tone(self.native_pairing_status, state)
+        repolish(self.native_pairing_status)
+
+    def _apply_native_chrome_ids(self):
+        """Save the Chrome/Edge extension IDs and re-register the native host.
+
+        An invalid ID is refused here, before it can reach a manifest's
+        allowed_origins; a valid save re-runs registration immediately so the
+        registry pointers follow the setting without a relaunch.
+        """
+        raw = self.cfg_native_chrome_ids.text().strip()
+        ids = self._dependencies["parse_native_extension_ids"](raw, browser="chrome")
+        if raw and not ids:
+            self._show_native_pairing_status(
+                "That is not a Chrome extension ID. Copy the 32-letter ID "
+                "shown on chrome://extensions.",
+                "error",
+            )
+            return
+        normalized = ", ".join(ids)
+        update = getattr(self.config, "update", None)
+        if not callable(update) or not update({"NativeChromeExtensionIds": normalized}):
+            self._show_native_pairing_status(
+                "Could not save the extension IDs. Check disk permissions and retry.",
+                "error",
+            )
+            return
+        self.cfg_native_chrome_ids.setText(normalized)
+        registered = bool(
+            self._dependencies["refresh_native_messaging_registration"]()
+        )
+        if ids and registered:
+            self._show_native_pairing_status(
+                "Chrome and Edge are paired. Reload the extension once and "
+                "its download button can hand off.",
+                "success",
+            )
+            self._append_log(
+                f"Registered the Chrome/Edge native host for {len(ids)} extension ID(s)"
+            )
+        elif ids:
+            self._show_native_pairing_status(
+                "Saved. This copy registers no browser hosts (portable or "
+                "source run) — pair from an installed copy.",
+                "warning",
+            )
+        elif registered:
+            self._show_native_pairing_status(
+                "Chrome and Edge pairing cleared.", "neutral"
+            )
+            self._append_log("Revoked the Chrome/Edge native-messaging registration")
+        else:
+            self._show_native_pairing_status(
+                "Cleared. This copy registers no browser hosts.", "neutral"
+            )
 
     def _copy_token(self):
         token = self.cfg_token.text()

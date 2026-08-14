@@ -579,6 +579,18 @@
       <translation>Endpunkt kopiert.</translation>
     </message>
     <message>
+      <source>That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.</source>
+      <translation>Das ist keine Chrome-Erweiterungs-ID. Die 32-Buchstaben-ID von chrome://extensions kopieren.</translation>
+    </message>
+    <message>
+      <source>Could not save the extension IDs. Check disk permissions and retry.</source>
+      <translation>Die Erweiterungs-IDs konnten nicht gespeichert werden. Datenträgerberechtigungen prüfen und erneut versuchen.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge are paired. Reload the extension once and its download button can hand off.</source>
+      <translation>Chrome und Edge sind gekoppelt. Die Erweiterung einmal neu laden, dann kann ihr Download-Button übergeben.</translation>
+    </message>
+    <message>
       <source>Copied token cleared from the clipboard.</source>
       <translation>Kopiertes Token wurde aus der Zwischenablage entfernt.</translation>
     </message>
@@ -1047,6 +1059,10 @@
       <translation>Videolink vorgemerkt. Öffnen Sie Downloads, um ihn vor dem Einreihen zu prüfen.</translation>
     </message>
     <message>
+      <source>Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.</source>
+      <translation>Gespeichert. Diese Kopie registriert keine Browser-Hosts (portabel oder Quellstart) — von einer installierten Kopie aus koppeln.</translation>
+    </message>
+    <message>
       <source>Reveal</source>
       <translation>Anzeigen</translation>
     </message>
@@ -1373,6 +1389,14 @@
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>Dieser Link bietet höchstens {height}p.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge pairing cleared.</source>
+      <translation>Kopplung mit Chrome und Edge aufgehoben.</translation>
+    </message>
+    <message>
+      <source>Cleared. This copy registers no browser hosts.</source>
+      <translation>Entfernt. Diese Kopie registriert keine Browser-Hosts.</translation>
     </message>
     <message>
       <source>Still running in the tray so Astra Deck can keep sending downloads.</source>
@@ -2163,6 +2187,10 @@
       <translation>Ordner öffnen</translation>
     </message>
     <message>
+      <source>Register</source>
+      <translation>Registrieren</translation>
+    </message>
+    <message>
       <source>In progress</source>
       <translation>Läuft</translation>
     </message>
@@ -2205,6 +2233,30 @@
     <message>
       <source>The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.</source>
       <translation>Die Erweiterung findet diesen Server selbst, sobald er läuft. Anfragen werden nur von diesem Computer angenommen und müssen das Sitzungstoken enthalten.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge pairing</source>
+      <translation>Kopplung mit Chrome und Edge</translation>
+    </message>
+    <message>
+      <source>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</source>
+      <translation>Firefox wird automatisch registriert. Für Chrome und Edge muss die Erweiterungs-ID von chrome://extensions einmal eingetragen werden.</translation>
+    </message>
+    <message>
+      <source>32-letter extension ID — several separated by commas</source>
+      <translation>Erweiterungs-ID aus 32 Buchstaben — mehrere durch Kommas getrennt</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge extension IDs</source>
+      <translation>Erweiterungs-IDs für Chrome und Edge</translation>
+    </message>
+    <message>
+      <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
+      <translation>Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.</translation>
+    </message>
+    <message>
+      <source>Chrome pairing status</source>
+      <translation>Status der Chrome-Kopplung</translation>
     </message>
     <message>
       <source>Server log</source>

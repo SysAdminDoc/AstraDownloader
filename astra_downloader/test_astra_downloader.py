@@ -13059,6 +13059,106 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             self.assertEqual(ad.read_last_installed_update_sha256(), 'b' * 64)
 
 
+class NativeChromePairingUiTests(unittest.TestCase):
+    """The Extension page's Chrome/Edge ID field (AD-47)."""
+
+    class _Config(FakeConfig):
+        def update(self, values):
+            self.data.update(values)
+            return True
+
+    class _TextWidget:
+        def __init__(self, value=""):
+            self.value = value
+            self.visible = False
+            self.properties = {}
+
+        def setText(self, value):
+            self.value = value
+
+        def text(self):
+            return self.value
+
+        def setProperty(self, key, value):
+            self.properties[key] = value
+
+        def show(self):
+            self.visible = True
+
+    def _window(self, config, *, refresh_result=True):
+        window = types.SimpleNamespace()
+        window.config = config
+        window.logs = []
+        window._append_log = window.logs.append
+        window.refresh_calls = []
+        window.cfg_native_chrome_ids = self._TextWidget()
+        window.native_pairing_status = self._TextWidget()
+        window._dependencies = {
+            "parse_native_extension_ids": ad.parse_native_extension_ids,
+            "refresh_native_messaging_registration": lambda: (
+                window.refresh_calls.append(True) or refresh_result
+            ),
+        }
+        gui = gui_module_for_tests()
+        for name in ("_apply_native_chrome_ids", "_show_native_pairing_status"):
+            setattr(window, name, types.MethodType(
+                getattr(gui.MainWindowCore, name), window))
+        return window
+
+    def test_a_valid_id_is_saved_normalized_and_registration_reruns(self):
+        config = self._Config({"NativeChromeExtensionIds": ""})
+        window = self._window(config)
+        window.cfg_native_chrome_ids.setText("  ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP  ")
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_native_chrome_ids()
+        self.assertEqual(
+            config.get("NativeChromeExtensionIds"),
+            "abcdefghijklmnopabcdefghijklmnop",
+        )
+        self.assertEqual(window.refresh_calls, [True])
+        self.assertEqual(window.native_pairing_status.properties["tone"], "success")
+        self.assertEqual(
+            window.cfg_native_chrome_ids.text(),
+            "abcdefghijklmnopabcdefghijklmnop",
+            "the field shows the normalized value that was saved",
+        )
+
+    def test_an_invalid_id_is_refused_before_any_save_or_registration(self):
+        config = self._Config({"NativeChromeExtensionIds": ""})
+        window = self._window(config)
+        window.cfg_native_chrome_ids.setText("not-a-chrome-id!")
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_native_chrome_ids()
+        self.assertEqual(config.get("NativeChromeExtensionIds"), "")
+        self.assertEqual(window.refresh_calls, [])
+        self.assertEqual(window.native_pairing_status.properties["tone"], "danger")
+        self.assertIn("chrome://extensions", window.native_pairing_status.text())
+
+    def test_clearing_the_field_revokes_and_reports_neutral(self):
+        config = self._Config({
+            "NativeChromeExtensionIds": "abcdefghijklmnopabcdefghijklmnop",
+        })
+        window = self._window(config)
+        window.cfg_native_chrome_ids.setText("")
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_native_chrome_ids()
+        self.assertEqual(config.get("NativeChromeExtensionIds"), "")
+        self.assertEqual(window.refresh_calls, [True])
+        self.assertEqual(window.native_pairing_status.properties["tone"], "neutral")
+
+    def test_a_copy_that_cannot_register_reports_the_warning(self):
+        config = self._Config({"NativeChromeExtensionIds": ""})
+        window = self._window(config, refresh_result=False)
+        window.cfg_native_chrome_ids.setText("abcdefghijklmnopabcdefghijklmnop")
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_native_chrome_ids()
+        self.assertEqual(
+            config.get("NativeChromeExtensionIds"),
+            "abcdefghijklmnopabcdefghijklmnop",
+        )
+        self.assertEqual(window.native_pairing_status.properties["tone"], "warning")
+
+
 class NativeMessagingBootstrapTests(unittest.TestCase):
     """Token bootstrap over the browser-pinned native-messaging stdio channel."""
 
@@ -17261,6 +17361,10 @@ class SettingsFormReloadTests(unittest.TestCase):
         # ServerToken is read-only and never travels in a bundle, so an
         # import cannot make this field stale.
         built.discard("cfg_token")
+        # NativeChromeExtensionIds is BUNDLE_EXCLUDED and the Extension page's
+        # Register button saves it immediately, outside the Settings form —
+        # an import can never change it, so a reload cannot make it stale.
+        built.discard("cfg_native_chrome_ids")
         tabled = {name for name, _key, _kind
                   in gui.MainWindowCore._SETTINGS_FORM_FIELDS}
         self.assertEqual(
