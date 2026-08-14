@@ -7011,6 +7011,24 @@ for forbidden in (
         self.assertEqual(ad.download_status_tone("complete"), "success")
         self.assertEqual(ad.download_status_tone("failed"), "danger")
 
+    def test_argv_credential_visibility_is_a_stated_accepted_property(self):
+        # build_site_login_credential_args emits --username/--password on the
+        # yt-dlp command line, visible in Win32_Process.CommandLine to any
+        # same-user process. That is a deliberate decision (netrc is refused,
+        # yt-dlp has no stdin channel) — but a decision is only accepted if it
+        # is stated. If the mechanism ever changes, move the SECURITY.md entry
+        # with it.
+        security = (Path(ad.__file__).resolve().parent.parent / "SECURITY.md").read_text(
+            encoding="utf-8")
+        self.assertIn("Stored site credentials travel to yt-dlp on its command line",
+                      security)
+        self.assertIn("Win32_Process.CommandLine", security)
+        import download as _download_module
+        args = _download_module.build_site_login_credential_args(
+            {"username": "user@example.com", "password": "hunter2"})
+        self.assertIn("--username", args)
+        self.assertIn("--password", args)
+
     def test_every_doc_referenced_from_source_exists(self):
         # Two accepted-risk rationales cited HARDENING.md, which never
         # existed — the code was right and the justification unrecoverable.
