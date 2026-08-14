@@ -16,13 +16,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Note: `Roadmap_Blocked.md` files this as blocked on the PyQt distribution decision. AD-08 removes that dependency; if AD-08 is deferred, AD-01 stays blocked and the blocked entry stands.
   Complexity: S
 
-- [ ] P0 — AD-05 — Cap concurrent subscription scans
-  Why: `request_scan` starts a bare thread per subscription with no total cap. `_scan_ids` dedupes per id only and `SUBSCRIPTION_MAX_RECORDS = 100`, so clicking "Scan now" down the list — or `POST /subscriptions/<id>/scan` at its 30/60 s allowance — can hold 100 threads each spawning yt-dlp. Every sibling path is gated (`_formats_gate = Semaphore(2)`, `_transcription_gate = BoundedSemaphore(1)`, `MAX_CONCURRENT = 3`).
-  Evidence: `astra_downloader/subscriptions.py:1153-1173`; `download.py:3421-3425`; `routes.py:1238-1258`.
-  Touches: `astra_downloader/subscriptions.py`
-  Acceptance: a bounded semaphore caps in-flight scans; a test requesting 20 scans proves at most N yt-dlp spawns are concurrent and none are dropped.
-  Complexity: S
-
 - [ ] P0 — AD-06 — Make status messages carry a visible tone
   Why: `_set_quick_download_status` sets `setProperty("state", …)` and calls `repolish()`, but `STYLESHEET` has no `QLabel[class="fieldHint"][state=…]` rule — only a flat `color: #8d97a4`. "Download queue is full (200/200)" therefore renders identically to "Clip ranges apply to a single link." Four more status labels set the same dead property. In a product whose thesis is diagnosis, the diagnosis is invisible.
   Evidence: `astra_downloader/gui.py:2400-2404`; `astra_downloader.py:4017` vs the working `tone` rules at `:3997-4035`; `build/companion-ui-smoke/downloads-queue-full.png`; `subscription_status`, `history_page_status`, `site_login_status`, `first_run_status`.

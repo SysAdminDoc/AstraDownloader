@@ -1186,6 +1186,66 @@ class SubscriptionTests(unittest.TestCase):
             clock=clock,
         )
 
+    def test_manual_scans_are_capped_by_the_scan_gate_and_none_are_dropped(self):
+        # request_scan used to spawn an unbounded thread per subscription, each
+        # running yt-dlp; at the 100-record cap "Scan now" down the list could
+        # hold 100 concurrent probes. The gate must bound concurrency without
+        # dropping any scan.
+        subs_mod = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "gate.json", clock=time.time)
+            sub_ids = []
+            for index in range(8):
+                record, error = store.add_subscription(
+                    f"https://www.youtube.com/@astra-gate-{index}",
+                    interval_minutes=60,
+                )
+                self.assertIsNone(error)
+                sub_ids.append(record["id"])
+
+            active = {"now": 0, "peak": 0}
+            probed = []
+            gate_lock = threading.Lock()
+
+            def probe(url):
+                with gate_lock:
+                    active["now"] += 1
+                    active["peak"] = max(active["peak"], active["now"])
+                    probed.append(url)
+                time.sleep(0.05)
+                with gate_lock:
+                    active["now"] -= 1
+                return ([], None)
+
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=probe,
+                enqueue=lambda *_args: (None, None),
+            )
+            for sub_id in sub_ids:
+                result, error = manager.request_scan(sub_id)
+                self.assertIsNone(error)
+                self.assertTrue(result["scheduled"])
+
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                with manager._lock:
+                    if not manager._scan_ids:
+                        break
+                time.sleep(0.02)
+            with manager._lock:
+                self.assertEqual(manager._scan_ids, set(), "scans must all finish")
+
+            with gate_lock:
+                self.assertEqual(active["now"], 0)
+                self.assertEqual(
+                    len(probed), len(sub_ids), "no requested scan may be dropped"
+                )
+                self.assertLessEqual(
+                    active["peak"], subs_mod.SUBSCRIPTION_SCAN_MAX_CONCURRENT,
+                    "concurrent yt-dlp probes must stay under the gate",
+                )
+
     def test_subscription_and_archive_state_round_trip_across_store_instances(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "subscriptions.json"
