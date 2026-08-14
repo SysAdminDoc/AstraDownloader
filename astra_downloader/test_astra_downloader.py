@@ -1188,6 +1188,45 @@ class SubscriptionTests(unittest.TestCase):
             clock=clock,
         )
 
+    def test_history_reads_the_archive_without_the_deep_copy(self):
+        # archive_entries() deep-copies every record under the store lock; at
+        # the 20,000-entry cap the Qt main thread paid a multi-megabyte copy
+        # per History refresh. The history path must use the scalar
+        # projection instead, and the projection must never call the deep
+        # copier.
+        subs_mod = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "view.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-view", interval_minutes=60)
+            self.assertIsNone(error)
+            for index in range(20_000):
+                store._data["archive"][f"id:v{index}"] = {
+                    "url": f"https://www.youtube.com/watch?v=v{index}",
+                    "title": f"Video {index}",
+                    "status": "complete",
+                    "subscriptionId": record["id"],
+                    "completedAt": 1000.0 + index,
+                    "nested": {"payload": ["that", "history", "never", "reads"]},
+                }
+            with mock.patch.object(
+                subs_mod, "_copy",
+                side_effect=AssertionError("history must not deep-copy the archive"),
+            ):
+                view = store.archive_history_view()
+            self.assertEqual(len(view), 20_000)
+            sample = view["id:v0"]
+            self.assertEqual(sample["title"], "Video 0")
+            self.assertNotIn("nested", sample, "the projection carries scalars only")
+            result = ad.query_history_entries(
+                [], sort="newest", offset=0, limit=5, archive_entries=view)
+            self.assertEqual(result["count"], 5)
+            self.assertEqual(result["total"], 20_000)
+            self.assertEqual(
+                result["history"][0]["title"], "Video 19999",
+                "the projection must satisfy sorting on the query path",
+            )
+
     def test_manual_scans_are_capped_by_the_scan_gate_and_none_are_dropped(self):
         # request_scan used to spawn an unbounded thread per subscription, each
         # running yt-dlp; at the 100-record cap "Scan now" down the list could

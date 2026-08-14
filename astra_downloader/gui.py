@@ -4396,7 +4396,11 @@ class MainWindowCore(
     def _history_query(self, *, entries=None, offset=None, limit=None):
         archive_entries = None
         manager = self._subscription_manager()
-        archive_reader = getattr(manager, "archive_entries", None) if manager else None
+        archive_reader = None
+        if manager is not None:
+            # Prefer the scalar projection: the full archive_entries() deep
+            # copy is a multi-megabyte, lock-held operation at the 20k cap.
+            archive_reader = getattr(manager, "archive_history_view", None)                 or getattr(manager, "archive_entries", None)
         if callable(archive_reader):
             try:
                 archive_entries = archive_reader()

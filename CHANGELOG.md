@@ -49,6 +49,11 @@ repository's git log.
 
 ### Fixed
 
+- **History no longer deep-copies the subscription archive on every
+  refresh.** Merging archive records into the History view copied all
+  20,000 possible records — nested payloads included — under the store lock,
+  on the Qt main thread, per refresh. A scalar projection now copies only
+  the eight fields History reads, on both the GUI and `/history` paths.
 - **Icons render sharp on scaled displays.** Every line icon was an 18-pixel
   bitmap upscaled by Qt at 125/150/200 % display scaling. The backing pixmap
   is now allocated at the device pixel ratio, so strokes stay crisp.
