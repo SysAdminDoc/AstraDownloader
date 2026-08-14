@@ -2,6 +2,7 @@ import ast
 import hashlib
 import inspect
 import io
+import re
 import json
 import os
 import queue
@@ -7009,6 +7010,30 @@ for forbidden in (
         self.assertEqual(ad.download_status_tone("queued"), "warning")
         self.assertEqual(ad.download_status_tone("complete"), "success")
         self.assertEqual(ad.download_status_tone("failed"), "danger")
+
+    def test_every_doc_referenced_from_source_exists(self):
+        # Two accepted-risk rationales cited HARDENING.md, which never
+        # existed — the code was right and the justification unrecoverable.
+        # Any .md a source comment points a reader at must resolve.
+        module_dir = Path(ad.__file__).resolve().parent
+        repo_root = module_dir.parent
+        referenced = set()
+        for source_file in module_dir.glob("*.py"):
+            if source_file.name.startswith("test_"):
+                continue
+            text = source_file.read_text(encoding="utf-8")
+            referenced.update(re.findall(r"\b[\w./-]*[\w-]+\.md\b", text))
+        self.assertTrue(referenced, "the scan must find doc references")
+        for name in sorted(referenced):
+            candidates = (
+                repo_root / name,
+                repo_root / "docs" / Path(name).name,
+                module_dir / name,
+            )
+            self.assertTrue(
+                any(candidate.is_file() for candidate in candidates),
+                f"source references {name} but no such document exists",
+            )
 
     def test_every_status_tone_and_state_literal_has_a_stylesheet_rule(self):
         # A status label used to set a `state` property that no stylesheet

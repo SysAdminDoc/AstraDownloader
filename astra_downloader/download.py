@@ -4398,7 +4398,9 @@ class DownloadManagerCore:
         # Output directory — path-confined to the server's configured roots.
         # A compromised extension or malicious content script would otherwise
         # be able to hand us any absolute path and watch us mkdir + write
-        # there. See HARDENING.md Pass 6 S2 (outputDir allowlist).
+        # there. SECURITY.md records this contract ("client-supplied output
+        # paths are confined"); normalize_output_dir resolves symlinks and
+        # fails closed before any mkdir.
         client_supplied_output = bool(output_dir)
         if not output_dir:
             if audio_only and self.config.get("AudioDownloadPath"):

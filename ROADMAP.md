@@ -62,26 +62,12 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the gate covers any handler whose body neither logs nor re-raises; the 65 sites are annotated or narrowed; `check:catch-reasons` exits 0.
   Complexity: M
 
-- [ ] P1 — AD-15 — Restore the rationale that `HARDENING.md` was supposed to hold
-  Why: two accepted-risk decisions cite a file that does not exist — the SSRF residual (a public DNS name pointed at a private address) and the outputDir allowlist design. The code is correct; the justification is unrecoverable, which is how an accepted risk quietly becomes an unexamined one.
-  Evidence: `astra_downloader/config.py:1198`; `astra_downloader/download.py:4309`; no `HARDENING*` file exists anywhere in the tree.
-  Touches: `docs/`, `SECURITY.md`, `astra_downloader/config.py`, `astra_downloader/download.py`
-  Acceptance: both rationales live in a file that exists (or inline), the comments point at it, and a test asserts every doc path referenced from source resolves.
-  Complexity: S
-
 - [ ] P1 — AD-16 — Give every tool button a distinct icon
   Why: `make_line_icon` matches on keyword and falls through to one three-lines-and-dots default, which 15 of 48 tool buttons hit — including *Remove*, *Restore*, *Restore defaults*, *Undo remove*, *Undo import*, *Undo defaults*, *Dismiss*, *Scan now*, *Add subscription*, *Test*, *Import settings*, *Import cookies.txt*. A destructive action and its undo are visually identical. The **Subscriptions** and **Settings** nav entries collide too.
   Evidence: `astra_downloader/gui_support.py:169-275` (the `else` branch at `:267`); `gui.py:1064`, `:1519`; visible in `settings-dirty.png`, `subscriptions-populated.png`, `dashboard-german.png`.
   Touches: `astra_downloader/gui_support.py`
   Acceptance: no two distinct button labels resolve to the same glyph; a test enumerates every `_make_tool_button` label and asserts a unique branch is taken (the fallback is reserved for genuinely unnamed icons).
   Complexity: M
-
-- [ ] P1 — AD-17 — Stop the language picker offering locales that are 0.6 % translated
-  Why: eleven locales are advertised; German is 783/783 and the other nine are **5/783** — five nav strings and nothing else. `check:translations` passes because it counts *declared* keys, and the generator writes a missing entry out as its own English source. Selecting Japanese today produces an English UI with a Japanese sidebar.
-  Evidence: `py -3.12 scripts/build-companion-translations.py` coverage output, measured 2026-08-14; `astra_downloader/i18n.py` `ADVERTISED_LOCALES`; `Roadmap_Blocked.md` §"Translate the nine incomplete locales".
-  Touches: `astra_downloader/i18n.py`, `astra_downloader/gui_settings_page.py`, `scripts/check-companion-translations.py`
-  Acceptance: a locale below a stated coverage threshold is either withheld or labelled "partial" in the picker; the threshold is enforced by the gate so a regressing catalogue fails the suite.
-  Complexity: S
 
 - [ ] P1 — AD-18 — Put the queue above the fold on the Download page
   Why: `downloads-active-pending.png` is a scenario *with* active and pending downloads and shows none of them at 1120×760. The page stacks first-run panel → paste box → password → four option rows → four hint lines → setup status → readiness grid → pre-flight panel → notices → divider → toolbar → queue. The design invariant is "downloader first"; the download you just started is last, and the pre-flight panel is fully expanded even when every check passes.
