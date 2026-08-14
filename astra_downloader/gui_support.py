@@ -19,6 +19,7 @@ __all__ = (
     "make_divider", "make_empty_state", "make_label", "make_line_icon", "make_section_label",
     "make_stat", "make_state_label", "make_status_badge", "make_vertical_divider",
     "refresh_line_icons", "repolish", "sanitize_csv_cell", "set_gui_theme", "set_line_icon",
+    "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
 )
 
@@ -97,6 +98,24 @@ def repolish(widget):
     widget.style().unpolish(widget)
     widget.style().polish(widget)
     widget.update()
+
+
+def set_status_tone(label, state, *, announce=True):
+    """Give a status label a visible tone.
+
+    Accepts the historical setter values — "error" maps onto the stylesheet's
+    "danger" tone so every status label shares the one settingsStatus
+    convention instead of setting a `state` property no stylesheet rule ever
+    matched. ``announce`` marks the call sites that should raise a
+    screen-reader Alert (WCAG 2.2 SC 4.1.3); PyQt6 does not bind QAccessible,
+    so the event itself can only be wired once the GUI runs on a binding that
+    does.
+    """
+    tone = str(state or "neutral")
+    tone = {"error": "danger"}.get(tone, tone)
+    label.setProperty("tone", tone)
+    # The caller repolishes: gui.py's imported `repolish` is what the test
+    # harnesses patch, and a repolish buried here would bypass that seam.
 
 
 def tr(text):

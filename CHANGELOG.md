@@ -35,6 +35,13 @@ repository's git log.
 
 ### Fixed
 
+- **Status messages carry a visible tone.** "Download queue is full" used to
+  render in the same grey as "Clip ranges apply to a single link" — every
+  status label set a `state` property that no stylesheet rule matched. All
+  five status surfaces (download, history, sign-ins, subscriptions,
+  first-run) now share the settingsStatus tone convention, so an error is
+  red, a success green, and a warning amber, with a test that fails when a
+  tone value gains no matching stylesheet rule.
 - **Concurrent subscription scans are capped.** Requesting a scan spawned an
   unbounded thread per subscription, each running its own yt-dlp probe — at
   the 100-subscription cap, "Scan now" down the list could hold 100

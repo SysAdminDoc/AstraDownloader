@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import inspect
 import io
@@ -7009,6 +7010,80 @@ for forbidden in (
         self.assertEqual(ad.download_status_tone("complete"), "success")
         self.assertEqual(ad.download_status_tone("failed"), "danger")
 
+    def test_every_status_tone_and_state_literal_has_a_stylesheet_rule(self):
+        # A status label used to set a `state` property that no stylesheet
+        # rule ever matched, so "queue is full" rendered in the same grey as a
+        # hint. Scan the GUI sources for the literal tone/state values they
+        # set and require a matching rule, so the next unmatched value fails
+        # here instead of rendering invisibly.
+        module_dir = Path(ad.__file__).resolve().parent
+        tone_values = set()
+        state_values = set()
+        for name in ("gui.py", "gui_support.py", "gui_download_page.py",
+                     "gui_history_page.py", "gui_site_logins_page.py",
+                     "gui_subscriptions_page.py", "gui_settings_page.py",
+                     "gui_extension_page.py"):
+            tree = ast.parse((module_dir / name).read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if (isinstance(func, ast.Attribute) and func.attr == "setProperty"
+                        and len(node.args) >= 2
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[1], ast.Constant)
+                        and isinstance(node.args[1].value, str)):
+                    prop, value = node.args[0].value, node.args[1].value
+                    if prop == "tone" and value:
+                        tone_values.add(value)
+                    elif prop == "state" and value:
+                        state_values.add(value)
+                elif (isinstance(func, ast.Name) and func.id == "set_status_tone"
+                        and len(node.args) >= 2
+                        and isinstance(node.args[1], ast.Constant)
+                        and isinstance(node.args[1].value, str)):
+                    raw = node.args[1].value or "neutral"
+                    tone_values.add({"error": "danger"}.get(raw, raw))
+        self.assertTrue(tone_values, "the scan must find tone literals")
+        for value in sorted(tone_values):
+            self.assertIn(
+                f'[tone="{value}"]', ad.STYLESHEET,
+                f'tone "{value}" is set somewhere but no stylesheet rule matches it',
+            )
+        for value in sorted(state_values):
+            self.assertIn(
+                f'[state="{value}"]', ad.STYLESHEET,
+                f'state "{value}" is set somewhere but no stylesheet rule matches it',
+            )
+
+    def test_set_status_tone_maps_error_onto_the_danger_convention(self):
+        gs = gui_module_for_tests()
+        applied = []
+
+        class FakeLabel:
+            def setProperty(self, name, value):
+                applied.append((name, value))
+
+            def style(self):
+                class _S:
+                    def unpolish(self, _w):
+                        pass
+
+                    def polish(self, _w):
+                        pass
+                return _S()
+
+            def update(self):
+                pass
+
+        label = FakeLabel()
+        gs.set_status_tone(label, "error")
+        gs.set_status_tone(label, "success")
+        gs.set_status_tone(label, "")
+        self.assertEqual(applied, [
+            ("tone", "danger"), ("tone", "success"), ("tone", "neutral"),
+        ])
+
     def test_gui_boundary_imports_pyqt_without_creating_application(self):
         script = r'''
 import importlib
@@ -12130,7 +12205,7 @@ class ClipboardLinkGrabberTests(unittest.TestCase):
             self.assertEqual(window._clipboard_staged_url, url)
             self.assertTrue(window.quick_download_status.visible)
             self.assertEqual(
-                window.quick_download_status.properties["state"], "success"
+                window.quick_download_status.properties["tone"], "success"
             )
             self.assertIn("Review the options", window.quick_download_status.text())
             # Deduplicated: the repeat paste must not notify or log twice.
@@ -14186,7 +14261,7 @@ class QuickDownloadBatchTests(unittest.TestCase):
 
         self.assertEqual(calls, [])
         self.assertEqual(
-            window.quick_download_status.properties["state"], "error"
+            window.quick_download_status.properties["tone"], "danger"
         )
         self.assertIn("free disk space", window.quick_download_status.text())
 
@@ -14204,7 +14279,7 @@ class QuickDownloadBatchTests(unittest.TestCase):
         self.assertEqual([call["url"] for call in calls], urls)
         self.assertIn("Queued 3 downloads", window.quick_download_status.text())
         self.assertEqual(
-            window.quick_download_status.properties["state"], "success"
+            window.quick_download_status.properties["tone"], "success"
         )
 
     def test_batch_reports_rejected_links_without_losing_the_accepted_ones(self):
@@ -14220,7 +14295,7 @@ class QuickDownloadBatchTests(unittest.TestCase):
         self.assertIn("1 link rejected", text)
         self.assertNotIn("link(s)", text, "placeholder plurals are not shipped copy")
         self.assertEqual(
-            window.quick_download_status.properties["state"], "warning"
+            window.quick_download_status.properties["tone"], "warning"
         )
 
     def test_batch_pluralises_and_does_not_merge_distinct_reasons(self):
@@ -14261,7 +14336,7 @@ class QuickDownloadBatchTests(unittest.TestCase):
             ad.MainWindow._start_quick_download(window)
         self.assertEqual(calls, [], "nothing may queue when the request is ambiguous")
         self.assertIn("single link", window.quick_download_status.text())
-        self.assertEqual(window.quick_download_status.properties["state"], "error")
+        self.assertEqual(window.quick_download_status.properties["tone"], "danger")
 
     def test_empty_box_reports_instead_of_queueing_nothing(self):
         window, calls = self._window("   ", [])
@@ -19722,7 +19797,7 @@ class DownloadPageFeedbackTests(unittest.TestCase):
             window._retry_download(types.SimpleNamespace(
                 id="dl_1", title="Unknown", url="https://example.com/v"))
         self.assertEqual(window.quick_download_status.text(), "Queue is full.")
-        self.assertEqual(window.quick_download_status.properties["state"], "error")
+        self.assertEqual(window.quick_download_status.properties["tone"], "danger")
 
     def test_a_refused_reorder_is_reported_on_the_page(self):
         window = self._window()
