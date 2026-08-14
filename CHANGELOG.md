@@ -43,6 +43,12 @@ repository's git log.
 
 ### Fixed
 
+- **The completion counter and shutdown cancellation are thread-safe.** The
+  session's completed-downloads tally was a bare increment shared by all
+  worker threads (losing counts under contention), and shutdown mutated
+  download records outside the manager lock while workers wrote the same
+  fields under it. Both now hold the lock; a 48-download, 8-thread hammer
+  test requires an exact tally.
 - **Windows system binaries are invoked by absolute path, with timeouts.**
   `icacls`, `powershell`, and `schtasks` were spawned by bare name, which
   CreateProcess resolves through the current working directory before PATH —

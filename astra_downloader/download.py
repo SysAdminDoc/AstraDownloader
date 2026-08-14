@@ -5208,7 +5208,10 @@ class DownloadManagerCore:
         if dl.status in DOWNLOAD_TERMINAL_STATES:
             self._sweep_download_intermediates(dl)
         if dl.status == "complete":
-            self.total_completed += 1
+            # Read-modify-write on a counter shared by MAX_CONCURRENT worker
+            # threads; without the lock, simultaneous completions lose counts.
+            with self._lock:
+                self.total_completed += 1
         # History is the durable record of every terminal outcome, not just a
         # successful file write. The queue intentionally evicts old terminal
         # objects, so omitting failures here made an overnight failure vanish
@@ -6325,13 +6328,18 @@ class DownloadManagerCore:
         if backoff_timer is not None:
             backoff_timer.cancel()
         for dl in active:
-            dl.status = "cancelled"
-            dl.error = "Cancelled (app shutdown)."
-            dl._cookies = None
-            dl.mark_terminal()
-            proc = dl.process
-            if proc is None and dl.id not in self._running_ids:
-                to_sweep.append(dl)
+            # Mutate each record under the lock: _worker_entry's finally
+            # writes the same fields under it, and _running_ids membership is
+            # only coherent inside it. Process termination stays outside so a
+            # slow tree-kill never stalls every other store operation.
+            with self._lock:
+                dl.status = "cancelled"
+                dl.error = "Cancelled (app shutdown)."
+                dl._cookies = None
+                dl.mark_terminal()
+                proc = dl.process
+                if proc is None and dl.id not in self._running_ids:
+                    to_sweep.append(dl)
             if proc and proc.poll() is None:
                 try:
                     self._dependencies['terminate_process_tree'](proc)

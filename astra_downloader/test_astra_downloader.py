@@ -9829,6 +9829,42 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         self.assertFalse(ad.is_playlist_url("https://x.com/a/status/1"))
 
 
+class TerminalCounterConcurrencyTests(unittest.TestCase):
+    def test_concurrent_completions_count_exactly(self):
+        # total_completed was a bare `+= 1` executed on up to MAX_CONCURRENT
+        # worker threads — a read-modify-write that loses counts under
+        # contention. Hammer _record_terminal_download from many threads and
+        # require an exact tally.
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmp}), FakeHistory())
+            count = 48
+            downloads = []
+            for index in range(count):
+                dl = ad.Download(f"dl_ctr_{index}", f"https://example.com/v{index}",
+                                 output_dir=tmp)
+                dl.status = "complete"
+                dl.filename = f"v{index}.mp4"
+                downloads.append(dl)
+            start = threading.Barrier(8)
+
+            def record(chunk):
+                start.wait(timeout=10)
+                for dl in chunk:
+                    manager._record_terminal_download(dl)
+
+            threads = [
+                threading.Thread(target=record, args=(downloads[i::8],))
+                for i in range(8)
+            ]
+            with mock.patch.object(ad, "write_persistent_log", return_value=None):
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=30)
+            self.assertEqual(manager.total_completed, count)
+
+
 class EndToEndDownloadTests(unittest.TestCase):
     """v1.5.1 / RESEARCH_FEATURE_PLAN EI14: end-to-end download flow with
     a faked yt-dlp subprocess.
