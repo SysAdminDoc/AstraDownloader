@@ -35,6 +35,13 @@ repository's git log.
 
 ### Fixed
 
+- **Windows system binaries are invoked by absolute path, with timeouts.**
+  `icacls`, `powershell`, and `schtasks` were spawned by bare name, which
+  CreateProcess resolves through the current working directory before PATH —
+  and the icacls call is the one that applies the cookie jar's owner-only
+  ACL. All six sites now resolve through `%SystemRoot%\System32`, every
+  `subprocess.run` in the package carries a timeout, and a test pins both
+  properties so a bare-name spawn cannot come back.
 - **Status messages carry a visible tone.** "Download queue is full" used to
   render in the same grey as "Clip ranges apply to a single link" — every
   status label set a `state` property that no stylesheet rule matched. All
