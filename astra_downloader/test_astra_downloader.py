@@ -1193,6 +1193,93 @@ class SubscriptionTests(unittest.TestCase):
             clock=clock,
         )
 
+    def test_a_scan_persists_once_regardless_of_candidate_count(self):
+        # reserve + mark_queued used to fsync the whole document per candidate,
+        # on the same lock the Qt main thread and /health take.
+        writes = []
+
+        def counting_writer(target, payload):
+            writes.append(target)
+            return ad.atomic_write_json(target, payload)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ad.SubscriptionStore(
+                path=Path(tmp) / "batched.json",
+                reader=ad.load_json_file,
+                writer=counting_writer,
+                logger=self.fail,
+                normalize_url=ad.normalize_url,
+                is_youtube_url=ad.is_youtube_url,
+                clean_text=ad.clean_text,
+                clamp_int=ad.clamp_int,
+                coerce_bool=ad.coerce_bool,
+                clock=lambda: 1000.0,
+            )
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel", interval_minutes=5, now=1000,
+            )
+            self.assertIsNone(error)
+
+            candidates = [
+                {"id": f"video{index}", "title": f"Video {index}",
+                 "url": f"https://www.youtube.com/watch?v=video{index:07d}"}
+                for index in range(50)
+            ]
+            queued_ids = iter(range(1, 1000))
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: (candidates, None),
+                enqueue=lambda *_args: (f"dl-{next(queued_ids)}", None),
+            )
+
+            writes.clear()
+            result = manager.scan_subscription(record["id"], now=2000)
+
+            self.assertEqual(result["queued"], 50)
+            self.assertFalse(result["error"])
+            # begin_scan, the coalesced candidate loop, and finish_scan. The
+            # bound is what matters: it must not grow with the candidate count.
+            self.assertLessEqual(
+                len(writes), 4,
+                f"a 50-candidate scan wrote {len(writes)} times",
+            )
+            reloaded = json.loads((Path(tmp) / "batched.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                sum(1 for entry in reloaded["archive"].values()
+                    if entry.get("status") == "queued"),
+                50,
+                "every claim must survive the coalesced write",
+            )
+
+    def test_a_scan_that_cannot_persist_reports_it_once(self):
+        # Inside a batch each mutation reports success on the strength of the
+        # pending write, so the failure has to surface when the batch flushes.
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(Path(tmp) / "unwritable.json")
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel", interval_minutes=5, now=1000,
+            )
+            self.assertIsNone(error)
+            store._logger = lambda _message: None
+
+            def failing_writer(_target, _payload):
+                raise OSError("disk full")
+
+            candidates = [
+                {"id": f"video{index}", "title": f"Video {index}",
+                 "url": f"https://www.youtube.com/watch?v=video{index:07d}"}
+                for index in range(5)
+            ]
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: (candidates, None),
+                enqueue=lambda *_args: ("dl-1", None),
+            )
+            store._writer = failing_writer
+            result = manager.scan_subscription(record["id"], now=2000)
+
+            self.assertIn("Could not save subscriptions", result["error"])
+
     def test_history_reads_the_archive_without_the_deep_copy(self):
         # archive_entries() deep-copies every record under the store lock; at
         # the 20,000-entry cap the Qt main thread paid a multi-megabyte copy
@@ -20999,7 +21086,14 @@ class SmallerGapTests(unittest.TestCase):
             self.assertNotEqual(store.archive_entry(key).get("title"), "mutated")
 
     def test_the_retry_exhausted_branch_reads_a_single_entry(self):
-        source = inspect.getsource(ad.SubscriptionManager.scan_subscription)
+        # The loop lives in _claim_candidates since the batched-save change;
+        # both are pinned so the read cannot drift back into either one.
+        source = "".join(
+            inspect.getsource(func) for func in (
+                ad.SubscriptionManager.scan_subscription,
+                ad.SubscriptionManager._claim_candidates,
+            )
+        )
         self.assertIn("self.store.archive_entry(key)", source)
         self.assertNotIn("self.store.archive_entries().get(key", source)
 
