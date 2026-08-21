@@ -1719,6 +1719,17 @@ class MainWindowCore(
         )
         return btn
 
+    def _set_control_label(self, widget, text):
+        """Keep the visible label and the accessible name in lockstep.
+
+        Lightweight test doubles implement `setText` and nothing else, so the
+        accessible-name write is skipped when the widget has no such method.
+        """
+        widget.setText(text)
+        setter = getattr(widget, "setAccessibleName", None)
+        if callable(setter):
+            setter(text)
+
     def _make_readiness_row(self, key, label_text, value_text="Checking"):
         row = QFrame()
         row.setProperty("class", "readinessRow")
@@ -2384,7 +2395,7 @@ class MainWindowCore(
             hint.setText(tr_format("Saves as {name}.<ext>", name=normalized))
         hint.show()
 
-    def _start_quick_download(self):
+    def _require_first_run_destination(self):
         if (
             getattr(self, "_first_run", False)
             and not getattr(self, "_first_run_destination_confirmed", False)
@@ -2393,7 +2404,15 @@ class MainWindowCore(
                 "Confirm your download folder before adding a download.",
                 "warning",
             )
-            self.first_run_destination.setFocus(Qt.FocusReason.OtherFocusReason)
+            first_run = getattr(self, "first_run_destination", None)
+            if first_run is not None:
+                first_run.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        return True
+
+    def _start_quick_download(self):
+        require = getattr(self, "_require_first_run_destination", None)
+        if callable(require) and not require():
             return
         # A URL can never contain whitespace (normalize_url rejects it), so
         # splitting on whitespace safely turns a multi-link paste — the common
@@ -3699,6 +3718,10 @@ class MainWindowCore(
             self.config.get("ServerPort", self._value('SERVER_PORT')),
             self._value('SERVER_PORT'), 1024, 65535,
         )
+        try:
+            self._dependencies["refresh_native_messaging_registration"]()
+        except Exception as error:
+            self._append_log(f"Native-host registration skipped: {error}")
         self._server_starting = True
         self._server_start_cancel = threading.Event()
         cancel = self._server_start_cancel
@@ -3911,7 +3934,7 @@ class MainWindowCore(
             self.server_badge.setAccessibleName(
                 tr("Extension server status indicator: Starting")
             )
-            self.btn_startstop.setText(tr("Starting server…"))
+            self._set_control_label(self.btn_startstop, tr("Starting server…"))
             set_line_icon(self.btn_startstop, "Starting server")
             self.btn_startstop.setProperty("class", "secondary")
             self.btn_startstop.setEnabled(False)
@@ -3937,7 +3960,7 @@ class MainWindowCore(
             self.server_badge.setAccessibleName(
                 tr("Extension server status indicator: Online")
             )
-            self.btn_startstop.setText(tr("Stop server"))
+            self._set_control_label(self.btn_startstop, tr("Stop server"))
             set_line_icon(self.btn_startstop, "Stop server")
             self.btn_startstop.setProperty("class", "secondary")
             self.btn_startstop.setEnabled(True)
@@ -3963,7 +3986,7 @@ class MainWindowCore(
             self.server_badge.setAccessibleName(
                 tr("Extension server status indicator: Offline")
             )
-            self.btn_startstop.setText(tr("Start server"))
+            self._set_control_label(self.btn_startstop, tr("Start server"))
             set_line_icon(self.btn_startstop, "Start server")
             self.btn_startstop.setProperty("class", "primary")
             self.btn_startstop.setEnabled(True)
@@ -4487,9 +4510,10 @@ class MainWindowCore(
                 limit=capacity["totalLimit"],
             )
         )
-        self.btn_queue_pause.setText(
-            "Resume queue" if capacity['intakePaused'] else "Pause intake"
+        pause_label = (
+            tr("Resume queue") if capacity['intakePaused'] else tr("Pause intake")
         )
+        self._set_control_label(self.btn_queue_pause, pause_label)
         set_line_icon(
             self.btn_queue_pause,
             "Resume queue" if capacity['intakePaused'] else "Pause intake",
@@ -4811,18 +4835,9 @@ class MainWindowCore(
                     self._append_log(f"Could not apply the selected theme: {error}")
         self._dependencies["reset_deno_runtime_cache"]()
         self._start_readiness_probe()
-        new_port = self._dependencies["clamp_int"](
-            values.get("ServerPort"), self._value("SERVER_PORT"), 1024, 65535,
+        restarted_server = self._apply_saved_server_port(
+            old_port, old_effective_port
         )
-        port_changed = (
-            new_port != old_port or new_port != old_effective_port
-        )
-        restarted_server = bool(port_changed and self.server_running)
-        if restarted_server:
-            self._stop_server()
-            self._start_server()
-        else:
-            self._sync_connection_ui()
 
         labels = []
         for key in changed:
@@ -4914,18 +4929,9 @@ class MainWindowCore(
                     self._append_log(f"Could not apply the selected theme: {error}")
         self._dependencies["reset_deno_runtime_cache"]()
         self._start_readiness_probe()
-        new_port = self._dependencies["clamp_int"](
-            settings.get("ServerPort"), self._value("SERVER_PORT"), 1024, 65535,
+        restarted_server = self._apply_saved_server_port(
+            old_port, old_effective_port
         )
-        port_changed = (
-            new_port != old_port or new_port != old_effective_port
-        )
-        restarted_server = bool(port_changed and self.server_running)
-        if restarted_server:
-            self._stop_server()
-            self._start_server()
-        else:
-            self._sync_connection_ui()
 
         journal_cleared = self._clear_config_undo("restoreDefaults")
         if journal_cleared:
@@ -5051,6 +5057,10 @@ class MainWindowCore(
                 "danger",
             )
             return False
+        previous_port = self._dependencies['clamp_int'](
+            self.config.get("ServerPort", self._value("SERVER_PORT")),
+            self._value("SERVER_PORT"), 1024, 65535,
+        )
         if not self.config.update(bundle["settings"]):
             self._clear_config_undo("settingsImport")
             self._settings_import_undo = None
@@ -5168,6 +5178,7 @@ class MainWindowCore(
         )
         # The form still shows the pre-import values until it is rebuilt.
         self._reload_settings_form()
+        self._apply_saved_server_port(previous_port)
         return True
 
     def _undo_settings_import(self):
@@ -5192,6 +5203,10 @@ class MainWindowCore(
                 remaining.append(sub_id)
         snapshot["subscriptionIds"] = remaining
         journal_updated = self._save_config_undo("settingsImport", snapshot)
+        previous_port = self._dependencies['clamp_int'](
+            self.config.get("ServerPort", self._value("SERVER_PORT")),
+            self._value("SERVER_PORT"), 1024, 65535,
+        )
         try:
             restored = bool(self.config.update(snapshot.get("settings", {})))
         except Exception as error:  # noqa: BLE001
@@ -5239,10 +5254,29 @@ class MainWindowCore(
             )
         self._reload_settings_form()
         self._refresh_subscriptions(force=True)
+        self._apply_saved_server_port(previous_port)
 
     def _export_history(self):
-        result = self._history_query(offset=0, limit=500)
-        rows = result["history"]
+        rows = []
+        offset = 0
+        page = 500
+        while True:
+            result = self._history_query(offset=offset, limit=page)
+            chunk = result.get("history") or []
+            if not chunk:
+                break
+            rows.extend(chunk)
+            offset += len(chunk)
+            total = result.get("filteredTotal")
+            try:
+                total = int(total)
+            except (TypeError, ValueError):
+                total = 0
+            if total:
+                if offset >= total:
+                    break
+            elif len(chunk) < page:
+                break
         if not rows:
             self._show_history_status(
                 "No filtered history rows are available to export.", "warning")
@@ -5731,6 +5765,9 @@ class MainWindowCore(
             self.btn_quick_stage.setVisible(is_playlist)
 
     def _open_playlist_staging(self):
+        require = getattr(self, "_require_first_run_destination", None)
+        if callable(require) and not require():
+            return
         url = self.quick_download_url.text().strip()
         if not url:
             self._set_quick_download_status(tr("Paste a playlist link first."), "error")
@@ -5822,7 +5859,25 @@ class MainWindowCore(
         if not hasattr(self, "settings_status") or not hasattr(self, "btn_save"):
             return
         self._show_settings_status("Unsaved changes", "warning")
-        self.btn_save.setText(tr("Save changes"))
+        self._set_control_label(self.btn_save, tr("Save changes"))
+
+    def _apply_saved_server_port(self, old_port, old_effective_port=None):
+        """Restart or refresh the local API after ServerPort changed on disk."""
+        clamp_int = self._dependencies["clamp_int"]
+        default_port = self._value("SERVER_PORT")
+        new_port = clamp_int(
+            self.config.get("ServerPort", default_port), default_port, 1024, 65535,
+        )
+        if old_effective_port is None:
+            old_effective_port = old_port
+        port_changed = new_port != old_port or new_port != old_effective_port
+        restarted = bool(port_changed and self.server_running)
+        if restarted:
+            self._stop_server()
+            self._start_server()
+        else:
+            self._sync_connection_ui()
+        return restarted
 
     def _sync_connection_ui(self):
         clamp_int = self._dependencies['clamp_int']
@@ -5903,7 +5958,7 @@ class MainWindowCore(
             return
         self._append_log("Forcing yt-dlp self-update…")
         self.btn_check_updates.setEnabled(False)
-        self.btn_check_updates.setText(tr("Checking…"))
+        self._set_control_label(self.btn_check_updates, tr("Checking…"))
         self._show_settings_status(
             "Checking yt-dlp. The verified current copy stays available until the update passes.",
             "warning",
@@ -5927,7 +5982,9 @@ class MainWindowCore(
 
     def _finish_ytdlp_update(self, result):
         self.btn_check_updates.setEnabled(True)
-        self.btn_check_updates.setText(tr("Check yt-dlp Update"))
+        self._set_control_label(
+            self.btn_check_updates, tr("Check for yt-dlp updates")
+        )
         self._refresh_tools_status()
         if result.get('ok'):
             version = result.get('version_after') or 'current'
@@ -6276,6 +6333,9 @@ class MainWindowCore(
             "MaxFileSizeMB": self.cfg_maxsize.value(),
             "RateLimit": rate,
             "Proxy": proxy,
+            "UseSystemProxy": checked_setting(
+                "cfg_use_system_proxy", "UseSystemProxy"
+            ),
             "ForceIPVersion": force_ip,
             "SourceAddress": source_address,
             "Xff": xff,
@@ -6304,7 +6364,7 @@ class MainWindowCore(
             ),
         })
         if not saved:
-            self.btn_save.setText(tr("Save changes"))
+            self._set_control_label(self.btn_save, tr("Save changes"))
             self._show_settings_status(
                 "Could not save settings. Nothing changed; check disk permissions and retry.",
                 "danger",
@@ -6362,8 +6422,11 @@ class MainWindowCore(
             # Enabling is an explicit opt-in, so consider the current
             # clipboard value without making the user copy it again.
             self._handle_clipboard_change()
-        self.btn_save.setText(tr("Saved"))
-        QTimer.singleShot(1500, lambda: self.btn_save.setText(tr("Save changes")))
+        self._set_control_label(self.btn_save, tr("Saved"))
+        QTimer.singleShot(
+            1500,
+            lambda: self._set_control_label(self.btn_save, tr("Save changes")),
+        )
         status_generation = getattr(self, "_settings_status_generation", 0)
         QTimer.singleShot(3200, lambda: self._clear_settings_status_if_current(status_generation))
 
@@ -6382,6 +6445,7 @@ class MainWindowCore(
         if not self._clipboard_staged_url:
             return
         self._clipboard_staged_url = ""
+        self._clipboard_last_seen = ""
         self.quick_download_status.hide()
 
     def _set_quick_clip_selector(self, start, end):
@@ -6528,12 +6592,12 @@ class MainWindowCore(
             return
         if payload.get("generation") != self._format_probe_generation:
             # The user typed on while this probe ran; it describes a URL that
-            # is no longer in the box.
-            return
-        if payload.get("url") != self.quick_download_url.text().strip():
+            # is no longer in the box. A newer probe owns in-flight state.
             return
         self._format_probe_in_flight = False
         self._format_probe_request_url = ""
+        if payload.get("url") != self.quick_download_url.text().strip():
+            return
         if payload.get("error"):
             # A probe failure is not a download failure: the fixed ladder is
             # still a usable offer, so it stays and nothing is said.
@@ -7127,7 +7191,7 @@ class MainWindowCore(
         self.setup_progress.setValue(0)
         self.setup_progress.show()
         self.btn_startstop.setEnabled(False)
-        self.btn_startstop.setText(tr("Setting Up"))
+        self._set_control_label(self.btn_startstop, tr("Setting Up"))
         self.setup_worker = self._dependencies['SetupWorker'](
             force_ffmpeg=force_ffmpeg,
             auto_update_ytdlp=self.config.get("AutoUpdateYtDlp", True),
@@ -7157,8 +7221,9 @@ class MainWindowCore(
         ffmpeg_refresh = bool(getattr(getattr(self, 'setup_worker', None), 'force_ffmpeg', False))
         self._setup_running = False
         self.btn_startstop.setEnabled(True)
-        self.btn_startstop.setText(
-            tr("Stop server") if self.server_running else tr("Start server")
+        self._set_control_label(
+            self.btn_startstop,
+            tr("Stop server") if self.server_running else tr("Start server"),
         )
         self.setup_progress.setValue(100)
         self.setup_status.setText(
@@ -7187,8 +7252,9 @@ class MainWindowCore(
         ffmpeg_refresh = bool(getattr(getattr(self, 'setup_worker', None), 'force_ffmpeg', False))
         self._setup_running = False
         self.btn_startstop.setEnabled(True)
-        self.btn_startstop.setText(
-            tr("Stop server") if self.server_running else tr("Start server")
+        self._set_control_label(
+            self.btn_startstop,
+            tr("Stop server") if self.server_running else tr("Start server"),
         )
         self.setup_status.setText(
             tr("ffmpeg refresh failed. The previous copy is still installed.")

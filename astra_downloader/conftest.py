@@ -43,6 +43,7 @@ _REDIRECTED_INSTALL_PATHS = (
     ("DENO_PATH", ("deno", "deno.exe")),
     ("QUICKJS_DIR", ("quickjs",)),
     ("QUICKJS_PATH", ("quickjs", "qjs.exe")),
+    ("NATIVE_HOST_DIR", ("native-hosts",)),
 )
 
 

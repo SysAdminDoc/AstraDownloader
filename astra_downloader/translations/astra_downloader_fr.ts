@@ -423,6 +423,14 @@
       <translation>{total} / {limit} jobs</translation>
     </message>
     <message>
+      <source>Resume queue</source>
+      <translation>Resume queue</translation>
+    </message>
+    <message>
+      <source>Pause intake</source>
+      <translation>Pause intake</translation>
+    </message>
+    <message>
       <source>Export Settings</source>
       <translation>Export Settings</translation>
     </message>
@@ -559,8 +567,8 @@
       <translation>Checking…</translation>
     </message>
     <message>
-      <source>Check yt-dlp Update</source>
-      <translation>Check yt-dlp Update</translation>
+      <source>Check for yt-dlp updates</source>
+      <translation>Check for yt-dlp updates</translation>
     </message>
     <message>
       <source>Setup is already running.</source>
@@ -1791,10 +1799,6 @@
       <translation>0 / 200 jobs</translation>
     </message>
     <message>
-      <source>Pause intake</source>
-      <translation>Pause intake</translation>
-    </message>
-    <message>
       <source>Download a video</source>
       <translation>Download a video</translation>
     </message>
@@ -2391,8 +2395,8 @@
       <translation>Chrome and Edge pairing</translation>
     </message>
     <message>
-      <source>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</source>
-      <translation>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</translation>
+      <source>Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.</source>
+      <translation>Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.</translation>
     </message>
     <message>
       <source>32-letter extension ID. Separate multiple IDs with commas.</source>
@@ -2537,10 +2541,6 @@
     <message>
       <source>Checking installed tools…</source>
       <translation>Checking installed tools…</translation>
-    </message>
-    <message>
-      <source>Check for yt-dlp updates</source>
-      <translation>Check for yt-dlp updates</translation>
     </message>
     <message>
       <source>Reinstall ffmpeg</source>
@@ -3261,6 +3261,18 @@
     <message>
       <source>update-ytdlp-or-retry-later</source>
       <translation>update-ytdlp-or-retry-later</translation>
+    </message>
+    <message>
+      <source>The stored YouTube sign-in made this public video unplayable on the player client this download uses.</source>
+      <translation>The stored YouTube sign-in made this public video unplayable on the player client this download uses.</translation>
+    </message>
+    <message>
+      <source>Skip the YouTube sign-in for this public video, or remove the stored YouTube cookies and retry. Members-only and private videos still need a matching sign-in.</source>
+      <translation>Skip the YouTube sign-in for this public video, or remove the stored YouTube cookies and retry. Members-only and private videos still need a matching sign-in.</translation>
+    </message>
+    <message>
+      <source>retry-without-cookies</source>
+      <translation>retry-without-cookies</translation>
     </message>
     <message>
       <source>yt-dlp needs the Deno JavaScript runtime to solve recent YouTube signature challenges.</source>
