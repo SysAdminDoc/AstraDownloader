@@ -9353,6 +9353,94 @@ class DenoRuntimeHardGateTests(unittest.TestCase):
             self.assertEqual((resp.get_json() or {}).get('code'), expected_code)
 
 
+class TimedOutProcessReapTests(unittest.TestCase):
+    """A tree-kill closes the pipes, which is not the same as waiting.
+
+    Every timeout handler used to terminate and return. The reader threads
+    exited because the pipes closed, so it looked finished, but the Popen was
+    never waited on and the OS kept the process entry until the object was
+    collected.
+    """
+
+    class FakeProc:
+        def __init__(self, raises=None):
+            self.communicate_calls = []
+            self.terminated = 0
+            self._raises = raises
+
+        def communicate(self, timeout=None):
+            self.communicate_calls.append(timeout)
+            if self._raises is not None:
+                raise self._raises
+            return "", ""
+
+    def test_the_child_is_waited_on_after_the_kill(self):
+        import download as download_module
+
+        proc = self.FakeProc()
+        logged = []
+        download_module.reap_terminated_process(
+            proc,
+            lambda target: setattr(target, "terminated", target.terminated + 1),
+            logged.append,
+            "format-probe",
+        )
+        self.assertEqual(proc.terminated, 1)
+        self.assertEqual(
+            proc.communicate_calls,
+            [download_module.REAP_AFTER_TERMINATE_SECONDS],
+            "the reap must be bounded, not an unbounded wait",
+        )
+        self.assertEqual(logged, [])
+
+    def test_a_kill_that_fails_still_reaps(self):
+        import download as download_module
+
+        proc = self.FakeProc()
+        logged = []
+
+        def failing_terminate(_target):
+            raise OSError("access denied")
+
+        download_module.reap_terminated_process(
+            proc, failing_terminate, logged.append, "cookie import",
+        )
+        self.assertEqual(len(proc.communicate_calls), 1,
+                         "a failed kill must not skip the wait")
+        self.assertTrue(any("cookie import termination failed" in line for line in logged))
+
+    def test_a_child_that_will_not_die_is_reported_not_awaited_forever(self):
+        import download as download_module
+
+        proc = self.FakeProc(raises=subprocess.TimeoutExpired("yt-dlp", 5))
+        logged = []
+        download_module.reap_terminated_process(
+            proc, lambda _target: None, logged.append, "playlist-probe",
+        )
+        self.assertTrue(
+            any("playlist-probe did not exit after termination" in line for line in logged)
+        )
+
+    def test_every_timeout_handler_routes_through_the_reaper(self):
+        # The point of the helper is that no handler keeps the old shape.
+        source = Path(ad.__file__).with_name("download.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            caught = ast.unparse(node.type) if node.type else ""
+            if "TimeoutExpired" not in caught:
+                continue
+            body = ast.unparse(ast.Module(body=node.body, type_ignores=[]))
+            if "terminate_process_tree" in body and "reap_terminated_process" not in body:
+                offenders.append(node.lineno)
+        self.assertEqual(
+            offenders, [],
+            f"timeout handlers terminating without reaping: {offenders}",
+        )
+
+
 class NativeExtensionIdSanitizeTests(unittest.TestCase):
     """A config field that keeps IDs registration would drop is a lie.
 
