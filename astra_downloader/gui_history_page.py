@@ -45,6 +45,10 @@ class HistoryPageMixin:
         header.addWidget(self.btn_export_history, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header)
 
+        filters_panel = make_card("filterBar")
+        filters_panel_layout = QVBoxLayout(filters_panel)
+        filters_panel_layout.setContentsMargins(14, 14, 14, 14)
+        filters_panel_layout.setSpacing(8)
         filters = QHBoxLayout()
         filters.setSpacing(8)
         self.history_search = QLineEdit()
@@ -74,7 +78,7 @@ class HistoryPageMixin:
         self.history_sort.addItem(tr("Newest first"), "newest")
         self.history_sort.addItem(tr("Oldest first"), "oldest")
         filters.addWidget(self.history_sort)
-        layout.addLayout(filters)
+        filters_panel_layout.addLayout(filters)
 
         range_row = QHBoxLayout()
         range_row.setSpacing(8)
@@ -99,7 +103,7 @@ class HistoryPageMixin:
         self.btn_history_next = self._make_tool_button("Next", "ghost")
         self.btn_history_next.clicked.connect(lambda: self._move_history_page(1))
         range_row.addWidget(self.btn_history_next)
-        layout.addLayout(range_row)
+        filters_panel_layout.addLayout(range_row)
 
         # Clear, Undo and Export used to report through _append_log, whose
         # widget lives on the Browser extension page — so a permissions error
@@ -108,7 +112,8 @@ class HistoryPageMixin:
         self.history_page_status = make_label("", "fieldHint", word_wrap=True)
         self.history_page_status.setAccessibleName(tr("History status message"))
         self.history_page_status.hide()
-        layout.addWidget(self.history_page_status)
+        filters_panel_layout.addWidget(self.history_page_status)
+        layout.addWidget(filters_panel)
 
         self._history_filter_timer = QTimer(self)
         self._history_filter_timer.setSingleShot(True)

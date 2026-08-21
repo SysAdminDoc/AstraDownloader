@@ -11556,6 +11556,67 @@ class GuiSmokeTests(unittest.TestCase):
                 QApplication.processEvents()
                 self._retained_windows.append(window)
 
+    def test_download_queue_and_settings_actions_stay_in_the_primary_view(self):
+        from PyQt6.QtCore import QPoint
+        from PyQt6.QtWidgets import QApplication, QScrollArea
+
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.MainWindow, "_refresh_tools_status"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+            try:
+                window.resize(1120, 760)
+                window.show()
+                window._nav_click("Download")
+                window._update_ui()
+                QApplication.processEvents()
+
+                self.assertTrue(window.quick_download_advanced.isHidden())
+                self.assertTrue(window.preflight_details.isHidden())
+                self.assertTrue(window.downloads_scroll.isVisible())
+                queue_top = window.downloads_scroll.mapTo(window, QPoint(0, 0)).y()
+                self.assertLess(queue_top, window.height())
+
+                window.btn_quick_options.setChecked(True)
+                QApplication.processEvents()
+                self.assertTrue(window.quick_download_advanced.isVisible())
+                self.assertEqual(window.btn_quick_options.text(), "Fewer options")
+
+                for key in window.preflight_values:
+                    window._set_preflight_row(key, "ok")
+                window._update_preflight_summary()
+                self.assertEqual(
+                    window.preflight_summary.text(),
+                    "All six checks passed. Downloads are ready.",
+                )
+                window._set_preflight_row("ffmpeg-capabilities", "error")
+                window._update_preflight_summary()
+                self.assertTrue(window.preflight_details.isVisible())
+
+                window._nav_click("Settings")
+                QApplication.processEvents()
+                settings_root = window.tabs.currentWidget()
+                settings_scroll = settings_root.findChild(QScrollArea)
+                self.assertIsNotNone(settings_scroll)
+                settings_scroll.verticalScrollBar().setValue(
+                    settings_scroll.verticalScrollBar().maximum()
+                )
+                QApplication.processEvents()
+                self.assertTrue(window.btn_save.isVisible())
+                save_top = window.btn_save.mapTo(window, QPoint(0, 0)).y()
+                self.assertLess(save_top, window.height())
+            finally:
+                window.update_timer.stop()
+                window.cleanup_timer.stop()
+                window.tools_status_timer.stop()
+                window.tray.hide()
+                window._force_exit = True
+                window.close()
+                QApplication.processEvents()
+                self._retained_windows.append(window)
+
     def test_make_line_icon_renders_glyph_at_native_requested_size(self):
         from PyQt6.QtCore import QSize
         # The default 18 px icon cannot satisfy a 36 px request without

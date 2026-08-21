@@ -302,12 +302,18 @@ def main():
             ]
             rects = []
             common_parent = container.parentWidget()
-            container_rect = container.geometry()
             for control in controls:
                 if not control.isVisible():
                     raise RuntimeError(
                         f"Download option is hidden: {control.objectName() or type(control).__name__}"
                     )
+                owner = (
+                    container
+                    if container.isAncestorOf(control)
+                    else window.quick_download_advanced
+                )
+                owner_top_left = owner.mapTo(common_parent, QPoint(0, 0))
+                container_rect = QRect(owner_top_left, owner.size())
                 top_left = control.mapTo(common_parent, QPoint(0, 0))
                 rect = QRect(top_left, control.size())
                 rects.append(rect)
@@ -521,6 +527,9 @@ def main():
                 ):
                     select_page(window, page)
                     scroll_current_page_to_top(window)
+                    if page == "Download":
+                        window.btn_quick_options.setChecked(True)
+                        app.processEvents()
                     assert_visible_text(window, expected_german)
                 select_page(window, "Browser extension")
             elif scenario in LOCALE_SCENARIOS:
@@ -806,6 +815,7 @@ def main():
                     window.resize(900, 620)
                     app.setFont(QFont("Segoe UI", 12))
                     window.setFont(app.font())
+                    window.btn_quick_options.setChecked(True)
                     window.style().unpolish(window)
                     window.style().polish(window)
                     app.processEvents()

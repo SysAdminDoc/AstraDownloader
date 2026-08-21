@@ -10,6 +10,29 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased]
+
+### Added
+
+- **Download health now starts with a useful summary.** Six readiness checks
+  stay one click away when everything is ready and open automatically when a
+  repair is needed.
+- **Less common download controls have a More options section.** Password,
+  clip range, and custom file name fields remain available without crowding
+  the normal paste-and-download path.
+
+### Changed
+
+- **The active queue stays in the first Download viewport.** The primary
+  link, media choices, health summary, and first queue row now fit at the
+  standard 1120 by 760 window size.
+- **Settings actions remain visible while the form scrolls.** Save Changes,
+  Restore defaults, and the saved or unsaved status now sit in a fixed action
+  bar.
+- History, sign-in, and subscription filters use the same bounded surface,
+  while cards, status callouts, select menus, scrollbars, and row hover states
+  share one clearer visual hierarchy in dark and light themes.
+
 ## [2.8.0] - 2026-08-14
 
 ### Added
