@@ -18,6 +18,11 @@ repository's git log.
   pause into an approximate hourly rate beside yt-dlp's published figures.
   The first stored YouTube sign-in also shows a linked warning about account
   bans and signed-in sessions that can make public videos unplayable.
+- **Downloaded release pairs are checked before installation.** When the
+  adjacent SHA-256 sidecar is present, a malformed file or digest mismatch
+  stops setup with a named integrity error before anything is copied into the
+  managed install. This detects mismatched release files; it is not a code
+  signature.
 
 ## [2.10.0] - 2026-08-21
 ### Changed

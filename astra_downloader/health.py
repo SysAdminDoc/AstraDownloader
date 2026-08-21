@@ -1,5 +1,7 @@
 """Import-safe runtime health policy and compatibility boundary."""
 
+import hashlib
+import hmac
 import re
 import subprocess
 import threading
@@ -30,6 +32,7 @@ __all__ = (
     "build_youtube_extractor_args", "is_youtube_url", "should_check_ytdlp_update",
     "maybe_auto_update_ytdlp", "_run_ytdlp_self_update",
     "read_update_recovery_status", "atomic_copy_verified",
+    "DownloadedExecutableIntegrityError", "verify_adjacent_release_sidecar",
     "parse_companion_version_source", "fetch_latest_companion_version",
     "validate_companion_update_binary", "probe_companion_update_binary",
     "read_last_installed_update_sha256", "record_last_installed_update_sha256",
@@ -64,6 +67,81 @@ QUICKJS_MIN_VERSION = "0.16.1"
 # path delegates format selection to yt-dlp and does not need a filter audit.
 REQUIRED_FFMPEG_FILTERS = ("aformat",)
 YTDLP_STALE_AFTER_DAYS = 30
+RELEASE_SIDECAR_MAX_BYTES = 4096
+
+
+class DownloadedExecutableIntegrityError(RuntimeError):
+    """A present release sidecar does not authenticate the running image."""
+
+    code = "download-integrity-check-failed"
+
+
+def _release_integrity_error(detail):
+    return DownloadedExecutableIntegrityError(
+        f"Astra Downloader download integrity check failed "
+        f"({DownloadedExecutableIntegrityError.code}): {detail} "
+        "Delete the executable and its SHA-256 file, then download both again."
+    )
+
+
+def verify_adjacent_release_sidecar(
+    executable, *, max_sidecar_bytes=RELEASE_SIDECAR_MAX_BYTES,
+):
+    """Verify ``<executable>.sha256`` when that release file is present.
+
+    Release downloads carry a small sha256sum-style manifest. Source runs,
+    managed installs, and extracted one-folder builds normally have no such
+    sibling, so absence deliberately preserves their existing startup path.
+    A present sidecar fails closed when it is unreadable, malformed, names a
+    different file, or disagrees with the running image.
+    """
+    executable = Path(executable)
+    sidecar = executable.with_name(executable.name + ".sha256")
+    try:
+        sidecar_size = sidecar.stat().st_size
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise _release_integrity_error(
+            f"the adjacent sidecar could not be inspected ({error})."
+        ) from error
+    limit = max(1, int(max_sidecar_bytes))
+    if sidecar_size <= 0 or sidecar_size > limit:
+        raise _release_integrity_error("the adjacent sidecar has an invalid size.")
+    try:
+        with sidecar.open("rb") as stream:
+            payload = stream.read(limit + 1)
+        if len(payload) > limit:
+            raise _release_integrity_error(
+                "the adjacent sidecar grew beyond the allowed size."
+            )
+        text = payload.decode("ascii").strip()
+    except (OSError, UnicodeError) as error:
+        raise _release_integrity_error(
+            f"the adjacent sidecar could not be read ({error})."
+        ) from error
+    match = re.fullmatch(r"([0-9A-Fa-f]{64})[ \t]+\*?([^\r\n]+)", text)
+    if not match or Path(match.group(2).strip()).name.casefold() != executable.name.casefold():
+        raise _release_integrity_error(
+            "the adjacent sidecar is malformed or names a different file."
+        )
+    try:
+        digest = hashlib.sha256()
+        with executable.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        raise _release_integrity_error(
+            f"the running executable could not be hashed ({error})."
+        ) from error
+    expected = match.group(1).lower()
+    actual = digest.hexdigest().lower()
+    if not hmac.compare_digest(expected, actual):
+        raise _release_integrity_error(
+            f"the sidecar expected {expected[:12]} but the executable is "
+            f"{actual[:12]}."
+        )
+    return True
 
 # The runtimes yt-dlp accepts that this app knows how to probe and select.
 # yt-dlp also lists `bun`; it is absent here because nothing provisions it and
@@ -991,6 +1069,7 @@ _OWNED_EXPORTS = {
     "probe_javascript_execution", "evaluate_javascript_runtime",
     "REQUIRED_FFMPEG_FILTERS", "YTDLP_STALE_AFTER_DAYS",
     "missing_ffmpeg_filters", "evaluate_preflight_checks",
+    "DownloadedExecutableIntegrityError", "verify_adjacent_release_sidecar",
 }
 _resolve_legacy = make_legacy_resolver(
     name for name in __all__ if name not in _OWNED_EXPORTS

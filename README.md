@@ -148,6 +148,12 @@ info → Run anyway**. That is permanent policy, not an oversight: verify the
 download against the SHA-256 published beside it instead of relying on a
 signature.
 
+When `AstraDownloader.exe.sha256` is beside a downloaded one-file executable,
+first launch checks the pair before the managed install begins. A present but
+malformed or mismatched sidecar stops setup. This detects a mismatched release
+pair; it is not code signing and cannot make a substituted executable
+trustworthy. Check the hash before running the file.
+
 ```powershell
 Get-FileHash .\AstraDownloader.exe -Algorithm SHA256
 ```
@@ -210,7 +216,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1034 tests; scratch state stays under build/pytest
+py -3.13 -m pytest          # 1037 tests; scratch state stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp

@@ -163,6 +163,7 @@ try:
         build_javascript_runtime_args, build_youtube_extractor_args,
         evaluate_javascript_runtime as _owned_evaluate_javascript_runtime,
         is_youtube_url,
+        DownloadedExecutableIntegrityError, verify_adjacent_release_sidecar,
         MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
         managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
@@ -305,6 +306,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_javascript_runtime_args, build_youtube_extractor_args,
         evaluate_javascript_runtime as _owned_evaluate_javascript_runtime,
         is_youtube_url,
+        DownloadedExecutableIntegrityError, verify_adjacent_release_sidecar,
         MANAGED_BINARY_ANTIVIRUS_ADVICE, MANAGED_BINARY_MIN_BYTES,
         managed_binary_state, managed_binary_usable,
         javascript_runtime_supported as _owned_javascript_runtime_supported,
@@ -5984,6 +5986,9 @@ def main():
                 output.flush()
             return
         raise SystemExit(probe_exit)
+
+    if is_frozen_app():
+        verify_adjacent_release_sidecar(current_executable_path())
 
     install_exit = companion_install_exit_code(sys.argv[1:])
     if install_exit is not None:
