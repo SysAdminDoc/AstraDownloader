@@ -99,6 +99,7 @@ def system_reduced_motion_enabled():
         )
         return bool(success) and not animations_enabled.value
     except Exception:
+        # reason: an unavailable SystemParametersInfoW means no reduced-motion preference to honour
         return False
 
 
@@ -1511,6 +1512,7 @@ class MainWindowCore(
         try:
             property_text = widget.property("settingsSearchText")
         except Exception:
+            # reason: a widget with no search property contributes nothing to the settings filter
             property_text = ""
         if property_text:
             parts.append(str(property_text))
@@ -1524,6 +1526,7 @@ class MainWindowCore(
             try:
                 value = method()
             except Exception:
+                # reason: a widget accessor that raises contributes no text to the settings filter
                 value = ""
             if value:
                 parts.append(str(value))
@@ -1531,6 +1534,7 @@ class MainWindowCore(
             try:
                 value = widget.text()
             except Exception:
+                # reason: a widget with no text contributes nothing to the settings filter
                 value = ""
             if value:
                 parts.append(str(value))
@@ -1539,6 +1543,7 @@ class MainWindowCore(
                 try:
                     parts.append(widget.itemText(index))
                 except Exception:
+                    # reason: a combo box that will not yield an item label contributes nothing to the settings filter
                     continue
         # Never put a private token or an arbitrary path value into the search
         # index. Labels, accessible names and placeholders already identify
@@ -2093,6 +2098,7 @@ class MainWindowCore(
         try:
             sabr = self._dependencies['evaluate_sabr_support'](yt_dlp or "")
         except Exception:
+            # reason: an unevaluable version is treated as limited SABR support, which is the cautious answer
             sabr = "limited"
         if sabr == "supported":
             self._set_readiness("sabr", "Supported", "success")
@@ -3381,6 +3387,7 @@ class MainWindowCore(
                 str(value) for value in (payload.get("scanning", []) or [])
             } if isinstance(payload, dict) else set()
         except Exception:
+            # reason: the marker is refreshed on the next snapshot; a failed read must not stop the timer
             return
         if sub_id not in scanning:
             self._subscription_scan_pending.discard(sub_id)
@@ -3412,6 +3419,7 @@ class MainWindowCore(
                     None,
                 )
             except Exception:
+                # reason: the record is only used to name the undo entry; the removal itself already reported
                 record = None
         self._subscription_scan_pending.discard(str(sub_id))
         self._subscription_scan_seen.discard(str(sub_id))
@@ -3706,6 +3714,7 @@ class MainWindowCore(
                     self._value('WHISPER_BIN_MIN_BYTES'),
                 ).get('usable')
             except Exception:
+                # reason: an unprobeable Whisper runtime is treated as missing, which is the cautious answer
                 runtime_missing = True
         if not tools_ready or ((model_missing or runtime_missing) and not self._model_setup_attempted):
             self._append_log("Required download tools are missing or unusable. Starting setup...")
@@ -4552,6 +4561,7 @@ class MainWindowCore(
             except Exception:
                 # A broken subscription state must not turn an otherwise
                 # readable download history into an empty error page.
+                # reason: a broken subscription state must not turn a readable download history into an empty error page
                 archive_entries = None
         return self._dependencies['query_history_entries'](
             self.history_mgr.load() if entries is None else entries,
@@ -4594,6 +4604,7 @@ class MainWindowCore(
         try:
             entries = read() or []
         except Exception:
+            # reason: an unreadable history is not evidence of quarantine
             return False
         for entry in entries:
             try:

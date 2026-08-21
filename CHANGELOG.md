@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The catch-reason gate now covers handlers that swallow without `pass`.**
+  It only examined handlers whose body was nothing but `pass`, so every
+  `except Exception: return None` went unread. It now examines any broad
+  handler that neither logs, re-raises, nor carries the error into what the
+  caller gets back, and 34 more of them say in one line why discarding the
+  failure is the right answer there.
+
 ### Changed
 
 - **Every button has its own icon now.** Fifteen of them shared one

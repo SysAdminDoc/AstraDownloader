@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-13 — Widen the catch-reason gate beyond pass-only handlers
-  Why: `check-python-catch-reasons.js:42` requires `all(isinstance(statement, ast.Pass) …)`, so any handler that swallows via `return None` / `return ''` / `continue` is never examined. 65 broad handlers currently swallow with no log, no re-raise and no reason (`download.py` 26, `gui.py` 20, `astra_downloader.py` 10, `health.py` 4, `routes.py` 3, `subscriptions.py` 2). CLAUDE.md documents a shipped bug from exactly this class.
-  Evidence: `scripts/check-python-catch-reasons.js:38-50`; `CLAUDE.md` §2026-08-06 "A bare `except` around a probe hid a name error".
-  Touches: `scripts/check-python-catch-reasons.js`, `tests/python-catch-reason-gate.test.js`, and the annotated handlers
-  Acceptance: the gate covers any handler whose body neither logs nor re-raises; the 65 sites are annotated or narrowed; `check:catch-reasons` exits 0.
-  Complexity: M
-
 - [ ] P1 — AD-18 — Put the queue above the fold on the Download page
   Why: `downloads-active-pending.png` is a scenario *with* active and pending downloads and shows none of them at 1120×760. The page stacks first-run panel → paste box → password → four option rows → four hint lines → setup status → readiness grid → pre-flight panel → notices → divider → toolbar → queue. The design invariant is "downloader first"; the download you just started is last, and the pre-flight panel is fully expanded even when every check passes.
   Evidence: `astra_downloader/gui_download_page.py:114-445`; `build/companion-ui-smoke/downloads-active-pending.png`, `downloads-queue-full.png`.

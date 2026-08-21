@@ -671,6 +671,7 @@ def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
     try:
         output = runner([str(path), '--version'], timeout=timeout)
     except Exception:
+        # reason: the returned probe already reports runtime-probe-failed, which is what the readiness row renders
         return {
             'runtime': runtime, 'version': None, 'path': path, 'source': source,
             'supported': False, 'ejsReady': False, 'minVersion': minimum,
@@ -710,6 +711,7 @@ def evaluate_javascript_runtime(runtime, path, source, *, runner, marker,
             runtime, path, runner=runner, marker=marker, timeout=timeout
         )
     except Exception:
+        # reason: an unusable challenge solver is a negative readiness answer; the runtime row above names what to repair
         ejs_ready = False
     return {
         'runtime': runtime, 'version': version, 'path': path, 'source': source,
@@ -732,6 +734,7 @@ def _run_captured(args, timeout=5, *, runner=None, creationflags=0):
         )
         return (result.stdout or '') + (result.stderr or '')
     except Exception:
+        # reason: a version probe that cannot run has no output, and every caller already treats empty text as unknown
         return ''
 
 
@@ -831,6 +834,7 @@ class ExecutableVersionProbe:
             except Exception:
                 # Health is advisory. A timeout, AV block, or parser failure
                 # is a negative result and must still receive the TTL.
+                # reason: health is advisory, so a timeout, AV block or parser failure is a negative result that still takes the TTL
                 value = None
         finally:
             with self._condition:

@@ -11783,6 +11783,7 @@ class GuiSmokeTests(unittest.TestCase):
             try:
                 ad._folder_pick_q.get_nowait()
             except Exception:  # queue.Empty or anything weird
+                # reason: draining a leftover queue; an empty queue is the exit condition
                 break
 
     def test_qapplication_constructs(self):

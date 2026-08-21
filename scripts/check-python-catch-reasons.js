@@ -27,7 +27,73 @@ if not root.is_dir():
     raise SystemExit(2)
 
 reason_pattern = re.compile(r"#\s*reason\s*:\s*\S+", re.IGNORECASE)
+
+# The gate used to look only at handlers whose body was nothing but \`pass\`,
+# which let every \`return None\` / \`return ''\` / \`continue\` swallow through
+# unexamined. What matters is not the shape of the body but whether anything
+# outside the handler can tell the failure happened.
+LOG_NAMES = {
+    "log", "_log", "logger", "_logger", "logging",
+    "debug", "info", "warning", "warn", "error", "exception", "critical",
+    "print", "write_persistent_log", "append_log", "_append_log",
+    "log_message", "_log_message", "emit",
+}
+BROAD_NAMES = {"Exception", "BaseException"}
+
+
+def is_broad(handler):
+    """A bare except, or one that names Exception/BaseException."""
+    node = handler.type
+    if node is None:
+        return True
+    items = [node] if not isinstance(node, ast.Tuple) else list(node.elts)
+    for item in items:
+        if (getattr(item, "attr", None) or getattr(item, "id", None)) in BROAD_NAMES:
+            return True
+    return False
+
+
+def reports_the_failure(handler):
+    """True when something outside the handler can still see it happened.
+
+    Three ways count: re-raising, calling something from the logging
+    vocabulary, or binding the exception and using it - a handler that turns
+    the error into a message it returns has reported it, just not to a log.
+    """
+    if handler.name:
+        for inner in ast.walk(handler):
+            if isinstance(inner, ast.Name) and inner.id == handler.name:
+                return True
+    for inner in ast.walk(handler):
+        if isinstance(inner, ast.Raise):
+            return True
+        if isinstance(inner, ast.Call):
+            func = inner.func
+            name = getattr(func, "attr", None) or getattr(func, "id", None)
+            if name and name.lower() in LOG_NAMES:
+                return True
+    return False
+
+
+def is_pass_only(handler):
+    return all(isinstance(statement, ast.Pass) for statement in handler.body)
+
+
+def silent_handlers(tree):
+    for handler in ast.walk(tree):
+        if not isinstance(handler, ast.ExceptHandler) or not handler.body:
+            continue
+        # Pass-only handlers stay in scope whatever they catch - that was the
+        # original rule and a narrow one still discards the failure entirely.
+        if not (is_broad(handler) or is_pass_only(handler)):
+            continue
+        if reports_the_failure(handler):
+            continue
+        yield handler
+
+
 violations = []
+count = 0
 for path in sorted(root.rglob("*.py")):
     source = path.read_text(encoding="utf-8")
     try:
@@ -36,31 +102,23 @@ for path in sorted(root.rglob("*.py")):
         print(f"[check-python-catch-reasons] syntax error in {path}: {error}", file=sys.stderr)
         raise SystemExit(2)
     lines = source.splitlines()
-    for handler in ast.walk(tree):
-        if not isinstance(handler, ast.ExceptHandler):
-            continue
-        if not handler.body or not all(isinstance(statement, ast.Pass) for statement in handler.body):
-            continue
+    for handler in silent_handlers(tree):
+        count += 1
         end_line = handler.end_lineno or handler.lineno
         snippet = "\n".join(lines[handler.lineno - 1:end_line])
         if not reason_pattern.search(snippet):
             violations.append(f"{path.relative_to(root.parent).as_posix()}:{handler.lineno}")
 
 if violations:
-    print("[check-python-catch-reasons] Missing '# reason:' on pass-only exception handlers:")
+    print(
+        "[check-python-catch-reasons] Missing '# reason:' on broad exception "
+        "handlers that neither log nor re-raise:"
+    )
     for violation in violations:
         print(f"  - {violation}")
     raise SystemExit(1)
 
-count = sum(
-    1
-    for path in root.rglob("*.py")
-    for handler in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
-    if isinstance(handler, ast.ExceptHandler)
-    and handler.body
-    and all(isinstance(statement, ast.Pass) for statement in handler.body)
-)
-print(f"[check-python-catch-reasons] OK — {count} pass-only exception handler(s) carry a reason")
+print(f"[check-python-catch-reasons] OK - {count} silent exception handler(s) carry a reason")
 `;
 
 const candidates = process.platform === 'win32'
