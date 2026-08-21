@@ -40,14 +40,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: with the sidecar running, a video that previously failed `po-token-required` succeeds; with it absent, behaviour and the named cause are unchanged; no yt-dlp plugin directory is enabled. *Needs live validation that a self-minted token is accepted on the pinned 2026.7.4.*
   Complexity: L
 
-- [ ] P2 — AD-31 — Make the rate-limit and cookie-ban tradeoff visible
-  Why: yt-dlp's wiki publishes the ceilings (~300 videos/hour guest, ~2000 signed-in, 5–10 s delays advised) and states plainly that using your account "runs the risk of it being banned". Parabolic's users file bugs against its hardcoded 14–30 s sleep because it is unexplained; pinchflat has an issue titled DO NOT USE YOUTUBE COOKIES. The whole field hides this dial and then fields the reports.
-  Evidence: yt-dlp Extractors wiki; Parabolic#1832; pinchflat#291; RESEARCH.md "Market signal" items 4–5.
-  Touches: `astra_downloader/gui_settings_page.py`, `gui_site_logins_page.py`, `download.py`, README
-  Acceptance: the pacing settings display the published ceilings alongside the current configuration and what it implies per hour; storing a YouTube sign-in shows the ban-risk warning once, sourced and linked.
-  Note (2026-08-21): yt-dlp#17389 (opened 2026-08-07) adds a second cookie failure mode — some jars make public videos UNPLAYABLE on `tv_downgraded`. Classification and a cookie-less retry shipped in this audit; this item is the Settings copy that names both the ban risk and that failure mode.
-  Complexity: S
-
 - [ ] P2 — AD-32 — Extend the health-check set with the checks Radarr proves matter
   Why: the pre-flight panel checks download preconditions; Radarr's 33 named checks cover the *environment*, and three map onto known bug classes here — state living where the updater will wipe it (`AppDataLocationCheck`, the portable-mode class), a site failing for an extended period rather than one download failing (`IndexerLongTermStatusCheck`, the right shape for bot-gating), and clock skew breaking TLS and cookie expiry (`SystemTimeCheck`). Output folder missing/unwritable/on a disconnected drive is the same family.
   Evidence: https://github.com/Radarr/Radarr/tree/develop/src/NzbDrone.Core/HealthCheck/Checks; `astra_downloader/health.py`; existing per-domain refusal circuits in `download.py`.

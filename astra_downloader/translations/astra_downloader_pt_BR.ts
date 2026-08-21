@@ -1339,8 +1339,8 @@
       <translation>No stored sign-ins</translation>
     </message>
     <message>
-      <source>Add one above for any site that only serves video to signed-in viewers. YouTube downloads use the browser extension instead and need nothing here.</source>
-      <translation>Add one above for any site that only serves video to signed-in viewers. YouTube downloads use the browser extension instead and need nothing here.</translation>
+      <source>Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.</source>
+      <translation>Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.</translation>
     </message>
     <message>
       <source>No sign-ins match these filters</source>
@@ -2243,6 +2243,14 @@
       <translation>Site sign-in status</translation>
     </message>
     <message>
+      <source>YouTube sign-ins are risky. yt-dlp warns that account use can cause temporary or permanent bans, and some signed-in sessions can make public videos unplayable. Use cookies only for account-required videos, keep a 5 to 10 second pause, and retry public videos signed out. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies"&gt;Read yt-dlp's YouTube guidance.&lt;/a&gt;</source>
+      <translation>YouTube sign-ins are risky. yt-dlp warns that account use can cause temporary or permanent bans, and some signed-in sessions can make public videos unplayable. Use cookies only for account-required videos, keep a 5 to 10 second pause, and retry public videos signed out. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies"&gt;Read yt-dlp's YouTube guidance.&lt;/a&gt;</translation>
+    </message>
+    <message>
+      <source>YouTube sign-in risk warning</source>
+      <translation>YouTube sign-in risk warning</translation>
+    </message>
+    <message>
       <source>Search stored sign-ins</source>
       <translation>Search stored sign-ins</translation>
     </message>
@@ -2443,6 +2451,10 @@
       <translation>Recent local companion events. Use Clear to remove visible entries.</translation>
     </message>
     <message>
+      <source>. yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Source&lt;/a&gt;.</source>
+      <translation>. yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Source&lt;/a&gt;.</translation>
+    </message>
+    <message>
       <source>No settings match this search.</source>
       <translation>No settings match this search.</translation>
     </message>
@@ -2577,6 +2589,14 @@
     <message>
       <source>Undo defaults</source>
       <translation>Undo defaults</translation>
+    </message>
+    <message>
+      <source>Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling</source>
+      <translation>Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling</translation>
+    </message>
+    <message>
+      <source>, plus {seconds} seconds between requests</source>
+      <translation>, plus {seconds} seconds between requests</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -2999,6 +3019,10 @@
       <translation>Pause between requests in seconds</translation>
     </message>
     <message>
+      <source>YouTube pacing guidance</source>
+      <translation>YouTube pacing guidance</translation>
+    </message>
+    <message>
       <source>Max file size</source>
       <translation>Max file size</translation>
     </message>
@@ -3193,6 +3217,14 @@
     <message>
       <source>Restore the settings from before Restore defaults was used.</source>
       <translation>Restore the settings from before Restore defaults was used.</translation>
+    </message>
+    <message>
+      <source>Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone</source>
+      <translation>Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone</translation>
+    </message>
+    <message>
+      <source>Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone</source>
+      <translation>Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone</translation>
     </message>
     <message>
       <source>Creator, else auto-generated</source>

@@ -5094,6 +5094,35 @@ class DownloadCardFocusTests(unittest.TestCase):
 
 
 class SiteLoginImportBoundTests(unittest.TestCase):
+    def test_first_youtube_sign_in_shows_and_persists_the_linked_warning(self):
+        _get_qapp_or_skip(self)
+        config = FakeConfig({"YouTubeSignInRiskNoticeShown": False})
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            self.assertTrue(window.youtube_sign_in_warning.isHidden())
+            self.assertTrue(window._apply_site_login_result({
+                "site": "youtube.com",
+                "cookies": 3,
+                "skipped": 0,
+            }, None))
+            self.assertFalse(window.youtube_sign_in_warning.isHidden())
+            self.assertTrue(window.youtube_sign_in_warning.openExternalLinks())
+            self.assertIn("yt-dlp/wiki/Extractors", window.youtube_sign_in_warning.text())
+            self.assertIn("public videos unplayable", window.youtube_sign_in_warning.text())
+            self.assertTrue(config.get("YouTubeSignInRiskNoticeShown"))
+
+            window.youtube_sign_in_warning.hide()
+            self.assertFalse(
+                window._show_youtube_sign_in_warning_once("youtube.com")
+            )
+            self.assertTrue(window.youtube_sign_in_warning.isHidden())
+        finally:
+            _retire_test_window(window)
+
     def test_cookie_file_import_reads_bounded_text_and_applies_store_result(self):
         class TextField:
             def __init__(self, value):
@@ -18599,6 +18628,25 @@ class SettingsNavigationTests(unittest.TestCase):
         )
         self.addCleanup(_retire_test_window, window)
         return window
+
+    def test_pacing_guidance_tracks_the_current_hourly_implication(self):
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        window.cfg_sleep_interval.setValue(5)
+        window.cfg_sleep_max.setValue(10)
+        window.cfg_pacing_jitter.setValue(0)
+        window.cfg_sleep_requests.setValue(2)
+        QApplication.processEvents()
+
+        guidance = window.pacing_guidance.text()
+        self.assertIn("5 to 10 seconds", guidance)
+        self.assertIn("480 per hour", guidance)
+        self.assertIn("2 seconds between requests", guidance)
+        self.assertIn("300 videos/hour signed out", guidance)
+        self.assertIn("2,000/hour signed in", guidance)
+        self.assertTrue(window.pacing_guidance.openExternalLinks())
 
     def test_filter_narrows_rows_without_losing_their_group(self):
         from PySide6.QtWidgets import QApplication

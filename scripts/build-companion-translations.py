@@ -566,6 +566,18 @@ CATALOGS = {
             "Pause zwischen Anfragen",
         "Seconds between the data requests inside one download.":
             "Sekunden zwischen den Datenanfragen innerhalb eines Downloads.",
+        "Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling":
+            "Die aktuelle Taktung enthält keine Pause zwischen Downloads. Diese Einstellung setzt daher keine stündliche Obergrenze.",
+        "Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone":
+            "Aktuelle Taktung: {minimum} Sekunden zwischen Downloads, allein durch diese Pause etwa {per_hour} pro Stunde",
+        "Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone":
+            "Aktuelle Taktung: {minimum} bis {maximum} Sekunden zwischen Downloads, allein durch diese Pause etwa {per_hour} pro Stunde",
+        ", plus {seconds} seconds between requests":
+            ", plus {seconds} Sekunden zwischen Anfragen",
+        ". yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors\">Source</a>.":
+            ". yt-dlp nennt etwa 300 Videos pro Stunde ohne Anmeldung und 2.000 pro Stunde mit Anmeldung. Empfohlen werden 5 bis 10 Sekunden zwischen Downloads. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors\">Quelle</a>.",
+        "YouTube pacing guidance":
+            "Hinweis zur YouTube-Taktung",
         "Max file size":
             "Maximale Dateigröße",
         "Skip anything larger. 0 means no limit.":
@@ -736,8 +748,12 @@ CATALOGS = {
             "Anzeigen",
         "No stored sign-ins":
             "Keine gespeicherten Anmeldungen",
-        "Add one above for any site that only serves video to signed-in viewers. YouTube downloads use the browser extension instead and need nothing here.":
-            "Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. YouTube-Downloads verwenden stattdessen die Browsererweiterung und benötigen hier nichts.",
+        "Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.":
+            "Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. Verwenden Sie YouTube-Anmeldungen nur für Videos, die ein Konto erfordern.",
+        "YouTube sign-ins are risky. yt-dlp warns that account use can cause temporary or permanent bans, and some signed-in sessions can make public videos unplayable. Use cookies only for account-required videos, keep a 5 to 10 second pause, and retry public videos signed out. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies\">Read yt-dlp's YouTube guidance.</a>":
+            "YouTube-Anmeldungen sind riskant. yt-dlp warnt, dass die Kontonutzung zu vorübergehenden oder dauerhaften Sperren führen kann. Bei einigen angemeldeten Sitzungen lassen sich öffentliche Videos nicht abspielen. Verwenden Sie Cookies nur für Videos, die ein Konto erfordern, halten Sie 5 bis 10 Sekunden Pause ein und versuchen Sie öffentliche Videos ohne Anmeldung erneut. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies\">YouTube-Hinweise von yt-dlp lesen.</a>",
+        "YouTube sign-in risk warning":
+            "Risikowarnung für YouTube-Anmeldung",
         "Missing on disk. Import it again.":
             "Auf dem Datenträger nicht gefunden. Importieren Sie die Anmeldung erneut.",
         "cookies for other sites were discarded.":

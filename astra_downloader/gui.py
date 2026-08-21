@@ -2942,8 +2942,8 @@ class MainWindowCore(
             self.site_login_container.addWidget(make_empty_state(
                 tr("No stored sign-ins"),
                 tr("Add one above for any site that only serves video to "
-                   "signed-in viewers. YouTube downloads use the browser "
-                   "extension instead and need nothing here."),
+                   "signed-in viewers. Reserve YouTube sign-ins for videos "
+                   "that require an account."),
                 "Add a site sign-in",
                 self._focus_site_login_url,
             ))
@@ -3050,6 +3050,24 @@ class MainWindowCore(
         set_status_tone(self.site_login_status, state)
         repolish(self.site_login_status)
 
+    def _show_youtube_sign_in_warning_once(self, site):
+        if str(site or "").lower() not in {
+            "youtube.com", "youtube-nocookie.com", "youtu.be",
+        }:
+            return False
+        if self.config.get("YouTubeSignInRiskNoticeShown", False):
+            return False
+        warning = getattr(self, "youtube_sign_in_warning", None)
+        if warning is None:
+            return False
+        warning.show()
+        repolish(warning)
+        if not self.config.update({"YouTubeSignInRiskNoticeShown": True}):
+            self._append_log(
+                "Could not save the one-time YouTube sign-in warning state."
+            )
+        return True
+
     def _apply_site_login_result(self, result, error):
         if error:
             self._show_site_login_status(error, "error")
@@ -3071,6 +3089,7 @@ class MainWindowCore(
                 discarded=tr("cookies for other sites were discarded."),
             )
         self._show_site_login_status(message, "success")
+        self._show_youtube_sign_in_warning_once(site)
         self._append_log(f"Stored a site sign-in for {site} ({count} cookies).")
         self._discard_site_login_undo()
         self._site_login_test_states.pop(site, None)
@@ -3104,6 +3123,7 @@ class MainWindowCore(
             ),
             "success",
         )
+        self._show_youtube_sign_in_warning_once(site)
         self._append_log(f"Stored a username/password sign-in for {site}.")
         self._discard_site_login_undo()
         self._site_login_test_states.pop(site, None)

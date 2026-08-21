@@ -25,6 +25,48 @@ except ImportError:  # Flat source-path compatibility.
 
 
 class SettingsPageMixin:
+    def _update_pacing_guidance(self, *_args):
+        minimum = self.cfg_sleep_interval.value()
+        configured_max = self.cfg_sleep_max.value()
+        jitter = self.cfg_pacing_jitter.value()
+        request_pause = self.cfg_sleep_requests.value()
+        if minimum <= 0:
+            current = tr(
+                "Current pacing has no pause between downloads, so this setting "
+                "does not impose an hourly ceiling"
+            )
+        else:
+            jitter_max = (minimum * (100 + jitter) + 99) // 100
+            effective_max = max(minimum, configured_max, jitter_max)
+            per_hour = max(1, 7200 // (minimum + effective_max))
+            if effective_max == minimum:
+                current = tr_format(
+                    "Current pacing: {minimum} seconds between downloads, about "
+                    "{per_hour} per hour from this pause alone",
+                    minimum=minimum,
+                    per_hour=per_hour,
+                )
+            else:
+                current = tr_format(
+                    "Current pacing: {minimum} to {maximum} seconds between "
+                    "downloads, about {per_hour} per hour from this pause alone",
+                    minimum=minimum,
+                    maximum=effective_max,
+                    per_hour=per_hour,
+                )
+        if request_pause > 0:
+            current += tr_format(
+                ", plus {seconds} seconds between requests",
+                seconds=request_pause,
+            )
+        guidance = tr(
+            ". yt-dlp reports about 300 videos/hour signed out and 2,000/hour "
+            "signed in, and recommends 5 to 10 seconds between downloads. "
+            "<a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors"
+            "#common-youtube-errors\">Source</a>."
+        )
+        self.pacing_guidance.setText(current + guidance)
+
     def _build_settings(self):
         self._settings_group_specs = []
         root = QWidget()
@@ -881,6 +923,22 @@ class SettingsPageMixin:
         self.cfg_sleep_requests.setFixedWidth(86)
         pace_req_row.addWidget(self.cfg_sleep_requests)
         perf_l.addLayout(pace_req_row)
+        self.pacing_guidance = QLabel()
+        self.pacing_guidance.setTextFormat(Qt.TextFormat.RichText)
+        self.pacing_guidance.setOpenExternalLinks(True)
+        self.pacing_guidance.setWordWrap(True)
+        self.pacing_guidance.setProperty("class", "settingsStatus")
+        self.pacing_guidance.setProperty("tone", "neutral")
+        self.pacing_guidance.setAccessibleName(tr("YouTube pacing guidance"))
+        perf_l.addWidget(self.pacing_guidance)
+        for control in (
+            self.cfg_sleep_interval,
+            self.cfg_sleep_max,
+            self.cfg_pacing_jitter,
+            self.cfg_sleep_requests,
+        ):
+            control.valueChanged.connect(self._update_pacing_guidance)
+        self._update_pacing_guidance()
         perf_l.addWidget(make_divider())
         # MaxFileSizeMB blocks downloads outright — a run that trips it exits
         # cleanly having written nothing and reports `skipped`, whose message

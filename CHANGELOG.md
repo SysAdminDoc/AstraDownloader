@@ -12,6 +12,13 @@ repository's git log.
 
 ## [Unreleased]
 
+### Added
+
+- **YouTube pacing now explains the tradeoff.** Settings turns the configured
+  pause into an approximate hourly rate beside yt-dlp's published figures.
+  The first stored YouTube sign-in also shows a linked warning about account
+  bans and signed-in sessions that can make public videos unplayable.
+
 ## [2.10.0] - 2026-08-21
 ### Changed
 

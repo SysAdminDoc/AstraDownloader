@@ -1339,8 +1339,8 @@
       <translation>Keine gespeicherten Anmeldungen</translation>
     </message>
     <message>
-      <source>Add one above for any site that only serves video to signed-in viewers. YouTube downloads use the browser extension instead and need nothing here.</source>
-      <translation>Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. YouTube-Downloads verwenden stattdessen die Browsererweiterung und benötigen hier nichts.</translation>
+      <source>Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.</source>
+      <translation>Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. Verwenden Sie YouTube-Anmeldungen nur für Videos, die ein Konto erfordern.</translation>
     </message>
     <message>
       <source>No sign-ins match these filters</source>
@@ -2243,6 +2243,14 @@
       <translation>Status der Website-Anmeldung</translation>
     </message>
     <message>
+      <source>YouTube sign-ins are risky. yt-dlp warns that account use can cause temporary or permanent bans, and some signed-in sessions can make public videos unplayable. Use cookies only for account-required videos, keep a 5 to 10 second pause, and retry public videos signed out. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies"&gt;Read yt-dlp's YouTube guidance.&lt;/a&gt;</source>
+      <translation>YouTube-Anmeldungen sind riskant. yt-dlp warnt, dass die Kontonutzung zu vorübergehenden oder dauerhaften Sperren führen kann. Bei einigen angemeldeten Sitzungen lassen sich öffentliche Videos nicht abspielen. Verwenden Sie Cookies nur für Videos, die ein Konto erfordern, halten Sie 5 bis 10 Sekunden Pause ein und versuchen Sie öffentliche Videos ohne Anmeldung erneut. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies"&gt;YouTube-Hinweise von yt-dlp lesen.&lt;/a&gt;</translation>
+    </message>
+    <message>
+      <source>YouTube sign-in risk warning</source>
+      <translation>Risikowarnung für YouTube-Anmeldung</translation>
+    </message>
+    <message>
       <source>Search stored sign-ins</source>
       <translation>Gespeicherte Anmeldungen durchsuchen</translation>
     </message>
@@ -2443,6 +2451,10 @@
       <translation>Aktuelle lokale Companion-Ereignisse. Mit „Leeren“ sichtbare Einträge entfernen.</translation>
     </message>
     <message>
+      <source>. yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Source&lt;/a&gt;.</source>
+      <translation>. yt-dlp nennt etwa 300 Videos pro Stunde ohne Anmeldung und 2.000 pro Stunde mit Anmeldung. Empfohlen werden 5 bis 10 Sekunden zwischen Downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Quelle&lt;/a&gt;.</translation>
+    </message>
+    <message>
       <source>No settings match this search.</source>
       <translation>Keine Einstellungen entsprechen dieser Suche.</translation>
     </message>
@@ -2577,6 +2589,14 @@
     <message>
       <source>Undo defaults</source>
       <translation>Standards rückgängig</translation>
+    </message>
+    <message>
+      <source>Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling</source>
+      <translation>Die aktuelle Taktung enthält keine Pause zwischen Downloads. Diese Einstellung setzt daher keine stündliche Obergrenze.</translation>
+    </message>
+    <message>
+      <source>, plus {seconds} seconds between requests</source>
+      <translation>, plus {seconds} Sekunden zwischen Anfragen</translation>
     </message>
     <message>
       <source>Settings</source>
@@ -2999,6 +3019,10 @@
       <translation>Pause zwischen Anfragen in Sekunden</translation>
     </message>
     <message>
+      <source>YouTube pacing guidance</source>
+      <translation>Hinweis zur YouTube-Taktung</translation>
+    </message>
+    <message>
       <source>Max file size</source>
       <translation>Maximale Dateigröße</translation>
     </message>
@@ -3193,6 +3217,14 @@
     <message>
       <source>Restore the settings from before Restore defaults was used.</source>
       <translation>Die Einstellungen vor dem Zurücksetzen auf Standards wiederherstellen.</translation>
+    </message>
+    <message>
+      <source>Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone</source>
+      <translation>Aktuelle Taktung: {minimum} Sekunden zwischen Downloads, allein durch diese Pause etwa {per_hour} pro Stunde</translation>
+    </message>
+    <message>
+      <source>Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone</source>
+      <translation>Aktuelle Taktung: {minimum} bis {maximum} Sekunden zwischen Downloads, allein durch diese Pause etwa {per_hour} pro Stunde</translation>
     </message>
     <message>
       <source>Creator, else auto-generated</source>

@@ -61,11 +61,13 @@ CAPTURE_NAMES = (
     "subscriptions-disabled",
     "site-logins-empty",
     "site-logins-stored",
+    "site-logins-youtube-warning",
     "site-logins-light-theme",
     "site-logins-error",
     "site-logins-filter-empty",
     "settings-dirty",
     "settings-light-theme",
+    "settings-pacing-guidance",
     "settings-subtitles",
     "settings-bundle-imported",
     "settings-fallback-port",
@@ -1077,7 +1079,18 @@ def main():
                     "Browser profile field is clipped in the standard viewport"
                 )
             store = window.dl_manager.site_logins
-            if scenario == "site-logins-error":
+            if scenario == "site-logins-youtube-warning":
+                window.config.update({"YouTubeSignInRiskNoticeShown": False})
+                if not window._show_youtube_sign_in_warning_once("youtube.com"):
+                    raise RuntimeError("YouTube sign-in warning fixture did not open")
+                app.processEvents()
+                warning = window.youtube_sign_in_warning
+                if not warning.isVisible() or not warning.openExternalLinks():
+                    raise RuntimeError("YouTube sign-in warning is not visibly linked")
+                if "temporary or permanent bans" not in warning.text():
+                    raise RuntimeError("YouTube sign-in warning lost the published risk")
+                scroll_current_page_to_top(window)
+            elif scenario == "site-logins-error":
                 def failing_entries():
                     raise RuntimeError("fixture sign-in store failure")
 
@@ -1126,6 +1139,15 @@ def main():
                 expected = "Unsaved changes"
             elif scenario == "settings-light-theme":
                 expected = "Settings"
+            elif scenario == "settings-pacing-guidance":
+                window.cfg_sleep_interval.setValue(5)
+                window.cfg_sleep_max.setValue(10)
+                window.cfg_pacing_jitter.setValue(0)
+                window.cfg_sleep_requests.setValue(2)
+                app.processEvents()
+                expected = window.pacing_guidance.text()
+                if "480 per hour" not in expected:
+                    raise RuntimeError("Pacing fixture lost its live hourly estimate")
             elif scenario == "settings-bundle-imported":
                 # Drive the real round trip: export the live settings, change
                 # them, import the bundle back, and check the FORM shows the
@@ -1283,6 +1305,14 @@ def main():
                           else current.findChild(QScrollArea))
                 if scroll is not None:
                     scroll.ensureWidgetVisible(window.cfg_proxy, 0, 160)
+                    app.processEvents()
+                    QTest.qWait(40)
+            elif scenario == "settings-pacing-guidance":
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(window.pacing_guidance, 0, 160)
                     app.processEvents()
                     QTest.qWait(40)
             elif scenario == "settings-invalid-site-profiles":
