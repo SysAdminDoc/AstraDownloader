@@ -53,3 +53,42 @@ their behalf.
 `microsoft/winget-pkgs` with `packaging/winget/manifests`, or decides the
 project is distributed through GitHub Releases only and the manifest directory
 is retired.
+
+## AD-53 — Set `SABR_NATIVE_MIN_VERSION` — waits on an upstream merge
+
+**State:** the wiring is already there. `evaluate_sabr_support` returns
+`"limited"` while the sentinel is not a real version, the Download-page SABR
+pill reads it, and a test pins both sides.
+
+**What is blocked:** yt-dlp PR #13515 (native SABR) is still open — updated
+2026-08-19 and not in 2026.08.19, which is the pinned release. The item itself
+says "do not invent a version while the PR is open", and the whole value of
+the constant is that it names the first stable release that actually contains
+the change.
+
+**To unblock:** when a yt-dlp stable ships #13515, set
+`SABR_NATIVE_MIN_VERSION` to that version. Nothing else changes; the pill
+flips on its own.
+
+## AD-56 — Areas this audit did not exercise — five separate external needs
+
+**State:** a self-audit note rather than one task. The five areas and what
+each actually needs:
+
+1. **The signed-release chain.** There is no code-signing certificate on this
+   machine and the release ships unsigned by design, with a SHA-256 sidecar
+   instead. Exercising a signed chain needs a certificate the maintainer would
+   have to buy and hold.
+2. **The whisper transcription live path.** Needs a real audio file and the
+   whisper.cpp model downloaded — a live run, not a fixture.
+3. **winget publish.** Submitting to `microsoft/winget-pkgs` is a publication
+   decision the maintainer has not taken; see the winget entry above.
+4. **Native-host stdio against a real Chrome profile.** Needs a browser
+   session with the extension loaded; the loopback pairing route is covered by
+   tests but the stdio channel to a live Chrome is not.
+5. **The Astra Deck userscript `/health` token echo.** Lives in the Astra-Deck
+   repository and is deliberately off.
+
+**To unblock:** each area separately. This is not one item and should not be
+picked up as one — when an area gets a live check or a named test, strike it
+from this list rather than closing the whole entry.

@@ -76,13 +76,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: German and Arabic captures exist for History, Settings, Sign-ins and Subscriptions; no translated label is clipped or elided in any of them; fixed widths become minimums where a translation needs more.
   Complexity: M
 
-- [ ] P2 — AD-37 — Ship a Scoop Extras manifest
-  Why: Scoop imposes no signing requirement and no review judgement, and the existing onedir zip plus `.sha256` is most of a valid manifest — so it is the shortest path to an install channel that never touches the browser download path or Mark-of-the-Web. Scoop **Main** is structurally closed (its criteria require a non-GUI tool), so Extras is the target. ytDownloader (10,134★) ships Scoop, winget and Chocolatey simultaneously.
-  Evidence: https://github.com/ScoopInstaller/Scoop/wiki/Criteria-for-including-apps-in-the-main-bucket; https://github.com/ScoopInstaller/Scoop/wiki/App-Manifests.
-  Touches: `packaging/scoop/`, `scripts/check-versions.js`
-  Acceptance: a manifest with `version`, `description`, `homepage`, `license`, `hash` and `autoupdate` validates and installs the onedir build; its version is covered by the same gate as the winget manifest. Depends on AD-01.
-  Complexity: S
-
 - [ ] P2 — AD-38 — Take the cheap Windows shell integrations
   Why: one prerequisite — a stable AppUserModelID set early in `main()` plus a Start-menu `.lnk` carrying it — unlocks jump-list Tasks ("Paste and download", "Open downloads folder"), correct taskbar grouping, and recent-items. Separately `RegisterApplicationRestart` makes a Windows Update reboot resume the queue instead of silently ending it, and `IFileOperation`/`send2trash` makes a queue delete recoverable.
   Evidence: https://learn.microsoft.com/en-us/windows/win32/shell/taskbar-extensions; RESEARCH.md "Security, Privacy, and Reliability"; taskbar progress is already implemented, so the COM plumbing exists.
@@ -134,18 +127,3 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: `astra_downloader/download.py`
   Acceptance: the serialize+fsync happens outside the lock (snapshot under the lock, write after); a test asserts the lock is not held across the write.
   Complexity: M
-
-- [ ] P3 — AD-53 — Set `SABR_NATIVE_MIN_VERSION` the day a yt-dlp stable includes PR #13515
-  Why: `evaluate_sabr_support` already returns `"limited"` until this sentinel is a real version. Native SABR is still unmerged (PR updated 2026-08-19, not in 2026.08.19). The wiring is one constant plus the existing pill.
-  Evidence: https://github.com/yt-dlp/yt-dlp/pull/13515; `astra_downloader/health.py:129-144`; test at `test_astra_downloader.py:5911-5917`.
-  Touches: `astra_downloader/health.py` (`SABR_NATIVE_MIN_VERSION`), the SABR pill copy in `gui.py`
-  Acceptance: the constant equals the first yt-dlp stable that contains #13515; `evaluate_sabr_support` returns `"supported"` for that version and `"limited"` below it; the Download-page SABR pill flips without a new UI. Do not invent a version while the PR is open.
-  Complexity: S
-
-- [ ] P3 — AD-56 — Areas this audit did not exercise
-  Why: remaining gaps are the signed-release chain, whisper transcription live path, winget publish, native-host stdio against a real Chrome profile, and the Astra Deck userscript `/health` token echo (still off).
-  Evidence: session self-audit 2026-08-21
-  Touches: `astra_downloader/build.py`, whisper paths in `download.py`, `scripts/stage-companion-release.js`, Astra-Deck userscript
-  Acceptance: each area has either a live check or a named test; delete this item when those exist.
-  Complexity: L
-

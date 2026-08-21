@@ -12,6 +12,14 @@ repository's git log.
 
 ## [Unreleased]
 
+### Added
+
+- **A Scoop manifest.** `packaging/scoop/astra-downloader.json` installs the
+  one-folder build with checkver and autoupdate wired to the release feed. The
+  same gate that keeps the winget digest honest now checks the Scoop hash
+  against the staged archive, so a manifest naming bytes nobody published
+  fails the release.
+
 ### Changed
 
 - **Settings groups describe what is in them.** A section headed Language held
