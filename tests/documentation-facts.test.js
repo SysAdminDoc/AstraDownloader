@@ -21,25 +21,38 @@ function pythonCandidates() {
 // previous pass left the number behind and the next reader trusted it.
 test('the test count the README states is the count pytest collects', () => {
     let collected = null;
+    let ran = false;
+    let lastOutput = '';
     for (const candidate of pythonCandidates()) {
         const result = spawnSync(
             candidate.command,
             [...candidate.prefix, '-m', 'pytest', '--collect-only', '-q'],
             { cwd: repoRoot, encoding: 'utf8' },
         );
-        if (result.error || result.status !== 0) continue;
+        // An absent interpreter is not a documentation failure. Anything else
+        // is: a collection error, a broken conftest or a bad addopts line used
+        // to read as "no Python" and turn this gate green while the README was
+        // provably wrong.
+        if (result.error) {
+            if (result.error.code === 'ENOENT') continue;
+            throw result.error;
+        }
+        ran = true;
+        lastOutput = `${result.stdout || ''}${result.stderr || ''}`;
         const match = /^(\d+) tests collected/m.exec(result.stdout || '');
         if (match) {
             collected = Number(match[1]);
             break;
         }
     }
-    if (collected === null) {
-        // Same posture as the other Python-backed gates: an absent interpreter
-        // is not a documentation failure.
-        console.log('[documentation-facts] no usable Python; skipping the count check');
+    if (!ran) {
+        console.log('[documentation-facts] no Python interpreter; skipping the count check');
         return;
     }
+    assert.ok(
+        collected !== null,
+        'pytest ran but reported no collected count:\n' + lastOutput.slice(-2000),
+    );
 
     const stated = /py -3\.\d+ -m pytest\s+# (\d[\d,]*) tests/.exec(readme);
     assert.ok(stated, 'README must state the test count beside the pytest command');

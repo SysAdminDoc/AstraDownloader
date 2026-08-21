@@ -304,6 +304,12 @@ CATALOGS = {
             "Ordner- oder Dateiname ist zu lang: {name}. Windows erlaubt {maximum} Bytes pro Name.",
         "Preview: {path} ({length} characters).":
             "Vorschau: {path} ({length} Zeichen).",
+        "Appearance and language":
+            "Darstellung und Sprache",
+        "Window and tray":
+            "Fenster und Infobereich",
+        "Clipboard":
+            "Zwischenablage",
         "Format preferences":
             "Formatwünsche",
         "Preferred video codec":

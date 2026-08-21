@@ -2531,12 +2531,16 @@
       <translation>Performance</translation>
     </message>
     <message>
-      <source>Language</source>
-      <translation>Language</translation>
+      <source>Appearance and language</source>
+      <translation>Appearance and language</translation>
     </message>
     <message>
-      <source>Tray behavior</source>
-      <translation>Tray behavior</translation>
+      <source>Window and tray</source>
+      <translation>Window and tray</translation>
+    </message>
+    <message>
+      <source>Clipboard</source>
+      <translation>Clipboard</translation>
     </message>
     <message>
       <source>Maintenance</source>
@@ -3099,6 +3103,10 @@
       <translation>System default follows the operating system appearance.</translation>
     </message>
     <message>
+      <source>Language</source>
+      <translation>Language</translation>
+    </message>
+    <message>
       <source>Companion language</source>
       <translation>Companion language</translation>
     </message>
@@ -3109,14 +3117,6 @@
     <message>
       <source>Language changes apply after restarting Astra Downloader.</source>
       <translation>Language changes apply after restarting Astra Downloader.</translation>
-    </message>
-    <message>
-      <source>Keep yt-dlp up to date automatically</source>
-      <translation>Keep yt-dlp up to date automatically</translation>
-    </message>
-    <message>
-      <source>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</source>
-      <translation>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</translation>
     </message>
     <message>
       <source>Close to the system tray</source>
@@ -3141,6 +3141,14 @@
     <message>
       <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
       <translation>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</translation>
+    </message>
+    <message>
+      <source>Keep yt-dlp up to date automatically</source>
+      <translation>Keep yt-dlp up to date automatically</translation>
+    </message>
+    <message>
+      <source>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</source>
+      <translation>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</translation>
     </message>
     <message>
       <source>Installed tools</source>
