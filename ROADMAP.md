@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-51 — Bump the release PyInstaller pin to 6.22.2
-  Why: `constraints-release.txt` pins 6.22.0. 6.22.1 closes GHSA-9fxf-4qw3-ghmr (onefile env spoof; needs a privileged binary — Astra is `asInvoker`, so impact is likely N/A). 6.22.2 (2026-08-17) fixes a spurious security-validation error when a onefile exe is launched from a Windows symlink or junction (`#9508`), which portable copies hit. yt-dlp's own 6.22.0 pin is their CI, not a reason to stay.
-  Evidence: https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr; https://pyinstaller.org/en/v6.22.2/CHANGES.html; `astra_downloader/constraints-release.txt:22`; vault note `Research/Packaging, a11y and i18n mechanics 2026-08-20.md`.
-  Touches: `astra_downloader/constraints-release.txt`, `astra_downloader/build.py` tests, provenance/SBOM regeneration on the next stage
-  Acceptance: the release constraint is `pyinstaller==6.22.2`; `npm run release:stage` (or a dry-run graph resolve) records 6.22.2; a onefile launch from a directory junction succeeds on Windows.
-  Complexity: S
-
 - [ ] P1 — AD-08 — Migrate PyQt6 → PySide6 6.11.2
   Why: PyQt6 is GPL-3.0-only, `LICENSE` is MIT, and the shipped one-file exe is a combined work — the two `decision: unresolved` component entries blocking `npm run check` are that contradiction. PySide6 is LGPL, which lets the app's own code stay MIT. This converts the blocker described in `Roadmap_Blocked.md` from a legal decision into a mechanical refactor.
   Evidence: measured surface — 90 `from PyQt6` imports over 21 files, 17 `pyqtSignal`, 4 submodules, and **0** each of `pyqtSlot`, `pyqtProperty`, `sip`, `QVariant`, `loadUi`, `QtWebEngine`, `QtMultimedia`, `QtSvg`, `QtNetwork`. YTSage (4,516★) and dsymbol/yt-dlp-gui both run this stack on PySide6.

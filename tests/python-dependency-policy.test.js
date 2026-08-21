@@ -37,8 +37,26 @@ test('requirements stay pinned for local companion dependency review', () => {
     assert.ok(pins.length >= 28, 'the reviewed release graph must include direct and transitive packages');
     assert.ok(pins.every((line) => /^[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+$/.test(line)),
         'every release constraint must be an exact name==version pin');
-    assert.match(constraints, /^pyinstaller==6\.22\.0$/m,
+    const pyinstallerPin = /^pyinstaller==(\d+)\.(\d+)\.(\d+)$/m.exec(constraints);
+    assert.ok(pyinstallerPin,
         'the ambient PyInstaller version must be part of the reviewed graph');
+    // A literal equality here goes stale on the next security bump and invites
+    // someone to "fix" the test backwards. 6.22.1 closed GHSA-9fxf-4qw3-ghmr
+    // and 6.22.2 fixed the onefile security-validation error a launch through
+    // a Windows junction triggers, which portable copies hit.
+    const pyinstallerFloor = [6, 22, 2];
+    const pyinstallerVersion = pyinstallerPin.slice(1, 4).map(Number);
+    const meetsFloor = pyinstallerVersion.reduce((verdict, part, index) => {
+        if (verdict !== null) {
+            return verdict;
+        }
+        if (part === pyinstallerFloor[index]) {
+            return null;
+        }
+        return part > pyinstallerFloor[index];
+    }, null);
+    assert.ok(meetsFloor !== false,
+        `PyInstaller must be pinned at ${pyinstallerFloor.join('.')} or newer, found ${pyinstallerPin[0]}`);
     for (const retired of ['rich', 'markdown-it-py', 'Pygments', 'mdurl']) {
         assert.doesNotMatch(constraints, new RegExp(`^${retired}==`, 'mi'),
             `${retired} should not remain in the curl_cffi runtime graph`);

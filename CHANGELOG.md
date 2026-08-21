@@ -14,6 +14,11 @@ repository's git log.
 
 ### Changed
 
+- **The release build now uses PyInstaller 6.22.2.** 6.22.1 closed
+  GHSA-9fxf-4qw3-ghmr, and 6.22.2 fixed the spurious security-validation error
+  a one-file executable raises when it is launched through a Windows symlink or
+  junction, which portable copies on mapped folders hit.
+
 - **The reviewed yt-dlp is now 2026.08.19**, the build the managed auto-update
   actually fetches. The extractor smoke runs against it, and against the
   managed executable with the shipped hardening flags, so the wheel and the
