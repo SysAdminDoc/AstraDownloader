@@ -14,6 +14,14 @@ repository's git log.
 
 ### Fixed
 
+- **Long names are measured in bytes, which is what Windows counts.** A title
+  made of emoji fills a folder or file name four times faster than its
+  character count suggests, so a custom output template with a character limit
+  bounded nothing and the preview reported a path shorter than the one yt-dlp
+  was about to write. Every free-text field in a template is byte-bounded now,
+  the preview truncates the way yt-dlp does, and a single folder name over the
+  per-name limit is called out instead of being reported as a long path.
+
 - **Native-host extension IDs are validated when they are saved.** The setting
   only trimmed its text, so a hand-edited config could show IDs the browser
   registration would silently drop. What the field stores is now what actually

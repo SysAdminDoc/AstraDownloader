@@ -104,13 +104,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: a scan that no longer sees a previously-archived item marks it, without deleting anything; a locally-deleted file is not silently re-fetched; both states are visible and reversible. Depends on AD-25.
   Complexity: M
 
-- [ ] P2 — AD-41 — Shorten every path segment, not just the filename
-  Why: the Windows limit is 255 *bytes* per component, and a 4-byte emoji title blows it three times faster than the character count suggests. ytdl-sub applies shortening to every folder segment and exempts only the configured output root; yt-dlp#1136 (32 reactions) names temporary files as the sneaky half of the problem.
-  Evidence: ytdl-sub release 2026.06.23; yt-dlp#1136; `astra_downloader/config.py:822-865` (the existing Windows-safe name preview).
-  Touches: `astra_downloader/config.py`, `download.py`
-  Acceptance: channel/playlist folder names and staging paths are shortened by byte length, not character count; the existing preview reports the shortened result; a test uses a 4-byte-per-character title.
-  Complexity: M
-
 - [ ] P2 — AD-42 — Deprioritise YouTube's AI "Super Resolution" formats
   Why: YouTube began serving AI-upscaled renditions that sort above the genuine source by resolution; yt-dlp#15433 (13 reactions, opened 2025-12-29) is open and no GUI exposes a control. An archivist wants the original, and the existing `--format-sort` builder already knows to emit `res` first.
   Evidence: yt-dlp#15433; `astra_downloader/download.py` `build_video_format_args` and the `--format-sort` ordering rule recorded in CLAUDE.md.

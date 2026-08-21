@@ -321,12 +321,70 @@ class NormalizationTests(unittest.TestCase):
             "%%(title)s/%(uploader).100B/%(title).100B.%(ext)s",
         )
         self.assertEqual(config_module.bound_output_template_fields(bounded), bounded)
+        # Clamped to the split budget and converted to a byte bound; a
+        # character precision does not survive because it is not a bound.
         self.assertIn(
-            "%(title).100s",
+            "%(title).100B",
             config_module.bound_output_template_fields(
                 "%(title).999s/%(uploader)s.%(ext)s"
             ),
         )
+
+    def test_paths_are_bounded_by_bytes_not_characters(self):
+        import config as config_module
+
+        # A four-byte emoji fills a Windows path component three times faster
+        # than the character count suggests. This is the case a character
+        # bound silently fails.
+        emoji = "\U0001f3ac"
+        self.assertEqual(len(emoji.encode("utf-8")), 4)
+
+        self.assertEqual(config_module.truncate_utf8_bytes(emoji * 10, 12), emoji * 3)
+        self.assertEqual(
+            config_module.truncate_utf8_bytes(emoji * 10, 11), emoji * 2,
+            "a truncation must never split a character",
+        )
+        self.assertEqual(config_module.truncate_utf8_bytes("abc", 10), "abc")
+        self.assertEqual(config_module.truncate_utf8_bytes("", 10), "")
+        self.assertEqual(config_module.truncate_utf8_bytes("abc", 0), "")
+
+        original = config_module._OUTPUT_TEMPLATE_PREVIEW_VALUES["title"]
+        config_module._OUTPUT_TEMPLATE_PREVIEW_VALUES["title"] = emoji * 100
+        try:
+            preview = config_module.output_template_preview(
+                "%(title)s.%(ext)s", r"C:\Videos",
+            )
+        finally:
+            config_module._OUTPUT_TEMPLATE_PREVIEW_VALUES["title"] = original
+
+        rendered = preview["relative"].rsplit(".", 1)[0]
+        self.assertLessEqual(
+            len(rendered.encode("utf-8")), 200,
+            "the preview must report the byte-bounded name yt-dlp will write",
+        )
+        self.assertEqual(
+            rendered, emoji * 50,
+            "200 bytes of a four-byte character is 50 characters, not 200",
+        )
+
+    def test_preview_names_a_folder_segment_over_the_component_limit(self):
+        import config as config_module
+
+        # A field expansion cannot exceed the limit - the split budget caps it
+        # at 100 bytes - but a literal folder name in the template can, and the
+        # total-path check cannot say which component is the problem.
+        preview = config_module.output_template_preview(
+            ("A" * 260) + "/%(title)s.%(ext)s", "C:\\V",
+        )
+
+        self.assertEqual(preview["maxComponentBytes"], 255)
+        self.assertEqual(preview["oversizedComponents"], ("A" * 260,))
+        self.assertTrue(preview["too_long"])
+
+        safe = config_module.output_template_preview(
+            "%(uploader)s/%(title)s.%(ext)s", r"C:\Videos",
+        )
+        self.assertEqual(safe["oversizedComponents"], ())
 
     def test_output_template_preview_flags_reserved_names_and_long_paths(self):
         import config as config_module
@@ -12810,7 +12868,10 @@ class UpdateYtdlpEndpointTests(unittest.TestCase):
         )
         # An over-generous explicit bound is clamped; a tighter one is kept.
         self.assertEqual(n("%(title).500B.%(ext)s"), "%(title).200B.%(ext)s")
-        self.assertEqual(n("%(title).30s.%(ext)s"), "%(title).30s.%(ext)s")
+        # A user's explicit `.Ns` becomes `.NB`. The N is kept, but the unit is
+        # not: the budget being split here is bytes, and a character precision
+        # bounds nothing on a title made of four-byte characters.
+        self.assertEqual(n("%(title).30s.%(ext)s"), "%(title).30B.%(ext)s")
         # A literal %% must never be treated as the start of an expansion.
         self.assertEqual(n("%%(title)s-%(id)s.%(ext)s"), "%%(title)s-%(id)s.%(ext)s")
         # Re-normalizing a saved template must not shrink it further.

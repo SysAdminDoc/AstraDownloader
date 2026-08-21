@@ -6083,7 +6083,18 @@ class MainWindowCore(
             warnings.append(tr(
                 "Reserved Windows name in preview: {name}."
             ).format(name=", ".join(reserved)))
-        if report.get("too_long"):
+        oversized = report.get("oversizedComponents") or ()
+        if oversized:
+            # The whole path can be well inside MAX_PATH while one folder name
+            # is over the per-component limit, so saying "the path is too long"
+            # here sends the user looking in the wrong place.
+            warnings.append(tr(
+                "Folder or file name is too long: {name}. Windows allows {maximum} bytes per name."
+            ).format(
+                name=", ".join(str(item)[:40] for item in oversized),
+                maximum=report.get("maxComponentBytes", 255),
+            ))
+        if report.get("too_long") and report.get("length", 0) > report.get("max_path", 260):
             warnings.append(tr(
                 "Rendered path is {length} characters; Windows maximum is {maximum}."
             ).format(
