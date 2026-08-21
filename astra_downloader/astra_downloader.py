@@ -1511,6 +1511,7 @@ def fetch_expected_sha256(sidecar_url, target_asset=None, timeout=15):
                 return lines[0].lower()
             return _parse_sha256_sums(text, target_asset=target_asset)
     except Exception:
+        # reason: a best-effort checksum fetch; the caller decides whether a missing digest is fatal
         return None
 
 
@@ -2339,6 +2340,7 @@ def _probe_ytdlp_binary(path, timeout=15):
             creationflags=CREATE_NO_WINDOW,
         )
     except Exception:
+        # reason: an unprobeable binary is reported as no version, which the readiness row already names
         return ''
     if result.returncode != 0:
         return ''
@@ -2449,6 +2451,7 @@ def _run_ytdlp_self_update(config, source_tag):
         try:
             channel = str((config.get('YtDlpUpdateChannel', 'nightly') if config else 'nightly') or 'nightly').lower()
         except Exception:
+            # reason: an unreadable channel setting falls back to the shipped default rather than blocking the update
             channel = 'nightly'
         if channel not in ('stable', 'nightly'):
             channel = 'nightly'
@@ -3532,6 +3535,7 @@ def _get_integrations_stamp():
     except FileNotFoundError:
         return None
     except Exception:
+        # reason: an absent or unreadable stamp means the integrations have not been written yet
         return None
 
 
@@ -3929,6 +3933,7 @@ def normalize_extension_origin(origin):
     try:
         parsed = urlparse(str(origin or "").strip().rstrip("/"))
     except Exception:
+        # reason: an origin that will not parse is not an origin this program accepts
         return ""
     scheme = (parsed.scheme or "").lower()
     host = (parsed.netloc or "").strip().lower()
@@ -4622,6 +4627,7 @@ def resolve_theme(theme="system", color_scheme=None):
             try:
                 color_scheme = QApplication.styleHints().colorScheme()
             except Exception:
+                # reason: the platform colour scheme is optional; the configured theme decides when Qt cannot answer
                 color_scheme = None
     schemes = getattr(Qt, "ColorScheme", None)
     if schemes is not None and color_scheme == getattr(schemes, "Light", object()):
@@ -4650,6 +4656,7 @@ def set_window_title_bar_theme(window, theme):
     except Exception:
         # The title bar is cosmetic and DWM is unavailable on non-Desktop
         # Windows hosts. The stylesheet remains the reliable fallback.
+        # reason: the title bar is cosmetic and DWM is absent on non-Desktop hosts; the stylesheet is the fallback
         return False
     return False
 
@@ -5224,6 +5231,7 @@ def is_safe_install_dir_for_removal(path):
     try:
         resolved = Path(path).resolve()
     except Exception:
+        # reason: a path that will not resolve is not one this program is willing to delete
         return False
     if not resolved.is_absolute():
         return False

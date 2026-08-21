@@ -961,6 +961,7 @@ def write_cookies_netscape(cookies, target_path, *, logger=None, domain_filter=N
             expiry = int(float(raw_expiry)) if raw_expiry not in (None, "") else 0
             expiry = max(0, expiry)
         except Exception:  # noqa: BLE001
+            # reason: a cookie with an unusable expiry is written as a session cookie rather than dropped
             expiry = 0
         lines.append(
             f"{'#HttpOnly_' if entry.get('httpOnly') else ''}{domain}\t"
@@ -2022,6 +2023,7 @@ class YTDLPActivityRegistry:
                     finished = poll() is not None
                 except Exception:
                     # An indeterminate process must keep the updater blocked.
+                    # reason: an indeterminate process must keep the updater blocked
                     finished = False
                 if finished:
                     self._activities.pop(token, None)
@@ -2123,6 +2125,7 @@ def is_playlist_url(url):
             bool(params.get(key, [''])[0]) for key in _PLAYLIST_QUERY_KEYS
         )
     except Exception:
+        # reason: a URL that will not parse is not a playlist, which is the answer the caller needs
         return False
 
 
@@ -4288,6 +4291,7 @@ class DownloadManagerCore:
                 MAX_CONCURRENT, 1, 10,
             )
         except Exception:  # noqa: BLE001
+            # reason: an unreadable concurrency setting falls back to the shipped default
             return MAX_CONCURRENT
 
     def _schedule(self):
@@ -6412,6 +6416,7 @@ class DownloadManagerCore:
             process_activity = max(0, int(activity_counter() or 0))
         except Exception:  # noqa: BLE001
             # An unknown activity state must fail closed for updater guards.
+            # reason: an unknown activity state must fail closed for the updater guards
             process_activity = queued_activity + 1
         return max(queued_activity, process_activity)
 
@@ -6517,6 +6522,7 @@ class DownloadManagerCore:
         try:
             info = json.loads(out)
         except Exception:  # noqa: BLE001
+            # reason: the named message is the report; the yt-dlp stderr is already in the log
             return None, 'Could not parse yt-dlp output while listing formats.'
         return summarize_ytdlp_formats(info), None
 
@@ -6814,6 +6820,7 @@ class DownloadManagerCore:
         try:
             info = json.loads(out)
         except Exception:  # noqa: BLE001
+            # reason: the named message is the report; the yt-dlp stderr is already in the log
             return None, 'Could not parse yt-dlp output while previewing the playlist.'
         return summarize_ytdlp_playlist(info), None
 

@@ -578,6 +578,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             # The pre-flight has no reason to expose a persistence exception or
             # the names of stored sites. An unavailable index is simply an
             # empty, non-blocking sign-in surface until the GUI can repair it.
+            # reason: the pre-flight must not expose a persistence exception or the names of stored sites
             sign_in_entries = []
         resp["preflight"] = evaluate_preflight_checks(
             ytdlp_version=ytdlp_version,
@@ -596,6 +597,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             except Exception:
                 # Health must remain available if the optional scheduler is
                 # recovering from a malformed local state file.
+                # reason: health stays available while the optional scheduler recovers from a malformed local state file
                 resp["subscriptions"] = {
                     "schedulerRunning": False,
                     "subscriptions": [],
@@ -1184,6 +1186,7 @@ def create_api(config, dl_manager, history, *, dependencies):
                 try:
                     archive_entries = archive_reader()
                 except Exception:
+                    # reason: history is the answer here; an unreadable subscription archive drops the archive column, not the page
                     archive_entries = None
         query_text = clean_text(request.args.get('q'), '', 200)
         requested_url = clean_text(request.args.get('url'), '', 4096)
