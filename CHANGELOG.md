@@ -12,6 +12,14 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **A subscription scan no longer rewrites the whole archive per candidate.**
+  Reserving and queueing each item used to serialize and fsync the entire
+  document, up to 20,000 records, twice per candidate, while holding the lock
+  the window and `/health` also take. A 50-item scan measured 102 writes and
+  598 ms; it now takes 3 writes and 11 ms.
+
 ### Fixed
 
 - **Deno downloads are verified again.** Deno publishes its checksum as

@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-11 — Stop the subscription scan from fsyncing the whole archive per candidate
-  Why: `reserve_archive` then `mark_archive_queued`/`release_archive` each run `_save_locked` → `atomic_write_json` → `os.fsync` on the entire document (up to 20,000 archive records) while holding `SubscriptionStore._lock` — ~100–150 full serialize+fsync cycles for one `--playlist-end 50` scan, on the same lock the Qt main thread and `/health` take. The 3.88 ms/call figure in `CLAUDE.md` was measured without a concurrent scan.
-  Evidence: `astra_downloader/subscriptions.py:1238-1298`, `:782-828`, `:504-519`; `config.py:1808-1831`; `SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000` at `subscriptions.py:53`.
-  Touches: `astra_downloader/subscriptions.py`
-  Acceptance: one scan performs O(1) persists, not O(candidates); a test counts `atomic_write_json` calls across a 50-candidate scan and asserts the bound; crash-safety of the reservation is preserved (a killed scan must not leak reserved keys).
-  Complexity: M
-
 - [ ] P1 — AD-13 — Widen the catch-reason gate beyond pass-only handlers
   Why: `check-python-catch-reasons.js:42` requires `all(isinstance(statement, ast.Pass) …)`, so any handler that swallows via `return None` / `return ''` / `continue` is never examined. 65 broad handlers currently swallow with no log, no re-raise and no reason (`download.py` 26, `gui.py` 20, `astra_downloader.py` 10, `health.py` 4, `routes.py` 3, `subscriptions.py` 2). CLAUDE.md documents a shipped bug from exactly this class.
   Evidence: `scripts/check-python-catch-reasons.js:38-50`; `CLAUDE.md` §2026-08-06 "A bare `except` around a probe hid a name error".

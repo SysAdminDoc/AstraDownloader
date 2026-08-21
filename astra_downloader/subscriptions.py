@@ -7,6 +7,7 @@ amount of linkage needed to reconcile a scan with a restart.  Ordinary
 downloads never consult this store and remain re-downloadable.
 """
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -287,6 +288,8 @@ class SubscriptionStore:
         self._lock = threading.RLock()
         self._compatible = True
         self._persistence_error = ""
+        self._save_batch_depth = 0
+        self._save_batch_pending = False
         self._undo = DurableUndoStore(
             path=self.path.with_name(f".{self.path.name}.undo"),
             loader=self._reader,
@@ -509,9 +512,7 @@ class SubscriptionStore:
             )
         return dict(entries)
 
-    def _save_locked(self):
-        if not self._compatible:
-            return False
+    def _write_locked(self):
         try:
             # Writers consume the JSON-shaped document synchronously while the
             # store lock is held. Copying the entire archive here turns every
@@ -525,6 +526,45 @@ class SubscriptionStore:
             )
             self._logger(f"Subscription state save failed: {error}")
             return False
+
+    def _save_locked(self):
+        if not self._compatible:
+            return False
+        if self._save_batch_depth:
+            self._save_batch_pending = True
+            return True
+        return self._write_locked()
+
+    @contextlib.contextmanager
+    def batched_saves(self):
+        """Coalesce the writes inside one scan into a single persist.
+
+        A scan runs reserve -> enqueue -> mark_queued for every candidate, and
+        each step was a full serialize plus fsync of the whole document while
+        holding this lock — around 100 rewrites of an archive capped at 20,000
+        records for one 50-item playlist, on the same lock the Qt main thread
+        and /health take.
+
+        Deferring is also the safer failure mode for a reservation. A scan
+        killed mid-flight now leaves nothing on disk, so the next scan reserves
+        the same keys again; persisting each claim immediately is what would
+        strand a key in "reserved" forever.
+
+        Inside the batch a mutation reports success on the strength of the
+        pending write. If the final write fails, in-memory state is ahead of
+        the file and ``persistence_error`` says so — check it after the block
+        rather than trusting the per-call return.
+        """
+        with self._lock:
+            self._save_batch_depth += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._save_batch_depth -= 1
+                if self._save_batch_depth == 0 and self._save_batch_pending:
+                    self._save_batch_pending = False
+                    self._write_locked()
 
     def persistence_error(self):
         """Return the current durable-state error, if one is known."""
@@ -1228,6 +1268,76 @@ class SubscriptionManager:
             return self.request_scan(sub_id)
         return self.scan_subscription(sub_id, manual=True)
 
+
+    def _claim_candidates(self, started, sub_id, candidates, now):
+        """Reserve, enqueue and mark each candidate, reporting the totals.
+
+        Split out of ``scan_subscription`` so the whole loop can run inside one
+        ``batched_saves`` block without indenting the surrounding scan.
+        """
+        queued = 0
+        skipped = 0
+        errors = []
+        for candidate in candidates:
+            if self._stop.is_set():
+                break
+            key = subscription_archive_key(candidate)
+            reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
+            if reserved == RESERVE_ALREADY_PRESENT:
+                skipped += 1
+                continue
+            if reserved == RESERVE_RETRY_BACKOFF:
+                skipped += 1
+                continue
+            if reserved == RESERVE_RETRY_EXHAUSTED:
+                skipped += 1
+                entry = self.store.archive_entry(key)
+                attempts = max(
+                    1,
+                    _safe_nonnegative_int(entry.get("attempts")),
+                )
+                last_error = self.store._clean(entry.get("lastError"), "", 500)
+                message = (
+                    f"{candidate.get('title') or '(untitled)'}: stopped retrying "
+                    f"after {attempts} attempts"
+                )
+                if last_error:
+                    message += f": {last_error}"
+                errors.append(message)
+                continue
+            if reserved != RESERVE_OK:
+                errors.append(
+                    self._persistence_message()
+                    if reserved == RESERVE_SAVE_FAILED else
+                    "Could not record the scheduled download; check disk "
+                    "space and permissions."
+                )
+                continue
+            if self._stop.is_set():
+                self.store.release_archive(
+                    key,
+                    "Scheduled scan stopped before queueing this item.",
+                    now=now,
+                )
+                break
+            try:
+                result = self._enqueue(started, candidate, key)
+                if isinstance(result, tuple):
+                    download_id, enqueue_error = result
+                else:
+                    download_id, enqueue_error = result, None
+            except Exception as error:  # noqa: BLE001
+                download_id, enqueue_error = None, str(error)
+            if enqueue_error or not download_id:
+                message = str(enqueue_error or "Download could not be queued.")[:500]
+                self.store.release_archive(key, message, now=now)
+                errors.append(message)
+                continue
+            if not self.store.mark_archive_queued(key, download_id, now=now):
+                errors.append(self._persistence_message())
+            queued += 1
+        return queued, skipped, errors
+
     def scan_subscription(self, sub_id, *, now=None, manual=False, _claimed=False):
         sub_id = str(sub_id)
         if not _claimed:
@@ -1283,67 +1393,16 @@ class SubscriptionManager:
                 if candidate:
                     candidates.append(candidate)
 
-            queued = 0
-            skipped = 0
-            errors = []
-            for candidate in candidates:
-                if self._stop.is_set():
-                    break
-                key = subscription_archive_key(candidate)
-                reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
-                if reserved == RESERVE_ALREADY_PRESENT:
-                    skipped += 1
-                    continue
-                if reserved == RESERVE_RETRY_BACKOFF:
-                    skipped += 1
-                    continue
-                if reserved == RESERVE_RETRY_EXHAUSTED:
-                    skipped += 1
-                    entry = self.store.archive_entry(key)
-                    attempts = max(
-                        1,
-                        _safe_nonnegative_int(entry.get("attempts")),
-                    )
-                    last_error = self.store._clean(entry.get("lastError"), "", 500)
-                    message = (
-                        f"{candidate.get('title') or '(untitled)'}: stopped retrying "
-                        f"after {attempts} attempts"
-                    )
-                    if last_error:
-                        message += f": {last_error}"
-                    errors.append(message)
-                    continue
-                if reserved != RESERVE_OK:
-                    errors.append(
-                        self._persistence_message()
-                        if reserved == RESERVE_SAVE_FAILED else
-                        "Could not record the scheduled download; check disk "
-                        "space and permissions."
-                    )
-                    continue
-                if self._stop.is_set():
-                    self.store.release_archive(
-                        key,
-                        "Scheduled scan stopped before queueing this item.",
-                        now=now,
-                    )
-                    break
-                try:
-                    result = self._enqueue(started, candidate, key)
-                    if isinstance(result, tuple):
-                        download_id, enqueue_error = result
-                    else:
-                        download_id, enqueue_error = result, None
-                except Exception as error:  # noqa: BLE001
-                    download_id, enqueue_error = None, str(error)
-                if enqueue_error or not download_id:
-                    message = str(enqueue_error or "Download could not be queued.")[:500]
-                    self.store.release_archive(key, message, now=now)
-                    errors.append(message)
-                    continue
-                if not self.store.mark_archive_queued(key, download_id, now=now):
-                    errors.append(self._persistence_message())
-                queued += 1
+            # One persist for the whole candidate loop instead of two per
+            # candidate. See SubscriptionStore.batched_saves for why deferring
+            # is also the safer crash behaviour for a reservation.
+            with self.store.batched_saves():
+                queued, skipped, errors = self._claim_candidates(
+                    started, sub_id, candidates, now,
+                )
+            deferred_failure = self.store.persistence_error()
+            if deferred_failure:
+                errors.append(deferred_failure)
 
             # Identical failures repeat once per candidate; the user needs
             # the cause, not the count.
