@@ -14,6 +14,12 @@ repository's git log.
 
 ### Changed
 
+- **Release builds now run on CPython 3.13.** python.org shipped no Windows
+  installer after 3.12.10, so the build interpreter had been sitting on a
+  branch that gets no more binaries. Running from source still works on 3.11
+  and newer. Every `py -3.12` call in the scripts, gates and docs moved with
+  it.
+
 - **The release build now uses PyInstaller 6.22.2.** 6.22.1 closed
   GHSA-9fxf-4qw3-ghmr, and 6.22.2 fixed the spurious security-validation error
   a one-file executable raises when it is launched through a Windows symlink or

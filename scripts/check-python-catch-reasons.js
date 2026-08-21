@@ -65,7 +65,7 @@ print(f"[check-python-catch-reasons] OK — {count} pass-only exception handler(
 
 const candidates = process.platform === 'win32'
     ? [
-        { command: 'py', prefix: ['-3.12'] },
+        { command: 'py', prefix: ['-3.13'] },
         { command: 'python', prefix: [] },
         { command: 'python3', prefix: [] },
     ]

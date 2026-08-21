@@ -3,7 +3,7 @@
 [![version](https://img.shields.io/badge/version-2.9.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
-[![python](https://img.shields.io/badge/python-3.12-3776ab)](astra_downloader/requirements.txt)
+[![python](https://img.shields.io/badge/python-3.13-3776ab)](astra_downloader/requirements.txt)
 
 A desktop video downloader for Windows. Paste a link — from YouTube, Reddit,
 X, TikTok, Vimeo, Instagram, Twitch, or any of the hundreds of sites
@@ -164,7 +164,7 @@ and downloaded media, run `--uninstall` from that folder.
 Python 3.11 or newer. That floor sits one release above what the pinned dependency graph resolves against, because CPython 3.10 reaches end of life in October 2026.
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --require-virtualenv -r astra_downloader/requirements.txt
 .\.venv\Scripts\python.exe astra_downloader/astra_downloader.py
 ```
@@ -175,7 +175,7 @@ behind your back.
 ## Build the executable
 
 ```powershell
-py -3.12 astra_downloader/build.py
+py -3.13 astra_downloader/build.py
 ```
 
 Produces the unsigned one-file `AstraDownloader.exe` and its SHA-256 sidecar,
@@ -194,7 +194,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.12 -m pytest          # 914 tests; scratch state stays under build/pytest
+py -3.13 -m pytest          # 1000 tests; scratch state stays under build/pytest
 npm run check               # port catalogue, catch reasons, versions, pip-audit
 npm run smoke:gui           # renders the real Qt window offscreen
 ```

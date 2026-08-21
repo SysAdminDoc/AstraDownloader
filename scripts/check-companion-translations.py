@@ -116,7 +116,7 @@ def main():
         print("[check-companion-translations] FAIL")
         for problem in problems:
             print(f"  {problem}")
-        print("  Run: py -3.12 scripts/build-companion-translations.py")
+        print("  Run: py -3.13 scripts/build-companion-translations.py")
         return 1
     print(
         f"[check-companion-translations] OK — {len(expected)} UI strings are "
