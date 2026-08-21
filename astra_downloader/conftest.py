@@ -29,6 +29,99 @@ import os
 import pytest
 
 
+# A full run is the product's regression contract. This floor catches a
+# missing optional dependency, a Qt bootstrap failure, or an accidentally
+# deleted test group even when pytest would otherwise report a green run.
+MIN_FULL_SUITE_EXECUTED_TESTS = 1038
+
+_executed_nodeids = set()
+_skipped_nodeids = {}
+
+
+def _is_full_suite_run(config):
+    """Return True only for an unfiltered, executable suite run."""
+    option = config.option
+    if any((
+        getattr(option, "collectonly", False),
+        getattr(option, "keyword", ""),
+        getattr(option, "markexpr", ""),
+        getattr(option, "lf", False),
+        getattr(option, "failedfirst", False),
+        getattr(option, "newfirst", False),
+        getattr(option, "stepwise", False),
+    )):
+        return False
+
+    invocation_dir = config.invocation_params.dir
+    for argument in config.invocation_params.args:
+        text = str(argument)
+        if "::" in text:
+            return False
+        if not text.startswith("-") and (invocation_dir / text).exists():
+            return False
+    return True
+
+
+def _skipped_group(reason):
+    normalized = str(reason).casefold()
+    if "yt-dlp" in normalized or "yt_dlp" in normalized:
+        return "yt-dlp integration"
+    if any(token in normalized for token in ("qapplication", "pyside6", "qt gui")):
+        return "Qt GUI"
+    return "other skipped tests"
+
+
+def _execution_floor_message(executed, minimum, skipped):
+    groups = {}
+    for reason in skipped.values():
+        group = _skipped_group(reason)
+        groups[group] = groups.get(group, 0) + 1
+    if groups:
+        detail = ", ".join(
+            f"{name} ({count})" for name, count in sorted(groups.items())
+        )
+    else:
+        detail = "none recorded; check collection and early-stop settings"
+    return (
+        f"Executed-test floor missed: {executed} ran; at least {minimum} are "
+        f"required. Skipped groups: {detail}."
+    )
+
+
+def pytest_sessionstart(session):
+    del session
+    _executed_nodeids.clear()
+    _skipped_nodeids.clear()
+
+
+def pytest_runtest_logreport(report):
+    if report.when == "call" and not report.skipped:
+        _executed_nodeids.add(report.nodeid)
+    elif report.skipped:
+        reason = report.longrepr
+        if isinstance(reason, tuple) and len(reason) >= 3:
+            reason = reason[2]
+        _skipped_nodeids[report.nodeid] = str(reason)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    del exitstatus
+    config = session.config
+    if hasattr(config, "workerinput") or not _is_full_suite_run(config):
+        return
+    executed = len(_executed_nodeids)
+    if executed >= MIN_FULL_SUITE_EXECUTED_TESTS:
+        return
+    message = _execution_floor_message(
+        executed, MIN_FULL_SUITE_EXECUTED_TESTS, _skipped_nodeids
+    )
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_sep("=", "TEST EXECUTION FLOOR FAILED", red=True)
+        reporter.write_line(message, red=True)
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 # The suite constructs real windows as part of its GUI coverage. Keep those
 # windows off the operator's display by default; an explicit opt-out is useful
 # when a maintainer is deliberately checking native platform rendering.
