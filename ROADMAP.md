@@ -8,15 +8,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
-- [ ] P0 — AD-01 — Publish v2.9.0, with both artifacts, from a rebuilt binary
-  Why: `gh release list` returns only `v2.0.0`; eight versions of fixes reach nobody, the in-app updater and the Astra Deck installer link both resolve to that build, and `v2.0.0` ships no `AstraDownloader-onedir.zip` — so the antivirus fallback the README documents has never existed.
-  Evidence: `gh release list`; `gh release view v2.0.0` (exe downloadCount 12, sha256 downloadCount 1, no onedir zip); RESEARCH.md 2026-08-21 "Executive Summary"; cobalt / Motrix / kannagi v1 all died in this exact state.
-  Touches: `astra_downloader/build.py`, `scripts/stage-companion-release.js`, `scripts/check-versions.js`, CHANGELOG.md
-  Acceptance: a GitHub Release `v2.9.0` carries `AstraDownloader.exe`, `AstraDownloader-onedir.zip` and both `.sha256` sidecars; `npm run check:versions` exits 0; `gh release view v2.9.0` lists four assets.
-  Note: `Roadmap_Blocked.md` files this as blocked on the PyQt distribution decision. AD-08 removes that dependency; if AD-08 is deferred, AD-01 stays blocked and the blocked entry stands.
-  Note (2026-08-21): source is `APP_VERSION` 2.9.0; only git tag remains `v2.0.0`. Publish whatever HEAD is when this is picked up.
-  Complexity: S
-
 ### P1
 
 ### P2
