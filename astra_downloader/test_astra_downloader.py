@@ -9353,6 +9353,90 @@ class DenoRuntimeHardGateTests(unittest.TestCase):
             self.assertEqual((resp.get_json() or {}).get('code'), expected_code)
 
 
+class LogWriterThreadTests(unittest.TestCase):
+    """The Qt main thread must not sit on the disk to write a log line.
+
+    write_persistent_log did mkdir + stat + open + write while holding a lock
+    every worker thread also wants, and the GUI called it from _append_log on
+    every status change.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.log_path = Path(self._tmp.name) / "server.log"
+        patcher = mock.patch.object(ad, "LOG_PATH", self.log_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(ad.flush_persistent_log)
+
+    def test_the_calling_thread_does_no_file_io(self):
+        opened_by = []
+        real_open = ad.open if hasattr(ad, "open") else open
+
+        def watching_open(target, *args, **kwargs):
+            if str(target) == str(self.log_path):
+                opened_by.append(threading.current_thread().name)
+            return real_open(target, *args, **kwargs)
+
+        caller = threading.current_thread().name
+        with mock.patch("builtins.open", watching_open):
+            ad.write_persistent_log("queued from the caller")
+            self.assertEqual(
+                opened_by, [],
+                "the calling thread must not touch the log file",
+            )
+            self.assertTrue(ad.flush_persistent_log(timeout=10))
+
+        self.assertTrue(opened_by, "the writer thread must have written it")
+        self.assertNotIn(caller, opened_by)
+        self.assertTrue(all(name.startswith("astra-log-writer") for name in opened_by))
+
+    def test_the_line_still_reaches_the_file_in_order(self):
+        for index in range(20):
+            ad.write_persistent_log(f"line {index:02d}")
+        self.assertTrue(ad.flush_persistent_log(timeout=10))
+
+        body = self.log_path.read_text(encoding="utf-8")
+        positions = [body.index(f"line {index:02d}") for index in range(20)]
+        self.assertEqual(positions, sorted(positions),
+                         "a single writer thread must preserve the order")
+
+    def test_the_in_memory_ring_is_updated_without_waiting(self):
+        # The GUI reads the ring immediately, so it stays on the caller.
+        marker = "ring visible right away"
+        ad.write_persistent_log(marker)
+        self.assertIn(
+            marker,
+            [entry["msg"] for entry in ad.get_recent_log_entries()],
+        )
+
+    def test_a_synchronous_write_lands_before_it_returns(self):
+        # The crash path cannot rely on a daemon thread that is about to die.
+        ad.write_persistent_log("crash detail", self.log_path, synchronous=True)
+        self.assertIn("crash detail", self.log_path.read_text(encoding="utf-8"))
+
+    def test_the_crash_paths_are_synchronous(self):
+        source = Path(ad.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if name != "write_persistent_log":
+                continue
+            targets = [ast.unparse(arg) for arg in node.args[1:]]
+            if not any("CRASH_LOG_PATH" in target for target in targets):
+                continue
+            if not any(kw.arg == "synchronous" for kw in node.keywords):
+                offenders.append(node.lineno)
+        self.assertEqual(
+            offenders, [],
+            f"crash-log writes must not be queued: lines {offenders}",
+        )
+
+
 class TimedOutProcessReapTests(unittest.TestCase):
     """A tree-kill closes the pipes, which is not the same as waiting.
 

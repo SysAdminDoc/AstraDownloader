@@ -713,6 +713,15 @@ MAX_TEXT_FIELD = 500
 MAX_PATH_FIELD = 2048
 LOG_MAX_BYTES = 1024 * 1024
 _LOG_LOCK = threading.Lock()
+# The Qt main thread calls write_persistent_log from _append_log, and the call
+# does mkdir + stat + open + write while holding a lock every worker thread
+# also wants. One writer thread drains this queue so the GUI never blocks on
+# the disk, and a single FIFO keeps the file in the order the lines were
+# produced. Bounded so a log storm cannot grow without limit; a full queue
+# falls back to writing inline rather than dropping a diagnostic.
+_LOG_QUEUE = queue.Queue(maxsize=2048)
+_LOG_WRITER_LOCK = threading.Lock()
+_LOG_WRITER = None
 # One source: the ring has to hold at least what a diagnostics bundle claims
 # to include, or the bundle quietly ships fewer entries than it advertises.
 _LOG_RING_MAX = DIAGNOSTIC_LOG_ENTRY_LIMIT
@@ -881,30 +890,112 @@ def spawn_media_process(args, **kwargs):
     return subprocess.Popen(list(args), **kwargs)
 
 
-def write_persistent_log(message, path=None):
+def _write_log_record(target, ts, message):
+    """Do the actual file work for one line. Never raises."""
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with _LOG_LOCK:
+            if target.exists() and target.stat().st_size > LOG_MAX_BYTES:
+                backup = target.with_suffix(target.suffix + ".1")
+                try:
+                    if backup.exists():
+                        backup.unlink()
+                    target.replace(backup)
+                except Exception:
+                    # reason: log rotation is optional and the active log remains usable
+                    pass
+            with open(target, 'a', encoding='utf-8') as f:
+                f.write(f"{ts} {message}\n")
+    except Exception:
+        # reason: persistent diagnostics are best-effort and must never mask application work
+        pass
+
+
+class _LogFlushMarker:
+    """Queued behind the pending lines so a waiter learns when they landed."""
+
+    __slots__ = ('event',)
+
+    def __init__(self):
+        self.event = threading.Event()
+
+
+def _drain_log_queue():
+    while True:
+        record = _LOG_QUEUE.get()
+        try:
+            if record is None:
+                return
+            if isinstance(record, _LogFlushMarker):
+                record.event.set()
+                continue
+            _write_log_record(*record)
+        finally:
+            _LOG_QUEUE.task_done()
+
+
+def start_log_writer():
+    """Start the background log writer once. Returns the thread."""
+    global _LOG_WRITER
+    with _LOG_WRITER_LOCK:
+        if _LOG_WRITER is not None and _LOG_WRITER.is_alive():
+            return _LOG_WRITER
+        _LOG_WRITER = threading.Thread(
+            target=_drain_log_queue, name='astra-log-writer', daemon=True,
+        )
+        _LOG_WRITER.start()
+        return _LOG_WRITER
+
+
+def flush_persistent_log(timeout=5.0):
+    """Wait for queued log lines to reach the file.
+
+    Shutdown and the tests both need a point where the log is on disk; without
+    it a daemon writer can be killed with lines still in hand.
+    """
+    with _LOG_WRITER_LOCK:
+        writer = _LOG_WRITER
+    if writer is None or not writer.is_alive():
+        return True
+    marker = _LogFlushMarker()
+    try:
+        _LOG_QUEUE.put(marker, timeout=timeout)
+    except queue.Full:
+        return False
+    return marker.event.wait(timeout)
+
+
+def write_persistent_log(message, path=None, *, synchronous=False):
     """Best-effort disk log for diagnostics when the windowed exe has no console.
 
     ``path`` binds LOG_PATH late so the test suite can redirect the module
     global to a temp file — unit runs used to interleave fabricated failure
     lines ("updater exploded", "disk full") into the REAL
-    %LOCALAPPDATA%/AstraDownloader/server.log, poisoning support reads."""
+    %LOCALAPPDATA%/AstraDownloader/server.log, poisoning support reads.
+
+    The in-memory ring is updated on the calling thread because the GUI reads
+    it immediately; only the file write is handed to the writer thread. Pass
+    ``synchronous=True`` where the line has to be on disk before the caller
+    continues — the crash handler is the case that matters, since the process
+    is about to end.
+    """
     try:
-        path = Path(LOG_PATH if path is None else path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        target = Path(LOG_PATH if path is None else path)
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with _LOG_LOCK:
-            if path.exists() and path.stat().st_size > LOG_MAX_BYTES:
-                backup = path.with_suffix(path.suffix + ".1")
-                try:
-                    if backup.exists():
-                        backup.unlink()
-                    path.replace(backup)
-                except Exception:
-                    # reason: log rotation is optional and the active log remains usable
-                    pass
-            with open(path, 'a', encoding='utf-8') as f:
-                f.write(f"{ts} {message}\n")
             _log_ring.append({'ts': ts, 'msg': message[:MAX_TEXT_FIELD]})
+        if synchronous:
+            _write_log_record(target, ts, message)
+            return
+        writer = start_log_writer()
+        if writer is None or not writer.is_alive():
+            _write_log_record(target, ts, message)
+            return
+        try:
+            _LOG_QUEUE.put_nowait((target, ts, message))
+        except queue.Full:
+            # A dropped diagnostic is worse than a slow one.
+            _write_log_record(target, ts, message)
     except Exception:
         # reason: persistent diagnostics are best-effort and must never mask application work
         pass
@@ -1030,7 +1121,9 @@ def build_diagnostics_bundle(server_running=False, endpoint='', active_downloads
 
 def log_crash(context="Unhandled exception"):
     try:
-        write_persistent_log(f"{context}\n{traceback.format_exc()}", CRASH_LOG_PATH)
+        write_persistent_log(
+            f"{context}\n{traceback.format_exc()}", CRASH_LOG_PATH, synchronous=True,
+        )
     except Exception:
         # reason: crash logging must not replace the original unhandled exception
         pass
@@ -1076,10 +1169,13 @@ def install_unhandled_exception_hooks(notify=None):
             previous(exc_type, exc_value, exc_traceback)
             return
         try:
+            # Synchronous: the process is about to end and a daemon writer
+            # dies with lines still in hand.
             write_persistent_log(
                 "Unhandled exception\n"
                 + "".join(traceback.format_exception(exc_type, exc_value, exc_traceback)),
                 CRASH_LOG_PATH,
+                synchronous=True,
             )
         except Exception:
             # reason: reporting must never replace the exception being reported
