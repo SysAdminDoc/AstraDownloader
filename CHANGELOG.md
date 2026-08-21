@@ -14,6 +14,12 @@ repository's git log.
 
 ### Changed
 
+- **Every button has its own icon now.** Fifteen of them shared one
+  three-lines-and-dots default, which meant Remove and Undo remove were the
+  same picture, as were Restore defaults and Undo defaults, and the
+  Subscriptions and Settings rail entries. Sixteen new glyphs cover the
+  buttons that had none, and the default is back to meaning "unnamed".
+
 - **A subscription scan no longer rewrites the whole archive per candidate.**
   Reserving and queueing each item used to serialize and fsync the entire
   document, up to 20,000 records, twice per candidate, while holding the lock

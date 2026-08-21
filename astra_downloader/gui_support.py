@@ -19,7 +19,8 @@ __all__ = (
     "GUI_ACCESSIBILITY_COLORS", "describe_rejected_links", "download_status_tone", "filter_site_login_entries",
     "filter_subscription_records", "format_duration", "human_status", "make_card",
     "make_divider", "make_empty_state", "make_label", "make_line_icon", "make_section_label",
-    "make_stat", "make_state_label", "make_status_badge", "make_vertical_divider",
+    "line_icon_glyph", "make_stat", "make_state_label", "make_status_badge",
+    "make_vertical_divider",
     "announce_status", "refresh_line_icons", "repolish", "sanitize_csv_cell",
     "set_gui_theme", "set_line_icon", "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
@@ -209,6 +210,261 @@ def make_state_label(text, tone="neutral"):
     return label
 
 
+# Matched in order, first hit wins, so a more specific name has to come first:
+# "Undo remove" is an undo, not a remove, and "Import settings" is an import,
+# not the Settings page. The fallback is reserved for a name nothing here
+# claims — a named button reaching it is the bug this table exists to prevent,
+# and a test enumerates every button label to say so.
+_ICON_MATCHERS = (
+    ("dashboard", lambda key: key == "dashboard"),
+    ("extension", lambda key: "extension" in key or "browser" in key),
+    ("download", lambda key: key == "downloads" or "download" in key),
+    ("history", lambda key: key == "history"),
+    ("undo", lambda key: "undo" in key),
+    ("restore", lambda key: "restore" in key),
+    ("start", lambda key: "start" in key or "resume" in key),
+    ("stop", lambda key: "stop" in key),
+    ("pause", lambda key: "pause" in key),
+    ("copy", lambda key: "copy" in key),
+    ("folder", lambda key: "folder" in key or "browse" in key or key == "show"),
+    ("clear", lambda key: "clear" in key or "cancel" in key),
+    ("save", lambda key: "save" in key),
+    ("refresh", lambda key: any(
+        word in key for word in ("regenerate", "reinstall", "update", "retry")
+    )),
+    ("reveal", lambda key: "reveal" in key),
+    ("diagnostic", lambda key: "diagnostic" in key),
+    ("updown", lambda key: key in ("up", "down")),
+    ("prevnext", lambda key: "previous" in key or "next" in key),
+    ("signin", lambda key: "sign-in" in key or "signin" in key),
+    ("export", lambda key: "export" in key),
+    ("import", lambda key: "import" in key),
+    ("command", lambda key: any(
+        word in key for word in ("command", "terminal", "inspect")
+    )),
+    ("playlist", lambda key: any(
+        word in key for word in ("playlist", "stage", "staging", "items")
+    )),
+    ("remove", lambda key: "remove" in key or "delete" in key),
+    ("dismiss", lambda key: "dismiss" in key or key == "close"),
+    ("scan", lambda key: "scan" in key),
+    ("test", lambda key: "test" in key),
+    ("checks", lambda key: "checks" in key),
+    ("password", lambda key: "password" in key or "credential" in key),
+    ("register", lambda key: "register" in key or "pair" in key),
+    ("link", lambda key: "link" in key or "url" in key),
+    ("clip", lambda key: "clip" in key or "30 s" in key or "seconds" in key),
+    ("options", lambda key: "option" in key or "advanced" in key),
+    ("add", lambda key: key.startswith("add") or key.startswith("new ")),
+    ("subscriptions", lambda key: "subscription" in key or "feed" in key),
+    ("settings", lambda key: "setting" in key or "preference" in key),
+)
+
+
+def line_icon_glyph(name):
+    """Name the glyph a button label resolves to.
+
+    Exposed so a test can enumerate every label without rendering, and so the
+    painter below dispatches on the same decision the test inspects.
+    """
+    key = str(name).lower()
+    for glyph, matches in _ICON_MATCHERS:
+        if matches(key):
+            return glyph
+    return "fallback"
+
+
+def _paint_line_icon(painter, glyph):
+    if glyph == "dashboard":
+        for x, y in ((2, 2), (10, 2), (2, 10), (10, 10)):
+            painter.drawRoundedRect(x, y, 6, 6, 1, 1)
+    elif glyph == "extension":
+        painter.drawRoundedRect(5, 7, 8, 9, 1, 1)
+        painter.drawLine(7, 7, 7, 3)
+        painter.drawLine(11, 7, 11, 3)
+        painter.drawLine(9, 16, 9, 17)
+    elif glyph == "download":
+        painter.drawLine(9, 2, 9, 12)
+        painter.drawLine(5, 9, 9, 13)
+        painter.drawLine(13, 9, 9, 13)
+        painter.drawLine(3, 16, 15, 16)
+    elif glyph == "history":
+        painter.drawEllipse(2, 2, 14, 14)
+        painter.drawLine(9, 5, 9, 9)
+        painter.drawLine(9, 9, 12, 11)
+    elif glyph == "undo":
+        # A counter-clockwise arrow, deliberately the mirror of "refresh" and
+        # nothing like the action it reverses.
+        painter.drawArc(3, 4, 12, 12, 145 * 16, 275 * 16)
+        painter.drawLine(3, 3, 3, 8)
+        painter.drawLine(3, 8, 8, 8)
+    elif glyph == "restore":
+        painter.drawArc(3, 4, 12, 12, 145 * 16, 275 * 16)
+        painter.drawLine(3, 3, 3, 8)
+        painter.drawLine(3, 8, 8, 8)
+        painter.drawLine(9, 7, 9, 11)
+        painter.drawLine(7, 9, 11, 9)
+    elif glyph == "start":
+        painter.drawLine(5, 3, 15, 9)
+        painter.drawLine(15, 9, 5, 15)
+        painter.drawLine(5, 15, 5, 3)
+    elif glyph == "stop":
+        painter.drawRoundedRect(4, 4, 10, 10, 1, 1)
+    elif glyph == "pause":
+        painter.drawLine(6, 3, 6, 15)
+        painter.drawLine(12, 3, 12, 15)
+    elif glyph == "copy":
+        painter.drawRoundedRect(5, 3, 9, 11, 1, 1)
+        painter.drawRoundedRect(2, 6, 9, 10, 1, 1)
+    elif glyph == "folder":
+        painter.drawLine(2, 6, 7, 6)
+        painter.drawLine(7, 6, 9, 8)
+        painter.drawLine(9, 8, 16, 8)
+        painter.drawRoundedRect(2, 5, 14, 11, 1, 1)
+    elif glyph == "clear":
+        painter.drawLine(5, 6, 6, 16)
+        painter.drawLine(13, 6, 12, 16)
+        painter.drawLine(6, 16, 12, 16)
+        painter.drawLine(4, 5, 14, 5)
+        painter.drawLine(7, 2, 11, 2)
+    elif glyph == "save":
+        painter.drawRoundedRect(3, 2, 12, 14, 1, 1)
+        painter.drawLine(6, 2, 6, 7)
+        painter.drawLine(6, 7, 12, 7)
+        painter.drawEllipse(6, 10, 6, 4)
+    elif glyph == "refresh":
+        painter.drawArc(3, 3, 12, 12, 35 * 16, 275 * 16)
+        painter.drawLine(12, 2, 15, 4)
+        painter.drawLine(15, 4, 14, 8)
+    elif glyph == "reveal":
+        painter.drawEllipse(2, 5, 14, 8)
+        painter.drawEllipse(7, 7, 4, 4)
+    elif glyph == "diagnostic":
+        painter.drawRoundedRect(3, 2, 12, 14, 1, 1)
+        painter.drawLine(6, 6, 12, 6)
+        painter.drawLine(6, 9, 12, 9)
+        painter.drawLine(6, 12, 10, 12)
+    elif glyph in ("up", "down"):
+        direction = -1 if glyph == "up" else 1
+        y_tip = 4 if direction == -1 else 14
+        y_tail = 14 if direction == -1 else 4
+        painter.drawLine(9, y_tail, 9, y_tip)
+        painter.drawLine(9, y_tip, 5, y_tip - (4 * direction))
+        painter.drawLine(9, y_tip, 13, y_tip - (4 * direction))
+    elif glyph in ("previous", "next"):
+        direction = -1 if glyph == "previous" else 1
+        x_tip = 5 if direction == -1 else 13
+        x_tail = 12 if direction == -1 else 6
+        painter.drawLine(x_tail, 3, x_tip, 9)
+        painter.drawLine(x_tip, 9, x_tail, 15)
+    elif glyph == "signin":
+        painter.drawEllipse(2, 6, 7, 7)
+        painter.drawLine(8, 9, 16, 9)
+        painter.drawLine(13, 9, 13, 13)
+        painter.drawLine(16, 9, 16, 12)
+    elif glyph == "export":
+        painter.drawLine(9, 2, 9, 12)
+        painter.drawLine(5, 6, 9, 2)
+        painter.drawLine(13, 6, 9, 2)
+        painter.drawLine(3, 10, 3, 16)
+        painter.drawLine(3, 16, 15, 16)
+        painter.drawLine(15, 16, 15, 10)
+    elif glyph == "import":
+        # The export tray with the arrow reversed: into the box, not out of it.
+        painter.drawLine(9, 2, 9, 12)
+        painter.drawLine(5, 8, 9, 12)
+        painter.drawLine(13, 8, 9, 12)
+        painter.drawLine(3, 10, 3, 16)
+        painter.drawLine(3, 16, 15, 16)
+        painter.drawLine(15, 16, 15, 10)
+    elif glyph == "command":
+        painter.drawRoundedRect(2, 3, 14, 12, 1, 1)
+        painter.drawLine(5, 7, 7, 9)
+        painter.drawLine(7, 9, 5, 11)
+        painter.drawLine(9, 11, 12, 11)
+    elif glyph == "playlist":
+        painter.drawEllipse(3, 4, 2, 2)
+        painter.drawEllipse(3, 8, 2, 2)
+        painter.drawEllipse(3, 12, 2, 2)
+        painter.drawLine(7, 5, 15, 5)
+        painter.drawLine(7, 9, 15, 9)
+        painter.drawLine(7, 13, 15, 13)
+    elif glyph == "remove":
+        # A bin. Nothing else in this set has a lid.
+        painter.drawLine(3, 5, 15, 5)
+        painter.drawLine(7, 5, 7, 2)
+        painter.drawLine(11, 5, 11, 2)
+        painter.drawLine(7, 2, 11, 2)
+        painter.drawLine(5, 5, 6, 16)
+        painter.drawLine(13, 5, 12, 16)
+        painter.drawLine(6, 16, 12, 16)
+        painter.drawLine(9, 8, 9, 13)
+    elif glyph == "dismiss":
+        painter.drawLine(4, 4, 14, 14)
+        painter.drawLine(14, 4, 4, 14)
+    elif glyph == "scan":
+        painter.drawEllipse(3, 3, 9, 9)
+        painter.drawLine(11, 11, 16, 16)
+        painter.drawLine(6, 7, 9, 7)
+    elif glyph == "test":
+        painter.drawLine(3, 9, 7, 14)
+        painter.drawLine(7, 14, 15, 4)
+    elif glyph == "checks":
+        painter.drawLine(3, 5, 5, 7)
+        painter.drawLine(5, 7, 8, 3)
+        painter.drawLine(10, 5, 16, 5)
+        painter.drawLine(3, 12, 5, 14)
+        painter.drawLine(5, 14, 8, 10)
+        painter.drawLine(10, 12, 16, 12)
+    elif glyph == "password":
+        painter.drawEllipse(2, 6, 7, 7)
+        painter.drawEllipse(4, 8, 3, 3)
+        painter.drawLine(8, 9, 16, 9)
+        painter.drawLine(12, 9, 12, 12)
+        painter.drawLine(15, 9, 15, 13)
+    elif glyph == "register":
+        painter.drawRoundedRect(2, 4, 9, 10, 1, 1)
+        painter.drawLine(11, 9, 16, 9)
+        painter.drawLine(14, 7, 16, 9)
+        painter.drawLine(14, 11, 16, 9)
+    elif glyph == "link":
+        painter.drawArc(2, 6, 8, 6, 90 * 16, 180 * 16)
+        painter.drawArc(8, 6, 8, 6, 270 * 16, 180 * 16)
+        painter.drawLine(6, 9, 12, 9)
+    elif glyph == "clip":
+        painter.drawEllipse(2, 2, 14, 14)
+        painter.drawLine(9, 5, 9, 9)
+        painter.drawLine(9, 9, 13, 9)
+        painter.drawLine(2, 9, 5, 9)
+    elif glyph == "options":
+        painter.drawLine(2, 5, 16, 5)
+        painter.drawLine(2, 13, 16, 13)
+        painter.drawEllipse(5, 3, 4, 4)
+        painter.drawEllipse(10, 11, 4, 4)
+    elif glyph == "add":
+        painter.drawEllipse(2, 2, 14, 14)
+        painter.drawLine(9, 5, 9, 13)
+        painter.drawLine(5, 9, 13, 9)
+    elif glyph == "subscriptions":
+        painter.drawArc(3, 4, 12, 12, 0, 90 * 16)
+        painter.drawArc(3, 9, 7, 7, 0, 90 * 16)
+        painter.drawEllipse(3, 13, 3, 3)
+    elif glyph == "settings":
+        painter.drawEllipse(5, 5, 8, 8)
+        painter.drawEllipse(7, 7, 4, 4)
+        painter.drawLine(9, 1, 9, 4)
+        painter.drawLine(9, 14, 9, 17)
+        painter.drawLine(1, 9, 4, 9)
+        painter.drawLine(14, 9, 17, 9)
+    else:
+        painter.drawLine(2, 5, 16, 5)
+        painter.drawLine(2, 9, 16, 9)
+        painter.drawLine(2, 13, 16, 13)
+        painter.drawEllipse(5, 3, 4, 4)
+        painter.drawEllipse(10, 7, 4, 4)
+        painter.drawEllipse(4, 11, 4, 4)
+
+
 def make_line_icon(name, size=18, dpr=None):
     """Draw the rail icons from one quiet monochrome system.
 
@@ -217,7 +473,12 @@ def make_line_icon(name, size=18, dpr=None):
     every stroke goes soft. ``dpr`` is overridable for tests; the default asks
     the running application.
     """
+    glyph = line_icon_glyph(name)
     key = str(name).lower()
+    if glyph == "updown":
+        glyph = key
+    elif glyph == "prevnext":
+        glyph = "previous" if "previous" in key else "next"
     if dpr is None:
         app = QApplication.instance()
         dpr = float(app.devicePixelRatio()) if app is not None else 1.0
@@ -236,107 +497,7 @@ def make_line_icon(name, size=18, dpr=None):
         Qt.PenCapStyle.RoundCap,
         Qt.PenJoinStyle.RoundJoin,
     ))
-    if key == "dashboard":
-        for x, y in ((2, 2), (10, 2), (2, 10), (10, 10)):
-            painter.drawRoundedRect(x, y, 6, 6, 1, 1)
-    elif "extension" in key or "browser" in key:
-        painter.drawRoundedRect(5, 7, 8, 9, 1, 1)
-        painter.drawLine(7, 7, 7, 3)
-        painter.drawLine(11, 7, 11, 3)
-        painter.drawLine(9, 16, 9, 17)
-    elif key == "downloads" or "download" in key:
-        painter.drawLine(9, 2, 9, 12)
-        painter.drawLine(5, 9, 9, 13)
-        painter.drawLine(13, 9, 9, 13)
-        painter.drawLine(3, 16, 15, 16)
-    elif key == "history":
-        painter.drawEllipse(2, 2, 14, 14)
-        painter.drawLine(9, 5, 9, 9)
-        painter.drawLine(9, 9, 12, 11)
-    elif "start" in key or "resume" in key:
-        painter.drawLine(5, 3, 15, 9)
-        painter.drawLine(15, 9, 5, 15)
-        painter.drawLine(5, 15, 5, 3)
-    elif "stop" in key:
-        painter.drawRoundedRect(4, 4, 10, 10, 1, 1)
-    elif "pause" in key:
-        painter.drawLine(6, 3, 6, 15)
-        painter.drawLine(12, 3, 12, 15)
-    elif "copy" in key:
-        painter.drawRoundedRect(5, 3, 9, 11, 1, 1)
-        painter.drawRoundedRect(2, 6, 9, 10, 1, 1)
-    elif "folder" in key or "browse" in key or key == "show":
-        painter.drawLine(2, 6, 7, 6)
-        painter.drawLine(7, 6, 9, 8)
-        painter.drawLine(9, 8, 16, 8)
-        painter.drawRoundedRect(2, 5, 14, 11, 1, 1)
-    elif "clear" in key or "cancel" in key:
-        painter.drawLine(5, 6, 6, 16)
-        painter.drawLine(13, 6, 12, 16)
-        painter.drawLine(6, 16, 12, 16)
-        painter.drawLine(4, 5, 14, 5)
-        painter.drawLine(7, 2, 11, 2)
-    elif "save" in key:
-        painter.drawRoundedRect(3, 2, 12, 14, 1, 1)
-        painter.drawLine(6, 2, 6, 7)
-        painter.drawLine(6, 7, 12, 7)
-        painter.drawEllipse(6, 10, 6, 4)
-    elif any(word in key for word in ("regenerate", "reinstall", "update", "retry")):
-        painter.drawArc(3, 3, 12, 12, 35 * 16, 275 * 16)
-        painter.drawLine(12, 2, 15, 4)
-        painter.drawLine(15, 4, 14, 8)
-    elif "reveal" in key:
-        painter.drawEllipse(2, 5, 14, 8)
-        painter.drawEllipse(7, 7, 4, 4)
-    elif "diagnostic" in key:
-        painter.drawRoundedRect(3, 2, 12, 14, 1, 1)
-        painter.drawLine(6, 6, 12, 6)
-        painter.drawLine(6, 9, 12, 9)
-        painter.drawLine(6, 12, 10, 12)
-    elif key in ("up", "down"):
-        direction = -1 if key == "up" else 1
-        y_tip = 4 if direction == -1 else 14
-        y_tail = 14 if direction == -1 else 4
-        painter.drawLine(9, y_tail, 9, y_tip)
-        painter.drawLine(9, y_tip, 5, y_tip - (4 * direction))
-        painter.drawLine(9, y_tip, 13, y_tip - (4 * direction))
-    elif "previous" in key or "next" in key:
-        direction = -1 if "previous" in key else 1
-        x_tip = 5 if direction == -1 else 13
-        x_tail = 12 if direction == -1 else 6
-        painter.drawLine(x_tail, 3, x_tip, 9)
-        painter.drawLine(x_tip, 9, x_tail, 15)
-    elif "sign-in" in key or "signin" in key:
-        painter.drawEllipse(2, 6, 7, 7)
-        painter.drawLine(8, 9, 16, 9)
-        painter.drawLine(13, 9, 13, 13)
-        painter.drawLine(16, 9, 16, 12)
-    elif "export" in key:
-        painter.drawLine(9, 2, 9, 12)
-        painter.drawLine(5, 6, 9, 2)
-        painter.drawLine(13, 6, 9, 2)
-        painter.drawLine(3, 10, 3, 16)
-        painter.drawLine(3, 16, 15, 16)
-        painter.drawLine(15, 16, 15, 10)
-    elif any(word in key for word in ("command", "terminal", "inspect")):
-        painter.drawRoundedRect(2, 3, 14, 12, 1, 1)
-        painter.drawLine(5, 7, 7, 9)
-        painter.drawLine(7, 9, 5, 11)
-        painter.drawLine(9, 11, 12, 11)
-    elif any(word in key for word in ("playlist", "stage", "staging", "items")):
-        painter.drawEllipse(3, 4, 2, 2)
-        painter.drawEllipse(3, 8, 2, 2)
-        painter.drawEllipse(3, 12, 2, 2)
-        painter.drawLine(7, 5, 15, 5)
-        painter.drawLine(7, 9, 15, 9)
-        painter.drawLine(7, 13, 15, 13)
-    else:
-        painter.drawLine(2, 5, 16, 5)
-        painter.drawLine(2, 9, 16, 9)
-        painter.drawLine(2, 13, 16, 13)
-        painter.drawEllipse(5, 3, 4, 4)
-        painter.drawEllipse(10, 7, 4, 4)
-        painter.drawEllipse(4, 11, 4, 4)
+    _paint_line_icon(painter, glyph)
     painter.end()
     return QIcon(pixmap)
 

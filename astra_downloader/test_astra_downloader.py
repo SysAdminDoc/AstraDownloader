@@ -7329,6 +7329,91 @@ for forbidden in (
 
         self.assertFalse(gs.announce_status(FakeLabel()))
 
+    @staticmethod
+    def _tool_button_labels():
+        """Every literal a button or rail icon is built from."""
+        module_dir = Path(ad.__file__).resolve().parent
+        labels = set()
+        for source in sorted(module_dir.glob("gui*.py")):
+            tree = ast.parse(source.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                name = getattr(func, "attr", None) or getattr(func, "id", None)
+                if name not in ("_make_tool_button", "make_line_icon", "set_line_icon"):
+                    continue
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        labels.add(arg.value)
+                        break
+                    if isinstance(arg, ast.Call) and getattr(arg.func, "id", None) == "tr":
+                        if arg.args and isinstance(arg.args[0], ast.Constant):
+                            labels.add(arg.args[0].value)
+                        break
+        return labels
+
+    def test_every_named_button_resolves_to_a_deliberate_glyph(self):
+        # 15 of 48 tool buttons used to fall through to one three-lines-and-dots
+        # default, which put Remove and Undo remove on the same picture.
+        gs = gui_module_for_tests()
+        import gui_support
+
+        # Property values, not icon names — _make_tool_button also takes a
+        # style class and a selection mode as string literals.
+        not_icon_names = {"ghost", "select", "primary", "danger", "quiet"}
+        labels = {
+            label for label in self._tool_button_labels()
+            if label and label not in not_icon_names
+        }
+        self.assertGreaterEqual(len(labels), 40, "the scan must find the button labels")
+
+        fell_through = sorted(
+            label for label in labels
+            if gui_support.line_icon_glyph(label) == "fallback"
+        )
+        self.assertEqual(
+            fell_through, [],
+            f"named buttons must not share the unnamed-icon default: {fell_through}",
+        )
+        self.assertEqual(gui_support.line_icon_glyph("some unnamed control"), "fallback",
+                         "the fallback must still exist for a genuinely unnamed icon")
+
+    def test_a_destructive_action_and_its_undo_do_not_share_a_glyph(self):
+        import gui_support
+
+        for destructive, undo in (
+            ("Remove", "Undo remove"),
+            ("Import settings", "Undo import"),
+            ("Restore defaults", "Undo defaults"),
+            ("Clear history", "Undo clear"),
+        ):
+            with self.subTest(action=destructive):
+                self.assertNotEqual(
+                    gui_support.line_icon_glyph(destructive),
+                    gui_support.line_icon_glyph(undo),
+                )
+
+    def test_the_nav_entries_each_draw_something_different(self):
+        # Subscriptions and Settings used to collide on the fallback.
+        gs = gui_module_for_tests()
+        import gui_support
+        if _get_qapp_or_skip(self) is None:
+            return
+
+        rendered = {}
+        for name in ("Download", "History", "Sign-ins", "Subscriptions",
+                     "Browser extension", "Settings"):
+            icon = gui_support.make_line_icon(name, dpr=1.0)
+            image = icon.pixmap(18, 18).toImage()
+            pixels = bytes(image.constBits())[:image.sizeInBytes()]
+            self.assertNotIn(
+                pixels, rendered.values(),
+                f"{name} draws the same glyph as "
+                f"{next((k for k, v in rendered.items() if v == pixels), '?')}",
+            )
+            rendered[name] = pixels
+
     def test_set_status_tone_maps_error_onto_the_danger_convention(self):
         gs = gui_module_for_tests()
         applied = []

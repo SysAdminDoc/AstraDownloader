@@ -26,13 +26,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the gate covers any handler whose body neither logs nor re-raises; the 65 sites are annotated or narrowed; `check:catch-reasons` exits 0.
   Complexity: M
 
-- [ ] P1 — AD-16 — Give every tool button a distinct icon
-  Why: `make_line_icon` matches on keyword and falls through to one three-lines-and-dots default, which 15 of 48 tool buttons hit — including *Remove*, *Restore*, *Restore defaults*, *Undo remove*, *Undo import*, *Undo defaults*, *Dismiss*, *Scan now*, *Add subscription*, *Test*, *Import settings*, *Import cookies.txt*. A destructive action and its undo are visually identical. The **Subscriptions** and **Settings** nav entries collide too.
-  Evidence: `astra_downloader/gui_support.py:169-275` (the `else` branch at `:267`); `gui.py:1064`, `:1519`; visible in `settings-dirty.png`, `subscriptions-populated.png`, `dashboard-german.png`.
-  Touches: `astra_downloader/gui_support.py`
-  Acceptance: no two distinct button labels resolve to the same glyph; a test enumerates every `_make_tool_button` label and asserts a unique branch is taken (the fallback is reserved for genuinely unnamed icons).
-  Complexity: M
-
 - [ ] P1 — AD-18 — Put the queue above the fold on the Download page
   Why: `downloads-active-pending.png` is a scenario *with* active and pending downloads and shows none of them at 1120×760. The page stacks first-run panel → paste box → password → four option rows → four hint lines → setup status → readiness grid → pre-flight panel → notices → divider → toolbar → queue. The design invariant is "downloader first"; the download you just started is last, and the pre-flight panel is fully expanded even when every check passes.
   Evidence: `astra_downloader/gui_download_page.py:114-445`; `build/companion-ui-smoke/downloads-active-pending.png`, `downloads-queue-full.png`.
