@@ -665,6 +665,18 @@ DOWNLOAD_FAILURE_RECOVERY = {
         ),
         'next_action': 'update-ytdlp-or-retry-later',
     },
+    'cookie-incompatible': {
+        'error': (
+            'The stored YouTube sign-in made this public video unplayable on '
+            'the player client this download uses.'
+        ),
+        'advice': (
+            'Skip the YouTube sign-in for this public video, or remove the '
+            'stored YouTube cookies and retry. Members-only and private '
+            'videos still need a matching sign-in.'
+        ),
+        'next_action': 'retry-without-cookies',
+    },
     'deno-runtime-missing': {
         'error': (
             'yt-dlp needs the Deno JavaScript runtime to solve recent YouTube '
@@ -3075,6 +3087,19 @@ def classify_download_failure(message='', lines=None):
     return _classify_failure_text(' '.join(text_parts).lower())
 
 
+def _line_shows_sabr_capped_stream(line):
+    """True when one yt-dlp line reports SABR-only leftovers (yt-dlp#12482).
+
+    The warning is emitted during format selection, then progress lines push
+    it out of the 30-line failure tail. Callers that only inspect `last_lines`
+    after a zero-exit 360p run would miss it.
+    """
+    text = str(line or '').lower()
+    if 'sabr' not in text:
+        return False
+    return 'missing a url' in text or 'formats skipped' in text
+
+
 def _classify_failure_text(text):
     if not text.strip():
         return None
@@ -3103,6 +3128,10 @@ def _classify_failure_text(text):
         'inappropriate for some users', 'members-only', 'members only',
     )):
         return 'sign-in-required'
+    if 'unplayable' in text and any(marker in text for marker in (
+        'tv_downgraded', 'tv downgraded',
+    )):
+        return 'cookie-incompatible'
     if 'unplayable' in text:
         return 'sign-in-required'
     if 'ffmpeg' in text and any(marker in text for marker in (
@@ -4666,6 +4695,8 @@ class DownloadManagerCore:
             last_lines.append(line)
             if len(last_lines) > 30:
                 last_lines = last_lines[-30:]
+            if _line_shows_sabr_capped_stream(line):
+                dl.sabr_capped_warning = True
             if 'ERROR' in line.upper():
                 last_error = line
 
@@ -4825,6 +4856,24 @@ class DownloadManagerCore:
             "be a page without a downloadable video, or the site may serve it "
             "only to signed-in viewers."
         )
+
+    def _apply_zero_exit_outcome(self, dl):
+        """Classify a yt-dlp exit 0 as skipped, SABR-capped, or complete."""
+        if getattr(dl, 'sabr_capped_warning', False):
+            dl.status = "failed"
+            dl.step = "failed"
+            apply_download_failure_classification(dl, 'sabr-limited')
+            return
+        skip_reason = self._empty_result_reason(dl)
+        if skip_reason:
+            dl.status = "skipped"
+            dl.step = "skipped"
+            dl.progress = 0
+            dl.error = skip_reason
+            return
+        dl.status = "complete"
+        dl.step = "complete"
+        dl.progress = 100
 
     def _download_intermediate_dir(self, dl):
         """Return the stable, app-owned staging directory for one download.
@@ -5660,17 +5709,10 @@ class DownloadManagerCore:
                     # (a 300 MB archive.org item under a 25 MB cap), or the
                     # extractor produced no media. Reporting "complete" with no
                     # file on disk reads exactly like a broken downloader, so
-                    # surface it as `skipped` with the reason instead.
-                    skip_reason = self._empty_result_reason(dl)
-                    if skip_reason:
-                        dl.status = "skipped"
-                        dl.step = "skipped"
-                        dl.progress = 0
-                        dl.error = skip_reason
-                    else:
-                        dl.status = "complete"
-                        dl.step = "complete"
-                        dl.progress = 100
+                    # surface it as `skipped` with the reason instead. A SABR
+                    # warning plus leftover 360p also exits 0 (yt-dlp#12482)
+                    # and must not look like a successful full-quality run.
+                    self._apply_zero_exit_outcome(dl)
                 else:
                     dl.status = "failed"
                     dl.step = "failed"
@@ -5713,9 +5755,23 @@ class DownloadManagerCore:
                             dl, _failure_code, error=dl.error,
                         )
                     combined = " ".join(last_lines).lower()
-                    if 'live event has ended' in combined and dl.cookies_file:
+                    cookie_incompatible = (
+                        'unplayable' in combined
+                        and (
+                            'tv_downgraded' in combined
+                            or 'tv downgraded' in combined
+                        )
+                    )
+                    if dl.cookies_file and (
+                        'live event has ended' in combined or cookie_incompatible
+                    ):
+                        reason = (
+                            "'live event has ended'"
+                            if 'live event has ended' in combined
+                            else "UNPLAYABLE with tv_downgraded"
+                        )
                         self._dependencies['write_persistent_log'](
-                            f"Download {dl.id}: 'live event has ended' with cookies. "
+                            f"Download {dl.id}: {reason} with cookies. "
                             "Retrying without cookies."
                         )
                         retry_args = [a for i, a in enumerate(args)
@@ -5726,6 +5782,7 @@ class DownloadManagerCore:
                         dl.error_advice = ""
                         dl.error_action = ""
                         dl.progress = 0
+                        dl.sabr_capped_warning = False
                         self.progress_updated.emit()
                         if stop_watchdog is not None:
                             stop_watchdog.set()
@@ -5845,14 +5902,7 @@ class DownloadManagerCore:
                                 dl, 'network-unreachable', error=dl.error
                             )
                         elif proc.returncode == 0:
-                            skip_reason = self._empty_result_reason(dl)
-                            if skip_reason:
-                                dl.status = "skipped"
-                                dl.progress = 0
-                                dl.error = skip_reason
-                            else:
-                                dl.status = "complete"
-                                dl.progress = 100
+                            self._apply_zero_exit_outcome(dl)
                         else:
                             dl.status = "failed"
                             if last_error:
