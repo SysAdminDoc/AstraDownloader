@@ -2531,12 +2531,16 @@
       <translation>Leistung</translation>
     </message>
     <message>
-      <source>Language</source>
-      <translation>Sprache</translation>
+      <source>Appearance and language</source>
+      <translation>Darstellung und Sprache</translation>
     </message>
     <message>
-      <source>Tray behavior</source>
-      <translation>Infobereich</translation>
+      <source>Window and tray</source>
+      <translation>Fenster und Infobereich</translation>
+    </message>
+    <message>
+      <source>Clipboard</source>
+      <translation>Zwischenablage</translation>
     </message>
     <message>
       <source>Maintenance</source>
@@ -3099,6 +3103,10 @@
       <translation>Der Systemstandard folgt dem Erscheinungsbild des Betriebssystems.</translation>
     </message>
     <message>
+      <source>Language</source>
+      <translation>Sprache</translation>
+    </message>
+    <message>
       <source>Companion language</source>
       <translation>Sprache der Anwendung</translation>
     </message>
@@ -3109,14 +3117,6 @@
     <message>
       <source>Language changes apply after restarting Astra Downloader.</source>
       <translation>Sprachänderungen werden nach einem Neustart von Astra Downloader angewendet.</translation>
-    </message>
-    <message>
-      <source>Keep yt-dlp up to date automatically</source>
-      <translation>yt-dlp automatisch aktuell halten</translation>
-    </message>
-    <message>
-      <source>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</source>
-      <translation>Prüft höchstens alle 12 Stunden – beim Serverstart und wenn die Warteschlange leer läuft.</translation>
     </message>
     <message>
       <source>Close to the system tray</source>
@@ -3141,6 +3141,14 @@
     <message>
       <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
       <translation>Standardmäßig deaktiviert. Zwischenablageinhalte, die nicht wie ein Videolink aussehen, werden ignoriert; passende Links werden bereitgestellt, ohne einen Download zu starten.</translation>
+    </message>
+    <message>
+      <source>Keep yt-dlp up to date automatically</source>
+      <translation>yt-dlp automatisch aktuell halten</translation>
+    </message>
+    <message>
+      <source>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</source>
+      <translation>Prüft höchstens alle 12 Stunden – beim Serverstart und wenn die Warteschlange leer läuft.</translation>
     </message>
     <message>
       <source>Installed tools</source>

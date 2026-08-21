@@ -1006,8 +1006,8 @@ class SettingsPageMixin:
         perf_l.addLayout(channel_row)
         layout.addWidget(perf_card)
 
-        # Language
-        language_card, language_l = self._make_settings_group("Language")
+        # Appearance and language
+        language_card, language_l = self._make_settings_group("Appearance and language")
         theme_row = QHBoxLayout()
         theme_row.addWidget(make_label("Theme", "fieldLabel"))
         theme_row.addStretch()
@@ -1051,17 +1051,8 @@ class SettingsPageMixin:
         ))
         layout.addWidget(language_card)
 
-        # Behavior
-        beh_card, beh_l = self._make_settings_group("Tray behavior")
-        self.cfg_autoupdate = QCheckBox(tr("Keep yt-dlp up to date automatically"))
-        self.cfg_autoupdate.setChecked(self.config.get("AutoUpdateYtDlp", True))
-        # The real cadence: throttled to once per 12 hours, checked when the
-        # server starts and again whenever the download queue goes idle (the
-        # race-free moment to swap the binary).
-        self.cfg_autoupdate.setToolTip(tr(
-            "Checks at most once every 12 hours - when the server starts and "
-            "when the download queue goes idle."
-        ))
+        # Window and tray
+        beh_card, beh_l = self._make_settings_group("Window and tray")
         self.cfg_closetotray = QCheckBox(tr("Close to the system tray"))
         self.cfg_closetotray.setChecked(self.config.get("CloseToTray", True))
         self.cfg_startmin = QCheckBox(tr("Start minimized to the tray"))
@@ -1085,14 +1076,29 @@ class SettingsPageMixin:
             )
         )
         for w in [
-            self.cfg_autoupdate, self.cfg_closetotray, self.cfg_startmin,
-            self.cfg_notify, self.cfg_clipboard,
+            self.cfg_closetotray, self.cfg_startmin, self.cfg_notify,
         ]:
             beh_l.addWidget(w)
         layout.addWidget(beh_card)
 
+        # Clipboard staging fills the Quick download field; it is a download
+        # behaviour, not something the tray does.
+        clip_card, clip_l = self._make_settings_group("Clipboard")
+        clip_l.addWidget(self.cfg_clipboard)
+        layout.addWidget(clip_card)
+
         # Tools — v1.2.0 downloader-maintenance actions
         tools_card, tools_l = self._make_settings_group("Maintenance")
+        self.cfg_autoupdate = QCheckBox(tr("Keep yt-dlp up to date automatically"))
+        self.cfg_autoupdate.setChecked(self.config.get("AutoUpdateYtDlp", True))
+        # The real cadence: throttled to once per 12 hours, checked when the
+        # server starts and again whenever the download queue goes idle (the
+        # race-free moment to swap the binary).
+        self.cfg_autoupdate.setToolTip(tr(
+            "Checks at most once every 12 hours - when the server starts and "
+            "when the download queue goes idle."
+        ))
+        tools_l.addWidget(self.cfg_autoupdate)
         tools_l.addWidget(make_label("Installed tools", "fieldLabel"))
         self.tools_status = make_label("Checking installed tools…", "fieldHint", word_wrap=True, status=True)
         self.tools_status.setAccessibleName(tr("Installed tools status"))

@@ -76,13 +76,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: German and Arabic captures exist for History, Settings, Sign-ins and Subscriptions; no translated label is clipped or elided in any of them; fixed widths become minimums where a translation needs more.
   Complexity: M
 
-- [ ] P2 — AD-36 — Fix the Settings section taxonomy
-  Why: a section headed **Language** contains *Theme* and *Language*; a section headed **Tray behavior** contains *Keep yt-dlp up to date automatically* and *Stage copied video links for review*. With 77 settings, the group name is the only navigation aid there is.
-  Evidence: `build/companion-ui-smoke/settings-dirty.png`; `astra_downloader/gui_settings_page.py`.
-  Touches: `astra_downloader/gui_settings_page.py`, `scripts/build-companion-translations.py`
-  Acceptance: every setting sits under a heading that describes it; new headings are translated and the catalogues regenerated; the settings-search test still finds each setting by its own words.
-  Complexity: S
-
 - [ ] P2 — AD-37 — Ship a Scoop Extras manifest
   Why: Scoop imposes no signing requirement and no review judgement, and the existing onedir zip plus `.sha256` is most of a valid manifest — so it is the shortest path to an install channel that never touches the browser download path or Mark-of-the-Web. Scoop **Main** is structurally closed (its criteria require a non-GUI tool), so Extras is the target. ytDownloader (10,134★) ships Scoop, winget and Chocolatey simultaneously.
   Evidence: https://github.com/ScoopInstaller/Scoop/wiki/Criteria-for-including-apps-in-the-main-bucket; https://github.com/ScoopInstaller/Scoop/wiki/App-Manifests.

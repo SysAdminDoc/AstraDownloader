@@ -3419,7 +3419,8 @@ class MainWindowCore(
                     None,
                 )
             except Exception:
-                # reason: the record is only used to name the undo entry; the removal itself already reported
+                # reason: without the record there is nothing to offer undo
+                # from, so the removal below proceeds and undo stays unavailable
                 record = None
         self._subscription_scan_pending.discard(str(sub_id))
         self._subscription_scan_seen.discard(str(sub_id))

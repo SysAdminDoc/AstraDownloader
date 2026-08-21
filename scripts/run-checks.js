@@ -12,14 +12,27 @@
 // the failures. Order still matters for readability, not for control flow.
 
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 
+// Every test file, discovered rather than listed. A hand-kept list means a new
+// suite is written, passes when run directly, and is never reached by the
+// command the docs tell you to run - which is how three of them ended up
+// outside `npm run check`.
+const TEST_FILES = fs.readdirSync(path.join(ROOT, 'tests'))
+    .filter((name) => name.endsWith('.test.js'))
+    .sort()
+    .map((name) => path.posix.join('tests', name));
+
+if (!TEST_FILES.length) {
+    console.error('[run-checks] no test files found under tests/');
+    process.exit(2);
+}
+
 const GATES = [
-    ['unit tests', process.execPath, ['--test', 'tests/companion-license-inventory.test.js',
-        'tests/python-catch-reason-gate.test.js', 'tests/python-dependency-policy.test.js',
-        'tests/release-provenance.test.js']],
+    ['unit tests', process.execPath, ['--test', ...TEST_FILES]],
     ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
     ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
     ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],

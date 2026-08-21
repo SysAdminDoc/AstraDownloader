@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings groups describe what is in them.** A section headed Language held
+  Theme and Language; one headed Tray behavior held the yt-dlp auto-update and
+  the clipboard link grabber. With 77 settings the heading is the only
+  navigation aid there is, so the yt-dlp update toggle moved to Maintenance,
+  clipboard staging got its own group, and the two misnamed headings became
+  Appearance and language, and Window and tray.
+
 ### Fixed
 
 - **Long names are measured in bytes, which is what Windows counts.** A title

@@ -18532,8 +18532,22 @@ class SettingsNavigationTests(unittest.TestCase):
 
         window._filter_settings("language")
         self.assertFalse(window.cfg_language.isHidden())
-        self.assertFalse(groups["Language"].isHidden())
-        self.assertTrue(groups["Tray behavior"].isHidden())
+        self.assertFalse(groups["Appearance and language"].isHidden())
+        self.assertTrue(groups["Window and tray"].isHidden())
+
+        # Every setting must be findable by its own words, whichever heading it
+        # ended up under.
+        for term, widget, heading in (
+            ("theme", window.cfg_theme, "Appearance and language"),
+            ("clipboard", window.cfg_clipboard, "Clipboard"),
+            ("yt-dlp up to date", window.cfg_autoupdate, "Maintenance"),
+            ("tray", window.cfg_closetotray, "Window and tray"),
+        ):
+            with self.subTest(term=term):
+                window._filter_settings(term)
+                QApplication.processEvents()
+                self.assertFalse(widget.isHidden(), f"{term} must survive its own search")
+                self.assertFalse(groups[heading].isHidden())
 
     def test_language_picker_hides_partial_catalogues(self):
         _get_qapp_or_skip(self)
@@ -22323,7 +22337,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         row is wholly inside it and that the page does not scroll to get there.
         """
         from PySide6.QtCore import QPoint
-        from PySide6.QtWidgets import QApplication, QFrame
+        from PySide6.QtWidgets import QApplication
 
         window = self._window()
         window.resize(1120, 760)
@@ -22349,18 +22363,38 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         window._update_ui()
         QApplication.processEvents()
 
+        # QLabel derives from QFrame, so an isinstance check picks up the
+        # section heading — twelve pixels tall and always inside the viewport,
+        # which is exactly the widget that cannot fail this assertion. Match
+        # the card by the object name gui.py gives it.
         rows = [
             window.downloads_list_layout.itemAt(index).widget()
             for index in range(window.downloads_list_layout.count())
         ]
-        cards = [row for row in rows if isinstance(row, QFrame) and row.isVisible()]
+        cards = [
+            row for row in rows
+            if row is not None and row.isVisible()
+            and row.objectName().startswith("download_")
+        ]
         self.assertTrue(cards, "an active download must render a queue row")
 
         card = cards[0]
-        top = card.mapTo(window, QPoint(0, 0)).y()
+        self.assertGreater(
+            card.height(), 40,
+            "the row must be a real card, not a collapsed placeholder",
+        )
+        # Clipping is against the queue's own viewport, not the window: a row
+        # can sit inside the window and still be cut off by a short scroller.
+        viewport = window.downloads_scroll.viewport()
+        top = card.mapTo(viewport, QPoint(0, 0)).y()
         self.assertGreaterEqual(top, 0)
         self.assertLessEqual(
-            top + card.height(), window.height(),
+            top + card.height(), viewport.height(),
+            "the first queue row must be wholly inside the queue viewport",
+        )
+        window_top = card.mapTo(window, QPoint(0, 0)).y()
+        self.assertLessEqual(
+            window_top + card.height(), window.height(),
             "the first queue row must be wholly inside a 1120x760 window",
         )
 
@@ -22371,8 +22405,8 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         )
         queue_bar = window.downloads_scroll.verticalScrollBar()
         self.assertEqual(
-            queue_bar.value(), 0,
-            "the queue must show its first row without being scrolled",
+            (queue_bar.value(), queue_bar.maximum()), (0, 0),
+            "the queue must show its first row without any scrolling at all",
         )
 
         # The contrast is what gives the assertion above its teeth: with the
@@ -22384,8 +22418,12 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         QApplication.processEvents()
         expanded_top = card.mapTo(window, QPoint(0, 0)).y()
         self.assertGreater(
-            expanded_top, top,
+            expanded_top, window_top,
             "expanding the optional controls must move the queue down",
+        )
+        self.assertGreater(
+            expanded_top, window.height(),
+            "the expanded page is the state that pushes the queue off screen",
         )
         self.assertGreater(
             window.download_page_scroll.verticalScrollBar().maximum(), 0,
