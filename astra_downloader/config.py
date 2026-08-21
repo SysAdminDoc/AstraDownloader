@@ -51,7 +51,7 @@ __all__ = (
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
-    "output_template_preview", "WINDOWS_MAX_PATH",
+    "output_template_preview", "truncate_utf8_bytes", "WINDOWS_MAX_PATH",
     "normalize_sublangs", "normalize_subtitle_sleep",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
@@ -76,7 +76,7 @@ _OWNED_EXPORTS = {
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
-    "output_template_preview", "WINDOWS_MAX_PATH",
+    "output_template_preview", "truncate_utf8_bytes", "WINDOWS_MAX_PATH",
     "normalize_sublangs", "normalize_subtitle_sleep",
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
@@ -794,6 +794,28 @@ _OUTPUT_TEXT_BUDGET = 200
 _OUTPUT_TEXT_FLOOR = 40
 
 
+# Windows caps a path component at 255, and the free-text budget below is
+# stated in bytes because that is what yt-dlp's `B` conversion counts. A
+# four-byte emoji therefore fills a component three times faster than the
+# character count suggests, which is why a character-based bound is not a
+# bound at all for the titles this program actually sees.
+_WINDOWS_MAX_COMPONENT_BYTES = 255
+
+
+def truncate_utf8_bytes(value, limit):
+    """Cut a string to at most ``limit`` UTF-8 bytes without splitting a rune.
+
+    Mirrors yt-dlp's `B` conversion. Doing this by character count instead is
+    the bug: `"🎬" * 60` is 60 characters and 240 bytes.
+    """
+    text_value = str(value or "")
+    limit = max(0, int(limit))
+    encoded = text_value.encode("utf-8")
+    if len(encoded) <= limit:
+        return text_value
+    return encoded[:limit].decode("utf-8", "ignore")
+
+
 def bound_output_template_fields(template):
     """Cap every free-text expansion in an already-validated template.
 
@@ -822,10 +844,10 @@ def bound_output_template_fields(template):
         if field not in _LONG_TEXT_OUTPUT_FIELDS or conversion not in ("s", "B"):
             return match.group(0)
         limit = min(int(precision), budget) if precision else budget
-        # An unbounded `%(field)s` becomes the byte-bounded form the built-in
-        # templates use; an explicit `.Ns` keeps character semantics.
-        conversion = "B" if precision is None else conversion
-        return f"%({field}){pad or ''}.{limit}{conversion}"
+        # Every free-text field becomes byte-bounded, including one the user
+        # gave an explicit `.Ns`. A character precision is not a bound on a
+        # title made of emoji, and the budget this splits is counted in bytes.
+        return f"%({field}){pad or ''}.{limit}B"
 
     return "%%".join(_OUTPUT_TOKEN_RE.sub(rewrite, segment) for segment in segments)
 
@@ -1017,10 +1039,16 @@ def _render_output_template_preview(template):
     template = template.replace("%%", literal_percent)
 
     def replace(match):
-        field, _pad, precision, _conversion = match.groups()
+        field, _pad, precision, conversion = match.groups()
         value = str(_OUTPUT_TEMPLATE_PREVIEW_VALUES.get(field, field))
         if precision:
-            value = value[:int(precision)]
+            # `B` counts bytes, `s` counts characters. Reporting the character
+            # cut for a byte-bounded field told the user a path was short
+            # enough when yt-dlp was about to write a longer one.
+            value = (
+                truncate_utf8_bytes(value, int(precision))
+                if conversion == "B" else value[:int(precision)]
+            )
         return value
 
     return _OUTPUT_TOKEN_RE.sub(replace, template).replace(literal_percent, "%")
@@ -1054,6 +1082,8 @@ def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PAT
                 "valid": False, "normalized": "", "relative": "", "path": "",
                 "length": 0, "max_path": int(max_path),
                 "reserved": (), "too_long": False,
+                "oversizedComponents": (),
+                "maxComponentBytes": _WINDOWS_MAX_COMPONENT_BYTES,
                 "stagingLength": 0, "stagingPath": "",
                 "windowsFilenames": bool(windows_filenames),
             }
@@ -1075,6 +1105,13 @@ def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PAT
             name = _windows_reserved_output_component(component)
             if name and name not in reserved:
                 reserved.append(name)
+    # Every segment is limited, not just the filename. A folder named from a
+    # channel title hits the same 255-byte wall the file does, and the total
+    # path length check above cannot see which component is the problem.
+    oversized = tuple(
+        component for component in relative.split("\\")
+        if len(component.encode("utf-8")) > _WINDOWS_MAX_COMPONENT_BYTES
+    )
     length = len(path)
     staging_length = len(staging_path)
     return {
@@ -1087,9 +1124,12 @@ def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PAT
         "reserved": tuple(reserved),
         "stagingPath": staging_path,
         "stagingLength": staging_length,
+        "oversizedComponents": oversized,
+        "maxComponentBytes": _WINDOWS_MAX_COMPONENT_BYTES,
         "too_long": (
             length > int(max_path)
             or bool(staging_path and staging_length > int(max_path))
+            or bool(oversized)
         ),
         "windowsFilenames": bool(windows_filenames),
     }

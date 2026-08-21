@@ -1643,6 +1643,10 @@
       <translation>Reservierter Windows-Name in der Vorschau: {name}.</translation>
     </message>
     <message>
+      <source>Folder or file name is too long: {name}. Windows allows {maximum} bytes per name.</source>
+      <translation>Ordner- oder Dateiname ist zu lang: {name}. Windows erlaubt {maximum} Bytes pro Name.</translation>
+    </message>
+    <message>
       <source>Rendered path is {length} characters; Windows maximum is {maximum}.</source>
       <translation>Der gerenderte Pfad hat {length} Zeichen; das Windows-Maximum ist {maximum}.</translation>
     </message>

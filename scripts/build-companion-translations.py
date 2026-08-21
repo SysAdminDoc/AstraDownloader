@@ -300,6 +300,8 @@ CATALOGS = {
             "Reservierter Windows-Name in der Vorschau: {name}.",
         "Rendered path is {length} characters; Windows maximum is {maximum}.":
             "Der gerenderte Pfad hat {length} Zeichen; das Windows-Maximum ist {maximum}.",
+        "Folder or file name is too long: {name}. Windows allows {maximum} bytes per name.":
+            "Ordner- oder Dateiname ist zu lang: {name}. Windows erlaubt {maximum} Bytes pro Name.",
         "Preview: {path} ({length} characters).":
             "Vorschau: {path} ({length} Zeichen).",
         "Format preferences":
