@@ -12,47 +12,33 @@ repository's git log.
 
 ## [Unreleased]
 
-### Fixed
+## [2.9.0] - 2026-08-21
 
-- **A version mismatch with the browser extension says so.** The downloader has
-  refused too-old extensions with a named 426 since 2.7.0, but the extension
-  reported it as a lost connection and offered to repair a downloader that was
-  running fine. Astra Deck now names both directions: an extension older than
-  the downloader accepts, and a downloader newer than the extension
-  understands.
+### Added
+- **Status messages now reach screen readers.** Changing a label's text tells
+  assistive technology nothing on its own, so a screen-reader user who pressed
+  Download and got rejected heard silence. Status labels now raise a Qt
+  accessibility alert whenever their text changes, which is WCAG 2.2 SC 4.1.3.
+  Repeating an unchanged message stays quiet, so a live preview does not
+  interrupt a screen reader on every keystroke.
+- **Astra Deck can pair Chrome and Edge itself.** Download buttons in the
+  extension used to fail until you pasted the 32-letter ID from
+  chrome://extensions: native messaging is the only token channel, and that
+  ID was never in the host manifest after a fresh install. The extension now
+  posts its ID to a loopback `/pair-extension` route (Origin-bound, no token
+  echo). Source runs register a cmd wrapper so the browser can launch the
+  native host without a packaged exe.
+- **Download health now starts with a useful summary.** Six readiness checks
+  stay one click away when everything is ready and open automatically when a
+  repair is needed.
+- **Less common download controls have a More options section.** Password,
+  clip range, and custom file name fields remain available without crowding
+  the normal paste-and-download path.
 
 ### Changed
-
 - **The download you just started is visible without scrolling.** At the
   standard 1120x760 window an active download's queue row now sits wholly
   inside the page, and reaching it takes no scrolling at all.
-
-### Fixed
-
-- **Status announcements now cover every message, and repeat themselves less.**
-  The screen-reader Alert was raised from the tone setter, which meant the
-  first-run sequence, the Settings save result and every subscription message
-  went out silently. The labels announce their own writes now, and only when
-  the text actually changed, so typing in the output template no longer
-  interrupts a screen reader on every keystroke.
-- **An Add subscription during a scan is saved immediately again.** A scan
-  batched its writes across the whole store rather than its own thread, so
-  anything else saved while a scan was running reported success with nothing on
-  disk.
-- **A scan interrupted midway no longer re-queues what it already started.**
-  Every claim is written before the first download is queued, so a restart
-  matches the restored downloads against their archive entries instead of
-  treating them as new.
-
-- **The catch-reason gate now covers handlers that swallow without `pass`.**
-  It only examined handlers whose body was nothing but `pass`, so every
-  `except Exception: return None` went unread. It now examines any broad
-  handler that neither logs, re-raises, nor carries the error into what the
-  caller gets back, and 34 more of them say in one line why discarding the
-  failure is the right answer there.
-
-### Changed
-
 - **Every button has its own icon now.** Fifteen of them shared one
   three-lines-and-dots default, which meant Remove and Undo remove were the
   same picture, as were Restore defaults and Undo defaults, and the
@@ -64,31 +50,6 @@ repository's git log.
   document, up to 20,000 records, twice per candidate, while holding the lock
   the window and `/health` also take. A 50-item scan measured 102 writes and
   598 ms; it now takes 3 writes and 11 ms.
-
-### Fixed
-
-- **Provisioning the Deno runtime works again.** Deno publishes its checksum
-  as PowerShell `Get-FileHash` output rather than the `sha256sum` layout yt-dlp
-  and FFmpeg use, and the parser did not recognise it. The verification refused
-  the runtime rather than letting it through, which was the right call, but it
-  meant a JavaScript runtime could never be installed from Deno. The sidecar
-  parses now, and a digest still has to name the file it belongs to.
-- **`npm run check` passes every gate except the release tag.** Staging
-  resolves the exact version and SHA-256 that each runtime helper's rolling
-  download alias currently points at, records them in the licence policy, and
-  the inspection accepts an alias only when a resolved digest accompanies it.
-  The licence inventory is down from 18 open issues to none.
-
-### Added
-
-- **Status messages now reach screen readers.** Changing a label's text tells
-  assistive technology nothing on its own, so a screen-reader user who pressed
-  Download and got rejected heard silence. Every status setter now posts a Qt
-  accessibility Alert, which is WCAG 2.2 SC 4.1.3. Clearing a status stays
-  quiet.
-
-### Changed
-
 - **The Qt binding is now PySide6 instead of PyQt6.** Astra Downloader's own
   code is MIT, and PyQt6 offered only GPL-3.0 or a paid Riverbank entitlement,
   which left the licence of the shipped executable genuinely unsettled. PySide6
@@ -112,27 +73,6 @@ repository's git log.
   actually fetches. The extractor smoke runs against it, and against the
   managed executable with the shipped hardening flags, so the wheel and the
   standalone build are both proven before a release.
-
-## [2.9.0] - 2026-08-21
-
-### Added
-
-- **Astra Deck can pair Chrome and Edge itself.** Download buttons in the
-  extension used to fail until you pasted the 32-letter ID from
-  chrome://extensions: native messaging is the only token channel, and that
-  ID was never in the host manifest after a fresh install. The extension now
-  posts its ID to a loopback `/pair-extension` route (Origin-bound, no token
-  echo). Source runs register a cmd wrapper so the browser can launch the
-  native host without a packaged exe.
-- **Download health now starts with a useful summary.** Six readiness checks
-  stay one click away when everything is ready and open automatically when a
-  repair is needed.
-- **Less common download controls have a More options section.** Password,
-  clip range, and custom file name fields remain available without crowding
-  the normal paste-and-download path.
-
-### Changed
-
 - **The active queue stays in the first Download viewport.** The primary
   link, media choices, health summary, and first queue row now fit at the
   standard 1120 by 760 window size.
@@ -153,7 +93,38 @@ repository's git log.
   punctuation-heavy fragments across setup, downloads, updates, and sign-ins.
 
 ### Fixed
+- **A version mismatch with the browser extension says so.** The downloader has
+  refused too-old extensions with a named 426 since 2.7.0, but the extension
+  reported it as a lost connection and offered to repair a downloader that was
+  running fine. Astra Deck now names both directions: an extension older than
+  the downloader accepts, and a downloader newer than the extension
+  understands.
+- **An Add subscription during a scan is saved immediately again.** A scan
+  batched its writes across the whole store rather than its own thread, so
+  anything else saved while a scan was running reported success with nothing on
+  disk.
+- **A scan interrupted midway no longer re-queues what it already started.**
+  Every claim is written before the first download is queued, so a restart
+  matches the restored downloads against their archive entries instead of
+  treating them as new.
 
+- **The catch-reason gate now covers handlers that swallow without `pass`.**
+  It only examined handlers whose body was nothing but `pass`, so every
+  `except Exception: return None` went unread. It now examines any broad
+  handler that neither logs, re-raises, nor carries the error into what the
+  caller gets back, and 34 more of them say in one line why discarding the
+  failure is the right answer there.
+- **Provisioning the Deno runtime works again.** Deno publishes its checksum
+  as PowerShell `Get-FileHash` output rather than the `sha256sum` layout yt-dlp
+  and FFmpeg use, and the parser did not recognise it. The verification refused
+  the runtime rather than letting it through, which was the right call, but it
+  meant a JavaScript runtime could never be installed from Deno. The sidecar
+  parses now, and a digest still has to name the file it belongs to.
+- **`npm run check` passes every gate except the release tag.** Staging
+  resolves the exact version and SHA-256 that each runtime helper's rolling
+  download alias currently points at, records them in the licence policy, and
+  the inspection accepts an alias only when a resolved digest accompanies it.
+  The licence inventory is down from 18 open issues to none.
 - **YouTube downloads no longer send the dead `android_vr` player client.**
   yt-dlp 2026.08.19 403s that client, and auto-update would fetch it while
   argv still listed it last in the token-exempt chain.
