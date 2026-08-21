@@ -12,6 +12,7 @@ repository's git log.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-08-21
 ### Changed
 
 - **The window no longer waits on the disk to write a log line.** Every status

@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.9.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.10.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.13-3776ab)](astra_downloader/requirements.txt)
