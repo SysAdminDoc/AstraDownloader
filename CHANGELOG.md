@@ -12,6 +12,13 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **The window no longer waits on the disk to write a log line.** Every status
+  change wrote to the log file from the main thread, holding a lock every
+  worker thread also wanted. Lines are handed to a writer thread now, still in
+  order, and the crash log is still written before the process ends.
+
 ### Added
 
 - **A Scoop manifest.** `packaging/scoop/astra-downloader.json` installs the

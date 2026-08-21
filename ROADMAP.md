@@ -114,13 +114,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P3
 
-- [ ] P3 — AD-45 — Take log writes off the Qt main thread
-  Why: `_append_log` runs on the main thread and calls `write_persistent_log`, which does `mkdir` + `stat` + `open(..., 'a')` + write per call while holding the process-global `_LOG_LOCK` that every worker thread also contends for. The GUI log widget and the in-memory ring are already correctly bounded; the synchronous I/O is the only issue.
-  Evidence: `astra_downloader/gui.py:6343`; `astra_downloader.py:849-875`.
-  Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/gui.py`
-  Acceptance: log writes are queued to a writer thread; ordering and the crash-log path are preserved; a test asserts the main thread does no file I/O on the log path.
-  Complexity: S
-
 - [ ] P3 — AD-46 — Also persist the queue outside the manager lock
   Why: `_persist_locked` runs `atomic_write_json` → `os.fsync` under `DownloadManagerCore._lock` from ~15 call sites, and the Qt main thread takes that same lock every 500 ms via `update_timer` → `_update_ui`. On a slow or BitLocker-throttled disk this is a visible stall that nothing measures. Same shape as AD-11, lower frequency.
   Evidence: `astra_downloader/download.py:3706-3715`, called from `:3696, :3902, :4402, :5649`; `gui.py:1166-1168`, `:4148`.
