@@ -54,6 +54,11 @@ class FakeConfig:
     def set(self, key, value):
         self.data[key] = value
 
+    def update(self, mapping):
+        if mapping:
+            self.data.update(mapping)
+        return True
+
     def save(self):
         pass
 
@@ -2437,6 +2442,45 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertEqual(events[-1][1], "success")
         self.assertIn("Exported 1", events[-1][0])
 
+    def test_export_history_pages_past_the_query_page_size(self):
+        calls = []
+
+        def query(**kwargs):
+            calls.append(kwargs)
+            offset = kwargs.get("offset") or 0
+            if offset == 0:
+                return {
+                    "history": [{"title": "one", "url": "https://a.example"}],
+                    "filteredTotal": 2,
+                }
+            if offset == 1:
+                return {
+                    "history": [{"title": "two", "url": "https://b.example"}],
+                    "filteredTotal": 2,
+                }
+            return {"history": [], "filteredTotal": 2}
+
+        events = []
+        window = types.SimpleNamespace(
+            config=FakeConfig({"DownloadPath": tempfile.gettempdir()}),
+            _history_query=query,
+            _show_history_status=lambda message, tone: events.append((message, tone)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "history.csv"
+            with mock.patch.object(
+                ad.QFileDialog,
+                "getSaveFileName",
+                return_value=(str(target), "CSV files (*.csv)"),
+            ):
+                ad.MainWindow._export_history(window)
+            body = target.read_text(encoding="utf-8-sig")
+
+        self.assertGreaterEqual(len(calls), 2)
+        self.assertIn("one", body)
+        self.assertIn("two", body)
+        self.assertIn("Exported 2", events[-1][0])
+
     def test_companion_qt_catalogues_cover_every_supported_locale_and_load_german(self):
         """Every advertised locale ships a compiled catalogue, and nothing ships
         a catalogue the app cannot select.
@@ -2782,6 +2826,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window._show_settings_status = lambda message, tone="neutral": window.statuses.append((message, tone))
         window._append_log = window.logs.append
         window._sync_connection_ui = lambda: window.server_calls.append("sync")
+        window._set_control_label = (
+            lambda widget, text, _window=window:
+                ad.MainWindow._set_control_label(_window, widget, text)
+        )
         window._sync_sublang_checkboxes = lambda *_args: None
         window._stop_server = lambda: window.server_calls.append("stop")
         window._start_server = lambda: window.server_calls.append("start")
@@ -2809,6 +2857,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertEqual(window.statuses[-1][1], "danger")
         self.assertIn("Nothing changed", window.statuses[-1][0])
         self.assertIn("server state were preserved", window.logs[-1])
+        self.assertIn("UseSystemProxy", window.config.attempted)
 
     def test_settings_validation_focuses_and_describes_first_invalid_field(self):
         class Field:
@@ -2936,6 +2985,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window._append_log = window.logs.append
         window._show_settings_status = lambda message, tone="neutral": window.statuses.append((message, tone))
         window._refresh_tools_status = lambda: setattr(window, "refreshes", window.refreshes + 1)
+        window._set_control_label = (
+            lambda widget, text, _window=window:
+                ad.MainWindow._set_control_label(_window, widget, text)
+        )
 
         ad.MainWindow._finish_ytdlp_update(window, {
             "ok": False,
@@ -2945,7 +2998,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         })
 
         self.assertTrue(window.btn_check_updates.enabled)
-        self.assertEqual(window.btn_check_updates.text, "Check yt-dlp Update")
+        self.assertEqual(window.btn_check_updates.text, "Check for yt-dlp updates")
         self.assertEqual(window.refreshes, 1)
         self.assertIn("Restored 2026.07.01", window.logs[-1])
         self.assertEqual(window.statuses[-1][1], "danger")
@@ -5607,6 +5660,20 @@ class PoTokenProviderNudgeTests(unittest.TestCase):
         ):
             self.assertEqual(self._classify(text), 'sign-in-required', text)
 
+    def test_tv_downgraded_unplayable_is_cookie_incompatible_not_sign_in(self):
+        # yt-dlp#17389: some jars make public videos UNPLAYABLE on tv_downgraded.
+        # Telling the user to add cookies is the opposite of the fix.
+        self.assertEqual(
+            self._classify(
+                'ERROR: [youtube] abc: Playability status UNPLAYABLE; tv_downgraded'
+            ),
+            'cookie-incompatible',
+        )
+        dl = ad.Download('dl_cookie', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+        ad.apply_download_failure_classification(dl, 'cookie-incompatible')
+        self.assertNotIn('sign in', dl.error_advice.lower())
+        self.assertIn('skip', dl.error_advice.lower())
+
     def test_advice_does_not_recommend_a_disabled_provider(self):
         nudge = ad.po_provider_nudge_advice
         self.assertEqual(ad.PO_PROVIDER_NUDGE_CODES, frozenset())
@@ -5677,9 +5744,12 @@ class PoTokenProviderNudgeTests(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         self.assertTrue(any(
             argument.startswith(
-                "youtube:player_client=visionos,tv,web_embedded,android_vr"
+                "youtube:player_client=visionos,tv,web_embedded"
             )
             for argument in captured[0]
+        ))
+        self.assertFalse(any(
+            "android_vr" in argument for argument in captured[0]
         ))
         self.assertFalse(any(
             "youtubepot-bgutilhttp" in argument for argument in captured[0]
@@ -5692,6 +5762,7 @@ class DownloadFailureClassifierTests(unittest.TestCase):
             ('ERROR: Missing PO Token for web client', 'po-token-required'),
             ('bgutil PO token provider failed to issue token: stale provider', 'po-provider-stale'),
             ('ERROR: requested format is not available; SABR only', 'sabr-limited'),
+            ('ERROR: Playability status UNPLAYABLE; tv_downgraded', 'cookie-incompatible'),
             ('Deno JavaScript runtime not found for n/sig signature solving', 'deno-runtime-missing'),
             ('ERROR: Sign in to confirm you are not a bot', 'sign-in-required'),
             ('ERROR: ffmpeg not found; install ffmpeg', 'ffmpeg-missing-or-stale'),
@@ -9070,9 +9141,10 @@ class PoTokenProviderTests(unittest.TestCase):
         self.assertIn('--extractor-args', args)
         self.assertFalse(any(a.startswith('youtubepot-bgutilhttp:') for a in args))
         self.assertIn(
-            'youtube:player_client=visionos,tv,web_embedded,android_vr',
+            'youtube:player_client=visionos,tv,web_embedded',
             args,
         )
+        self.assertFalse(any('android_vr' in a for a in args))
         # SABR arg remains alongside the deterministic token-exempt fallback.
         self.assertIn('youtube:formats=duplicate', args)
 
@@ -9080,7 +9152,7 @@ class PoTokenProviderTests(unittest.TestCase):
         # Without a reachable PO-token provider the default web/mweb clients
         # need GVS tokens and fail; fall back to the token-exempt clients first
         # so extraction degrades instead of failing outright.
-        fallback = 'youtube:player_client=visionos,tv,web_embedded,android_vr'
+        fallback = 'youtube:player_client=visionos,tv,web_embedded'
         for absent in (None, {'ok': False}, {}):
             with self.subTest(provider=absent):
                 args = ad.build_youtube_extractor_args(
@@ -9092,11 +9164,12 @@ class PoTokenProviderTests(unittest.TestCase):
                 self.assertEqual(args[idx - 1], '--extractor-args')
         # Chain hygiene: bare `web` is NOT token-exempt (SABR-only without a
         # GVS token), visionos is the measured first choice, and android_vr
-        # is erratic so it must ride last.
+        # is gone (yt-dlp 2026.08.19 403s that client).
         clients = fallback.split('=', 1)[1].split(',')
         self.assertNotIn('web', clients)
+        self.assertNotIn('android_vr', clients)
         self.assertEqual(clients[0], 'visionos')
-        self.assertEqual(clients[-1], 'android_vr')
+        self.assertEqual(clients[-1], 'web_embedded')
         # A reachable bgutil process cannot change the argv while plugin
         # loading is disabled, so the same fallback remains in force.
         ok_args = ad.build_youtube_extractor_args(
@@ -9881,7 +9954,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_8_0(self):
+    def test_app_version_bumped_to_2_9_0(self):
         # v2.8.0: playlists stage for review before queueing, progress names
         # its pipeline step, every job records a redacted argv (queue menu,
         # API, diagnostics), Chrome/Edge pair from the Extension page, Deno
@@ -9900,7 +9973,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.8.0")
+        self.assertEqual(ad.APP_VERSION, "2.9.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
@@ -10097,6 +10170,68 @@ class EndToEndDownloadTests(unittest.TestCase):
         self.assertEqual(download.error_action, "")
         self.assertEqual(manager._host_backoffs, {},
                          "a successful retry must not pause the host for the first attempt")
+
+    def test_cookieless_retry_strips_cookies_for_tv_downgraded_unplayable(self):
+        attempts = []
+
+        class FakeProc:
+            def __init__(self, lines, rc):
+                self.stdout = iter([line + "\n" for line in lines])
+                self.returncode = rc
+                self._waited = False
+
+            def wait(self):
+                self._waited = True
+                return self.returncode
+
+            def poll(self):
+                return self.returncode if self._waited else None
+
+            def terminate(self):
+                pass
+
+            def kill(self):
+                pass
+
+            def communicate(self, *_args, **_kwargs):
+                self._waited = True
+                return ('', '')
+
+        def popen(args, **_kwargs):
+            if '--ignore-config' not in args:
+                return FakeProc([], 0)
+            attempts.append(list(args))
+            if len(attempts) == 1:
+                return FakeProc([
+                    'ERROR: [youtube] abc: Playability status UNPLAYABLE; tv_downgraded'
+                ], 1)
+            return FakeProc([
+                'MDLP_JSON {"downloaded_bytes": 10, "total_bytes": 10}',
+                '[download] Destination: public.mp4',
+            ], 0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
+            manager = ad.DownloadManager(config, FakeHistory())
+            cookie_jar = Path(tmpdir) / "cookies.txt"
+            cookie_jar.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+            download = ad.Download(
+                "dl_cookie_retry",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                output_dir=tmpdir,
+            )
+            download.status = "queued"
+            download.cookies_file = str(cookie_jar)
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                 mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                 mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                manager._run_download(download)
+
+        self.assertEqual(len(attempts), 2)
+        self.assertIn('--cookies', attempts[0])
+        self.assertNotIn('--cookies', attempts[1])
+        self.assertEqual(download.status, "complete")
+        self.assertEqual(download.error_code, "")
 
     def test_cookieless_retry_with_no_output_is_skipped(self):
         attempts = []
@@ -12386,6 +12521,9 @@ class ClipboardLinkGrabberTests(unittest.TestCase):
         def show(self):
             self.visible = True
 
+        def hide(self):
+            self.visible = False
+
     def _window(self, enabled=True):
         messages = []
         logs = []
@@ -12454,6 +12592,24 @@ class ClipboardLinkGrabberTests(unittest.TestCase):
             # Deduplicated: the repeat paste must not notify or log twice.
             self.assertEqual(len(messages), 1, url)
             self.assertEqual(logs, ["Staged a copied video link for review."], url)
+
+    def test_clearing_a_staged_url_lets_the_same_clipboard_restage(self):
+        import gui as gui_module
+
+        window, _messages, _logs = self._window()
+        url = "https://www.youtube.com/watch?v=abcdefghijk"
+        with mock.patch.object(gui_module, "repolish"):
+            ad.MainWindow._handle_clipboard_change(window, url)
+        self.assertEqual(window._clipboard_last_seen, url)
+        window._sync_quick_download_profile = lambda **_kwargs: None
+        window._schedule_format_probe = lambda: None
+        window._sync_playlist_staging_button = lambda: None
+        ad.MainWindow._quick_download_url_edited(window)
+        self.assertEqual(window._clipboard_last_seen, "")
+        self.assertEqual(window._clipboard_staged_url, "")
+        with mock.patch.object(gui_module, "repolish"):
+            ad.MainWindow._handle_clipboard_change(window, url)
+        self.assertEqual(window._clipboard_staged_url, url)
 
 
 class CompanionUpdateEndpointTests(unittest.TestCase):
@@ -13406,6 +13562,8 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
 
     def test_argv_gate_matches_chrome_origins_and_registered_firefox_manifest(self):
         self.assertTrue(ad.argv_requests_native_host(["chrome-extension://abc/", "--parent-window=9"]))
+        self.assertTrue(ad.argv_requests_native_host(["--native-host"]))
+        self.assertTrue(ad.argv_requests_native_host(["-native-host", "chrome-extension://abc/"]))
 
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ad, "NATIVE_HOST_DIR", Path(tmp)):
             manifest = Path(tmp) / f"{ad.NATIVE_HOST_NAME}.firefox.json"
@@ -13587,6 +13745,108 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
                 f"{ad.FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{ad.NATIVE_HOST_NAME}",
                 revoked,
             )
+
+    def test_source_registration_writes_a_cmd_wrapper(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(ad, "NATIVE_HOST_DIR", Path(tmp)), \
+             mock.patch.object(ad.sys, "platform", "win32"), \
+             mock.patch.object(ad, "register_native_host_registry_value"):
+            config = FakeConfig({
+                "NativeChromeExtensionIds": "a" * 32,
+                "NativeFirefoxExtensionIds": "ytkit@sysadmindoc.github.io",
+            })
+            script = str(Path(ad.__file__).resolve())
+            ad.register_native_messaging_hosts(sys.executable, [script], config)
+            launcher = Path(tmp) / f"{ad.NATIVE_HOST_NAME}.cmd"
+            self.assertTrue(launcher.is_file())
+            body = launcher.read_text(encoding="utf-8")
+            self.assertIn("--native-host", body)
+            chrome_manifest = json.loads(
+                (Path(tmp) / f"{ad.NATIVE_HOST_NAME}.chrome.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(Path(chrome_manifest["path"]), launcher)
+
+
+class ExtensionPairingTests(unittest.TestCase):
+    """Loopback pairing so Astra Deck can register its Chrome ID itself."""
+
+    def test_pair_persists_a_chrome_id_bound_to_origin(self):
+        chrome_id = "abcdefghijklmnopabcdefghijklmnop"
+        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        refresh = mock.Mock(return_value=True)
+        result = ad.pair_browser_extension(
+            config,
+            f"chrome-extension://{chrome_id}",
+            chrome_id,
+            refresh=refresh,
+        )
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["paired"])
+        self.assertFalse(result["alreadyPaired"])
+        self.assertNotIn("token", result)
+        self.assertEqual(config.get("NativeChromeExtensionIds"), chrome_id)
+        refresh.assert_called_once_with()
+
+    def test_pair_rejects_mismatched_chrome_id_and_youtube_origin(self):
+        chrome_id = "abcdefghijklmnopabcdefghijklmnop"
+        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        refresh = mock.Mock(return_value=True)
+        mismatch = ad.pair_browser_extension(
+            config,
+            f"chrome-extension://{chrome_id}",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            refresh=refresh,
+        )
+        self.assertEqual(mismatch["code"], "id-mismatch")
+        web = ad.pair_browser_extension(
+            config,
+            "https://www.youtube.com",
+            chrome_id,
+            refresh=refresh,
+        )
+        self.assertEqual(web["code"], "invalid-origin")
+        self.assertEqual(config.get("NativeChromeExtensionIds"), "")
+        refresh.assert_not_called()
+
+    def test_pair_route_registers_chrome_id_without_echoing_the_token(self):
+        chrome_id = "abcdefghijklmnopabcdefghijklmnop"
+        origin = f"chrome-extension://{chrome_id}"
+        config = FakeConfig({
+            "ServerToken": "z" * 32,
+            "NativeChromeExtensionIds": "",
+            "LegacyHealthTokenEcho": False,
+        })
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad, "refresh_native_messaging_registration", return_value=True):
+            api = ad.create_api(config, manager, FakeHistory())
+            resp = api.test_client().post(
+                "/pair-extension",
+                json={"id": chrome_id},
+                headers={"Origin": origin, "X-MDL-Client": "MediaDL"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["paired"])
+        self.assertEqual(body["id"], chrome_id)
+        self.assertNotIn("token", body)
+        self.assertEqual(resp.headers.get("Access-Control-Allow-Origin"), origin)
+        self.assertEqual(config.get("NativeChromeExtensionIds"), chrome_id)
+
+    def test_pair_route_rejects_a_web_origin(self):
+        config = FakeConfig({"ServerToken": "z" * 32, "NativeChromeExtensionIds": ""})
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad, "refresh_native_messaging_registration", return_value=True) as refresh:
+            api = ad.create_api(config, manager, FakeHistory())
+            resp = api.test_client().post(
+                "/pair-extension",
+                json={"id": "abcdefghijklmnopabcdefghijklmnop"},
+                headers={"Origin": "https://www.youtube.com", "X-MDL-Client": "MediaDL"},
+            )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.get_json()["code"], "invalid-origin")
+        self.assertEqual(config.get("NativeChromeExtensionIds"), "")
+        refresh.assert_not_called()
 
 
 class DownloadWorkerRaceGuardTests(unittest.TestCase):
@@ -14396,6 +14656,43 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         self.assertEqual(download.status, "complete")
         self.assertEqual(download.progress, 100)
         self.assertEqual(download.filename, "clip.mp4")
+
+    def test_zero_exit_with_a_sabr_warning_is_not_complete(self):
+        # yt-dlp#12482: SABR leftover 360p still exits 0. Progress lines after
+        # the warning must not hide it from the zero-exit classifier.
+        def popen(args, **_kwargs):
+            if '--ignore-config' not in args:
+                return self._FakeProc([], 0)
+            progress = [f'[download] {index}.0%' for index in range(1, 32)]
+            return self._FakeProc(
+                [
+                    'WARNING: [youtube] abc: Some web client https formats have '
+                    'been skipped as they are missing a url. YouTube is forcing '
+                    'SABR streaming',
+                    *progress,
+                    '[download] Destination: clip.mp4',
+                ],
+                0,
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({
+                "DownloadPath": tmpdir,
+                "AudioDownloadPath": tmpdir,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            download = ad.Download(
+                "dl_sabr", "https://www.youtube.com/watch?v=abc", output_dir=tmpdir,
+            )
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                 mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                 mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                manager._run_download(download)
+
+        self.assertEqual(download.status, "failed")
+        self.assertEqual(download.error_code, "sabr-limited")
+        self.assertTrue(getattr(download, "sabr_capped_warning", False))
 
     def test_sponsorblock_is_not_requested_off_youtube(self):
         overrides = {"SponsorBlock": True, "SponsorBlockAction": "remove"}
@@ -15897,6 +16194,23 @@ class FormatProbeTests(unittest.TestCase):
         self.assertTrue(window._format_probe_in_flight)
         self.assertIn("Looking up", window.quick_download_status.text())
 
+    def test_a_stale_probe_does_not_block_the_same_url(self):
+        window = self._window()
+        window._format_probe_generation = 1
+        window._format_probe_in_flight = True
+        window._format_probe_request_url = "https://vimeo.com/1"
+        window.quick_download_url.setText("https://vimeo.com/changed")
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 1,
+                "url": "https://vimeo.com/1",
+                "summary": {},
+                "error": "",
+            })
+        self.assertFalse(window._format_probe_in_flight)
+        window.quick_download_url.setText("https://vimeo.com/1")
+        self.assertEqual(len(self._spawned(window)), 1)
+
     def test_editing_past_a_probed_url_restores_the_full_ladder(self):
         window = self._window()
         with mock.patch.object(gui_module_for_tests(), "repolish"):
@@ -17057,6 +17371,8 @@ window.close()
             )
         self.assertIn("QCheckBox::indicator:focus", sheet)
         self.assertIn("QCheckBox::indicator:checked:focus", sheet)
+        self.assertIn('QLineEdit[state="error"]:focus', sheet)
+        self.assertIn('QSpinBox[state="error"]:focus', sheet)
 
     def test_tab_traversal_skips_hidden_tab_bar_and_leaves_site_profile_editor(self):
         script = r'''
@@ -17586,6 +17902,17 @@ class SettingsFormReloadTests(unittest.TestCase):
         self.assertEqual(
             kinds, {"text", "check", "number", "decimal", "combo"}
         )
+
+    def test_every_form_key_is_written_on_save(self):
+        # Reload coverage used to hide a save hole: UseSystemProxy was in
+        # the form table and survived an import, then Save dropped it.
+        source = inspect.getsource(ad.MainWindow._save_settings)
+        missing = [
+            key for _name, key, _kind
+            in ad.MainWindow._SETTINGS_FORM_FIELDS
+            if f'"{key}"' not in source
+        ]
+        self.assertEqual(missing, [])
 
 
 class SettingsNavigationTests(unittest.TestCase):
@@ -21454,6 +21781,14 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
 
                 window.quick_download_url.setText("https://example.com/video")
                 window._start_quick_download()
+                self.assertIn(
+                    "Confirm your download folder",
+                    window.quick_download_status.text(),
+                )
+                window.quick_download_url.setText(
+                    "https://www.youtube.com/playlist?list=PLtest"
+                )
+                window._open_playlist_staging()
                 self.assertIn(
                     "Confirm your download folder",
                     window.quick_download_status.text(),
