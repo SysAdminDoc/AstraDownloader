@@ -1339,7 +1339,9 @@ def create_api(config, dl_manager, history, *, dependencies):
             # Mark this queued request so its eventual dequeue is discarded
             # instead of opening a ghost dialog after this HTTP call ended.
             cancellation.set()
-            return cors_response({"error": "Folder picker timed out — was the dialog left open?"}, 504)
+            return cors_response({
+                "error": "Folder picker timed out. Close the open folder dialog, then retry."
+            }, 504)
         if isinstance(result, dict) and result.get('path'):
             roots = allowed_output_roots(config)
             inside = False
@@ -1392,12 +1394,20 @@ def create_api(config, dl_manager, history, *, dependencies):
         if not check_auth():
             return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
         if not YTDLP_PATH.exists():
-            return cors_response({"error": "yt-dlp is not installed yet — finish the Astra Downloader setup first.", "ok": False}, 503)
+            return cors_response({
+                "error": "yt-dlp is not installed yet. Finish the Astra Downloader setup first.",
+                "ok": False,
+            }, 503)
         in_flight = dl_manager.active_count()
         if in_flight > 0:
+            active_downloads = (
+                f"{in_flight} download is"
+                if in_flight == 1
+                else f"{in_flight} downloads are"
+            )
             return cors_response(
                 {
-                    "error": f"{in_flight} download(s) in flight — wait for them to finish, then try again. "
+                    "error": f"{active_downloads} still in flight. Wait for them to finish, then try again. "
                              f"yt-dlp -U atomically replaces the binary and would race the active subprocess.",
                     "ok": False,
                     "inFlight": in_flight,
@@ -1438,9 +1448,14 @@ def create_api(config, dl_manager, history, *, dependencies):
             )
         in_flight = dl_manager.active_count()
         if in_flight > 0:
+            active_downloads = (
+                f"{in_flight} download is"
+                if in_flight == 1
+                else f"{in_flight} downloads are"
+            )
             return cors_response(
                 {
-                    "error": f"{in_flight} download(s) in flight — wait for them to finish, then try again. "
+                    "error": f"{active_downloads} still in flight. Wait for them to finish, then try again. "
                              f"The companion update must restart Astra Downloader after atomically replacing the executable.",
                     "ok": False,
                     "inFlight": in_flight,

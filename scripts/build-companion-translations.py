@@ -360,8 +360,8 @@ CATALOGS = {
             "Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.",
         "Download a video":
             "Video herunterladen",
-        "Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.":
-            "Fügen Sie einen Link von fast jeder Website ein — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.",
+        "Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.":
+            "Fügen Sie einen Link von fast jeder Website ein. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.",
         "Welcome to Astra Downloader":
             "Willkommen bei Astra Downloader",
         "Confirm where finished videos should go. You can change this later in Settings.":
@@ -428,8 +428,8 @@ CATALOGS = {
             "Anmeldungen",
         "Add a site sign-in":
             "Website-Anmeldung hinzufügen",
-        "Site address you signed in to — x.com, instagram.com, vimeo.com":
-            "Adresse der Website, bei der Sie angemeldet sind — x.com, instagram.com, vimeo.com",
+        "Site address you signed in to, such as x.com, instagram.com, or vimeo.com":
+            "Adresse der Website, bei der Sie angemeldet sind, zum Beispiel x.com, instagram.com oder vimeo.com",
         "Profile (optional)":
             "Profil (optional)",
         "Import this site's cookies to unblock the download waiting on it.":
@@ -630,8 +630,8 @@ CATALOGS = {
             "Kopierte Videolinks zur Prüfung vormerken",
         "Installed tools":
             "Installierte Werkzeuge",
-        "Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported — cookies stay on this machine.":
-            "Diese Installation auf einen anderen Computer übertragen oder eine nicht mehr lesbare Konfiguration wiederherstellen. Das Paket enthält Einstellungen und Abonnements. Gespeicherte Anmeldungen werden nur nach Website aufgeführt, aber nie exportiert — Cookies bleiben auf diesem Computer.",
+        "Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.":
+            "Diese Installation auf einen anderen Computer übertragen oder eine nicht mehr lesbare Konfiguration wiederherstellen. Das Paket enthält Einstellungen und Abonnements. Gespeicherte Anmeldungen werden nur nach Website aufgeführt, aber nie exportiert. Cookies bleiben auf diesem Computer.",
         "Cancel":
             "Abbrechen",
         "Play":
@@ -648,8 +648,8 @@ CATALOGS = {
             "Beste",
         "One-link video password":
             "Videopasswort für einen Link",
-        "Video password — one link only (optional)":
-            "Videopasswort — nur ein Link (optional)",
+        "Video password (one link only, optional)":
+            "Videopasswort (nur ein Link, optional)",
         "For a single protected link. Stored site credentials live under Sign-ins.":
             "Für einen einzelnen geschützten Link. Gespeicherte Zugangsdaten finden Sie unter Anmeldungen.",
         "Video passwords are available for a single link only.":
@@ -670,8 +670,8 @@ CATALOGS = {
             "Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.",
         "Read from":
             "Lesen aus",
-        "Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.":
-            "Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt — exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername/Passwort. Firefox lässt sich normalerweise direkt lesen.",
+        "Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.":
+            "Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt. Exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername und Passwort. Firefox lässt sich normalerweise direkt lesen.",
         "likely unreadable on Windows 127+":
             "unter Windows 127+ wahrscheinlich nicht lesbar",
         "Site sign-in username":
@@ -686,8 +686,8 @@ CATALOGS = {
             "Benutzername/Passwort speichern",
         "username/password stored securely.":
             "Benutzername/Passwort sicher gespeichert.",
-        "Username/password — stored securely":
-            "Benutzername/Passwort — sicher gespeichert",
+        "Username and password. Stored securely.":
+            "Benutzername und Passwort. Sicher gespeichert.",
         "cookie session expired":
             "Cookie-Sitzung abgelaufen",
         "cookies + username/password":
@@ -696,8 +696,8 @@ CATALOGS = {
             "Benutzername/Passwort",
         "Import this site's cookies or store its username/password to unblock the download waiting on it.":
             "Importieren Sie die Cookies dieser Website oder speichern Sie Benutzername/Passwort, um den wartenden Download freizugeben.",
-        "Expired — sign in again to refresh it":
-            "Abgelaufen — melden Sie sich erneut an, um sie zu erneuern",
+        "Expired. Sign in again to refresh it.":
+            "Abgelaufen. Melden Sie sich erneut an, um die Anmeldung zu erneuern.",
         "Signed in to":
             "Angemeldet bei",
         "cookies stored":
@@ -728,8 +728,8 @@ CATALOGS = {
             "Keine gespeicherten Anmeldungen",
         "Add one above for any site that only serves video to signed-in viewers. YouTube downloads use the browser extension instead and need nothing here.":
             "Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. YouTube-Downloads verwenden stattdessen die Browsererweiterung und benötigen hier nichts.",
-        "Missing on disk — import it again":
-            "Auf dem Datenträger nicht gefunden — erneut importieren",
+        "Missing on disk. Import it again.":
+            "Auf dem Datenträger nicht gefunden. Importieren Sie die Anmeldung erneut.",
         "cookies for other sites were discarded.":
             "Cookies anderer Websites wurden verworfen.",
         "No preference":
@@ -748,8 +748,8 @@ CATALOGS = {
             "Seite",
         "Open":
             "Öffnen",
-        "Session cookies — valid until the site signs you out":
-            "Sitzungscookies — gültig, bis die Website Sie abmeldet",
+        "Session cookies. Valid until the site signs you out.":
+            "Sitzungscookies. Gültig, bis die Website Sie abmeldet.",
         "Removed the stored sign-in for":
             "Gespeicherte Anmeldung entfernt für",
         "from":
@@ -1007,8 +1007,8 @@ CATALOGS = {
             "Geben Sie eine HTTP-, HTTPS- oder SOCKS-Proxy-URL ein.",
         "The private API token cannot be empty.":
             "Das private API-Token darf nicht leer sein.",
-        "Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.":
-            "Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s, %(uploader)s — keine absoluten Pfade oder '..'.",
+        "Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.":
+            "Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s oder %(uploader)s. Absolute Pfade und '..' sind nicht erlaubt.",
         "Check the highlighted fields before saving.":
             "Prüfen Sie die markierten Felder vor dem Speichern.",
         "Could not save settings. Nothing changed; check disk permissions and retry.":
@@ -1189,8 +1189,8 @@ CATALOGS = {
             "Verknüpfungen und Protokolle werden registriert…",
         "Finishing setup...":
             "Einrichtung wird abgeschlossen…",
-        "This host is paused — retry in {duration}.":
-            "Dieser Host ist pausiert — erneut versuchen in {duration}.",
+        "This host is paused. Retry in {duration}.":
+            "Dieser Host ist pausiert. Erneuter Versuch in {duration}.",
         "Host paused · retry in {duration}":
             "Host pausiert · erneut versuchen in {duration}",
         "YouTube requires a proof-of-origin token for this video, and the plugin-free client chain cannot supply one.":
@@ -1281,12 +1281,12 @@ CATALOGS = {
             "Setzen Sie `--xff` in den Einstellungen auf einen zweistelligen Ländercode oder CIDR-Block für die Geoprüfung. Wenn dieser Weg weiterhin blockiert ist, fügen Sie dort einen `--geo-verification-proxy` hinzu und versuchen Sie es erneut.",
         "configure-geo-and-retry":
             "configure-geo-and-retry",
-        "Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.":
-            "Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls. Wenn eine Dual-Stack-Route den 403 verursacht, versuchen Sie `--force-ipv4` in den Einstellungen.",
+        "Set a browser to imitate in Settings. This is usually the fix for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.":
+            "Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein. Dies behebt normalerweise eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls. Wenn eine Dual-Stack-Route den 403 verursacht, versuchen Sie `--force-ipv4` in den Einstellungen.",
         "The site refused further requests for now (HTTP 429).":
             "Die Website hat weitere Anfragen vorerst abgelehnt (HTTP 429).",
-        "This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.":
-            "Diese Website ist für den Rest des Wiederholungsfensters pausiert. Erhöhen Sie in den Einstellungen das Anfrage-Pacing — eine Bandbreitenbegrenzung hilft hier nicht — und versuchen Sie es erneut. Andere Websites können weiter herunterladen.",
+        "This site is paused for the rest of its retry window. Raise the request pacing in Settings. A bandwidth cap won't help here. Then retry. Other sites can continue downloading.":
+            "Diese Website ist für den Rest des Wiederholungsfensters pausiert. Erhöhen Sie in den Einstellungen das Anfrage-Pacing. Eine Bandbreitenbegrenzung hilft hier nicht. Versuchen Sie es dann erneut. Andere Websites können weiter herunterladen.",
         "slow-down-and-retry":
             "slow-down-and-retry",
         "There is not enough free disk space for this download.":
@@ -1420,8 +1420,8 @@ CATALOGS["de"].update({
         "{count} {noun} abgelehnt: {reason}",
     "Downloads {kind} in {languages}{format}, without the video. Change this under Settings, Post-processing.":
         "Lädt {kind} in {languages}{format} ohne Video herunter. Ändern Sie das unter Einstellungen, Nachbearbeitung.",
-    "{signed_in} {site} — {count} {stored}.":
-        "{signed_in} {site} — {count} {stored}.",
+    "{signed_in} {site}. {count} {stored}.":
+        "{signed_in} {site}. {count} {stored}.",
     "{label} could not be read and was set aside as {backup}. Restore puts the original back and reloads it.":
         "{label} konnte nicht gelesen werden und wurde als {backup} beiseitegelegt. Die Wiederherstellung legt das Original zurück und lädt es neu.",
     "Exported {settings} settings and {subscriptions} subscriptions.":
@@ -1480,7 +1480,7 @@ CATALOGS["de"].update({
     "Search title or filename": "Titel oder Dateiname suchen",
     "{total} configured · {archived} archived · {queued} queued":
         "{total} konfiguriert · {archived} archiviert · {queued} eingereiht",
-    "{signed_in} {site} — {stored}": "{signed_in} {site} — {stored}",
+    "{signed_in} {site}. {stored}": "{signed_in} {site}. {stored}",
     "Select the exported cookies.txt": "Exportierte cookies.txt auswählen",
     "Added {title}. The first scan is scheduled now.":
         "{title} hinzugefügt. Der erste Scan ist jetzt geplant.",
@@ -1516,8 +1516,19 @@ CATALOGS["de"].update({
         "Kopierter Videolink vorgemerkt. Prüfen Sie die Optionen und wählen Sie Zur Warteschlange hinzufügen.",
     "Endpoint copied.": "Endpunkt kopiert.",
     "Review Diagnostics": "Diagnose prüfen",
+    "Review redacted diagnostics": "Geschwärzte Diagnose prüfen",
+    "Review the support data before saving or copying it.":
+        "Prüfen Sie die Supportdaten vor dem Speichern oder Kopieren.",
+    "Read-only support data with private values removed.":
+        "Schreibgeschützte Supportdaten, aus denen private Werte entfernt wurden.",
     "Save diagnostics": "Diagnose speichern",
-    "Copy to Clipboard": "In Zwischenablage kopieren",
+    "Save the redacted diagnostics as a JSON file.":
+        "Geschwärzte Diagnose als JSON-Datei speichern.",
+    "Copy to clipboard": "In Zwischenablage kopieren",
+    "Copy the redacted diagnostics and close this review.":
+        "Geschwärzte Diagnose kopieren und diese Prüfung schließen.",
+    "Close the diagnostics review without copying anything.":
+        "Diagnoseprüfung schließen, ohne etwas zu kopieren.",
     "{name} {page}": "{name} {page}",
     "{open_label} {name}": "{open_label} {name}",
     "Clip ranges apply to a single link. Remove the extra links or clear the clip range.":
@@ -1528,7 +1539,7 @@ CATALOGS["de"].update({
     "{label} {title}": "{label} {title}",
     "Every {minutes} min · next scan {next_scan}":
         "Alle {minutes} Min. · nächster Scan {next_scan}",
-    "{browser} — {warning}": "{browser} — {warning}",
+    "{browser}. {warning}": "{browser}. {warning}",
     "{count} {discarded}": "{count} {discarded}",
     "That cookie file is too large to be a browser export.":
         "Diese Cookie-Datei ist zu groß für einen Browserexport.",
@@ -1549,8 +1560,8 @@ CATALOGS["de"].update({
     "Next: {action}": "Nächster Schritt: {action}",
     "ETA {eta}": "Restzeit {eta}",
     "Preparing download": "Download wird vorbereitet",
-    "{count} stored sign-ins are listed by site only — add them again after importing.":
-        "{count} gespeicherte Anmeldungen sind nur nach Website aufgeführt — fügen Sie sie nach dem Import erneut hinzu.",
+    "{count} stored sign-ins are listed by site only. Add them again after importing.":
+        "{count} gespeicherte Anmeldungen sind nur nach Website aufgeführt. Fügen Sie sie nach dem Import erneut hinzu.",
     "{added} subscriptions added, {skipped} already present":
         "{added} Abonnements hinzugefügt, {skipped} bereits vorhanden",
     "sign-ins still needed for {sites}": "Anmeldungen weiterhin erforderlich für {sites}",
@@ -1559,8 +1570,8 @@ CATALOGS["de"].update({
         "{start}–{end} von {filtered} gefiltert · {total} behalten",
     "0 of {filtered} filtered · {total} retained":
         "0 von {filtered} gefiltert · {total} behalten",
-    "{start}–{end} of {filtered} filtered · {total} retained · limit {limit}":
-        "{start}–{end} von {filtered} gefiltert · {total} behalten · Limit {limit}",
+    "{start} to {end} of {filtered} filtered · {total} retained · limit {limit}":
+        "{start} bis {end} von {filtered} gefiltert · {total} behalten · Limit {limit}",
     "0 of {filtered} filtered · {total} retained · limit {limit}":
         "0 von {filtered} gefiltert · {total} behalten · Limit {limit}",
     "History retention": "Verlaufsaufbewahrung",
@@ -1586,7 +1597,7 @@ CATALOGS["de"].update({
     "mp4": "mp4",
     "mkv": "mkv",
     "webm": "webm",
-    "—": "—",
+    "Not set": "Nicht festgelegt",
     "{target} (unavailable)": "{target} (nicht verfügbar)",
     "creator subtitles only": "nur Untertitel vom Ersteller",
     "auto-generated subtitles only": "nur automatisch erzeugte Untertitel",
@@ -1618,21 +1629,48 @@ CATALOGS["de"].update({
     "Copy command": "Befehl kopieren",
     "Close": "Schließen",
     "Review Playlist": "Playlist überprüfen",
+    "Review playlist videos": "Playlist-Videos überprüfen",
+    "Choose which videos should be added to the download queue.":
+        "Wählen Sie aus, welche Videos zur Download-Warteschlange hinzugefügt werden sollen.",
     "(untitled playlist)": "(unbenannte Playlist)",
     "Select all": "Alle auswählen",
+    "Select every video in this playlist preview.":
+        "Alle Videos in dieser Playlist-Vorschau auswählen.",
     "Deselect all": "Alle abwählen",
+    "Clear every selection in this playlist preview.":
+        "Alle Auswahlen in dieser Playlist-Vorschau aufheben.",
     "Invert": "Umkehren",
+    "Select unselected videos and clear selected videos.":
+        "Nicht ausgewählte Videos auswählen und ausgewählte Videos abwählen.",
+    "Select playlist item {index}: {title}":
+        "Playlist-Eintrag {index} auswählen: {title}",
+    "Duration {duration}": "Dauer {duration}",
+    "No videos found": "Keine Videos gefunden",
+    "This playlist did not return any videos. Close this review and try the link again.":
+        "Diese Playlist hat keine Videos zurückgegeben. Schließen Sie die Prüfung und versuchen Sie den Link erneut.",
     "Download selected": "Auswahl herunterladen",
     "{selected} of {total} selected": "{selected} von {total} ausgewählt",
     "Download selected ({count})": "Auswahl herunterladen ({count})",
+    "Close the playlist review without adding anything to the queue.":
+        "Playlist-Prüfung schließen, ohne etwas zur Warteschlange hinzuzufügen.",
+    "Add the selected playlist videos to the download queue.":
+        "Ausgewählte Playlist-Videos zur Download-Warteschlange hinzufügen.",
     "yt-dlp Command": "yt-dlp-Befehl",
+    "Review redacted yt-dlp command": "Geschwärzten yt-dlp-Befehl prüfen",
+    "Review or copy the redacted command used for this download.":
+        "Den für diesen Download verwendeten geschwärzten Befehl prüfen oder kopieren.",
     "Scanning playlist items...": "Playlist-Einträge werden gelesen...",
     "(untitled)": "(ohne Titel)",
     "View yt-dlp command": "yt-dlp-Befehl anzeigen",
     "Command for {title}": "Befehl für {title}",
-    "This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.":
-        "Dies ist die exakte Befehlszeile dieses Auftrags; Zugangsdaten, Token und Cookie-Pfade sind geschwärzt.",
+    "This is the exact command line used for this job. Credentials, tokens, and cookie paths are redacted.":
+        "Dies ist die exakte Befehlszeile dieses Auftrags. Zugangsdaten, Token und Cookie-Pfade sind geschwärzt.",
     "No command recorded.": "Kein Befehl aufgezeichnet.",
+    "Redacted yt-dlp command": "Geschwärzter yt-dlp-Befehl",
+    "Read-only command text with private values removed.":
+        "Schreibgeschützter Befehlstext, aus dem private Werte entfernt wurden.",
+    "Copy command status": "Status beim Kopieren des Befehls",
+    "Copied to clipboard.": "In die Zwischenablage kopiert.",
     "Paste a playlist link first.": "Zuerst einen Playlist-Link einfügen.",
     "Enter a playlist URL to review.": "Zum Überprüfen eine Playlist-URL eingeben.",
     "Security floor": "Sicherheitsuntergrenze",
@@ -1662,8 +1700,8 @@ CATALOGS["de"].update({
         "Die Erweiterungs-IDs konnten nicht gespeichert werden. Datenträgerberechtigungen prüfen und erneut versuchen.",
     "Chrome and Edge are paired. Reload the extension once and its download button can hand off.":
         "Chrome und Edge sind gekoppelt. Die Erweiterung einmal neu laden, dann kann ihr Download-Button übergeben.",
-    "Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.":
-        "Gespeichert. Diese Kopie registriert keine Browser-Hosts (portabel oder Quellstart) — von einer installierten Kopie aus koppeln.",
+    "Saved. This portable copy registers no browser hosts. Pair from an installed copy.":
+        "Gespeichert. Diese portable Kopie registriert keine Browser-Hosts. Koppeln Sie über eine installierte Kopie.",
     "Chrome and Edge pairing cleared.": "Kopplung mit Chrome und Edge aufgehoben.",
     "Cleared. This copy registers no browser hosts.":
         "Entfernt. Diese Kopie registriert keine Browser-Hosts.",

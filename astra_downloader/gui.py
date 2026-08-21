@@ -918,6 +918,12 @@ class PlaylistStagingDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("Review Playlist"))
         self.setMinimumSize(640, 480)
+        self.resize(760, 560)
+        self.setModal(True)
+        self.setAccessibleName(tr("Review playlist videos"))
+        self.setAccessibleDescription(
+            tr("Choose which videos should be added to the download queue.")
+        )
         self.playlist_info = playlist_info or {}
         self.items = self.playlist_info.get("items") or []
         self.checkboxes = []
@@ -948,6 +954,9 @@ class PlaylistStagingDialog(QDialog):
         btn_all = QPushButton(tr("Select all"))
         btn_all.setProperty("class", "ghost")
         btn_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_all.setAccessibleDescription(
+            tr("Select every video in this playlist preview.")
+        )
         set_line_icon(btn_all, "select", size=15)
         btn_all.clicked.connect(self._select_all)
         toolbar.addWidget(btn_all)
@@ -955,6 +964,9 @@ class PlaylistStagingDialog(QDialog):
         btn_none = QPushButton(tr("Deselect all"))
         btn_none.setProperty("class", "ghost")
         btn_none.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_none.setAccessibleDescription(
+            tr("Clear every selection in this playlist preview.")
+        )
         set_line_icon(btn_none, "clear", size=15)
         btn_none.clicked.connect(self._deselect_all)
         toolbar.addWidget(btn_none)
@@ -962,6 +974,9 @@ class PlaylistStagingDialog(QDialog):
         btn_invert = QPushButton(tr("Invert"))
         btn_invert.setProperty("class", "ghost")
         btn_invert.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_invert.setAccessibleDescription(
+            tr("Select unselected videos and clear selected videos.")
+        )
         set_line_icon(btn_invert, "update", size=15)
         btn_invert.clicked.connect(self._invert_selection)
         toolbar.addWidget(btn_invert)
@@ -980,8 +995,11 @@ class PlaylistStagingDialog(QDialog):
         items_layout.setSpacing(6)
 
         for item in self.items:
-            row = QHBoxLayout()
-            row.setSpacing(8)
+            row_frame = QFrame()
+            row_frame.setProperty("class", "playlistRow")
+            row = QHBoxLayout(row_frame)
+            row.setContentsMargins(12, 9, 12, 9)
+            row.setSpacing(10)
             cb = QCheckBox()
             cb.setChecked(True)
             cb.stateChanged.connect(self._update_count)
@@ -991,11 +1009,40 @@ class PlaylistStagingDialog(QDialog):
             idx = item.get("index", len(self.checkboxes))
             item_title = item.get("title") or tr("(untitled)")
             dur = format_duration(item.get("duration", 0))
-            dur_label = f"  [{dur}]" if dur else ""
-            lbl = make_label(f"#{idx}  {item_title}{dur_label}", "fieldLabel", word_wrap=True)
+            cb.setAccessibleName(
+                tr_format(
+                    "Select playlist item {index}: {title}",
+                    index=idx,
+                    title=item_title,
+                )
+            )
+            if dur:
+                cb.setAccessibleDescription(
+                    tr_format("Duration {duration}", duration=dur)
+                )
+            lbl = make_label(f"#{idx}  {item_title}", "fieldLabel", word_wrap=True)
+            lbl.setToolTip(item_title)
             row.addWidget(lbl, 1)
+            if dur:
+                duration_label = make_label(dur, "toolbarMeta")
+                duration_label.setAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
+                row.addWidget(duration_label)
 
-            items_layout.addLayout(row)
+            items_layout.addWidget(row_frame)
+
+        if not self.items:
+            items_layout.addWidget(
+                make_empty_state(
+                    tr("No videos found"),
+                    tr(
+                        "This playlist did not return any videos. Close this review "
+                        "and try the link again."
+                    ),
+                ),
+                1,
+            )
 
         items_layout.addStretch()
         scroll.setWidget(items_widget)
@@ -1006,6 +1053,9 @@ class PlaylistStagingDialog(QDialog):
         btn_cancel = QPushButton(tr("Cancel"))
         btn_cancel.setProperty("class", "secondary")
         btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setAccessibleDescription(
+            tr("Close the playlist review without adding anything to the queue.")
+        )
         btn_cancel.clicked.connect(self.reject)
         bottom.addWidget(btn_cancel)
 
@@ -1015,11 +1065,17 @@ class PlaylistStagingDialog(QDialog):
         self.btn_download.setProperty("class", "primary")
         self.btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
         set_line_icon(self.btn_download, "download", size=15)
+        self.btn_download.setDefault(True)
+        self.btn_download.setAccessibleDescription(
+            tr("Add the selected playlist videos to the download queue.")
+        )
         self.btn_download.clicked.connect(self.accept)
         bottom.addWidget(self.btn_download)
 
         layout.addLayout(bottom)
         self._update_count()
+        if self.checkboxes:
+            self.checkboxes[0][0].setFocus(Qt.FocusReason.TabFocusReason)
 
     def _select_all(self):
         for cb, _ in self.checkboxes:
@@ -2889,13 +2945,13 @@ class MainWindowCore(
             credentialed = bool(entry.get("credentialed"))
             count = int(entry.get("cookies", 0) or 0)
             if credentialed:
-                state = tr("Username/password — stored securely")
+                state = tr("Username and password. Stored securely.")
                 if entry.get("expired") and count:
                     state += " · " + tr("cookie session expired")
             elif entry.get("expired"):
-                state = tr("Expired — sign in again to refresh it")
+                state = tr("Expired. Sign in again to refresh it.")
             elif not entry.get("stored"):
-                state = tr("Missing on disk — import it again")
+                state = tr("Missing on disk. Import it again.")
             elif entry.get("earliestExpiry"):
                 try:
                     expires = time.strftime(
@@ -2909,7 +2965,7 @@ class MainWindowCore(
                     date=expires,
                 )
             else:
-                state = tr("Session cookies — valid until the site signs you out")
+                state = tr("Session cookies. Valid until the site signs you out.")
             test_state = self._site_login_test_states.get(entry.get("site"))
             if test_state:
                 state += " · " + str(test_state.get("message", ""))
@@ -2977,7 +3033,7 @@ class MainWindowCore(
         count = (result or {}).get("cookies", 0)
         skipped = (result or {}).get("skipped", 0)
         message = tr_format(
-            "{signed_in} {site} — {count} {stored}.",
+            "{signed_in} {site}. {count} {stored}.",
             signed_in=tr("Signed in to"),
             site=site,
             count=count,
@@ -3016,7 +3072,7 @@ class MainWindowCore(
         site = (result or {}).get("site", "")
         self._show_site_login_status(
             tr_format(
-                "{signed_in} {site} — {stored}",
+                "{signed_in} {site}. {stored}",
                 signed_in=tr("Signed in to"),
                 site=site,
                 stored=tr("username/password stored securely."),
@@ -3971,7 +4027,7 @@ class MainWindowCore(
                 recovery_text = (
                     recovery_text
                     + "\n"
-                    + tr("This host is paused — retry in {duration}.").format(
+                    + tr("This host is paused. Retry in {duration}.").format(
                         duration=format_duration(seconds)
                     )
                 )
@@ -4937,8 +4993,8 @@ class MainWindowCore(
             # Say it plainly rather than letting the user discover it on the
             # other machine: this file will not sign them back in.
             summary += " " + tr_format(
-                "{count} stored sign-ins are listed by site only — "
-                "add them again after importing.",
+                "{count} stored sign-ins are listed by site only. "
+                "Add them again after importing.",
                 count=len(bundle["siteLoginSites"]),
             )
         self._show_settings_status(summary, "success")
@@ -5287,7 +5343,7 @@ class MainWindowCore(
         retention_limit = self._history_retention_limit()
         self.history_meta.setText(
             tr_format(
-                "{start}–{end} of {filtered} filtered · {total} retained · limit {limit}",
+                "{start} to {end} of {filtered} filtered · {total} retained · limit {limit}",
                 start=start,
                 end=end,
                 filtered=filtered_total,
@@ -5346,11 +5402,12 @@ class MainWindowCore(
                     make_label(str(h["error"]), "errorCallout", word_wrap=True)
                 )
             card_l.addLayout(file_copy, 4)
+            not_set = tr("Not set")
             values = (
-                str(h.get("format", "")).upper() if h.get("format") else "\u2014",
-                h.get("quality") or "\u2014",
-                format_duration(h.get("duration", 0)) or "\u2014",
-                h.get("date") or "\u2014",
+                str(h.get("format", "")).upper() if h.get("format") else not_set,
+                h.get("quality") or not_set,
+                format_duration(h.get("duration", 0)) or not_set,
+                h.get("date") or not_set,
             )
             for value in values:
                 label = make_label(str(value), "tableValue")
@@ -5603,14 +5660,23 @@ class MainWindowCore(
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("yt-dlp Command"))
         dialog.setMinimumWidth(560)
+        dialog.resize(720, 410)
+        dialog.setModal(True)
+        dialog.setAccessibleName(tr("Review redacted yt-dlp command"))
+        dialog.setAccessibleDescription(
+            tr("Review or copy the redacted command used for this download.")
+        )
         layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
 
         title = getattr(download, 'title', '') or 'Download'
         layout.addWidget(make_label(tr_format("Command for {title}", title=title), "panelTitle", word_wrap=True))
         layout.addWidget(make_label(
-            tr("This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted."),
+            tr(
+                "This is the exact command line used for this job. Credentials, "
+                "tokens, and cookie paths are redacted."
+            ),
             "fieldHint", word_wrap=True
         ))
 
@@ -5625,26 +5691,38 @@ class MainWindowCore(
         edit.setPlainText(command_text or tr("No command recorded."))
         edit.setProperty("class", "monospaceLog")
         edit.setMinimumHeight(140)
+        edit.setAccessibleName(tr("Redacted yt-dlp command"))
+        edit.setAccessibleDescription(
+            tr("Read-only command text with private values removed.")
+        )
         layout.addWidget(edit)
 
         buttons = QHBoxLayout()
-        btn_copy = self._make_tool_button("Copy command", "primary")
-        btn_copy.setEnabled(bool(command_text))
-        btn_copy.clicked.connect(lambda: self._copy_command_to_clipboard(command_text, dialog))
-        buttons.addWidget(btn_copy)
+        copy_status = make_label("", "settingsStatus")
+        copy_status.setAccessibleName(tr("Copy command status"))
+        buttons.addWidget(copy_status)
         buttons.addStretch()
-        btn_close = self._make_tool_button("Close")
+        btn_close = self._make_tool_button("Close", "secondary")
         btn_close.clicked.connect(dialog.accept)
         buttons.addWidget(btn_close)
+        btn_copy = self._make_tool_button("Copy command", "primary")
+        btn_copy.setEnabled(bool(command_text))
+        btn_copy.setDefault(True)
+        btn_copy.clicked.connect(
+            lambda: self._copy_command_to_clipboard(command_text, copy_status)
+        )
+        buttons.addWidget(btn_copy)
         layout.addLayout(buttons)
 
         dialog.exec()
 
-    def _copy_command_to_clipboard(self, command_text, dialog=None):
+    def _copy_command_to_clipboard(self, command_text, status_label=None):
         QApplication.clipboard().setText(command_text)
         self._append_log("Copied redacted yt-dlp command to clipboard.")
-        if dialog is not None:
-            dialog.accept()
+        if status_label is not None:
+            status_label.setText(tr("Copied to clipboard."))
+            set_status_tone(status_label, "success")
+            repolish(status_label)
 
     def _sync_playlist_staging_button(self):
         url = self.quick_download_url.text().strip()
@@ -5810,7 +5888,7 @@ class MainWindowCore(
 
     def _force_ytdlp_update(self):
         if not self._value('YTDLP_PATH').exists():
-            self._append_log("yt-dlp is not installed yet — run setup first.")
+            self._append_log("yt-dlp is not installed yet. Run setup first.")
             self._show_settings_status("Install yt-dlp before checking for updates.", "warning")
             return
         active_downloads = self.dl_manager.active_count()
@@ -6063,7 +6141,7 @@ class MainWindowCore(
             mark_error(
                 self.cfg_outtmpl,
                 "Keep %(ext)s and use only safe yt-dlp fields such as "
-                "%(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.",
+                "%(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.",
             )
         preview_builder = self._dependencies.get("output_template_preview")
         if outtmpl_raw and outtmpl and callable(preview_builder):
@@ -6577,8 +6655,8 @@ class MainWindowCore(
             )
         elif ids:
             self._show_native_pairing_status(
-                "Saved. This copy registers no browser hosts (portable or "
-                "source run) — pair from an installed copy.",
+                "Saved. This portable copy registers no browser hosts. "
+                "Pair from an installed copy.",
                 "warning",
             )
         elif registered:
@@ -6613,6 +6691,10 @@ class MainWindowCore(
         dialog.setWindowTitle(tr("Review Diagnostics"))
         dialog.setModal(True)
         dialog.resize(720, 520)
+        dialog.setAccessibleName(tr("Review redacted diagnostics"))
+        dialog.setAccessibleDescription(
+            tr("Review the support data before saving or copying it.")
+        )
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
@@ -6627,16 +6709,33 @@ class MainWindowCore(
         preview.setReadOnly(True)
         preview.setPlainText(text)
         preview.setAccessibleName(tr("Redacted diagnostics preview"))
+        preview.setAccessibleDescription(
+            tr("Read-only support data with private values removed.")
+        )
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         save_button = buttons.addButton(
             tr("Save diagnostics"), QDialogButtonBox.ButtonRole.ActionRole
         )
+        save_button.setProperty("class", "secondary")
+        save_button.setAccessibleDescription(
+            tr("Save the redacted diagnostics as a JSON file.")
+        )
         save_button.clicked.connect(lambda: self._save_diagnostics_text(text))
         copy_button = buttons.addButton(
-            tr("Copy to Clipboard"), QDialogButtonBox.ButtonRole.AcceptRole
+            tr("Copy to clipboard"), QDialogButtonBox.ButtonRole.AcceptRole
+        )
+        copy_button.setProperty("class", "primary")
+        copy_button.setAccessibleDescription(
+            tr("Copy the redacted diagnostics and close this review.")
         )
         copy_button.setDefault(True)
         copy_button.clicked.connect(dialog.accept)
+        cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_button is not None:
+            cancel_button.setProperty("class", "secondary")
+            cancel_button.setAccessibleDescription(
+                tr("Close the diagnostics review without copying anything.")
+            )
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(heading)
         layout.addWidget(detail)

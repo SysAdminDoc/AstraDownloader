@@ -32,6 +32,15 @@ repository's git log.
 - History, sign-in, and subscription filters use the same bounded surface,
   while cards, status callouts, select menus, scrollbars, and row hover states
   share one clearer visual hierarchy in dark and light themes.
+- Playlist review now gives every video a distinct row, readable duration,
+  accessible selection label, useful empty state, and a clear queue action.
+- Command and diagnostics reviews now keep their copy actions visible, report
+  success in place, distinguish primary and secondary actions, and explain
+  what their redacted read-only content contains.
+- Browser-profile controls no longer crowd the sign-in actions, History uses
+  plain missing-value labels, and pagination reads naturally at a glance.
+- Recovery messages now use short sentences with direct next steps instead of
+  punctuation-heavy fragments across setup, downloads, updates, and sign-ins.
 
 ## [2.8.0] - 2026-08-14
 
