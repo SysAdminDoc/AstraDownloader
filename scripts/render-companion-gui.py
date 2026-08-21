@@ -52,6 +52,8 @@ CAPTURE_NAMES = (
     "history-unreadable",
     "history-filter-empty",
     "history-pagination",
+    "history-german",
+    "history-arabic-rtl",
     "subscriptions-empty",
     "subscriptions-populated",
     "subscriptions-light-theme",
@@ -59,12 +61,16 @@ CAPTURE_NAMES = (
     "subscriptions-error",
     "subscriptions-filter-empty",
     "subscriptions-disabled",
+    "subscriptions-german",
+    "subscriptions-arabic-rtl",
     "site-logins-empty",
     "site-logins-stored",
     "site-logins-youtube-warning",
     "site-logins-light-theme",
     "site-logins-error",
     "site-logins-filter-empty",
+    "site-logins-german",
+    "site-logins-arabic-rtl",
     "settings-dirty",
     "settings-light-theme",
     "settings-pacing-guidance",
@@ -77,6 +83,8 @@ CAPTURE_NAMES = (
     "settings-save-failed",
     "settings-update-busy",
     "settings-focus-125x",
+    "settings-german",
+    "settings-arabic-rtl",
     "reflow-900x620-hidpi-large-font",
     "diagnostics-review",
     "diagnostics-review-light-theme",
@@ -95,6 +103,24 @@ LOCALE_SCENARIOS = {
     "dashboard-portuguese": "pt_BR",
     "dashboard-russian": "ru",
     "dashboard-chinese": "zh_CN",
+}
+
+PAGE_LOCALE_SCENARIOS = {
+    "history-german": "de",
+    "history-arabic-rtl": "ar",
+    "subscriptions-german": "de",
+    "subscriptions-arabic-rtl": "ar",
+    "site-logins-german": "de",
+    "site-logins-arabic-rtl": "ar",
+    "settings-german": "de",
+    "settings-arabic-rtl": "ar",
+}
+
+SCENARIO_LOCALES = {
+    "dashboard-german": "de",
+    "downloads-arabic-rtl": "ar",
+    **LOCALE_SCENARIOS,
+    **PAGE_LOCALE_SCENARIOS,
 }
 
 SCALE_SCENARIOS = {
@@ -155,7 +181,7 @@ def main():
         sys.path.insert(0, str(ROOT))
 
         from astra_downloader import astra_downloader as app_module
-        from PySide6.QtCore import QPoint, QRect, Qt, QTimer
+        from PySide6.QtCore import QCoreApplication, QPoint, QRect, Qt, QTimer
         from PySide6.QtGui import QFont, QFontDatabase, QIcon, QImage
         from PySide6.QtTest import QTest
         from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
@@ -170,15 +196,9 @@ def main():
         app.setQuitOnLastWindowClosed(False)
         app.setApplicationName(app_module.APP_NAME)
         app.setApplicationVersion(app_module.APP_VERSION)
-        if scenario == "downloads-arabic-rtl":
-            app._astra_translator = app_module.install_companion_translator(app, "ar")
-        else:
-            locale = {
-                "dashboard-german": "de",
-                **LOCALE_SCENARIOS,
-            }.get(scenario)
-            if locale:
-                app._astra_translator = app_module.install_companion_translator(app, locale)
+        locale = SCENARIO_LOCALES.get(scenario)
+        if locale:
+            app._astra_translator = app_module.install_companion_translator(app, locale)
         for font_name in ("segoeui.ttf", "seguisb.ttf", "segoeuib.ttf"):
             font_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / font_name
             if font_path.exists():
@@ -388,6 +408,55 @@ def main():
                 raise RuntimeError(
                     f"Operational state text is not visible: {missing}; "
                     f"visible={sorted(rendered)}"
+                )
+
+        def assert_locale_page_layout(window, page):
+            """Fail a locale capture when its page or visible labels clip."""
+            expected = QCoreApplication.translate("AstraDownloader", page)
+            rendered = visible_text(window) | {
+                button.text() for button in window.nav_buttons
+            }
+            if expected not in rendered:
+                raise RuntimeError(
+                    f"Translated page label is missing: {expected!r}; "
+                    f"visible={sorted(rendered)}"
+                )
+            locale_name = PAGE_LOCALE_SCENARIOS[scenario]
+            expected_direction = (
+                Qt.LayoutDirection.RightToLeft
+                if locale_name == "ar"
+                else Qt.LayoutDirection.LeftToRight
+            )
+            if app.layoutDirection() != expected_direction:
+                raise RuntimeError(
+                    f"{scenario} has the wrong layout direction: "
+                    f"{app.layoutDirection()}"
+                )
+            rail_x = window.sidebar.mapTo(window, QPoint(0, 0)).x()
+            if locale_name == "ar" and rail_x < window.width() / 2:
+                raise RuntimeError(
+                    f"RTL navigation rail stayed on the left at x={rail_x}"
+                )
+            if locale_name != "ar" and rail_x > window.width() / 2:
+                raise RuntimeError(
+                    f"LTR navigation rail moved to the right at x={rail_x}"
+                )
+
+            clipped = []
+            for label in window.findChildren(QLabel):
+                if not label.isVisible() or not label.text() or label.wordWrap():
+                    continue
+                if label.textFormat() == Qt.TextFormat.RichText:
+                    continue
+                needed = label.sizeHint().width()
+                if needed > label.width() + 2:
+                    clipped.append(
+                        f"{label.text()!r} needs {needed}px, has {label.width()}px"
+                    )
+            if clipped:
+                raise RuntimeError(
+                    "Translated labels are clipped on " + page + ": "
+                    + "; ".join(clipped)
                 )
 
         def capture_window(window, name, *, dpr=1):
@@ -1018,6 +1087,8 @@ def main():
                 assert_visible_text(
                     window, {"Keyboard navigation deep dive", "Offline media workflow"}
                 )
+            if scenario in PAGE_LOCALE_SCENARIOS:
+                assert_locale_page_layout(window, "History")
             capture_window(window, scenario)
 
         def capture_subscription_state(window):
@@ -1041,10 +1112,18 @@ def main():
                     raise RuntimeError("Subscription scan fixture did not expose its active state")
             elif scenario == "subscriptions-empty":
                 assert_visible_text(window, {"No scheduled subscriptions"})
-            elif scenario in {"subscriptions-populated", "subscriptions-light-theme"}:
+            elif scenario in {
+                    "subscriptions-populated", "subscriptions-light-theme",
+                    "subscriptions-german", "subscriptions-arabic-rtl"}:
                 assert_visible_text(window, {"Astra channel"})
                 if not any("Every 60 min" in text for text in visible_text(window)):
-                    raise RuntimeError("Subscription fixture did not render its scan interval")
+                    if not (
+                        scenario in PAGE_LOCALE_SCENARIOS
+                        and any("60" in text for text in visible_text(window))
+                    ):
+                        raise RuntimeError(
+                            "Subscription fixture did not render its scan interval"
+                        )
             elif scenario == "subscriptions-error":
                 assert_visible_text(window, {
                     "Subscriptions unavailable",
@@ -1070,6 +1149,8 @@ def main():
                     raise RuntimeError("Disabled subscription filter did not stay selected")
             else:
                 raise RuntimeError(f"Unhandled subscription fixture: {scenario}")
+            if scenario in PAGE_LOCALE_SCENARIOS:
+                assert_locale_page_layout(window, "Subscriptions")
             capture_window(window, scenario)
 
         def capture_site_login_state(window):
@@ -1129,6 +1210,8 @@ def main():
                 rendered = " ".join(visible_text(window))
                 if "fixture-value" in rendered or "auth_token" in rendered:
                     raise RuntimeError("Cookie values must never render in the sign-ins view")
+            if scenario in PAGE_LOCALE_SCENARIOS:
+                assert_locale_page_layout(window, "Sign-ins")
             capture_window(window, scenario)
 
         def capture_settings_state(window, config):
@@ -1288,6 +1371,26 @@ def main():
                     "Could not save settings. Nothing changed; "
                     "check disk permissions and retry."
                 )
+            elif scenario in PAGE_LOCALE_SCENARIOS:
+                headings = [
+                    label
+                    for label in window.findChildren(QLabel)
+                    if label.isVisible()
+                    and label.property("class") == "settingsSection"
+                ]
+                if not headings:
+                    raise RuntimeError("Settings locale fixture has no section headings")
+                widest = max(headings, key=lambda label: label.sizeHint().width())
+                current = window.tabs.currentWidget()
+                scroll = (
+                    current if isinstance(current, QScrollArea)
+                    else current.findChild(QScrollArea)
+                )
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(widest, 0, 180)
+                    app.processEvents()
+                    QTest.qWait(40)
+                expected = widest.text()
             else:
                 window.btn_check_updates.setEnabled(False)
                 window.btn_check_updates.setText("Checking…")
@@ -1323,11 +1426,15 @@ def main():
                     scroll.ensureWidgetVisible(window.cfg_site_profiles, 0, 160)
                     app.processEvents()
                     QTest.qWait(40)
+            elif scenario in PAGE_LOCALE_SCENARIOS:
+                pass
             elif scenario not in ("settings-subtitles", "settings-bundle-imported"):
                 # That scenario already scrolled to the controls it exists to
                 # show; scrolling to the bottom here would hide them again.
                 scroll_current_page_to_bottom(window)
             assert_visible_text(window, {expected})
+            if scenario in PAGE_LOCALE_SCENARIOS:
+                assert_locale_page_layout(window, "Settings")
             capture_window(
                 window, scenario,
                 dpr=SCALE_SCENARIOS.get(scenario, 1.0),

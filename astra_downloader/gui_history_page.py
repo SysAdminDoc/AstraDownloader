@@ -137,7 +137,7 @@ class HistoryPageMixin:
         columns_layout.addWidget(make_label("File", "columnLabel"), 4)
         for text in ("Format", "Quality", "Duration", "Saved"):
             label = make_label(text, "columnLabel")
-            label.setFixedWidth(92)
+            label.setMinimumWidth(92)
             columns_layout.addWidget(label)
         columns_layout.addSpacing(54)
         layout.addWidget(columns)

@@ -2901,6 +2901,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "downloads-recovery-terminal", "history-cleared-undo",
             "settings-save-failed", "settings-update-busy",
             "reflow-900x620-hidpi-large-font",
+            "history-german", "history-arabic-rtl",
+            "settings-german", "settings-arabic-rtl",
+            "site-logins-german", "site-logins-arabic-rtl",
+            "subscriptions-german", "subscriptions-arabic-rtl",
         }
         self.assertTrue(required_states <= set(renderer.CAPTURE_NAMES))
         self.assertEqual(renderer.SCALE_SCENARIOS["downloads-focus-1x"], 1.0)
@@ -16097,7 +16101,11 @@ class RightToLeftLayoutTests(unittest.TestCase):
         import i18n
 
         renderer = self._renderer()
-        self.assertIn("downloads-arabic-rtl", renderer.CAPTURE_NAMES)
+        self.assertTrue({
+            "downloads-arabic-rtl", "history-arabic-rtl",
+            "settings-arabic-rtl", "site-logins-arabic-rtl",
+            "subscriptions-arabic-rtl",
+        } <= set(renderer.CAPTURE_NAMES))
         app = _get_qapp_or_skip(self)
         translator = i18n.install_companion_translator(app, "ar")
         try:
