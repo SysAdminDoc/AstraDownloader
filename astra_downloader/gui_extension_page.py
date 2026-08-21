@@ -33,7 +33,7 @@ class ExtensionPageMixin:
         # Server control
         ctrl = make_card("serverControl")
         ctrl_layout = QVBoxLayout(ctrl)
-        ctrl_layout.setContentsMargins(0, 10, 20, 14)
+        ctrl_layout.setContentsMargins(18, 16, 18, 16)
         ctrl_layout.setSpacing(13)
 
         state_row = QHBoxLayout()
@@ -76,7 +76,7 @@ class ExtensionPageMixin:
 
         readiness = make_card("readiness")
         readiness_layout = QVBoxLayout(readiness)
-        readiness_layout.setContentsMargins(22, 10, 0, 8)
+        readiness_layout.setContentsMargins(18, 16, 18, 16)
         readiness_layout.setSpacing(1)
         readiness_header = QHBoxLayout()
         readiness_header.addWidget(make_label("Pairing", "panelTitle"))
@@ -93,9 +93,8 @@ class ExtensionPageMixin:
         readiness_layout.addStretch()
 
         hero = QHBoxLayout()
-        hero.setSpacing(0)
+        hero.setSpacing(12)
         hero.addWidget(ctrl, 3)
-        hero.addWidget(make_vertical_divider())
         hero.addWidget(readiness, 2)
         layout.addLayout(hero)
 

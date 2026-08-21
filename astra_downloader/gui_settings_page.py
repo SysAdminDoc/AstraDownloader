@@ -27,13 +27,18 @@ except ImportError:  # Flat source-path compatibility.
 class SettingsPageMixin:
     def _build_settings(self):
         self._settings_group_specs = []
+        root = QWidget()
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
         page = QWidget()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(page)
+        root_layout.addWidget(scroll, 1)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 30, 24)
-        layout.setSpacing(0)
+        layout.setSpacing(10)
 
         layout.addLayout(self._make_page_header("Settings", ""))
         layout.addSpacing(14)
@@ -1151,8 +1156,11 @@ class SettingsPageMixin:
         layout.addWidget(tools_card)
         layout.addWidget(transfer_card)
 
-        save_row = QHBoxLayout()
-        save_row.setContentsMargins(166, 14, 0, 0)
+        save_bar = QFrame()
+        save_bar.setProperty("class", "settingsSaveBar")
+        save_row = QHBoxLayout(save_bar)
+        save_row.setContentsMargins(38, 12, 30, 12)
+        save_row.setSpacing(8)
         self.settings_status = make_label("", "settingsStatus")
         self.settings_status.setAccessibleName(tr("Settings status"))
         save_row.addWidget(self.settings_status, 1)
@@ -1179,11 +1187,11 @@ class SettingsPageMixin:
         )
         self._set_settings_filter_hidden(self.btn_undo_restore_defaults, True)
         save_row.addWidget(self.btn_undo_restore_defaults)
-        layout.addLayout(save_row)
         layout.addStretch()
+        root_layout.addWidget(save_bar)
 
         for signal in self._settings_change_signals():
             signal.connect(self._mark_settings_dirty)
         self._filter_settings("")
 
-        self.tabs.addTab(scroll, tr("Settings"))
+        self.tabs.addTab(root, tr("Settings"))

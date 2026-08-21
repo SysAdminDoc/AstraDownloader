@@ -1436,10 +1436,10 @@ class MainWindowCore(
         group.setProperty("class", "settingsGroup")
         group.setProperty("settingsSearchTitle", str(title))
         outer = QHBoxLayout(group)
-        outer.setContentsMargins(0, 13, 0, 13)
-        outer.setSpacing(24)
+        outer.setContentsMargins(18, 16, 18, 16)
+        outer.setSpacing(26)
         heading = make_label(title, "settingsSection")
-        heading.setFixedWidth(142)
+        heading.setFixedWidth(150)
         heading.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         outer.addWidget(heading)
         content = QVBoxLayout()
@@ -1748,6 +1748,8 @@ class MainWindowCore(
             return
         dot, detail, button = widgets
         status = str(status or "unknown").strip().lower()
+        if hasattr(self, "_preflight_statuses"):
+            self._preflight_statuses[key] = status
         tone = {
             "ok": "success",
             "not-applicable": "neutral",
@@ -1798,6 +1800,55 @@ class MainWindowCore(
         )
         repolish(dot)
 
+    def _set_preflight_expanded(self, expanded):
+        """Keep readiness repairs one click away without hiding the queue."""
+        expanded = bool(expanded)
+        self.preflight_details.setVisible(expanded)
+        label = tr("Hide checks") if expanded else tr("Show checks")
+        self.btn_preflight_toggle.setText(label)
+        self.btn_preflight_toggle.setAccessibleName(label)
+
+    def _update_preflight_summary(self):
+        summary = getattr(self, "preflight_summary", None)
+        if summary is None:
+            return
+        statuses = list(getattr(self, "_preflight_statuses", {}).values())
+        checking = sum(status == "unknown" for status in statuses)
+        errors = sum(status == "error" for status in statuses)
+        warnings = sum(status == "warning" for status in statuses)
+        if checking:
+            message = tr("Checking download readiness...")
+            tone = "neutral"
+        elif errors:
+            if errors == 1:
+                message = tr(
+                    "One check needs repair. Open the checks to see the fix."
+                )
+            else:
+                message = tr(
+                    "{count} checks need repair. Open the checks to see the fixes."
+                ).format(count=errors)
+            tone = "danger"
+        elif warnings:
+            if warnings == 1:
+                message = tr(
+                    "One check needs attention. Downloads can still be available."
+                )
+            else:
+                message = tr(
+                    "{count} checks need attention. Downloads can still be available."
+                ).format(count=warnings)
+            tone = "warning"
+        else:
+            message = tr("All six checks passed. Downloads are ready.")
+            tone = "success"
+        summary.setText(message)
+        set_status_tone(summary, tone)
+        repolish(summary)
+        toggle = getattr(self, "btn_preflight_toggle", None)
+        if errors and toggle is not None and not toggle.isChecked():
+            toggle.setChecked(True)
+
     def _apply_preflight(self, payload):
         payload = payload if isinstance(payload, dict) else {}
         checks = payload.get("checks")
@@ -1814,6 +1865,7 @@ class MainWindowCore(
                 item.get("message", ""),
                 item.get("action", fallback_action),
             )
+        self._update_preflight_summary()
 
     def _run_preflight_action(self, key):
         action = self._preflight_actions.get(key, "")
@@ -2133,6 +2185,19 @@ class MainWindowCore(
 
     def _quick_download_profile_changed(self, *_args):
         self._sync_quick_download_profile(apply=True)
+
+    def _set_quick_options_expanded(self, expanded):
+        """Reveal infrequent download controls without burying the queue."""
+        expanded = bool(expanded)
+        self.quick_download_advanced.setVisible(expanded)
+        label = tr("Fewer options") if expanded else tr("More options")
+        self.btn_quick_options.setText(label)
+        self.btn_quick_options.setAccessibleName(label)
+        self.btn_quick_options.setToolTip(
+            tr("Hide password, clip range, and custom file name controls.")
+            if expanded
+            else tr("Show password, clip range, and custom file name controls.")
+        )
 
     def _sync_quick_download_profile(self, *, apply=False):
         combo = getattr(self, "quick_download_profile", None)

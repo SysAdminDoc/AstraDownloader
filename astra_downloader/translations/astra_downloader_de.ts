@@ -19,6 +19,38 @@
       <translation>Wird geprüft</translation>
     </message>
     <message>
+      <source>MP3</source>
+      <translation>MP3</translation>
+    </message>
+    <message>
+      <source>M4A</source>
+      <translation>M4A</translation>
+    </message>
+    <message>
+      <source>Opus</source>
+      <translation>Opus</translation>
+    </message>
+    <message>
+      <source>FLAC</source>
+      <translation>FLAC</translation>
+    </message>
+    <message>
+      <source>WAV</source>
+      <translation>WAV</translation>
+    </message>
+    <message>
+      <source>MP4</source>
+      <translation>MP4</translation>
+    </message>
+    <message>
+      <source>MKV</source>
+      <translation>MKV</translation>
+    </message>
+    <message>
+      <source>WebM</source>
+      <translation>WebM</translation>
+    </message>
+    <message>
       <source>Removed?</source>
       <translation>Entfernt?</translation>
     </message>
@@ -183,38 +215,6 @@
       <translation>{app} – {status}</translation>
     </message>
     <message>
-      <source>MP3</source>
-      <translation>MP3</translation>
-    </message>
-    <message>
-      <source>M4A</source>
-      <translation>M4A</translation>
-    </message>
-    <message>
-      <source>Opus</source>
-      <translation>Opus</translation>
-    </message>
-    <message>
-      <source>FLAC</source>
-      <translation>FLAC</translation>
-    </message>
-    <message>
-      <source>WAV</source>
-      <translation>WAV</translation>
-    </message>
-    <message>
-      <source>MP4</source>
-      <translation>MP4</translation>
-    </message>
-    <message>
-      <source>MKV</source>
-      <translation>MKV</translation>
-    </message>
-    <message>
-      <source>WebM</source>
-      <translation>WebM</translation>
-    </message>
-    <message>
       <source>mp3</source>
       <translation>mp3</translation>
     </message>
@@ -249,6 +249,18 @@
     <message>
       <source>—</source>
       <translation>—</translation>
+    </message>
+    <message>
+      <source>Hide checks</source>
+      <translation>Prüfungen ausblenden</translation>
+    </message>
+    <message>
+      <source>Show checks</source>
+      <translation>Prüfungen anzeigen</translation>
+    </message>
+    <message>
+      <source>Checking download readiness...</source>
+      <translation>Download-Bereitschaft wird geprüft...</translation>
     </message>
     <message>
       <source>Missing</source>
@@ -293,6 +305,14 @@
     <message>
       <source>No profile (one-off)</source>
       <translation>Kein Profil (einmalig)</translation>
+    </message>
+    <message>
+      <source>Fewer options</source>
+      <translation>Weniger Optionen</translation>
+    </message>
+    <message>
+      <source>More options</source>
+      <translation>Weitere Optionen</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -657,6 +677,14 @@
     <message>
       <source>Plugin-based proof-of-origin providers are disabled. Downloads use the verified token-exempt YouTube client chain.</source>
       <translation>Pluginbasierte Proof-of-Origin-Anbieter sind deaktiviert. Downloads verwenden die verifizierte tokenfreie YouTube-Clientkette.</translation>
+    </message>
+    <message>
+      <source>Hide password, clip range, and custom file name controls.</source>
+      <translation>Passwort, Ausschnitt und eigenen Dateinamen ausblenden.</translation>
+    </message>
+    <message>
+      <source>Show password, clip range, and custom file name controls.</source>
+      <translation>Passwort, Ausschnitt und eigenen Dateinamen anzeigen.</translation>
     </message>
     <message>
       <source>Automatic matching is on; no profile matches this link.</source>
@@ -1135,6 +1163,14 @@
       <translation>{action} für {label}</translation>
     </message>
     <message>
+      <source>One check needs repair. Open the checks to see the fix.</source>
+      <translation>Eine Prüfung muss repariert werden. Öffnen Sie die Prüfungen für die Lösung.</translation>
+    </message>
+    <message>
+      <source>All six checks passed. Downloads are ready.</source>
+      <translation>Alle sechs Prüfungen bestanden. Downloads sind bereit.</translation>
+    </message>
+    <message>
       <source>{target} (unavailable)</source>
       <translation>{target} (nicht verfügbar)</translation>
     </message>
@@ -1415,6 +1451,10 @@
       <translation>Öffnen</translation>
     </message>
     <message>
+      <source>One check needs attention. Downloads can still be available.</source>
+      <translation>Eine Prüfung braucht Aufmerksamkeit. Downloads können trotzdem verfügbar sein.</translation>
+    </message>
+    <message>
       <source>Runtime floor</source>
       <translation>Laufzeituntergrenze</translation>
     </message>
@@ -1519,6 +1559,10 @@
       <translation>Transkriptionsmodell wird vorbereitet…</translation>
     </message>
     <message>
+      <source>{count} checks need repair. Open the checks to see the fixes.</source>
+      <translation>{count} Prüfungen müssen repariert werden. Öffnen Sie die Prüfungen für die Lösungen.</translation>
+    </message>
+    <message>
       <source>{runtime} {version} is below the security floor {floor}; update it before downloading.</source>
       <translation>{runtime} {version} liegt unter der Sicherheitsuntergrenze {floor}; vor dem Herunterladen aktualisieren.</translation>
     </message>
@@ -1569,6 +1613,10 @@
     <message>
       <source>Finishing setup...</source>
       <translation>Einrichtung wird abgeschlossen…</translation>
+    </message>
+    <message>
+      <source>{count} checks need attention. Downloads can still be available.</source>
+      <translation>{count} Prüfungen brauchen Aufmerksamkeit. Downloads können trotzdem verfügbar sein.</translation>
     </message>
     <message>
       <source>unknown</source>
@@ -1633,6 +1681,10 @@
     <message>
       <source>Last 30 s</source>
       <translation>Letzte 30 s</translation>
+    </message>
+    <message>
+      <source>Checking six common download blockers...</source>
+      <translation>Sechs häufige Download-Probleme werden geprüft...</translation>
     </message>
     <message>
       <source>Restore</source>
@@ -1743,6 +1795,10 @@
       <translation>Downloadqualität</translation>
     </message>
     <message>
+      <source>Shows password, clip range, and custom file name controls.</source>
+      <translation>Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.</translation>
+    </message>
+    <message>
       <source>Clip from</source>
       <translation>Ausschnitt von</translation>
     </message>
@@ -1807,12 +1863,16 @@
       <translation>Fortschritt der Download-Tool-Einrichtung</translation>
     </message>
     <message>
-      <source>Pre-flight</source>
-      <translation>Vorabprüfung</translation>
+      <source>Download health</source>
+      <translation>Download-Bereitschaft</translation>
     </message>
     <message>
-      <source>Checks known download failure causes before a job starts. Each row names the remedy.</source>
-      <translation>Prüft bekannte Downloadfehler, bevor ein Auftrag startet. Jede Zeile nennt die Lösung.</translation>
+      <source>Show each download readiness check and its repair action.</source>
+      <translation>Jede Download-Prüfung und ihre Reparaturaktion anzeigen.</translation>
+    </message>
+    <message>
+      <source>Download health summary</source>
+      <translation>Zusammenfassung der Download-Bereitschaft</translation>
     </message>
     <message>
       <source>Storage problem</source>

@@ -70,6 +70,40 @@ CATALOGS = {
             "Diagnose prüfen",
         "Download":
             "Herunterladen",
+        "More options":
+            "Weitere Optionen",
+        "Fewer options":
+            "Weniger Optionen",
+        "Show password, clip range, and custom file name controls.":
+            "Passwort, Ausschnitt und eigenen Dateinamen anzeigen.",
+        "Shows password, clip range, and custom file name controls.":
+            "Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.",
+        "Hide password, clip range, and custom file name controls.":
+            "Passwort, Ausschnitt und eigenen Dateinamen ausblenden.",
+        "Download health":
+            "Download-Bereitschaft",
+        "Show checks":
+            "Prüfungen anzeigen",
+        "Hide checks":
+            "Prüfungen ausblenden",
+        "Show each download readiness check and its repair action.":
+            "Jede Download-Prüfung und ihre Reparaturaktion anzeigen.",
+        "Checking six common download blockers...":
+            "Sechs häufige Download-Probleme werden geprüft...",
+        "Download health summary":
+            "Zusammenfassung der Download-Bereitschaft",
+        "Checking download readiness...":
+            "Download-Bereitschaft wird geprüft...",
+        "One check needs repair. Open the checks to see the fix.":
+            "Eine Prüfung muss repariert werden. Öffnen Sie die Prüfungen für die Lösung.",
+        "{count} checks need repair. Open the checks to see the fixes.":
+            "{count} Prüfungen müssen repariert werden. Öffnen Sie die Prüfungen für die Lösungen.",
+        "One check needs attention. Downloads can still be available.":
+            "Eine Prüfung braucht Aufmerksamkeit. Downloads können trotzdem verfügbar sein.",
+        "{count} checks need attention. Downloads can still be available.":
+            "{count} Prüfungen brauchen Aufmerksamkeit. Downloads können trotzdem verfügbar sein.",
+        "All six checks passed. Downloads are ready.":
+            "Alle sechs Prüfungen bestanden. Downloads sind bereit.",
         "Save to":
             "Speichern unter",
         "Restore":

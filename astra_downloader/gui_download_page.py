@@ -141,6 +141,15 @@ class DownloadPageMixin:
         url_row.addWidget(self.btn_quick_download)
         quick_layout.addLayout(url_row)
 
+        # Keep the landing state focused on the link and output choice. The
+        # password, clipping, and custom-name controls are valuable, but they
+        # are secondary for most downloads and previously pushed the queue
+        # below the first viewport.
+        self.quick_download_advanced = QWidget()
+        advanced_layout = QVBoxLayout(self.quick_download_advanced)
+        advanced_layout.setContentsMargins(0, 2, 0, 0)
+        advanced_layout.setSpacing(8)
+
         password_row = QHBoxLayout()
         self.quick_download_video_password = QLineEdit()
         self.quick_download_video_password.setEchoMode(QLineEdit.EchoMode.Password)
@@ -157,7 +166,7 @@ class DownloadPageMixin:
             "fieldHint",
             word_wrap=True,
         ))
-        quick_layout.addLayout(password_row)
+        advanced_layout.addLayout(password_row)
 
         # These controls used to share one HBox. At the documented minimum
         # size, a large system font made Qt squeeze the combo boxes until
@@ -224,6 +233,18 @@ class DownloadPageMixin:
         )
         self.btn_quick_download_dest.clicked.connect(self._pick_quick_download_dir)
         media_row.addWidget(self.btn_quick_download_dest)
+        self.btn_quick_options = self._make_tool_button("More options", "ghost")
+        self.btn_quick_options.setCheckable(True)
+        self.btn_quick_options.setToolTip(
+            tr("Show password, clip range, and custom file name controls.")
+        )
+        self.btn_quick_options.setAccessibleDescription(
+            tr("Shows password, clip range, and custom file name controls.")
+        )
+        self.btn_quick_options.toggled.connect(
+            self._set_quick_options_expanded
+        )
+        media_row.addWidget(self.btn_quick_options)
         media_row.addStretch(1)
         options_layout.addWidget(media_row_widget)
 
@@ -264,7 +285,7 @@ class DownloadPageMixin:
         )
         clip_row.addWidget(self.btn_quick_clip_last_30)
         clip_row.addStretch(1)
-        options_layout.addWidget(clip_row_widget)
+        advanced_layout.addWidget(clip_row_widget)
 
         # Its own row rather than an extra field on the clip row: a QLineEdit
         # with a label enforces its text as a minimum width, and the last time
@@ -284,18 +305,20 @@ class DownloadPageMixin:
         ))
         self.quick_download_name.textChanged.connect(self._sync_quick_download_name_hint)
         name_row.addWidget(self.quick_download_name, 1)
-        options_layout.addWidget(name_row_widget)
+        advanced_layout.addWidget(name_row_widget)
         self.quick_download_name_hint = make_label("", "fieldHint", word_wrap=True)
         self.quick_download_name_hint.setAccessibleName(tr("Output file name status"))
         self.quick_download_name_hint.hide()
-        options_layout.addWidget(self.quick_download_name_hint)
+        advanced_layout.addWidget(self.quick_download_name_hint)
 
         quick_layout.addWidget(self.quick_download_options_container)
+        quick_layout.addWidget(self.quick_download_advanced)
+        self.quick_download_advanced.hide()
         self.quick_download_clip_hint = make_label(
             tr("Clip ranges apply to a single link."), "fieldHint",
             word_wrap=True,
         )
-        quick_layout.addWidget(self.quick_download_clip_hint)
+        advanced_layout.addWidget(self.quick_download_clip_hint)
         self.quick_download_profile_hint = make_label(
             "", "fieldHint", word_wrap=True
         )
@@ -373,17 +396,38 @@ class DownloadPageMixin:
         preflight_layout.setContentsMargins(18, 10, 18, 8)
         preflight_layout.setSpacing(1)
         preflight_header = QHBoxLayout()
-        preflight_header.addWidget(make_label("Pre-flight", "panelTitle"))
+        preflight_header.addWidget(make_label("Download health", "panelTitle"))
         preflight_header.addStretch()
+        self.btn_preflight_toggle = self._make_tool_button(
+            "Show checks", "ghost"
+        )
+        self.btn_preflight_toggle.setCheckable(True)
+        self.btn_preflight_toggle.setToolTip(
+            tr("Show each download readiness check and its repair action.")
+        )
+        self.btn_preflight_toggle.toggled.connect(
+            self._set_preflight_expanded
+        )
+        preflight_header.addWidget(self.btn_preflight_toggle)
         preflight_layout.addLayout(preflight_header)
-        preflight_layout.addWidget(make_label(
-            "Checks known download failure causes before a job starts. Each row names the remedy.",
-            "fieldHint", word_wrap=True,
-        ))
+        self.preflight_summary = make_label(
+            "Checking six common download blockers...",
+            "fieldHint",
+            word_wrap=True,
+        )
+        self.preflight_summary.setAccessibleName(tr("Download health summary"))
+        preflight_layout.addWidget(self.preflight_summary)
+        self.preflight_details = QWidget()
+        preflight_details_layout = QVBoxLayout(self.preflight_details)
+        preflight_details_layout.setContentsMargins(0, 3, 0, 0)
+        preflight_details_layout.setSpacing(1)
+        self._preflight_statuses = {}
         for key, label_text, action_text in _PREFLIGHT_ROW_SPECS:
-            preflight_layout.addWidget(
+            preflight_details_layout.addWidget(
                 self._make_preflight_row(key, label_text, action_text)
             )
+        preflight_layout.addWidget(self.preflight_details)
+        self.preflight_details.hide()
         self.preflight_panel = preflight_panel
         layout.addWidget(preflight_panel)
 
