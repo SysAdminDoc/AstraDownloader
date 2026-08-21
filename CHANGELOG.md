@@ -12,6 +12,12 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **The download you just started is visible without scrolling.** At the
+  standard 1120x760 window an active download's queue row now sits wholly
+  inside the page, and reaching it takes no scrolling at all.
+
 ### Fixed
 
 - **Status announcements now cover every message, and repeat themselves less.**

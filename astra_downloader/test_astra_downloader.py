@@ -22114,6 +22114,84 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         self.addCleanup(_retire_test_window, window)
         return window
 
+    def test_an_active_download_is_visible_without_scrolling(self):
+        """The design invariant is downloader first, so the download you just
+        started must not be below the fold at the documented window size.
+
+        The older pin only checked that the queue scroller *began* inside the
+        window, which a one-pixel sliver satisfies. This asserts the first real
+        row is wholly inside it and that the page does not scroll to get there.
+        """
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QApplication, QFrame
+
+        window = self._window()
+        window.resize(1120, 760)
+        window.show()
+        window._nav_click("Download")
+        QApplication.processEvents()
+
+        download = ad.Download(
+            "active",
+            "https://www.youtube.com/watch?v=abcdefghijk",
+            fmt="mp4",
+            quality="1080",
+            output_dir=".",
+            title="Downloading documentary",
+            created_at=1_750_000_000,
+            queue_order=1,
+            clock=lambda: 1_750_001_000,
+        )
+        download.status = "downloading"
+        download.progress = 63.4
+        window.dl_manager.downloads[download.id] = download
+        window.dl_manager._running_ids.add(download.id)
+        window._update_ui()
+        QApplication.processEvents()
+
+        rows = [
+            window.downloads_list_layout.itemAt(index).widget()
+            for index in range(window.downloads_list_layout.count())
+        ]
+        cards = [row for row in rows if isinstance(row, QFrame) and row.isVisible()]
+        self.assertTrue(cards, "an active download must render a queue row")
+
+        card = cards[0]
+        top = card.mapTo(window, QPoint(0, 0)).y()
+        self.assertGreaterEqual(top, 0)
+        self.assertLessEqual(
+            top + card.height(), window.height(),
+            "the first queue row must be wholly inside a 1120x760 window",
+        )
+
+        page_bar = window.download_page_scroll.verticalScrollBar()
+        self.assertEqual(
+            page_bar.maximum(), 0,
+            "reaching the queue must not require scrolling the Download page",
+        )
+        queue_bar = window.downloads_scroll.verticalScrollBar()
+        self.assertEqual(
+            queue_bar.value(), 0,
+            "the queue must show its first row without being scrolled",
+        )
+
+        # The contrast is what gives the assertion above its teeth: with the
+        # optional controls and the passing checks expanded, the same queue is
+        # pushed out of the viewport. Progressive disclosure is what keeps the
+        # downloader first, not a taller window.
+        window.btn_quick_options.setChecked(True)
+        window.btn_preflight_toggle.setChecked(True)
+        QApplication.processEvents()
+        expanded_top = card.mapTo(window, QPoint(0, 0)).y()
+        self.assertGreater(
+            expanded_top, top,
+            "expanding the optional controls must move the queue down",
+        )
+        self.assertGreater(
+            window.download_page_scroll.verticalScrollBar().maximum(), 0,
+            "the expanded page is the state that needs scrolling",
+        )
+
     def test_download_is_the_first_page_and_the_landing_page(self):
         window = self._window()
         self.assertEqual(
