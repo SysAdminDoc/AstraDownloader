@@ -1176,6 +1176,31 @@ def select_site_profile(url, profiles, profile_name=None):
     return dict(max(matches, key=lambda profile: len(str(profile.get("Domain") or ""))))
 
 
+
+REAP_AFTER_TERMINATE_SECONDS = 5
+
+
+def reap_terminated_process(proc, terminate, log, label):
+    """Kill a timed-out child and then actually wait on it.
+
+    ``terminate_process_tree`` closes the pipes, so the reader threads exit and
+    everything looks finished — but the ``Popen`` is never waited on, so the
+    OS keeps the process entry and the handle until the object is collected.
+    A second bounded ``communicate`` collects it deterministically.
+    """
+    try:
+        terminate(proc)
+    except Exception as error:  # noqa: BLE001
+        # reason: best-effort kill; the child may already be gone
+        log(f"WARNING: {label} termination failed: {error}")
+    try:
+        proc.communicate(timeout=REAP_AFTER_TERMINATE_SECONDS)
+    except Exception as error:  # noqa: BLE001
+        # reason: the kill already happened; a child that will not be reaped
+        # within the window is reported, not waited on forever
+        log(f"WARNING: {label} did not exit after termination: {error}")
+
+
 class _ProfileConfigOverlay:
     """A read-only config view with non-empty profile overrides applied."""
 
@@ -6504,13 +6529,12 @@ class DownloadManagerCore:
         try:
             out, errout = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            try:
-                self._dependencies['terminate_process_tree'](proc)
-            except Exception as error:
-                # reason: best-effort kill; process may already be gone
-                self._dependencies['write_persistent_log'](
-                    f"WARNING: format-probe termination failed: {error}"
-                )
+            reap_terminated_process(
+                proc,
+                self._dependencies['terminate_process_tree'],
+                self._dependencies['write_persistent_log'],
+                'format-probe',
+            )
             return None, 'Timed out while listing formats.'
         finally:
             identity_cleanup()
@@ -6564,13 +6588,12 @@ class DownloadManagerCore:
         try:
             output, _ = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            try:
-                self._dependencies['terminate_process_tree'](proc)
-            except Exception as error:
-                # reason: best-effort kill; the reader may already have exited
-                self._dependencies['write_persistent_log'](
-                    f"WARNING: cookie import termination failed: {error}"
-                )
+            reap_terminated_process(
+                proc,
+                self._dependencies['terminate_process_tree'],
+                self._dependencies['write_persistent_log'],
+                'cookie import',
+            )
             self._unlink_quietly(staging)
             return None, 'Timed out while reading cookies from the browser.'
         try:
@@ -6659,13 +6682,12 @@ class DownloadManagerCore:
             try:
                 _output, error_output = proc.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
-                try:
-                    self._dependencies['terminate_process_tree'](proc)
-                except Exception as error:
-                    # reason: best-effort kill; the test is already bounded
-                    self._dependencies['write_persistent_log'](
-                        f'WARNING: sign-in test termination failed: {error}'
-                    )
+                reap_terminated_process(
+                    proc,
+                    self._dependencies['terminate_process_tree'],
+                    self._dependencies['write_persistent_log'],
+                    'sign-in test',
+                )
                 return None, f'Sign-in test timed out for {key}.'
             finally:
                 self._release_ytdlp_activity(proc)
@@ -6800,12 +6822,12 @@ class DownloadManagerCore:
         try:
             out, errout = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            try:
-                self._dependencies['terminate_process_tree'](proc)
-            except Exception as error:
-                self._dependencies['write_persistent_log'](
-                    f"WARNING: playlist-probe termination failed: {error}"
-                )
+            reap_terminated_process(
+                proc,
+                self._dependencies['terminate_process_tree'],
+                self._dependencies['write_persistent_log'],
+                'playlist-probe',
+            )
             return None, 'Timed out while previewing the playlist.'
         finally:
             identity_cleanup()

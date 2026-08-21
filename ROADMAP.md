@@ -128,13 +128,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P3
 
-- [ ] P3 — AD-44 — Reap the process after a `communicate` timeout
-  Why: three timeout handlers call `terminate_process_tree(proc)` and return without a second `communicate()`/`wait()`. In practice the tree-kill closes the pipes so the reader threads exit, but the `Popen` is never waited on and the handle survives until GC.
-  Evidence: `astra_downloader/download.py:6330-6339`, `:6485-6493`, `:6625-6633`.
-  Touches: `astra_downloader/download.py`
-  Acceptance: each handler waits on the child after terminating it, with its own bounded timeout.
-  Complexity: S
-
 - [ ] P3 — AD-45 — Take log writes off the Qt main thread
   Why: `_append_log` runs on the main thread and calls `write_persistent_log`, which does `mkdir` + `stat` + `open(..., 'a')` + write per call while holding the process-global `_LOG_LOCK` that every worker thread also contends for. The GUI log widget and the in-memory ring are already correctly bounded; the synchronous I/O is the only issue.
   Evidence: `astra_downloader/gui.py:6343`; `astra_downloader.py:849-875`.
