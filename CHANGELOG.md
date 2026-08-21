@@ -12,6 +12,13 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **The reviewed yt-dlp is now 2026.08.19**, the build the managed auto-update
+  actually fetches. The extractor smoke runs against it, and against the
+  managed executable with the shipped hardening flags, so the wheel and the
+  standalone build are both proven before a release.
+
 ## [2.9.0] - 2026-08-21
 
 ### Added

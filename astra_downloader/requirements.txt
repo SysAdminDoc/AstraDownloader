@@ -1,9 +1,10 @@
 # Astra Downloader Python dependency pins.
 #
-# Floor: Python 3.11 — the yt-dlp pin below raised its minimum in 2026.07.04.
-# Hard-failed at runtime in astra_downloader.py module load, which has to agree
-# with this pin: on an older interpreter the resolve fails first and the guard
-# that exists to explain the problem never runs.
+# Floor: Python 3.11 — one release above the yt-dlp wheel's own >=3.10, because
+# CPython 3.10 reaches end of life in October 2026 and the packaged build has
+# never run on it. Hard-failed at runtime in astra_downloader.py module load,
+# which has to agree with this floor: on an older interpreter the resolve of
+# this file fails first and the guard that exists to explain it never runs.
 #
 # Upper bounds are per-package — prevents Dependabot or a fresh
 # pip resolve from silently landing PyQt7/Flask4/requests3/waitress4
@@ -13,9 +14,12 @@
 # Astra Downloader still downloads yt-dlp.exe at runtime, but pinning the
 # Python package gives Dependabot a reviewed version surface and lets the
 # local smoke prove a candidate extractor can fetch a known stable video.
-# 2026.7.4 fixes CVE-2026-55404 (--write-link shortcut injection). Astra also
-# denies every link-file flag at the final subprocess boundary as defense in depth.
-yt-dlp==2026.7.4
+# 2026.7.4 fixed CVE-2026-55404 (--write-link shortcut injection); the pin has
+# carried that fix forward ever since, and Astra also denies every link-file
+# flag at the final subprocess boundary as defense in depth. 2026.8.19 is the
+# build the managed-binary auto-update fetches, so the smoke gate tests what
+# users actually run.
+yt-dlp==2026.8.19
 curl_cffi==0.16.0
 PyQt6>=6.6.0,<7
 # v1.4.0 NX11: Flask >=3.1.3 closes CVE-2026-27205 (session cache-control

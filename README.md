@@ -161,7 +161,7 @@ and downloaded media, run `--uninstall` from that folder.
 
 ## Run from source
 
-Python 3.11 or newer — the pinned yt-dlp raised its minimum in 2026.07.04.
+Python 3.11 or newer. That floor sits one release above what the pinned dependency graph resolves against, because CPython 3.10 reaches end of life in October 2026.
 
 ```powershell
 py -3.12 -m venv .venv

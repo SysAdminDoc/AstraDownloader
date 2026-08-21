@@ -12,17 +12,20 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
 
-# The pinned yt-dlp (2026.7.4) requires Python 3.11; on 3.10 the install of
-# requirements.txt fails before this guard would ever run, so the guard has to
-# agree with the pin or it explains nothing. Packaged builds carry their own
-# interpreter and build.py already restricts them to 3.11 and 3.12.
+# requirements.txt declares a Python 3.11 floor, one release above what the
+# pinned yt-dlp wheel asks for, because CPython 3.10 reaches end of life in
+# October 2026. On 3.10 the install of requirements.txt fails before this
+# guard would ever run, so the guard has to agree with that floor or it
+# explains nothing. Packaged builds carry their own interpreter and build.py
+# already restricts them to 3.11 and 3.12.
 _MIN_PYTHON = (3, 11)
 if sys.version_info < _MIN_PYTHON:
     sys.stderr.write(
         f"[Astra Downloader] Python {_MIN_PYTHON[0]}.{_MIN_PYTHON[1]}+ "
         f"required (you're on "
-        f"{sys.version_info.major}.{sys.version_info.minor}). yt-dlp "
-        f"raised its minimum to Python 3.11 in release 2026.07.04.\n"
+        f"{sys.version_info.major}.{sys.version_info.minor}). "
+        f"requirements.txt pins a dependency graph that resolves only "
+        f"on 3.11 and newer.\n"
     )
     sys.exit(1)
 
@@ -752,7 +755,7 @@ YTDLP_FORBIDDEN_LINK_FLAGS = frozenset({
 # this program downloads and manages, do not fetch remote components anyway.
 #
 # Both options require a current yt-dlp. That is already this program's floor:
-# requirements.txt pins 2026.7.4 and YouTube extraction needs a build newer
+# requirements.txt pins 2026.8.19 and YouTube extraction needs a build newer
 # than YTDLP_EXTERNAL_RUNTIME_CUTOFF regardless.
 YTDLP_HARDENING_FLAGS = ('--no-plugin-dirs', '--no-remote-components')
 
