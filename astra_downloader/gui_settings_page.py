@@ -30,29 +30,40 @@ class SettingsPageMixin:
         configured_max = self.cfg_sleep_max.value()
         jitter = self.cfg_pacing_jitter.value()
         request_pause = self.cfg_sleep_requests.value()
+        concurrent = max(1, self.cfg_maxconcurrent.value())
         if minimum <= 0:
-            current = tr(
-                "Current pacing has no pause between downloads, so this setting "
-                "does not impose an hourly ceiling"
+            current = tr_format(
+                "Current pacing has no pause between downloads with concurrency set "
+                "to {concurrent}, so this setting does not impose an hourly ceiling",
+                concurrent=concurrent,
             )
         else:
             jitter_max = (minimum * (100 + jitter) + 99) // 100
             effective_max = max(minimum, configured_max, jitter_max)
-            per_hour = max(1, 7200 // (minimum + effective_max))
+            per_worker_count = max(1, 7200 // (minimum + effective_max))
+            aggregate_count = per_worker_count * concurrent
+            per_worker = f"{per_worker_count:,}"
+            aggregate = f"{aggregate_count:,}"
             if effective_max == minimum:
                 current = tr_format(
-                    "Current pacing: {minimum} seconds between downloads, about "
-                    "{per_hour} per hour from this pause alone",
+                    "Current pacing: {minimum} seconds between downloads per worker, "
+                    "about {per_worker} per hour each and {aggregate} total with "
+                    "concurrency set to {concurrent}",
                     minimum=minimum,
-                    per_hour=per_hour,
+                    per_worker=per_worker,
+                    aggregate=aggregate,
+                    concurrent=concurrent,
                 )
             else:
                 current = tr_format(
                     "Current pacing: {minimum} to {maximum} seconds between "
-                    "downloads, about {per_hour} per hour from this pause alone",
+                    "downloads per worker, about {per_worker} per hour each and "
+                    "{aggregate} total with concurrency set to {concurrent}",
                     minimum=minimum,
                     maximum=effective_max,
-                    per_hour=per_hour,
+                    per_worker=per_worker,
+                    aggregate=aggregate,
+                    concurrent=concurrent,
                 )
         if request_pause > 0:
             current += tr_format(
@@ -932,6 +943,7 @@ class SettingsPageMixin:
         self.pacing_guidance.setAccessibleName(tr("YouTube pacing guidance"))
         perf_l.addWidget(self.pacing_guidance)
         for control in (
+            self.cfg_maxconcurrent,
             self.cfg_sleep_interval,
             self.cfg_sleep_max,
             self.cfg_pacing_jitter,

@@ -15,9 +15,10 @@ repository's git log.
 ### Added
 
 - **YouTube pacing now explains the tradeoff.** Settings turns the configured
-  pause into an approximate hourly rate beside yt-dlp's published figures.
-  The first stored YouTube sign-in also shows a linked warning about account
-  bans and signed-in sessions that can make public videos unplayable.
+  pause into per-worker and aggregate hourly estimates at the current
+  concurrency, beside yt-dlp's published figures. The first stored YouTube
+  sign-in also returns or shows a linked warning about account bans and
+  signed-in sessions that can make public videos unplayable.
 - **Downloaded release pairs are checked before installation.** When the
   adjacent SHA-256 sidecar is present, a malformed file or digest mismatch
   stops setup with a named integrity error before anything is copied into the
@@ -25,6 +26,12 @@ repository's git log.
   signature.
 
 ### Changed
+
+- **The full-suite floor recognizes the real collection shape.** Running the
+  configured test root explicitly still enforces the floor, while intentional
+  ignore and deselect filters do not produce a false failure. The terminal
+  bucket check now drives the live Download page for every shared terminal
+  state instead of checking status labels alone.
 
 - **A green test run now means the full suite ran.** Full runs fail below the
   recorded execution floor and name skipped yt-dlp or Qt groups. Brittle tests

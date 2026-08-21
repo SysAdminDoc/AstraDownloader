@@ -46,6 +46,17 @@ _PUBLIC_RUNTIME_FIELDS = (
     "source",
 )
 
+_YOUTUBE_SIGN_IN_WARNING_CODE = "youtube-account-risk"
+_YOUTUBE_SIGN_IN_WARNING = (
+    "YouTube sign-ins are risky. yt-dlp warns that account use can cause "
+    "temporary or permanent bans, and some signed-in sessions can make public "
+    "videos unplayable. Use cookies only for account-required videos, keep a "
+    "5 to 10 second pause, and retry public videos signed out."
+)
+_YOUTUBE_SIGN_IN_WARNING_URL = (
+    "https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies"
+)
+
 
 def _public_runtime_status(status):
     """Return the runtime capability contract without local filesystem data."""
@@ -261,6 +272,10 @@ def create_api(config, dl_manager, history, *, dependencies):
     validate_download_request_body = dependencies['validate_download_request_body']
     write_persistent_log = dependencies['write_persistent_log']
     subscription_manager = dependencies.get('subscription_manager')
+    youtube_sign_in_warning_delivered = bool(
+        config.get("YouTubeSignInRiskNoticeShown", False)
+    )
+    youtube_sign_in_warning_lock = threading.Lock()
 
     api = Flask(__name__)
     api.logger.disabled = True
@@ -875,6 +890,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         names and values are never readable back out of this endpoint, so a
         token holder cannot turn the store into a credential dump.
         """
+        nonlocal youtube_sign_in_warning_delivered
         if not check_auth():
             return cors_response({
                 "error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."
@@ -961,7 +977,29 @@ def create_api(config, dl_manager, history, *, dependencies):
             }, 400)
         if error:
             return cors_response({"error": error, "code": "site-login-failed"}, 400)
-        return cors_response(result)
+        payload = dict(result or {})
+        warning_claim = None
+        if is_youtube_url(probe_url):
+            with youtube_sign_in_warning_lock:
+                if (not youtube_sign_in_warning_delivered
+                        and not config.get("YouTubeSignInRiskNoticeShown", False)):
+                    persisted = bool(config.update({
+                        "YouTubeSignInRiskNoticeShown": True
+                    }))
+                    youtube_sign_in_warning_delivered = True
+                    warning_claim = persisted
+        if warning_claim is not None:
+            payload.update({
+                "warningCode": _YOUTUBE_SIGN_IN_WARNING_CODE,
+                "warning": _YOUTUBE_SIGN_IN_WARNING,
+                "warningUrl": _YOUTUBE_SIGN_IN_WARNING_URL,
+                "warningStatePersisted": warning_claim,
+            })
+            if not warning_claim:
+                write_persistent_log(
+                    "Could not save the one-time YouTube sign-in warning state."
+                )
+        return cors_response(payload)
 
     @api.route('/formats', methods=['POST'])
     def formats():

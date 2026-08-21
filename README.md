@@ -36,11 +36,13 @@ pasting a link never needs it.
 - **Sign in to sites.** Private and members-only videos work: import a
   `cookies.txt`, or read a browser profile. One jar per site, filtered to
   that site's registrable domain and attached to that site alone. A one-time
-  YouTube warning explains the account-ban and public-video risks, with a link
-  to [yt-dlp's guidance](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies).
+  YouTube warning appears whether the sign-in is stored in the app or through
+  the local API. It explains the account-ban and public-video risks, with a
+  link to [yt-dlp's guidance](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies).
 - **See what pacing means.** Settings turns the configured pause into an
-  approximate hourly rate. It puts that beside yt-dlp's published YouTube
-  estimates and its recommended 5 to 10 second delay.
+  approximate hourly rate per worker and in total at the current concurrency.
+  It puts those figures beside yt-dlp's published YouTube estimates and its
+  recommended 5 to 10 second delay.
 - **Site profiles.** Name a domain-bound profile in Settings for automatic
   format, quality, proxy, impersonation and pacing defaults. The paste box
   shows the matched profile and offers a one-off profile or no-profile choice;
