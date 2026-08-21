@@ -8,7 +8,7 @@ First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 
 import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, hashlib, struct, math, stat
 import queue
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
 
@@ -1410,10 +1410,16 @@ def _compute_sha256(path, chunk_size=65536):
 def _parse_sha256_sums(body, target_asset=None):
     """Parse a SHA256SUMS-style document.
 
-    Supports two formats:
+    Supports these formats:
       <hex>  <filename>
       <hex> *<filename>
       <hex>
+      a PowerShell Get-FileHash block: Algorithm / Hash / Path lines
+
+    Deno publishes the last one. Without it the digest for
+    deno-x86_64-pc-windows-msvc.zip cannot be read at all, and the runtime
+    download falls through to the unverified path.
+
     Returns the hex digest for target_asset, or the single digest if the file
     contains exactly one entry with no filename and no asset selector was
     supplied.
@@ -1438,7 +1444,32 @@ def _parse_sha256_sums(body, target_asset=None):
         if target_asset and Path(name).name != target_asset:
             continue
         return digest
-    return None
+    return _parse_get_filehash_block(lines, target_asset)
+
+
+def _parse_get_filehash_block(lines, target_asset=None):
+    """Read a PowerShell Get-FileHash sidecar.
+
+    Deno's `<asset>.zip.sha256sum` is the console rendering of that cmdlet, so
+    the digest and the filename arrive on separate lines and the path is a
+    Windows build-agent path. The name still has to match, for the same reason
+    a bare digest is refused when an asset was named.
+    """
+    digest = None
+    named = None
+    for line in lines:
+        match = re.match(r'^Hash\s*:\s*([0-9A-Fa-f]{64})$', line)
+        if match:
+            digest = match.group(1).lower()
+            continue
+        match = re.match(r'^Path\s*:\s*(.+)$', line)
+        if match:
+            named = PureWindowsPath(match.group(1).strip()).name
+    if not digest:
+        return None
+    if target_asset and named != target_asset:
+        return None
+    return digest
 
 
 def fetch_expected_sha256(sidecar_url, target_asset=None, timeout=15):

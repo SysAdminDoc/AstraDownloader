@@ -8037,6 +8037,34 @@ class Sha256VerifyTests(unittest.TestCase):
             ad._parse_sha256_sums(f"{digest}\n", target_asset="other.exe")
         )
 
+
+    def test_deno_get_filehash_sidecar_yields_a_digest(self):
+        # Deno publishes the console rendering of PowerShell's Get-FileHash,
+        # not a sha256sum line. Before this was handled the digest could not be
+        # read at all and the Deno download fell through unverified.
+        sidecar = "\r\n".join([
+            "",
+            "Algorithm : SHA256",
+            "Hash      : 171EFAB55AC6B9881FD53EE4C20F8BF3BB1340FFC618483746909014DB12216A",
+            "Path      : C:\\a\\deno\\deno\\target\\release\\deno-x86_64-pc-windows-msvc.zip",
+            "",
+        ])
+        self.assertEqual(
+            ad._parse_sha256_sums(sidecar, target_asset="deno-x86_64-pc-windows-msvc.zip"),
+            "171efab55ac6b9881fd53ee4c20f8bf3bb1340ffc618483746909014db12216a",
+        )
+        self.assertIsNone(
+            ad._parse_sha256_sums(sidecar, target_asset="deno-aarch64-pc-windows-msvc.zip"),
+            "a digest must not be handed to an asset the sidecar does not name",
+        )
+        self.assertIsNone(
+            ad._parse_sha256_sums(
+                "Algorithm : SHA256\r\nPath      : C:\\out\\deno.zip",
+                target_asset="deno.zip",
+            ),
+            "a block with no Hash line resolves to nothing",
+        )
+
     def test_ffmpeg_checksum_manifest_selects_the_named_archive(self):
         digest = "f" * 64
         manifest = (

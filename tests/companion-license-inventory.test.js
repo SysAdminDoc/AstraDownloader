@@ -248,20 +248,34 @@ test('companion SBOM inventory links exact embedded versions to the staged artif
         )),
         true
     );
-    // The Qt binding used to be the headline unresolved decision here. It is
-    // approved under LGPL-3.0-only now, so the invariant worth pinning is that
-    // no reviewed component is left undecided, while the runtime helpers that
-    // genuinely are still get named.
+    // Every component in the real policy is decided now: the Qt binding under
+    // LGPL-3.0-only, and each runtime helper through the digest staging
+    // resolves for it. What still has to hold is that an undecided entry is
+    // named rather than waved through, which the planted-component tests below
+    // exercise from the other direction.
     assert.deepEqual(
-        inspection.issues
-            .filter((issue) => /decision=unresolved/i.test(issue))
-            .map((issue) => issue.split(':')[0])
-            .sort(),
-        ['deno', 'ffmpeg', 'yt-dlp'],
-        'the runtime helpers are the only components still awaiting a decision'
+        inspection.issues.filter((issue) => /decision=unresolved/i.test(issue)),
+        []
     );
-    assert.ok(inspection.issues.some((issue) => /ffmpeg: exact version is unresolved/i.test(issue)));
-    assert.ok(inspection.issues.some((issue) => /yt-dlp: exact download SHA-256 is unresolved/i.test(issue)));
+    const helperIssues = inspection.issues.filter(
+        (issue) => /^(?:yt-dlp|ffmpeg|deno):/.test(issue)
+    );
+    assert.deepEqual(helperIssues, [],
+        'a rolling alias with a resolved version and digest is a reviewed delivery form');
+});
+
+test('a runtime helper whose digest was never resolved is refused', () => {
+    const { root, buildDir } = writeEmptyBuildTree();
+    const { artifactSha256, inventory } = writeCompanionInventoryFixture(root, buildDir);
+    const ffmpeg = inventory.components.find((component) => component.name === 'FFmpeg GPL build');
+    ffmpeg.properties.find((entry) => entry.name === PROPERTY.downloadSha256).value = '';
+
+    const inspection = inspectCompanionInventory({ components: inventory.components }, artifactSha256);
+    assert.ok(inspection.issues.some((issue) => /ffmpeg: exact download SHA-256 is unresolved/i.test(issue)));
+    assert.ok(
+        inspection.issues.some((issue) => /ffmpeg: distribution URL still uses a moving latest target/i.test(issue)),
+        'the alias only stops being an issue because a digest resolves it'
+    );
 });
 
 test('companion license inspection fails closed on disallowed decisions and clears only after exact approvals', () => {

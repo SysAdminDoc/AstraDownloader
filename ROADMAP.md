@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-09 — Resolve the three runtime-helper licence entries as part of staging
-  Why: `yt-dlp`, `ffmpeg` and `deno` account for the remaining 16 of 18 licence-inventory issues, and every one is "moving `latest` target, exact version and digest unresolved" — which a real release run can resolve mechanically. Cross-reference `Roadmap_Blocked.md`, which correctly notes FFmpeg-Builds is the asymmetric case (its dated release ships a differently-named archive with a different digest).
-  Evidence: `npm run check` output, 18 issues; `astra_downloader/license-policy.json`; `Roadmap_Blocked.md` §"Make `npm run check` pass".
-  Touches: `scripts/stage-companion-release.js`, `scripts/companion-license-inventory.js`, `astra_downloader/license-policy.json`
-  Acceptance: staging writes the resolved version + digest actually downloaded for each helper into the policy; the inspection accepts a publisher-verified rolling alias only when a resolved digest accompanies it; `check:companion-inventory` exits 0.
-  Complexity: M
-
 - [ ] P1 — AD-11 — Stop the subscription scan from fsyncing the whole archive per candidate
   Why: `reserve_archive` then `mark_archive_queued`/`release_archive` each run `_save_locked` → `atomic_write_json` → `os.fsync` on the entire document (up to 20,000 archive records) while holding `SubscriptionStore._lock` — ~100–150 full serialize+fsync cycles for one `--playlist-end 50` scan, on the same lock the Qt main thread and `/health` take. The 3.88 ms/call figure in `CLAUDE.md` was measured without a concurrent scan.
   Evidence: `astra_downloader/subscriptions.py:1238-1298`, `:782-828`, `:504-519`; `config.py:1808-1831`; `SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000` at `subscriptions.py:53`.
