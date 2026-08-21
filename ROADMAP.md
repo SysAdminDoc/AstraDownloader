@@ -8,21 +8,37 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
-- [ ] P0 — AD-01 — Publish v2.7.0, with both artifacts, from a rebuilt binary
-  Why: `gh release list` returns only `v2.0.0`; seven versions of fixes reach nobody, the in-app updater and the Astra Deck installer link both resolve to that build, and `v2.0.0` ships no `AstraDownloader-onedir.zip` — so the antivirus fallback the README documents has never existed.
-  Evidence: `gh release list`; `check:versions` failure text; RESEARCH.md "Delivery and licence"; cobalt / Motrix / kannagi0303 all died in this exact state.
+- [ ] P0 — AD-01 — Publish v2.9.0, with both artifacts, from a rebuilt binary
+  Why: `gh release list` returns only `v2.0.0`; eight versions of fixes reach nobody, the in-app updater and the Astra Deck installer link both resolve to that build, and `v2.0.0` ships no `AstraDownloader-onedir.zip` — so the antivirus fallback the README documents has never existed.
+  Evidence: `gh release list`; `gh release view v2.0.0` (exe downloadCount 12, sha256 downloadCount 1, no onedir zip); RESEARCH.md 2026-08-21 "Executive Summary"; cobalt / Motrix / kannagi v1 all died in this exact state.
   Touches: `astra_downloader/build.py`, `scripts/stage-companion-release.js`, `scripts/check-versions.js`, CHANGELOG.md
-  Acceptance: `build/companion-build-metadata.json` reports `2.7.0` (it currently reports 2.6.0); the release carries `AstraDownloader.exe`, `AstraDownloader-onedir.zip` and both `.sha256` sidecars; `npm run check:versions` exits 0.
+  Acceptance: a GitHub Release `v2.9.0` carries `AstraDownloader.exe`, `AstraDownloader-onedir.zip` and both `.sha256` sidecars; `npm run check:versions` exits 0; `gh release view v2.9.0` lists four assets.
   Note: `Roadmap_Blocked.md` files this as blocked on the PyQt distribution decision. AD-08 removes that dependency; if AD-08 is deferred, AD-01 stays blocked and the blocked entry stands.
+  Note (2026-08-21): source is `APP_VERSION` 2.9.0; only git tag remains `v2.0.0`. Publish whatever HEAD is when this is picked up.
   Complexity: S
 
 ### P1
 
-- [ ] P1 — AD-08 — Migrate PyQt6 → PySide6 6.11.1
+- [ ] P1 — AD-48 — Pin and smoke yt-dlp 2026.08.19
+  Why: argv no longer emits `android_vr` (dropped 2026-08-21). The Python pin and extractor smoke still test 2026.7.4 while auto-update will fetch 2026.08.19.
+  Evidence: `astra_downloader/requirements.txt` `yt-dlp==2026.7.4`; `constraints-release.txt`; `scripts/yt-dlp-smoke.py`
+  Touches: `astra_downloader/requirements.txt`, `constraints-release.txt`, `scripts/yt-dlp-smoke.py`
+  Acceptance: the Python package pin and extractor smoke run against 2026.08.19; SABR/PO-token tests still pass.
+  Complexity: S
+
+- [ ] P1 — AD-51 — Bump the release PyInstaller pin to 6.22.2
+  Why: `constraints-release.txt` pins 6.22.0. 6.22.1 closes GHSA-9fxf-4qw3-ghmr (onefile env spoof; needs a privileged binary — Astra is `asInvoker`, so impact is likely N/A). 6.22.2 (2026-08-17) fixes a spurious security-validation error when a onefile exe is launched from a Windows symlink or junction (`#9508`), which portable copies hit. yt-dlp's own 6.22.0 pin is their CI, not a reason to stay.
+  Evidence: https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr; https://pyinstaller.org/en/v6.22.2/CHANGES.html; `astra_downloader/constraints-release.txt:22`; vault note `Research/Packaging, a11y and i18n mechanics 2026-08-20.md`.
+  Touches: `astra_downloader/constraints-release.txt`, `astra_downloader/build.py` tests, provenance/SBOM regeneration on the next stage
+  Acceptance: the release constraint is `pyinstaller==6.22.2`; `npm run release:stage` (or a dry-run graph resolve) records 6.22.2; a onefile launch from a directory junction succeeds on Windows.
+  Complexity: S
+
+- [ ] P1 — AD-08 — Migrate PyQt6 → PySide6 6.11.2
   Why: PyQt6 is GPL-3.0-only, `LICENSE` is MIT, and the shipped one-file exe is a combined work — the two `decision: unresolved` component entries blocking `npm run check` are that contradiction. PySide6 is LGPL, which lets the app's own code stay MIT. This converts the blocker described in `Roadmap_Blocked.md` from a legal decision into a mechanical refactor.
-  Evidence: measured surface — 90 `from PyQt6` imports over 21 files, 17 `pyqtSignal`, 4 submodules, and **0** each of `pyqtSlot`, `pyqtProperty`, `sip`, `QVariant`, `loadUi`, `QtWebEngine`, `QtMultimedia`, `QtSvg`, `QtNetwork`. YTSage (4,465★) and dsymbol/yt-dlp-gui both run this stack on PySide6.
+  Evidence: measured surface — 90 `from PyQt6` imports over 21 files, 17 `pyqtSignal`, 4 submodules, and **0** each of `pyqtSlot`, `pyqtProperty`, `sip`, `QVariant`, `loadUi`, `QtWebEngine`, `QtMultimedia`, `QtSvg`, `QtNetwork`. YTSage (4,516★) and dsymbol/yt-dlp-gui both run this stack on PySide6.
   Touches: all `astra_downloader/gui*.py`, `astra_downloader.py`, `build.py`, `requirements.txt`, `constraints-release.txt`, `license-policy.json`, `pytest.ini` (`qt_api`), `scripts/render-companion-gui.py`
-  Acceptance: 964 tests and all 54 render captures pass on PySide6; `license-policy.json` has no unresolved *component* entry; the onedir zip is documented as the LGPL relinking artifact; the exe size delta is recorded.
+  Acceptance: the current pytest collection and all render captures pass on PySide6; `license-policy.json` has no unresolved *component* entry; the onedir zip is documented as the LGPL relinking artifact; the exe size delta is recorded.
+  Note (2026-08-21): retarget **6.11.2** (PyPI 2026-08-18), not 6.11.1. Qt 6.11.2 is the first wheel that contains CVE-2026-8168 (SVG nested-tree overflow). PyQt6-Qt6 has no 6.11.2 wheel; Astra currently imports QtSvg zero times so exposure is low, but AD-08 is the moment the binding and the Qt wheel move together. Qt 6.12 LTS is due 2026-09-22 — do not wait.
   Note: this supersedes the "needs the PyQt distribution decision" framing in `Roadmap_Blocked.md` — the decision is still the maintainer's, but one of the two options is now a costed engineering task rather than a legal review. Update or retire that blocked entry when this lands.
   Complexity: L
 
@@ -67,6 +83,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Evidence: `astra_downloader/gui_download_page.py:114-445`; `build/companion-ui-smoke/downloads-active-pending.png`, `downloads-queue-full.png`.
   Touches: `astra_downloader/gui_download_page.py`, `scripts/render-companion-gui.py`, `DownloaderFirstLayoutTests`
   Acceptance: with one active download, the queue's first row is visible at 1120×760 without scrolling; the readiness strip and pre-flight panel collapse to a one-line summary when nothing is wrong and expand on a failing check; `DownloaderFirstLayoutTests` pins the new order.
+  Note (2026-08-21): uncommitted working-tree edits already disclose password/clip/name behind `quick_download_advanced` and collapse passing preflight (`btn_preflight_toggle`, `preflight_details.hide()`). Do not restack from the 2026-08-14 description — finish the remaining acceptance (queue row visible at 1120×760) on top of that WIP, or drop the WIP and start from HEAD.
   Complexity: M
 
 - [ ] P1 — AD-20 — Move the build interpreter to Python 3.13.15
@@ -77,10 +94,11 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 - [ ] P1 — AD-23 — Make `SERVICE_API_VERSION` a real handshake
-  Why: the version is advertised in `/health` and read nowhere — zero hits for `apiVersion`/`api_version` anywhere in the Astra Deck extension. Two independently versioned products share a gate-checked port catalogue with no compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
-  Evidence: `astra_downloader/astra_downloader.py:450`, `routes.py:477, 506`; grep of `~/repos/Astra-Deck/extension/`.
-  Touches: `astra_downloader/routes.py`, `scripts/companion-port-catalogue.json`, and the Astra Deck repository
-  Acceptance: the extension reads `api` from `/health` and shows a named "companion too old / too new" state; a minimum-supported version is declared on both sides and gate-checked like the port catalogue.
+  Why: two independently versioned products share a gate-checked port catalogue with no client-side compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
+  Evidence: `astra_downloader/astra_downloader.py:450-460`, `routes.py:449-506`; grep of `C:\repos\Astra-Deck` for `X-MDL-Api` returns no extension hits (2026-08-21).
+  Touches: the Astra Deck repository (downloader side already shipped)
+  Acceptance: Astra Deck sends `X-MDL-Api` on every companion request and shows a named "companion too old / too new" state on 426; a minimum-supported version is declared on both sides and gate-checked like the port catalogue.
+  Note (2026-08-21): the downloader handshake shipped in 2.7.0 — `/health` advertises `api`, clients sending `X-MDL-Api` below the floor get a named 426, missing header is still served (CHANGELOG 2.7.0; tests at `test_astra_downloader.py:20640-20679`). Astra Deck now sends `X-MDL-Api` on companion health, pair, and download requests. Remaining work is the named 426 UI in the extension.
   Complexity: M
 
 ### P2
@@ -118,6 +136,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Evidence: yt-dlp Extractors wiki; Parabolic#1832; pinchflat#291; RESEARCH.md "Market signal" items 4–5.
   Touches: `astra_downloader/gui_settings_page.py`, `gui_site_logins_page.py`, `download.py`, README
   Acceptance: the pacing settings display the published ceilings alongside the current configuration and what it implies per hour; storing a YouTube sign-in shows the ban-risk warning once, sourced and linked.
+  Note (2026-08-21): yt-dlp#17389 (opened 2026-08-07) adds a second cookie failure mode — some jars make public videos UNPLAYABLE on `tv_downgraded`. Classification and a cookie-less retry shipped in this audit; this item is the Settings copy that names both the ban risk and that failure mode.
   Complexity: S
 
 - [ ] P2 — AD-32 — Extend the health-check set with the checks Radarr proves matter
@@ -170,10 +189,11 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 - [ ] P2 — AD-39 — Sync the docs to what the repository actually is
-  Why: README claims 914 tests (actual 964) and describes `npm run check` as four gates (it is seven with a per-gate summary); `Roadmap_Blocked.md` claims the History column headers are untranslated, which is now stale — they are extracted and translated, and the residual risk is the fixed width (AD-35). `SECURITY.md` cites two yt-dlp CVEs and three more landed 2026-06-09.
-  Evidence: measured suite output; `npm run check` summary; German catalogue contains `Duration → Dauer`; GHSA-6v4j-43gg-vj32 / GHSA-c6mh-fpjc-4pr3 / GHSA-f7j3-774f-rfhj.
+  Why: README claims 914 tests (actual ~988 `def test_` on 2026-08-21) and describes `npm run check` as four gates (it is seven with a per-gate summary); `Roadmap_Blocked.md` claims the History column headers are untranslated, which is now stale — they are extracted and translated, and the residual risk is the fixed width (AD-35). `SECURITY.md` cites two yt-dlp CVEs and three more landed 2026-06-09.
+  Evidence: `README.md:197`; static `def test_` grep across `test_astra_downloader.py` / `test_feature_upgrades.py` / `test_build.py`; `npm run check` summary; German catalogue contains `Duration → Dauer`; GHSA-6v4j-43gg-vj32 / GHSA-c6mh-fpjc-4pr3 / GHSA-f7j3-774f-rfhj.
   Touches: README.md, SECURITY.md, Roadmap_Blocked.md, CLAUDE.md
   Acceptance: every count and gate list in the docs matches a command that can be run; the stale translation claim is corrected in place with its date.
+  Note (2026-08-21): README line 197 still says `914 tests`. Re-count with `py -3.12 -m pytest --collect-only -q` at the moment this is picked up — do not copy 964 or 988 as a new literal.
   Complexity: S
 
 - [ ] P2 — AD-40 — Detect archived items the source has since deleted
@@ -194,7 +214,8 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: YouTube began serving AI-upscaled renditions that sort above the genuine source by resolution; yt-dlp#15433 (13 reactions, opened 2025-12-29) is open and no GUI exposes a control. An archivist wants the original, and the existing `--format-sort` builder already knows to emit `res` first.
   Evidence: yt-dlp#15433; `astra_downloader/download.py` `build_video_format_args` and the `--format-sort` ordering rule recorded in CLAUDE.md.
   Touches: `astra_downloader/download.py`, `gui_settings_page.py`
-  Acceptance: a setting deprioritises upscaled renditions; verified against a `--load-info-json` fixture carrying both a native and an upscaled format. *Needs live validation of the field yt-dlp exposes for the marker on the pinned 2026.7.4.*
+  Acceptance: a setting deprioritises upscaled renditions; verified against a `--load-info-json` fixture carrying both a native and an upscaled format. *Needs live validation of the field yt-dlp exposes for the marker on the pinned yt-dlp (2026.08.19 once AD-48 lands; 2026.7.4 until then).*
+  Note (2026-08-21): 2026.08.19 release notes do not mention Super Resolution. #15433 is still open. Do not invent a format key — probe a fixture on the pinned exe.
   Complexity: S
 
 - [ ] P2 — AD-43 — Split `create_api` by resource
@@ -203,6 +224,13 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: `astra_downloader/routes.py`
   Acceptance: routes are grouped into per-resource registrars (downloads / queue / subscriptions / site-logins / system) taking the same dependency mapping; the `_REQUIRED_*_DEPENDENCIES` contract is unchanged; all route tests pass untouched.
   Complexity: M
+
+- [ ] P2 — AD-52 — Compare the running executable to its SHA-256 sidecar on first launch of a downloaded copy
+  Why: AppWork's 2026-05-06 website-link swap replaced JDownloader installers with malware; in-app RSA updates were fine. Astra's only published channel is GitHub Releases plus a sidecar the README tells the user to check by hand. A first-launch compare against a sidecar sitting next to the exe catches a swapped file without asking for a signature, which this project refuses.
+  Evidence: https://jdownloader.org/incident_8.5.2026.html; https://www.malwarebytes.com/blog/news/2026/05/attackers-replaced-jdownloader-installer-downloads-with-malware; `README.md:141-148`; `SECURITY.md` unsigned-by-design clause; existing `atomic_copy_verified` / sidecar readers in `health.py`.
+  Touches: `astra_downloader/astra_downloader.py` (`main` / first-run), `health.py` (hash helper already used by self-update)
+  Acceptance: if `AstraDownloader.exe.sha256` exists beside the running image and the digest mismatches, setup stops with a named error and does not copy into `%LOCALAPPDATA%`; if the sidecar is absent (portable/dev/source), behaviour is unchanged; a test plants a wrong sidecar and asserts the named stop.
+  Complexity: S
 
 ### P3
 
@@ -226,3 +254,32 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: `astra_downloader/download.py`
   Acceptance: the serialize+fsync happens outside the lock (snapshot under the lock, write after); a test asserts the lock is not held across the write.
   Complexity: M
+
+- [ ] P3 — AD-53 — Set `SABR_NATIVE_MIN_VERSION` the day a yt-dlp stable includes PR #13515
+  Why: `evaluate_sabr_support` already returns `"limited"` until this sentinel is a real version. Native SABR is still unmerged (PR updated 2026-08-19, not in 2026.08.19). The wiring is one constant plus the existing pill.
+  Evidence: https://github.com/yt-dlp/yt-dlp/pull/13515; `astra_downloader/health.py:129-144`; test at `test_astra_downloader.py:5911-5917`.
+  Touches: `astra_downloader/health.py` (`SABR_NATIVE_MIN_VERSION`), the SABR pill copy in `gui.py`
+  Acceptance: the constant equals the first yt-dlp stable that contains #13515; `evaluate_sabr_support` returns `"supported"` for that version and `"limited"` below it; the Download-page SABR pill flips without a new UI. Do not invent a version while the PR is open.
+  Complexity: S
+
+- [ ] P3 — AD-54 — Normalize native-host extension IDs in `sanitize_config`
+  Why: `NativeChromeExtensionIds` and `NativeFirefoxExtensionIds` are `clean_text` only. A hand-edited config can keep invalid IDs in the field while registration silently drops them. `parse_native_extension_ids` lives in the composition root, so config.py cannot call it without a boundary move.
+  Evidence: `astra_downloader/config.py:1772-1773`; `astra_downloader.py` `parse_native_extension_ids`
+  Touches: `astra_downloader/config.py`, `astra_downloader.py`
+  Acceptance: sanitize stores only IDs the parser would accept; a test plants a mixed string and asserts the cleaned value.
+  Complexity: S
+
+- [ ] P3 — AD-55 — Pin light-theme non-text contrast in CI
+  Why: `StylesheetContrastTests` parses only dark `STYLESHEET`. Light theme is generated from the replacement map and passed a manual audit this session, but a later token that fails 3:1 in light would not fail CI.
+  Evidence: `StylesheetContrastTests`; `_LIGHT_THEME_COLOR_REPLACEMENTS`
+  Touches: `astra_downloader/test_astra_downloader.py`
+  Acceptance: the same border floor is asserted against `LIGHT_STYLESHEET` backgrounds.
+  Complexity: S
+
+- [ ] P3 — AD-56 — Areas this audit did not exercise
+  Why: remaining gaps are the signed-release chain, whisper transcription live path, winget publish, native-host stdio against a real Chrome profile, and the Astra Deck userscript `/health` token echo (still off).
+  Evidence: session self-audit 2026-08-21
+  Touches: `astra_downloader/build.py`, whisper paths in `download.py`, `scripts/stage-companion-release.js`, Astra-Deck userscript
+  Acceptance: each area has either a live check or a named test; delete this item when those exist.
+  Complexity: L
+
