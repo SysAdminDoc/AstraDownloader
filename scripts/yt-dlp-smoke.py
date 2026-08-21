@@ -5,6 +5,16 @@ Downloads a tiny, stable YouTube test video with the pinned Python yt-dlp
 package. This intentionally exercises the real extractor and media download
 path, not only import/version checks, so dependency updates can be checked
 before a broken extractor reaches users.
+
+The argv carries the same hardening flags the application spawns, with one
+documented divergence. Since 2026.08.19 YouTube extraction needs the EJS
+challenge-solver script to recover signatures and the n parameter. The
+official standalone builds Astra downloads and manages ship that script
+inside the executable, so ``--no-remote-components`` costs them nothing and
+is asserted here against the managed binary. The PyPI wheel does not bundle
+it, and under ``--no-remote-components`` every format is filtered out and the
+run dies with "Requested format is not available" — so when the smoke runs
+the wheel it opts the solver fetch back in instead.
 """
 
 from __future__ import annotations
@@ -20,6 +30,7 @@ from pathlib import Path
 DEFAULT_SMOKE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 MAX_BYTES = 25 * 1024 * 1024
 TIMEOUT_SECONDS = 300
+EJS_SOLVER_SOURCE = "ejs:github"
 
 
 def run_command(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -31,6 +42,18 @@ def run_command(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         timeout=TIMEOUT_SECONDS,
         check=False,
     )
+
+
+def uses_managed_binary() -> bool:
+    """True when the release gate points the smoke at a managed build."""
+    return bool(os.environ.get("ASTRA_YTDLP_SMOKE_BINARY", "").strip())
+
+
+def hardening_flags() -> list[str]:
+    """Mirror YTDLP_HARDENING_FLAGS, minus what the wheel cannot honour."""
+    if uses_managed_binary():
+        return ["--no-plugin-dirs", "--no-remote-components"]
+    return ["--no-plugin-dirs", "--remote-components", EJS_SOLVER_SOURCE]
 
 
 def yt_dlp_command(*args: str) -> list[str]:
@@ -52,6 +75,7 @@ def main() -> int:
 
         result = run_command(
             yt_dlp_command(
+                *hardening_flags(),
                 "--no-playlist",
                 "--no-progress",
                 "--max-filesize",
@@ -93,6 +117,8 @@ def main() -> int:
             "url": smoke_url,
             "artifact": largest.name,
             "bytes": size,
+            "hardening": hardening_flags(),
+            "managedBinary": uses_managed_binary(),
         }, sort_keys=True))
         return 0
 

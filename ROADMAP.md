@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-48 — Pin and smoke yt-dlp 2026.08.19
-  Why: argv no longer emits `android_vr` (dropped 2026-08-21). The Python pin and extractor smoke still test 2026.7.4 while auto-update will fetch 2026.08.19.
-  Evidence: `astra_downloader/requirements.txt` `yt-dlp==2026.7.4`; `constraints-release.txt`; `scripts/yt-dlp-smoke.py`
-  Touches: `astra_downloader/requirements.txt`, `constraints-release.txt`, `scripts/yt-dlp-smoke.py`
-  Acceptance: the Python package pin and extractor smoke run against 2026.08.19; SABR/PO-token tests still pass.
-  Complexity: S
-
 - [ ] P1 — AD-51 — Bump the release PyInstaller pin to 6.22.2
   Why: `constraints-release.txt` pins 6.22.0. 6.22.1 closes GHSA-9fxf-4qw3-ghmr (onefile env spoof; needs a privileged binary — Astra is `asInvoker`, so impact is likely N/A). 6.22.2 (2026-08-17) fixes a spurious security-validation error when a onefile exe is launched from a Windows symlink or junction (`#9508`), which portable copies hit. yt-dlp's own 6.22.0 pin is their CI, not a reason to stay.
   Evidence: https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr; https://pyinstaller.org/en/v6.22.2/CHANGES.html; `astra_downloader/constraints-release.txt:22`; vault note `Research/Packaging, a11y and i18n mechanics 2026-08-20.md`.
