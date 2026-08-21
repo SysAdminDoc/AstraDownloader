@@ -7,6 +7,7 @@ import time
 import traceback
 from collections import deque
 from pathlib import Path
+from types import SimpleNamespace
 
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
@@ -515,6 +516,827 @@ def create_api(config, dl_manager, history, *, dependencies):
                 allow = normalize_extension_origin(origin)
             return cors_response({"ok": True}, allow_origin=allow)
 
+    context = SimpleNamespace(
+        config=config,
+        dl_manager=dl_manager,
+        history=history,
+        subscription_manager=subscription_manager,
+        youtube_sign_in_warning_delivered=youtube_sign_in_warning_delivered,
+        youtube_sign_in_warning_lock=youtube_sign_in_warning_lock,
+        download_rate_limiter=download_rate_limiter,
+        pickfolder_rate_limiter=pickfolder_rate_limiter,
+        health_rate_limiter=health_rate_limiter,
+        subscription_scan_rate_limiter=subscription_scan_rate_limiter,
+        pair_rate_limiter=pair_rate_limiter,
+        companion_update_gate=companion_update_gate,
+        record_companion_update_result=record_companion_update_result,
+        check_auth=check_auth,
+        request_json_object=request_json_object,
+        is_allowed_extension_origin=is_allowed_extension_origin,
+        cors_response=cors_response,
+    )
+    _register_download_routes(api, context, dependencies)
+    _register_queue_routes(api, context, dependencies)
+    _register_subscriptions_routes(api, context, dependencies)
+    _register_site_logins_routes(api, context, dependencies)
+    _register_system_routes(api, context, dependencies)
+    return api
+
+
+def _register_download_routes(api, context, dependencies):
+    """Register download, playlist, format, status, and history routes."""
+    config = context.config
+    dl_manager = context.dl_manager
+    history = context.history
+    subscription_manager = context.subscription_manager
+    download_rate_limiter = context.download_rate_limiter
+    check_auth = context.check_auth
+    cors_response = context.cors_response
+    clamp_int = dependencies["clamp_int"]
+    clean_text = dependencies["clean_text"]
+    download_error_payload = dependencies["download_error_payload"]
+    describe_media_url_block = dependencies["describe_media_url_block"]
+    is_youtube_url = dependencies["is_youtube_url"]
+    media_url_block_reason = dependencies["media_url_block_reason"]
+    MAX_SITE_LOGIN_COOKIES = dependencies["MAX_SITE_LOGIN_COOKIES"]
+    normalize_url = dependencies["normalize_url"]
+    probe_javascript_runtime = dependencies["probe_javascript_runtime"]
+    lookup_history_url = dependencies["lookup_history_url"]
+    query_history_entries = dependencies["query_history_entries"]
+    validate_download_request_body = dependencies["validate_download_request_body"]
+
+    @api.route('/download', methods=['POST'])
+    def download():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        # v1.2.0: rate limit BEFORE we do any body parsing or normalization so
+        # a burst can't burn CPU on 10k rejected requests.
+        allowed, retry_after = download_rate_limiter.allow('download')
+        if not allowed:
+            return cors_response(
+                {"error": "Too many download requests in a short period. Please wait a moment."},
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+        body, body_err, body_code = validate_download_request_body(request.get_json(silent=True))
+        if body_err:
+            payload = {"error": body_err}
+            if body_code:
+                payload["code"] = body_code
+            return cors_response(payload, 400)
+        url, url_err = normalize_url(body['url'])
+        if url_err:
+            return cors_response({"error": url_err}, 400)
+
+        # SSRF hardening: v1.8.0 opened the companion to every site yt-dlp
+        # supports, so the old YouTube-only allowlist no longer applies — but
+        # its actual job does. `normalize_url` only checks scheme+netloc, so
+        # without this a caller holding the token could point yt-dlp (and the
+        # attached cookie jar) at internal/LAN/cloud-metadata hosts. The
+        # private-network denylist enforces that here, at the trust boundary,
+        # rather than in the extension (an untrusted boundary).
+        block_reason = media_url_block_reason(url)
+        if block_reason:
+            return cors_response(
+                {
+                    "error": describe_media_url_block(block_reason),
+                    "code": block_reason,
+                },
+                400,
+            )
+
+        # Runtime capability hard gate — YouTube only. yt-dlp needs an external
+        # JavaScript runtime to solve YouTube's n/sig challenges; no other
+        # extractor does, so refusing a Reddit or X download because Deno is
+        # missing would block a capability that works fine without it.
+        # Presence is insufficient for YouTube: downloads require a supported
+        # version and a successful EJS execution probe.
+        runtime = probe_javascript_runtime(
+            configured_runtime=config.get('JavaScriptRuntime', 'auto')
+        )
+        runtime_usable = runtime.get('supported') is True and runtime.get('ejsReady') is True
+        if is_youtube_url(url) and runtime.get('ytdlpNeedsRuntime') and not runtime_usable:
+            reason = runtime.get('reason')
+            if reason == 'runtime-not-installed':
+                error_code = 'js-runtime-missing'
+            elif reason == 'runtime-version-below-security-floor':
+                error_code = 'js-runtime-security-floor'
+            elif reason == 'runtime-version-unsupported':
+                error_code = 'js-runtime-unsupported'
+            elif reason in {'runtime-version-unparseable', 'runtime-probe-failed'}:
+                error_code = 'js-runtime-unverified'
+            else:
+                error_code = 'ejs-runtime-not-ready'
+            advice = runtime.get('advice') or 'Configure a supported JavaScript runtime and retry.'
+            payload = download_error_payload(
+                error_code,
+                error=(
+                    "yt-dlp requires a verified JavaScript runtime to solve "
+                    "YouTube's signature challenges. " + advice
+                ),
+                advice=advice,
+            )
+            return cors_response(
+                payload,
+                422,
+            )
+
+        raw_cookies = body.get('cookies')
+        cookies = raw_cookies if isinstance(raw_cookies, list) else None
+        # Cap the cookie list so a hostile extension context can't cause the
+        # server to write a multi-megabyte cookie jar. The bound is the same
+        # one the sign-in store enforces: a hardcoded 200 here meant a jar the
+        # store accepted whole was silently halved on the download path, and
+        # the only symptom was yt-dlp failing to authenticate.
+        cookies_truncated = False
+        if cookies is not None and len(cookies) > MAX_SITE_LOGIN_COOKIES:
+            cookies = cookies[:MAX_SITE_LOGIN_COOKIES]
+            cookies_truncated = True
+        dl_id, err = dl_manager.start_download(
+            url=url,
+            audio_only=body.get('audioOnly', False),
+            fmt=body.get('format'),
+            quality=body.get('quality', 'best'),
+            output_dir=body.get('outputDir'),
+            title=body.get('title'),
+            output_name=body.get('outputName'),
+            referer=body.get('referer'),
+            cookies=cookies,
+            section=body.get('section'),
+            playlist_items=body.get('playlistItems'),
+            video_password=body.get('videoPassword'),
+        )
+        if err:
+            if 'queue is full' in err.lower():
+                return cors_response({
+                    "error": err,
+                    "code": "queue-full",
+                    "capacity": dl_manager.capacity(),
+                    "remediation": (
+                        "Cancel a pending item or wait for a running download to finish, "
+                        "then retry."
+                    ),
+                }, 429)
+            if 'incompatible astra downloader version' in err.lower():
+                return cors_response({
+                    "error": err,
+                    "code": "queue-schema-incompatible",
+                    "remediation": (
+                        "Update Astra Downloader, or delete the pending "
+                        "download-queue.json file to start a fresh queue."
+                    ),
+                }, 503)
+            if 'could not save' in err.lower():
+                return cors_response({"error": err, "code": "queue-persistence-failed"}, 503)
+            return cors_response({"error": err}, 400)
+        status_value = dl_manager.status_of(dl_id, default='pending')
+        payload = {
+            "id": dl_id,
+            "status": status_value,
+            "capacity": dl_manager.capacity(),
+        }
+        if cookies_truncated:
+            # Say so rather than letting the caller discover it as an
+            # authentication failure with nothing pointing at the cause.
+            payload["cookiesTruncated"] = MAX_SITE_LOGIN_COOKIES
+        return cors_response(payload)
+
+    @api.route('/playlist', methods=['POST'])
+    def playlist():
+        if not check_auth():
+            return cors_response({
+                "error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."
+            }, 401)
+        allowed, retry_after = download_rate_limiter.allow('playlist')
+        if not allowed:
+            return cors_response(
+                {"error": "Too many playlist previews in a short period. Please wait a moment."},
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get('url'), str):
+            return cors_response({"error": "Missing playlist URL."}, 400)
+        url, url_err = normalize_url(body['url'])
+        if url_err:
+            return cors_response({"error": url_err}, 400)
+        block_reason = media_url_block_reason(url)
+        if block_reason:
+            return cors_response({
+                "error": describe_media_url_block(block_reason),
+                "code": block_reason,
+            }, 400)
+        result, err = dl_manager.preview_playlist(url)
+        if err:
+            if err == getattr(dl_manager, 'PLAYLIST_BUSY_MESSAGE', None):
+                return cors_response(
+                    {"error": err, "code": "playlist-busy"},
+                    429,
+                    extra_headers={"Retry-After": "5"},
+                )
+            status_code = 400 if 'playlist URL' in err else 502
+            return cors_response({
+                "error": err,
+                "code": "invalid-playlist-url" if status_code == 400 else "playlist-unavailable",
+            }, status_code)
+        return cors_response(result)
+
+    @api.route('/formats', methods=['POST'])
+    def formats():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        allowed, retry_after = download_rate_limiter.allow('formats')
+        if not allowed:
+            return cors_response(
+                {"error": "Too many format requests in a short period. Please wait a moment."},
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get('url'), str):
+            return cors_response({"error": "Missing video URL."}, 400)
+        url, url_err = normalize_url(body['url'])
+        if url_err:
+            return cors_response({"error": url_err}, 400)
+        # Same trust boundary as /download — never point yt-dlp (and any
+        # attached cookie jar) at private-network hosts.
+        block_reason = media_url_block_reason(url)
+        if block_reason:
+            return cors_response(
+                {"error": describe_media_url_block(block_reason), "code": block_reason},
+                400,
+            )
+        result, err = dl_manager.list_formats(url)
+        if err:
+            if err == getattr(dl_manager, 'FORMATS_BUSY_MESSAGE', None):
+                # All probe slots are occupied — a retryable condition, not
+                # an extraction failure.
+                return cors_response(
+                    {"error": err, "code": "formats-busy"},
+                    429,
+                    extra_headers={"Retry-After": "5"},
+                )
+            return cors_response({"error": err, "code": "formats-unavailable"}, 502)
+        return cors_response(result)
+
+    @api.route('/status/<dl_id>')
+    def status(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        payload = dl_manager.snapshot_of(dl_id)
+        if payload is None:
+            return cors_response({"error": "Download no longer exists in the active queue."}, 404)
+        return cors_response(payload)
+
+    @api.route('/history')
+    def hist():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        raw_limit = request.args.get('limit', '50')
+        raw_offset = request.args.get('offset', '0')
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            return cors_response({
+                "error": "History limit must be an integer.",
+                "code": "invalid-limit",
+            }, 400)
+        try:
+            offset = int(raw_offset)
+        except (TypeError, ValueError):
+            return cors_response({
+                "error": "History offset must be an integer.",
+                "code": "invalid-offset",
+            }, 400)
+        limit = clamp_int(limit, 50, 1, 500)
+        offset = clamp_int(offset, 0, 0, 500)
+        sort = request.args.get('sort', 'newest').strip().lower()
+        if sort not in {'newest', 'oldest'}:
+            return cors_response({
+                "error": "History sort must be newest or oldest.",
+                "code": "invalid-sort",
+            }, 400)
+        date_from = request.args.get('dateFrom', '').strip()
+        date_to = request.args.get('dateTo', '').strip()
+        for key, value in (('dateFrom', date_from), ('dateTo', date_to)):
+            if not value:
+                continue
+            try:
+                time.strptime(value, '%Y-%m-%d')
+            except (TypeError, ValueError):
+                return cors_response({
+                    "error": f"History {key} must use YYYY-MM-DD.",
+                    "code": "invalid-date",
+                }, 400)
+        if date_from and date_to and date_from > date_to:
+            return cors_response({
+                "error": "History dateFrom cannot be after dateTo.",
+                "code": "invalid-date-range",
+            }, 400)
+        history_entries = history.load()
+        archive_entries = None
+        if subscription_manager is not None:
+            # Prefer the scalar projection over the full deep copy — see
+            # SubscriptionStore.archive_history_view.
+            archive_reader = (
+                getattr(subscription_manager, 'archive_history_view', None)
+                or getattr(subscription_manager, 'archive_entries', None)
+            )
+            if callable(archive_reader):
+                try:
+                    archive_entries = archive_reader()
+                except Exception:
+                    # reason: history is the answer here; an unreadable subscription archive drops the archive column, not the page
+                    archive_entries = None
+        query_text = clean_text(request.args.get('q'), '', 200)
+        requested_url = clean_text(request.args.get('url'), '', 4096)
+        result = query_history_entries(
+            history_entries,
+            query=query_text or requested_url,
+            status=clean_text(request.args.get('status'), '', 32),
+            fmt=clean_text(request.args.get('format'), '', 16),
+            date_from=date_from,
+            date_to=date_to,
+            sort=sort,
+            offset=offset,
+            limit=limit,
+            archive_entries=archive_entries,
+        )
+        if requested_url:
+            result['lookup'] = lookup_history_url(
+                history_entries,
+                requested_url,
+                archive_entries=archive_entries,
+            )
+        return cors_response(result)
+
+def _register_queue_routes(api, context, dependencies):
+    """Register queue control and cancellation routes."""
+    dl_manager = context.dl_manager
+    check_auth = context.check_auth
+    request_json_object = context.request_json_object
+    cors_response = context.cors_response
+    MAX_SITE_LOGIN_COOKIES = dependencies["MAX_SITE_LOGIN_COOKIES"]
+
+    @api.route('/downloads/<dl_id>/command', methods=['GET'])
+    def download_command(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        payload = dl_manager.snapshot_of(dl_id)
+        if payload is None:
+            return cors_response({"error": "Download no longer exists in the active queue."}, 404)
+        return cors_response({
+            "id": dl_id,
+            "commandArgs": payload.get("commandArgs") or [],
+            "command": " ".join(payload.get("commandArgs") or []),
+        })
+
+    # NOTE: must not be named `queue` — a nested function named `queue` would
+    # shadow the stdlib `queue` module for every sibling closure in create_api
+    # (pick_folder uses queue.Queue / queue.Full / queue.Empty).
+    @api.route('/queue')
+    def queue_endpoint():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        return cors_response(dl_manager.queue_payload())
+
+    @api.route('/queue/pause', methods=['POST'])
+    def pause_queue():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        if not dl_manager.pause_intake():
+            return cors_response({
+                "error": "Could not save the paused queue state. Check disk space and permissions.",
+                "code": "queue-persistence-failed",
+            }, 503)
+        return cors_response({"paused": True, "capacity": dl_manager.capacity()})
+
+    @api.route('/queue/resume', methods=['POST'])
+    def resume_queue():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        if not dl_manager.resume_intake():
+            return cors_response({
+                "error": "Could not save the resumed queue state. Check disk space and permissions.",
+                "code": "queue-persistence-failed",
+            }, 503)
+        return cors_response({"paused": False, "capacity": dl_manager.capacity()})
+
+    def _fresh_cookies_from_body():
+        body, body_error = request_json_object()
+        if body_error:
+            return None, body_error
+        raw = body.get('cookies')
+        if raw is None:
+            return None, None
+        if not isinstance(raw, list):
+            return None, 'cookies must be a JSON array.'
+        return raw[:MAX_SITE_LOGIN_COOKIES], None
+
+    @api.route('/queue/<dl_id>/resume', methods=['POST'])
+    def resume_queued_download(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        cookies, cookie_error = _fresh_cookies_from_body()
+        if cookie_error:
+            return cors_response({"error": cookie_error, "code": "invalid-cookies"}, 400)
+        ok, err = dl_manager.resume_download(dl_id, cookies=cookies)
+        if not ok:
+            if err and 'still finalizing' in err:
+                code = 'download-finalizing'
+            elif err and 'Fresh YouTube cookies' in err:
+                code = 'fresh-auth-required'
+            else:
+                code = 'queue-resume-rejected'
+            status_code = 404 if err and 'no longer exists' in err else 409
+            return cors_response({"error": err, "code": code}, status_code)
+        return cors_response({"id": dl_id, "resumed": True, "capacity": dl_manager.capacity()})
+
+    @api.route('/queue/<dl_id>/retry', methods=['POST'])
+    def retry_queued_download(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        cookies, cookie_error = _fresh_cookies_from_body()
+        if cookie_error:
+            return cors_response({"error": cookie_error, "code": "invalid-cookies"}, 400)
+        ok, err = dl_manager.retry(dl_id, cookies=cookies)
+        if not ok:
+            if err and 'queue is full' in err.lower():
+                return cors_response({
+                    "error": err,
+                    "code": "queue-full",
+                    "capacity": dl_manager.capacity(),
+                    "remediation": (
+                        "Cancel a pending item or wait for a running download to finish, "
+                        "then retry."
+                    ),
+                }, 429)
+            if err and 'still finalizing' in err:
+                code = 'download-finalizing'
+            elif err and 'Fresh YouTube cookies' in err:
+                code = 'fresh-auth-required'
+            else:
+                code = 'retry-rejected'
+            status_code = 404 if err and 'no longer exists' in err else 409
+            return cors_response({"error": err, "code": code}, status_code)
+        return cors_response({"id": dl_id, "retried": True, "capacity": dl_manager.capacity()})
+
+    @api.route('/queue/<dl_id>/move', methods=['POST'])
+    def move_queued_download(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        body, body_error = request_json_object()
+        if body_error:
+            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
+        if 'position' not in body:
+            return cors_response({"error": "position is required.", "code": "invalid-position"}, 400)
+        ok, err = dl_manager.move_pending(dl_id, body.get('position'))
+        if not ok:
+            status_code = 400 if err and 'integer' in err else 409
+            return cors_response({"error": err, "code": "queue-move-rejected"}, status_code)
+        return cors_response({"id": dl_id, "moved": True, "queue": dl_manager.queue_payload()})
+
+    @api.route('/cancel/<dl_id>', methods=['DELETE'])
+    def cancel(dl_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        exists = dl_manager.exists(dl_id)
+        if dl_manager.cancel(dl_id):
+            return cors_response({"id": dl_id, "cancelled": True})
+        if exists:
+            return cors_response({"error": "Download is already finished and cannot be cancelled."}, 409)
+        return cors_response({"error": "Download no longer exists in the active queue."}, 404)
+
+
+def _register_subscriptions_routes(api, context, dependencies):
+    """Register subscription collection routes."""
+    subscription_manager = context.subscription_manager
+    subscription_scan_rate_limiter = context.subscription_scan_rate_limiter
+    check_auth = context.check_auth
+    request_json_object = context.request_json_object
+    cors_response = context.cors_response
+
+    def _subscription_unavailable():
+        return cors_response({
+            "error": "Scheduled subscriptions are unavailable until Astra Downloader finishes setup.",
+            "code": "subscriptions-unavailable",
+        }, 503)
+
+    def _subscription_manager_or_error():
+        if subscription_manager is None:
+            return None, _subscription_unavailable()
+        return subscription_manager, None
+
+    def _is_subscription_persistence_error(error):
+        text = str(error or "").casefold()
+        return any(marker in text for marker in (
+            "could not save subscriptions",
+            "subscription state was written by a newer",
+            "subscription state schema is incompatible",
+            "could not reset subscription retry state",
+            "could not save scheduled download archive state",
+        ))
+
+    def _subscription_error(error, code, status):
+        if _is_subscription_persistence_error(error):
+            return cors_response({
+                "error": error,
+                "code": "subscription-persistence-failed",
+            }, 503)
+        return cors_response({"error": error, "code": code}, status)
+
+    @api.route('/subscriptions', methods=['GET'])
+    def subscriptions_list():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        return cors_response(manager.snapshot())
+
+    @api.route('/subscriptions', methods=['POST'])
+    def subscriptions_create():
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        body, body_error = request_json_object()
+        if body_error:
+            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
+        allowed = {"url", "intervalMinutes", "enabled", "title"}
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return cors_response({
+                "error": "Unsupported subscription field(s): " + ", ".join(unknown),
+                "code": "invalid-subscription-field",
+            }, 400)
+        if not isinstance(body.get("url"), str) or not body.get("url", "").strip():
+            return cors_response({"error": "A YouTube channel or playlist URL is required.", "code": "invalid-subscription-url"}, 400)
+        record, error = manager.add_subscription(
+            body["url"],
+            interval_minutes=body.get("intervalMinutes", 60),
+            enabled=body.get("enabled", True),
+            title=body.get("title", ""),
+        )
+        if error:
+            status = 409 if "already configured" in error.lower() else 400
+            return _subscription_error(error, "subscription-rejected", status)
+        return cors_response(record, 201)
+
+    @api.route('/subscriptions/<subscription_id>', methods=['PATCH'])
+    def subscriptions_update(subscription_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        body, body_error = request_json_object()
+        if body_error:
+            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
+        allowed = {"url", "intervalMinutes", "enabled", "title"}
+        unknown = sorted(set(body) - allowed)
+        if unknown or not body:
+            return cors_response({
+                "error": "Provide only url, intervalMinutes, enabled, or title.",
+                "code": "invalid-subscription-field",
+            }, 400)
+        fields = {}
+        if "url" in body:
+            fields["url"] = body["url"]
+        if "intervalMinutes" in body:
+            fields["interval_minutes"] = body["intervalMinutes"]
+        if "enabled" in body:
+            fields["enabled"] = body["enabled"]
+        if "title" in body:
+            fields["title"] = body["title"]
+        record, error = manager.update_subscription(subscription_id, **fields)
+        if error:
+            status = 404 if "no longer exists" in error.lower() else 400
+            return _subscription_error(error, "subscription-update-rejected", status)
+        return cors_response(record)
+
+    @api.route('/subscriptions/<subscription_id>', methods=['DELETE'])
+    def subscriptions_delete(subscription_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        removed, error = manager.remove_subscription(subscription_id)
+        if error:
+            return _subscription_error(error, "subscription-delete-rejected", 404)
+        return cors_response({"id": subscription_id, "removed": bool(removed)})
+
+    @api.route('/subscriptions/<subscription_id>/scan', methods=['POST'])
+    def subscriptions_scan(subscription_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        allowed, retry_after = subscription_scan_rate_limiter.allow('subscription-scan')
+        if not allowed:
+            return cors_response(
+                {
+                    "error": "Too many subscription scans in a short period. Please wait a moment.",
+                    "code": "subscription-scan-rate-limited",
+                },
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+        result, error = manager.request_scan(subscription_id)
+        if error:
+            return _subscription_error(error, "subscription-scan-rejected", 404)
+        return cors_response(result, 202)
+
+
+def _register_site_logins_routes(api, context, dependencies):
+    """Register the write-only per-site sign-in resource."""
+    config = context.config
+    dl_manager = context.dl_manager
+    youtube_sign_in_warning_delivered = context.youtube_sign_in_warning_delivered
+    youtube_sign_in_warning_lock = context.youtube_sign_in_warning_lock
+    download_rate_limiter = context.download_rate_limiter
+    check_auth = context.check_auth
+    cors_response = context.cors_response
+    describe_media_url_block = dependencies["describe_media_url_block"]
+    is_youtube_url = dependencies["is_youtube_url"]
+    media_url_block_reason = dependencies["media_url_block_reason"]
+    MAX_SITE_LOGIN_COOKIES = dependencies["MAX_SITE_LOGIN_COOKIES"]
+    normalize_url = dependencies["normalize_url"]
+    write_persistent_log = dependencies["write_persistent_log"]
+
+    @api.route('/site-logins', methods=['GET', 'POST', 'DELETE'])
+    def site_logins():
+        """Manage the per-site cookie store used for signed-in downloads.
+
+        GET returns metadata only — site, source, cookie count, expiry. Cookie
+        names and values are never readable back out of this endpoint, so a
+        token holder cannot turn the store into a credential dump.
+        """
+        nonlocal youtube_sign_in_warning_delivered
+        if not check_auth():
+            return cors_response({
+                "error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."
+            }, 401)
+        store = getattr(dl_manager, 'site_logins', None)
+        if store is None:
+            return cors_response({"error": "Site sign-ins are unavailable.", "code": "site-logins-unavailable"}, 503)
+
+        if request.method == 'GET':
+            return cors_response({"sites": store.entries()})
+
+        allowed, retry_after = download_rate_limiter.allow('site-logins')
+        if not allowed:
+            return cors_response(
+                {"error": "Too many site sign-in requests in a short period. Please wait a moment."},
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get('site'), str):
+            return cors_response({"error": "Missing site address.", "code": "missing-site"}, 400)
+
+        if request.method == 'DELETE':
+            removed = store.remove(body['site'])
+            return cors_response({"removed": bool(removed)}, 200 if removed else 404)
+
+        # A site sign-in is only meaningful for a site the downloader may
+        # actually reach, so it runs through the same URL policy as /download.
+        probe_url, probe_error = normalize_url(
+            body['site'] if '://' in body['site'] else f"https://{body['site'].strip()}/"
+        )
+        if probe_error:
+            return cors_response({"error": probe_error, "code": "invalid-site"}, 400)
+        block_reason = media_url_block_reason(probe_url)
+        if block_reason:
+            return cors_response(
+                {"error": describe_media_url_block(block_reason), "code": block_reason},
+                400,
+            )
+
+        raw_cookies = body.get('cookies')
+        cookies_text = body.get('cookiesText')
+        username = body.get('username')
+        password = body.get('password')
+        has_credentials = username is not None or password is not None
+        has_cookies = (
+            isinstance(raw_cookies, list)
+            or isinstance(cookies_text, str)
+            or isinstance(body.get('browser'), str)
+        )
+        if has_credentials and has_cookies:
+            return cors_response({
+                "error": "Provide either username/password or cookies, not both.",
+                "code": "ambiguous-site-login",
+            }, 400)
+        if has_credentials:
+            if not isinstance(username, str) or not isinstance(password, str):
+                return cors_response({
+                    "error": "Username and password are both required.",
+                    "code": "missing-credentials",
+                }, 400)
+            result, error = store.save_credentials(
+                body['site'], username, password,
+                source=str(body.get('source') or 'credentials')[:60],
+            )
+        elif isinstance(raw_cookies, list):
+            result, error = store.save_cookies(
+                body['site'], raw_cookies[:MAX_SITE_LOGIN_COOKIES],
+                source=str(body.get('source') or 'extension')[:60],
+            )
+        elif isinstance(cookies_text, str):
+            result, error = store.import_netscape_text(
+                body['site'], cookies_text,
+                source=str(body.get('source') or 'cookies.txt')[:60],
+            )
+        elif isinstance(body.get('browser'), str):
+            result, error = dl_manager.import_site_login_from_browser(
+                body['site'], body['browser'], body.get('profile'),
+            )
+        else:
+            return cors_response({
+                "error": "Provide username/password, cookies, cookiesText, or a browser to read them from.",
+                "code": "missing-cookies",
+            }, 400)
+        if error:
+            return cors_response({"error": error, "code": "site-login-failed"}, 400)
+        payload = dict(result or {})
+        warning_claim = None
+        if is_youtube_url(probe_url):
+            with youtube_sign_in_warning_lock:
+                if (not youtube_sign_in_warning_delivered
+                        and not config.get("YouTubeSignInRiskNoticeShown", False)):
+                    persisted = bool(config.update({
+                        "YouTubeSignInRiskNoticeShown": True
+                    }))
+                    youtube_sign_in_warning_delivered = True
+                    warning_claim = persisted
+        if warning_claim is not None:
+            payload.update({
+                "warningCode": _YOUTUBE_SIGN_IN_WARNING_CODE,
+                "warning": _YOUTUBE_SIGN_IN_WARNING,
+                "warningUrl": _YOUTUBE_SIGN_IN_WARNING_URL,
+                "warningStatePersisted": warning_claim,
+            })
+            if not warning_claim:
+                write_persistent_log(
+                    "Could not save the one-time YouTube sign-in warning state."
+                )
+        return cors_response(payload)
+
+
+def _register_system_routes(api, context, dependencies):
+    """Register health, pairing, configuration, update, and shutdown routes."""
+    config = context.config
+    dl_manager = context.dl_manager
+    subscription_manager = context.subscription_manager
+    pickfolder_rate_limiter = context.pickfolder_rate_limiter
+    health_rate_limiter = context.health_rate_limiter
+    pair_rate_limiter = context.pair_rate_limiter
+    companion_update_gate = context.companion_update_gate
+    record_companion_update_result = context.record_companion_update_result
+    check_auth = context.check_auth
+    request_json_object = context.request_json_object
+    is_allowed_extension_origin = context.is_allowed_extension_origin
+    cors_response = context.cors_response
+    APP_NAME = dependencies["APP_NAME"]
+    APP_VERSION = dependencies["APP_VERSION"]
+    DEFAULT_CONFIG = dependencies["DEFAULT_CONFIG"]
+    RATE_LIMIT_DOWNLOAD_MAX = dependencies["RATE_LIMIT_DOWNLOAD_MAX"]
+    RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS = dependencies["RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS"]
+    RATE_LIMIT_HEALTH_MAX = dependencies["RATE_LIMIT_HEALTH_MAX"]
+    RATE_LIMIT_HEALTH_WINDOW_SECONDS = dependencies["RATE_LIMIT_HEALTH_WINDOW_SECONDS"]
+    SERVER_PORT = dependencies["SERVER_PORT"]
+    SERVICE_API_VERSION = dependencies["SERVICE_API_VERSION"]
+    SERVICE_API_MINIMUM_CLIENT = dependencies["SERVICE_API_MINIMUM_CLIENT"]
+    SERVICE_ID = dependencies["SERVICE_ID"]
+    YTDLP_PATH = dependencies["YTDLP_PATH"]
+    _folder_pick_q = dependencies["_folder_pick_q"]
+    _folder_picker_service = dependencies["_folder_picker_service"]
+    _run_companion_self_update = dependencies["_run_companion_self_update"]
+    _run_ytdlp_self_update = dependencies["_run_ytdlp_self_update"]
+    allowed_output_roots = dependencies["allowed_output_roots"]
+    clamp_int = dependencies["clamp_int"]
+    clean_text = dependencies["clean_text"]
+    coerce_bool = dependencies["coerce_bool"]
+    get_ffmpeg_version = dependencies["get_ffmpeg_version"]
+    get_last_deno_provision_error = dependencies["get_last_deno_provision_error"]
+    get_recent_log_entries = dependencies["get_recent_log_entries"]
+    get_ytdlp_version = dependencies["get_ytdlp_version"]
+    evaluate_sabr_support = dependencies["evaluate_sabr_support"]
+    evaluate_preflight_checks = dependencies["evaluate_preflight_checks"]
+    get_preflight_ffmpeg_capabilities = dependencies["get_preflight_ffmpeg_capabilities"]
+    get_github_api_budget = dependencies["get_github_api_budget"]
+    normalize_extension_origin = dependencies["normalize_extension_origin"]
+    is_extension_origin_shape = dependencies["is_extension_origin_shape"]
+    pair_browser_extension = dependencies["pair_browser_extension"]
+    probe_javascript_runtime = dependencies["probe_javascript_runtime"]
+    probe_po_token_provider = dependencies["probe_po_token_provider"]
+    provision_deno = dependencies["provision_deno"]
+    read_update_recovery_status = dependencies["read_update_recovery_status"]
+
     @api.route('/health')
     def health():
         token = config.get("ServerToken")
@@ -706,682 +1528,6 @@ def create_api(config, dl_manager, history, *, dependencies):
             "error": error.get('message') or "Failed to download Deno. Check network connection.",
         }, 500)
 
-    @api.route('/download', methods=['POST'])
-    def download():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        # v1.2.0: rate limit BEFORE we do any body parsing or normalization so
-        # a burst can't burn CPU on 10k rejected requests.
-        allowed, retry_after = download_rate_limiter.allow('download')
-        if not allowed:
-            return cors_response(
-                {"error": "Too many download requests in a short period. Please wait a moment."},
-                429,
-                extra_headers={"Retry-After": str(int(retry_after) + 1)},
-            )
-        body, body_err, body_code = validate_download_request_body(request.get_json(silent=True))
-        if body_err:
-            payload = {"error": body_err}
-            if body_code:
-                payload["code"] = body_code
-            return cors_response(payload, 400)
-        url, url_err = normalize_url(body['url'])
-        if url_err:
-            return cors_response({"error": url_err}, 400)
-
-        # SSRF hardening: v1.8.0 opened the companion to every site yt-dlp
-        # supports, so the old YouTube-only allowlist no longer applies — but
-        # its actual job does. `normalize_url` only checks scheme+netloc, so
-        # without this a caller holding the token could point yt-dlp (and the
-        # attached cookie jar) at internal/LAN/cloud-metadata hosts. The
-        # private-network denylist enforces that here, at the trust boundary,
-        # rather than in the extension (an untrusted boundary).
-        block_reason = media_url_block_reason(url)
-        if block_reason:
-            return cors_response(
-                {
-                    "error": describe_media_url_block(block_reason),
-                    "code": block_reason,
-                },
-                400,
-            )
-
-        # Runtime capability hard gate — YouTube only. yt-dlp needs an external
-        # JavaScript runtime to solve YouTube's n/sig challenges; no other
-        # extractor does, so refusing a Reddit or X download because Deno is
-        # missing would block a capability that works fine without it.
-        # Presence is insufficient for YouTube: downloads require a supported
-        # version and a successful EJS execution probe.
-        runtime = probe_javascript_runtime(
-            configured_runtime=config.get('JavaScriptRuntime', 'auto')
-        )
-        runtime_usable = runtime.get('supported') is True and runtime.get('ejsReady') is True
-        if is_youtube_url(url) and runtime.get('ytdlpNeedsRuntime') and not runtime_usable:
-            reason = runtime.get('reason')
-            if reason == 'runtime-not-installed':
-                error_code = 'js-runtime-missing'
-            elif reason == 'runtime-version-below-security-floor':
-                error_code = 'js-runtime-security-floor'
-            elif reason == 'runtime-version-unsupported':
-                error_code = 'js-runtime-unsupported'
-            elif reason in {'runtime-version-unparseable', 'runtime-probe-failed'}:
-                error_code = 'js-runtime-unverified'
-            else:
-                error_code = 'ejs-runtime-not-ready'
-            advice = runtime.get('advice') or 'Configure a supported JavaScript runtime and retry.'
-            payload = download_error_payload(
-                error_code,
-                error=(
-                    "yt-dlp requires a verified JavaScript runtime to solve "
-                    "YouTube's signature challenges. " + advice
-                ),
-                advice=advice,
-            )
-            return cors_response(
-                payload,
-                422,
-            )
-
-        raw_cookies = body.get('cookies')
-        cookies = raw_cookies if isinstance(raw_cookies, list) else None
-        # Cap the cookie list so a hostile extension context can't cause the
-        # server to write a multi-megabyte cookie jar. The bound is the same
-        # one the sign-in store enforces: a hardcoded 200 here meant a jar the
-        # store accepted whole was silently halved on the download path, and
-        # the only symptom was yt-dlp failing to authenticate.
-        cookies_truncated = False
-        if cookies is not None and len(cookies) > MAX_SITE_LOGIN_COOKIES:
-            cookies = cookies[:MAX_SITE_LOGIN_COOKIES]
-            cookies_truncated = True
-        dl_id, err = dl_manager.start_download(
-            url=url,
-            audio_only=body.get('audioOnly', False),
-            fmt=body.get('format'),
-            quality=body.get('quality', 'best'),
-            output_dir=body.get('outputDir'),
-            title=body.get('title'),
-            output_name=body.get('outputName'),
-            referer=body.get('referer'),
-            cookies=cookies,
-            section=body.get('section'),
-            playlist_items=body.get('playlistItems'),
-            video_password=body.get('videoPassword'),
-        )
-        if err:
-            if 'queue is full' in err.lower():
-                return cors_response({
-                    "error": err,
-                    "code": "queue-full",
-                    "capacity": dl_manager.capacity(),
-                    "remediation": (
-                        "Cancel a pending item or wait for a running download to finish, "
-                        "then retry."
-                    ),
-                }, 429)
-            if 'incompatible astra downloader version' in err.lower():
-                return cors_response({
-                    "error": err,
-                    "code": "queue-schema-incompatible",
-                    "remediation": (
-                        "Update Astra Downloader, or delete the pending "
-                        "download-queue.json file to start a fresh queue."
-                    ),
-                }, 503)
-            if 'could not save' in err.lower():
-                return cors_response({"error": err, "code": "queue-persistence-failed"}, 503)
-            return cors_response({"error": err}, 400)
-        status_value = dl_manager.status_of(dl_id, default='pending')
-        payload = {
-            "id": dl_id,
-            "status": status_value,
-            "capacity": dl_manager.capacity(),
-        }
-        if cookies_truncated:
-            # Say so rather than letting the caller discover it as an
-            # authentication failure with nothing pointing at the cause.
-            payload["cookiesTruncated"] = MAX_SITE_LOGIN_COOKIES
-        return cors_response(payload)
-
-    @api.route('/playlist', methods=['POST'])
-    def playlist():
-        if not check_auth():
-            return cors_response({
-                "error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."
-            }, 401)
-        allowed, retry_after = download_rate_limiter.allow('playlist')
-        if not allowed:
-            return cors_response(
-                {"error": "Too many playlist previews in a short period. Please wait a moment."},
-                429,
-                extra_headers={"Retry-After": str(int(retry_after) + 1)},
-            )
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get('url'), str):
-            return cors_response({"error": "Missing playlist URL."}, 400)
-        url, url_err = normalize_url(body['url'])
-        if url_err:
-            return cors_response({"error": url_err}, 400)
-        block_reason = media_url_block_reason(url)
-        if block_reason:
-            return cors_response({
-                "error": describe_media_url_block(block_reason),
-                "code": block_reason,
-            }, 400)
-        result, err = dl_manager.preview_playlist(url)
-        if err:
-            if err == getattr(dl_manager, 'PLAYLIST_BUSY_MESSAGE', None):
-                return cors_response(
-                    {"error": err, "code": "playlist-busy"},
-                    429,
-                    extra_headers={"Retry-After": "5"},
-                )
-            status_code = 400 if 'playlist URL' in err else 502
-            return cors_response({
-                "error": err,
-                "code": "invalid-playlist-url" if status_code == 400 else "playlist-unavailable",
-            }, status_code)
-        return cors_response(result)
-
-    @api.route('/site-logins', methods=['GET', 'POST', 'DELETE'])
-    def site_logins():
-        """Manage the per-site cookie store used for signed-in downloads.
-
-        GET returns metadata only — site, source, cookie count, expiry. Cookie
-        names and values are never readable back out of this endpoint, so a
-        token holder cannot turn the store into a credential dump.
-        """
-        nonlocal youtube_sign_in_warning_delivered
-        if not check_auth():
-            return cors_response({
-                "error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."
-            }, 401)
-        store = getattr(dl_manager, 'site_logins', None)
-        if store is None:
-            return cors_response({"error": "Site sign-ins are unavailable.", "code": "site-logins-unavailable"}, 503)
-
-        if request.method == 'GET':
-            return cors_response({"sites": store.entries()})
-
-        allowed, retry_after = download_rate_limiter.allow('site-logins')
-        if not allowed:
-            return cors_response(
-                {"error": "Too many site sign-in requests in a short period. Please wait a moment."},
-                429,
-                extra_headers={"Retry-After": str(int(retry_after) + 1)},
-            )
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get('site'), str):
-            return cors_response({"error": "Missing site address.", "code": "missing-site"}, 400)
-
-        if request.method == 'DELETE':
-            removed = store.remove(body['site'])
-            return cors_response({"removed": bool(removed)}, 200 if removed else 404)
-
-        # A site sign-in is only meaningful for a site the downloader may
-        # actually reach, so it runs through the same URL policy as /download.
-        probe_url, probe_error = normalize_url(
-            body['site'] if '://' in body['site'] else f"https://{body['site'].strip()}/"
-        )
-        if probe_error:
-            return cors_response({"error": probe_error, "code": "invalid-site"}, 400)
-        block_reason = media_url_block_reason(probe_url)
-        if block_reason:
-            return cors_response(
-                {"error": describe_media_url_block(block_reason), "code": block_reason},
-                400,
-            )
-
-        raw_cookies = body.get('cookies')
-        cookies_text = body.get('cookiesText')
-        username = body.get('username')
-        password = body.get('password')
-        has_credentials = username is not None or password is not None
-        has_cookies = (
-            isinstance(raw_cookies, list)
-            or isinstance(cookies_text, str)
-            or isinstance(body.get('browser'), str)
-        )
-        if has_credentials and has_cookies:
-            return cors_response({
-                "error": "Provide either username/password or cookies, not both.",
-                "code": "ambiguous-site-login",
-            }, 400)
-        if has_credentials:
-            if not isinstance(username, str) or not isinstance(password, str):
-                return cors_response({
-                    "error": "Username and password are both required.",
-                    "code": "missing-credentials",
-                }, 400)
-            result, error = store.save_credentials(
-                body['site'], username, password,
-                source=str(body.get('source') or 'credentials')[:60],
-            )
-        elif isinstance(raw_cookies, list):
-            result, error = store.save_cookies(
-                body['site'], raw_cookies[:MAX_SITE_LOGIN_COOKIES],
-                source=str(body.get('source') or 'extension')[:60],
-            )
-        elif isinstance(cookies_text, str):
-            result, error = store.import_netscape_text(
-                body['site'], cookies_text,
-                source=str(body.get('source') or 'cookies.txt')[:60],
-            )
-        elif isinstance(body.get('browser'), str):
-            result, error = dl_manager.import_site_login_from_browser(
-                body['site'], body['browser'], body.get('profile'),
-            )
-        else:
-            return cors_response({
-                "error": "Provide username/password, cookies, cookiesText, or a browser to read them from.",
-                "code": "missing-cookies",
-            }, 400)
-        if error:
-            return cors_response({"error": error, "code": "site-login-failed"}, 400)
-        payload = dict(result or {})
-        warning_claim = None
-        if is_youtube_url(probe_url):
-            with youtube_sign_in_warning_lock:
-                if (not youtube_sign_in_warning_delivered
-                        and not config.get("YouTubeSignInRiskNoticeShown", False)):
-                    persisted = bool(config.update({
-                        "YouTubeSignInRiskNoticeShown": True
-                    }))
-                    youtube_sign_in_warning_delivered = True
-                    warning_claim = persisted
-        if warning_claim is not None:
-            payload.update({
-                "warningCode": _YOUTUBE_SIGN_IN_WARNING_CODE,
-                "warning": _YOUTUBE_SIGN_IN_WARNING,
-                "warningUrl": _YOUTUBE_SIGN_IN_WARNING_URL,
-                "warningStatePersisted": warning_claim,
-            })
-            if not warning_claim:
-                write_persistent_log(
-                    "Could not save the one-time YouTube sign-in warning state."
-                )
-        return cors_response(payload)
-
-    @api.route('/formats', methods=['POST'])
-    def formats():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        allowed, retry_after = download_rate_limiter.allow('formats')
-        if not allowed:
-            return cors_response(
-                {"error": "Too many format requests in a short period. Please wait a moment."},
-                429,
-                extra_headers={"Retry-After": str(int(retry_after) + 1)},
-            )
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get('url'), str):
-            return cors_response({"error": "Missing video URL."}, 400)
-        url, url_err = normalize_url(body['url'])
-        if url_err:
-            return cors_response({"error": url_err}, 400)
-        # Same trust boundary as /download — never point yt-dlp (and any
-        # attached cookie jar) at private-network hosts.
-        block_reason = media_url_block_reason(url)
-        if block_reason:
-            return cors_response(
-                {"error": describe_media_url_block(block_reason), "code": block_reason},
-                400,
-            )
-        result, err = dl_manager.list_formats(url)
-        if err:
-            if err == getattr(dl_manager, 'FORMATS_BUSY_MESSAGE', None):
-                # All probe slots are occupied — a retryable condition, not
-                # an extraction failure.
-                return cors_response(
-                    {"error": err, "code": "formats-busy"},
-                    429,
-                    extra_headers={"Retry-After": "5"},
-                )
-            return cors_response({"error": err, "code": "formats-unavailable"}, 502)
-        return cors_response(result)
-
-    @api.route('/status/<dl_id>')
-    def status(dl_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        payload = dl_manager.snapshot_of(dl_id)
-        if payload is None:
-            return cors_response({"error": "Download no longer exists in the active queue."}, 404)
-        return cors_response(payload)
-
-    @api.route('/downloads/<dl_id>/command', methods=['GET'])
-    def download_command(dl_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        payload = dl_manager.snapshot_of(dl_id)
-        if payload is None:
-            return cors_response({"error": "Download no longer exists in the active queue."}, 404)
-        return cors_response({
-            "id": dl_id,
-            "commandArgs": payload.get("commandArgs") or [],
-            "command": " ".join(payload.get("commandArgs") or []),
-        })
-
-    # NOTE: must not be named `queue` — a nested function named `queue` would
-    # shadow the stdlib `queue` module for every sibling closure in create_api
-    # (pick_folder uses queue.Queue / queue.Full / queue.Empty).
-    @api.route('/queue')
-    def queue_endpoint():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        return cors_response(dl_manager.queue_payload())
-
-    @api.route('/queue/pause', methods=['POST'])
-    def pause_queue():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        if not dl_manager.pause_intake():
-            return cors_response({
-                "error": "Could not save the paused queue state. Check disk space and permissions.",
-                "code": "queue-persistence-failed",
-            }, 503)
-        return cors_response({"paused": True, "capacity": dl_manager.capacity()})
-
-    @api.route('/queue/resume', methods=['POST'])
-    def resume_queue():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        if not dl_manager.resume_intake():
-            return cors_response({
-                "error": "Could not save the resumed queue state. Check disk space and permissions.",
-                "code": "queue-persistence-failed",
-            }, 503)
-        return cors_response({"paused": False, "capacity": dl_manager.capacity()})
-
-    def _fresh_cookies_from_body():
-        body, body_error = request_json_object()
-        if body_error:
-            return None, body_error
-        raw = body.get('cookies')
-        if raw is None:
-            return None, None
-        if not isinstance(raw, list):
-            return None, 'cookies must be a JSON array.'
-        return raw[:MAX_SITE_LOGIN_COOKIES], None
-
-    @api.route('/queue/<dl_id>/resume', methods=['POST'])
-    def resume_queued_download(dl_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        cookies, cookie_error = _fresh_cookies_from_body()
-        if cookie_error:
-            return cors_response({"error": cookie_error, "code": "invalid-cookies"}, 400)
-        ok, err = dl_manager.resume_download(dl_id, cookies=cookies)
-        if not ok:
-            if err and 'still finalizing' in err:
-                code = 'download-finalizing'
-            elif err and 'Fresh YouTube cookies' in err:
-                code = 'fresh-auth-required'
-            else:
-                code = 'queue-resume-rejected'
-            status_code = 404 if err and 'no longer exists' in err else 409
-            return cors_response({"error": err, "code": code}, status_code)
-        return cors_response({"id": dl_id, "resumed": True, "capacity": dl_manager.capacity()})
-
-    @api.route('/queue/<dl_id>/retry', methods=['POST'])
-    def retry_queued_download(dl_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        cookies, cookie_error = _fresh_cookies_from_body()
-        if cookie_error:
-            return cors_response({"error": cookie_error, "code": "invalid-cookies"}, 400)
-        ok, err = dl_manager.retry(dl_id, cookies=cookies)
-        if not ok:
-            if err and 'queue is full' in err.lower():
-                return cors_response({
-                    "error": err,
-                    "code": "queue-full",
-                    "capacity": dl_manager.capacity(),
-                    "remediation": (
-                        "Cancel a pending item or wait for a running download to finish, "
-                        "then retry."
-                    ),
-                }, 429)
-            if err and 'still finalizing' in err:
-                code = 'download-finalizing'
-            elif err and 'Fresh YouTube cookies' in err:
-                code = 'fresh-auth-required'
-            else:
-                code = 'retry-rejected'
-            status_code = 404 if err and 'no longer exists' in err else 409
-            return cors_response({"error": err, "code": code}, status_code)
-        return cors_response({"id": dl_id, "retried": True, "capacity": dl_manager.capacity()})
-
-    @api.route('/queue/<dl_id>/move', methods=['POST'])
-    def move_queued_download(dl_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        body, body_error = request_json_object()
-        if body_error:
-            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
-        if 'position' not in body:
-            return cors_response({"error": "position is required.", "code": "invalid-position"}, 400)
-        ok, err = dl_manager.move_pending(dl_id, body.get('position'))
-        if not ok:
-            status_code = 400 if err and 'integer' in err else 409
-            return cors_response({"error": err, "code": "queue-move-rejected"}, status_code)
-        return cors_response({"id": dl_id, "moved": True, "queue": dl_manager.queue_payload()})
-
-    @api.route('/history')
-    def hist():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        raw_limit = request.args.get('limit', '50')
-        raw_offset = request.args.get('offset', '0')
-        try:
-            limit = int(raw_limit)
-        except (TypeError, ValueError):
-            return cors_response({
-                "error": "History limit must be an integer.",
-                "code": "invalid-limit",
-            }, 400)
-        try:
-            offset = int(raw_offset)
-        except (TypeError, ValueError):
-            return cors_response({
-                "error": "History offset must be an integer.",
-                "code": "invalid-offset",
-            }, 400)
-        limit = clamp_int(limit, 50, 1, 500)
-        offset = clamp_int(offset, 0, 0, 500)
-        sort = request.args.get('sort', 'newest').strip().lower()
-        if sort not in {'newest', 'oldest'}:
-            return cors_response({
-                "error": "History sort must be newest or oldest.",
-                "code": "invalid-sort",
-            }, 400)
-        date_from = request.args.get('dateFrom', '').strip()
-        date_to = request.args.get('dateTo', '').strip()
-        for key, value in (('dateFrom', date_from), ('dateTo', date_to)):
-            if not value:
-                continue
-            try:
-                time.strptime(value, '%Y-%m-%d')
-            except (TypeError, ValueError):
-                return cors_response({
-                    "error": f"History {key} must use YYYY-MM-DD.",
-                    "code": "invalid-date",
-                }, 400)
-        if date_from and date_to and date_from > date_to:
-            return cors_response({
-                "error": "History dateFrom cannot be after dateTo.",
-                "code": "invalid-date-range",
-            }, 400)
-        history_entries = history.load()
-        archive_entries = None
-        if subscription_manager is not None:
-            # Prefer the scalar projection over the full deep copy — see
-            # SubscriptionStore.archive_history_view.
-            archive_reader = (
-                getattr(subscription_manager, 'archive_history_view', None)
-                or getattr(subscription_manager, 'archive_entries', None)
-            )
-            if callable(archive_reader):
-                try:
-                    archive_entries = archive_reader()
-                except Exception:
-                    # reason: history is the answer here; an unreadable subscription archive drops the archive column, not the page
-                    archive_entries = None
-        query_text = clean_text(request.args.get('q'), '', 200)
-        requested_url = clean_text(request.args.get('url'), '', 4096)
-        result = query_history_entries(
-            history_entries,
-            query=query_text or requested_url,
-            status=clean_text(request.args.get('status'), '', 32),
-            fmt=clean_text(request.args.get('format'), '', 16),
-            date_from=date_from,
-            date_to=date_to,
-            sort=sort,
-            offset=offset,
-            limit=limit,
-            archive_entries=archive_entries,
-        )
-        if requested_url:
-            result['lookup'] = lookup_history_url(
-                history_entries,
-                requested_url,
-                archive_entries=archive_entries,
-            )
-        return cors_response(result)
-
-    def _subscription_unavailable():
-        return cors_response({
-            "error": "Scheduled subscriptions are unavailable until Astra Downloader finishes setup.",
-            "code": "subscriptions-unavailable",
-        }, 503)
-
-    def _subscription_manager_or_error():
-        if subscription_manager is None:
-            return None, _subscription_unavailable()
-        return subscription_manager, None
-
-    def _is_subscription_persistence_error(error):
-        text = str(error or "").casefold()
-        return any(marker in text for marker in (
-            "could not save subscriptions",
-            "subscription state was written by a newer",
-            "subscription state schema is incompatible",
-            "could not reset subscription retry state",
-            "could not save scheduled download archive state",
-        ))
-
-    def _subscription_error(error, code, status):
-        if _is_subscription_persistence_error(error):
-            return cors_response({
-                "error": error,
-                "code": "subscription-persistence-failed",
-            }, 503)
-        return cors_response({"error": error, "code": code}, status)
-
-    @api.route('/subscriptions', methods=['GET'])
-    def subscriptions_list():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        manager, response = _subscription_manager_or_error()
-        if response is not None:
-            return response
-        return cors_response(manager.snapshot())
-
-    @api.route('/subscriptions', methods=['POST'])
-    def subscriptions_create():
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        manager, response = _subscription_manager_or_error()
-        if response is not None:
-            return response
-        body, body_error = request_json_object()
-        if body_error:
-            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
-        allowed = {"url", "intervalMinutes", "enabled", "title"}
-        unknown = sorted(set(body) - allowed)
-        if unknown:
-            return cors_response({
-                "error": "Unsupported subscription field(s): " + ", ".join(unknown),
-                "code": "invalid-subscription-field",
-            }, 400)
-        if not isinstance(body.get("url"), str) or not body.get("url", "").strip():
-            return cors_response({"error": "A YouTube channel or playlist URL is required.", "code": "invalid-subscription-url"}, 400)
-        record, error = manager.add_subscription(
-            body["url"],
-            interval_minutes=body.get("intervalMinutes", 60),
-            enabled=body.get("enabled", True),
-            title=body.get("title", ""),
-        )
-        if error:
-            status = 409 if "already configured" in error.lower() else 400
-            return _subscription_error(error, "subscription-rejected", status)
-        return cors_response(record, 201)
-
-    @api.route('/subscriptions/<subscription_id>', methods=['PATCH'])
-    def subscriptions_update(subscription_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        manager, response = _subscription_manager_or_error()
-        if response is not None:
-            return response
-        body, body_error = request_json_object()
-        if body_error:
-            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
-        allowed = {"url", "intervalMinutes", "enabled", "title"}
-        unknown = sorted(set(body) - allowed)
-        if unknown or not body:
-            return cors_response({
-                "error": "Provide only url, intervalMinutes, enabled, or title.",
-                "code": "invalid-subscription-field",
-            }, 400)
-        fields = {}
-        if "url" in body:
-            fields["url"] = body["url"]
-        if "intervalMinutes" in body:
-            fields["interval_minutes"] = body["intervalMinutes"]
-        if "enabled" in body:
-            fields["enabled"] = body["enabled"]
-        if "title" in body:
-            fields["title"] = body["title"]
-        record, error = manager.update_subscription(subscription_id, **fields)
-        if error:
-            status = 404 if "no longer exists" in error.lower() else 400
-            return _subscription_error(error, "subscription-update-rejected", status)
-        return cors_response(record)
-
-    @api.route('/subscriptions/<subscription_id>', methods=['DELETE'])
-    def subscriptions_delete(subscription_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        manager, response = _subscription_manager_or_error()
-        if response is not None:
-            return response
-        removed, error = manager.remove_subscription(subscription_id)
-        if error:
-            return _subscription_error(error, "subscription-delete-rejected", 404)
-        return cors_response({"id": subscription_id, "removed": bool(removed)})
-
-    @api.route('/subscriptions/<subscription_id>/scan', methods=['POST'])
-    def subscriptions_scan(subscription_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        manager, response = _subscription_manager_or_error()
-        if response is not None:
-            return response
-        allowed, retry_after = subscription_scan_rate_limiter.allow('subscription-scan')
-        if not allowed:
-            return cors_response(
-                {
-                    "error": "Too many subscription scans in a short period. Please wait a moment.",
-                    "code": "subscription-scan-rate-limited",
-                },
-                429,
-                extra_headers={"Retry-After": str(int(retry_after) + 1)},
-            )
-        result, error = manager.request_scan(subscription_id)
-        if error:
-            return _subscription_error(error, "subscription-scan-rejected", 404)
-        return cors_response(result, 202)
-
     @api.route('/config', methods=['GET'])
     def get_config():
         if not check_auth():
@@ -1465,17 +1611,6 @@ def create_api(config, dl_manager, history, *, dependencies):
                 inside = False
             result['outsideAllowlist'] = not inside
         return cors_response(result)
-
-    @api.route('/cancel/<dl_id>', methods=['DELETE'])
-    def cancel(dl_id):
-        if not check_auth():
-            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
-        exists = dl_manager.exists(dl_id)
-        if dl_manager.cancel(dl_id):
-            return cors_response({"id": dl_id, "cancelled": True})
-        if exists:
-            return cors_response({"error": "Download is already finished and cannot be cancelled."}, 409)
-        return cors_response({"error": "Download no longer exists in the active queue."}, 404)
 
     @api.route('/update-ytdlp', methods=['POST'])
     def update_ytdlp():
@@ -1594,7 +1729,6 @@ def create_api(config, dl_manager, history, *, dependencies):
             return cors_response({"status": "shutting_down"})
         return cors_response({"status": "stop_from_app_required"}, 202)
 
-    return api
 
 # ══════════════════════════════════════════════════════════════
 # FIRST-RUN SETUP

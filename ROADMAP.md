@@ -76,13 +76,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Note (2026-08-21): 2026.08.19 release notes do not mention Super Resolution. #15433 is still open. Do not invent a format key — probe a fixture on the pinned exe.
   Complexity: S
 
-- [ ] P2 — AD-43 — Split `create_api` by resource
-  Why: it is a single 1,262-line function holding 27 routes and 54 unpacked dependencies in one closure. Tests can exercise it through Flask now, but there is still no smaller route unit to maintain.
-  Evidence: `astra_downloader/routes.py:196`; route behavior tests in `test_astra_downloader.py`.
-  Touches: `astra_downloader/routes.py`
-  Acceptance: routes are grouped into per-resource registrars (downloads / queue / subscriptions / site-logins / system) taking the same dependency mapping; the `_REQUIRED_*_DEPENDENCIES` contract is unchanged; all route tests pass untouched.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — AD-46 — Also persist the queue outside the manager lock
