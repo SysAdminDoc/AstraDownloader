@@ -125,19 +125,44 @@ def announce_status(label):
     return True
 
 
+class StatusLabel(QLabel):
+    """A label that tells assistive technology when its text changes.
+
+    Routing the announcement through the status *setters* left every call site
+    that writes the label directly silent, and there are dozens — the whole
+    first-run sequence, every subscription message, the Settings save result.
+    Announcing from ``setText`` covers all of them, including ones written
+    later, and it is the only place that can see whether the text actually
+    changed. Repeating an unchanged message would interrupt a screen reader
+    mid-word on every keystroke of a live preview.
+    """
+
+    def setText(self, text):
+        changed = text != self.text()
+        super().setText(text)
+        if changed:
+            announce_status(self)
+
+
 def set_status_tone(label, state, *, announce=True):
-    """Give a status label a visible tone, and say it out loud.
+    """Give a status label a visible tone.
 
     Accepts the historical setter values — "error" maps onto the stylesheet's
     "danger" tone so every status label shares the one settingsStatus
     convention instead of setting a `state` property no stylesheet rule ever
-    matched. ``announce`` is false only where the caller is clearing a status
-    rather than reporting one; an Alert for "nothing happened" is noise.
+    matched.
+
+    The screen-reader Alert is raised by StatusLabel.setText, not here: a tone
+    change on its own is not a status message, and half the call sites that
+    write these labels never come through this function. ``announce`` is kept
+    because it marks the two clearing call sites, and a label that is not a
+    StatusLabel still gets an Alert from here so a plain QLabel used as a
+    status surface is not silent.
     """
     tone = str(state or "neutral")
     tone = {"error": "danger"}.get(tone, tone)
     label.setProperty("tone", tone)
-    if announce:
+    if announce and not isinstance(label, StatusLabel):
         announce_status(label)
     # The caller repolishes: gui.py's imported `repolish` is what the test
     # harnesses patch, and a repolish buried here would bypass that seam.
@@ -153,8 +178,12 @@ def tr_format(template, **values):
     return tr(template).format(**values)
 
 
-def make_label(text, class_name=None, word_wrap=False):
-    label = QLabel(tr(text))
+def make_label(text, class_name=None, word_wrap=False, status=False):
+    """Build a body label. ``status`` marks one that reports an outcome.
+
+    A status label announces its own text changes; see StatusLabel.
+    """
+    label = (StatusLabel if status else QLabel)(tr(text))
     label.setTextFormat(Qt.TextFormat.PlainText)
     if class_name:
         label.setProperty("class", class_name)

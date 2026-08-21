@@ -252,6 +252,20 @@ def subscription_archive_key(candidate):
     return f"url:{url}"
 
 
+class _SaveBatch:
+    """Handle yielded by ``SubscriptionStore.batched_saves``."""
+
+    __slots__ = ("_state",)
+
+    def __init__(self, state):
+        self._state = state
+
+    @property
+    def failed(self):
+        """True when the batch's final write did not land."""
+        return bool(self._state["failed"])
+
+
 class SubscriptionStore:
     """Schema-checked atomic storage for schedules and their archive."""
 
@@ -288,8 +302,11 @@ class SubscriptionStore:
         self._lock = threading.RLock()
         self._compatible = True
         self._persistence_error = ""
-        self._save_batch_depth = 0
-        self._save_batch_pending = False
+        # Thread-local: a batch belongs to the thread that opened it. A
+        # store-wide counter would silently defer another thread's write and
+        # hand it back True, so an Add subscription clicked during a scan would
+        # report success with nothing on disk.
+        self._save_batch = threading.local()
         self._undo = DurableUndoStore(
             path=self.path.with_name(f".{self.path.name}.undo"),
             loader=self._reader,
@@ -527,44 +544,56 @@ class SubscriptionStore:
             self._logger(f"Subscription state save failed: {error}")
             return False
 
+    def _batch_state(self):
+        state = getattr(self._save_batch, "state", None)
+        if state is None:
+            state = {"depth": 0, "pending": False, "failed": False}
+            self._save_batch.state = state
+        return state
+
     def _save_locked(self):
         if not self._compatible:
             return False
-        if self._save_batch_depth:
-            self._save_batch_pending = True
+        state = self._batch_state()
+        if state["depth"]:
+            state["pending"] = True
             return True
         return self._write_locked()
 
     @contextlib.contextmanager
     def batched_saves(self):
-        """Coalesce the writes inside one scan into a single persist.
+        """Coalesce this thread's writes inside the block into one persist.
 
         A scan runs reserve -> enqueue -> mark_queued for every candidate, and
         each step was a full serialize plus fsync of the whole document while
-        holding this lock — around 100 rewrites of an archive capped at 20,000
+        holding this lock - around 100 rewrites of an archive capped at 20,000
         records for one 50-item playlist, on the same lock the Qt main thread
         and /health take.
 
-        Deferring is also the safer failure mode for a reservation. A scan
-        killed mid-flight now leaves nothing on disk, so the next scan reserves
-        the same keys again; persisting each claim immediately is what would
-        strand a key in "reserved" forever.
+        The batch is thread-local. Another thread mutating the store during a
+        scan still writes immediately, because it has its own caller waiting on
+        a truthful answer.
 
         Inside the batch a mutation reports success on the strength of the
-        pending write. If the final write fails, in-memory state is ahead of
-        the file and ``persistence_error`` says so — check it after the block
-        rather than trusting the per-call return.
+        pending write. Yields a handle whose ``failed`` attribute is set if the
+        final write does not land, so the caller can report that once instead of
+        reading the store-wide persistence error, which is sticky and may belong
+        to someone else.
         """
-        with self._lock:
-            self._save_batch_depth += 1
+        state = self._batch_state()
+        state["depth"] += 1
+        if state["depth"] == 1:
+            state["failed"] = False
+        handle = _SaveBatch(state)
         try:
-            yield
+            yield handle
         finally:
-            with self._lock:
-                self._save_batch_depth -= 1
-                if self._save_batch_depth == 0 and self._save_batch_pending:
-                    self._save_batch_pending = False
-                    self._write_locked()
+            state["depth"] -= 1
+            if state["depth"] == 0 and state["pending"]:
+                state["pending"] = False
+                with self._lock:
+                    if not self._write_locked():
+                        state["failed"] = True
 
     def persistence_error(self):
         """Return the current durable-state error, if one is known."""
@@ -1269,13 +1298,9 @@ class SubscriptionManager:
         return self.scan_subscription(sub_id, manual=True)
 
 
-    def _claim_candidates(self, started, sub_id, candidates, now):
-        """Reserve, enqueue and mark each candidate, reporting the totals.
-
-        Split out of ``scan_subscription`` so the whole loop can run inside one
-        ``batched_saves`` block without indenting the surrounding scan.
-        """
-        queued = 0
+    def _reserve_candidates(self, sub_id, candidates, now):
+        """Claim every candidate. Returns the claimed keys and the tallies."""
+        claimed = []
         skipped = 0
         errors = []
         for candidate in candidates:
@@ -1283,10 +1308,7 @@ class SubscriptionManager:
                 break
             key = subscription_archive_key(candidate)
             reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
-            if reserved == RESERVE_ALREADY_PRESENT:
-                skipped += 1
-                continue
-            if reserved == RESERVE_RETRY_BACKOFF:
+            if reserved in (RESERVE_ALREADY_PRESENT, RESERVE_RETRY_BACKOFF):
                 skipped += 1
                 continue
             if reserved == RESERVE_RETRY_EXHAUSTED:
@@ -1313,13 +1335,21 @@ class SubscriptionManager:
                     "space and permissions."
                 )
                 continue
+            claimed.append((key, candidate))
+        return claimed, skipped, errors
+
+    def _enqueue_claimed(self, started, claimed, now):
+        """Queue each claimed candidate and mark the claim against it."""
+        queued = 0
+        errors = []
+        for key, candidate in claimed:
             if self._stop.is_set():
                 self.store.release_archive(
                     key,
                     "Scheduled scan stopped before queueing this item.",
                     now=now,
                 )
-                break
+                continue
             try:
                 result = self._enqueue(started, candidate, key)
                 if isinstance(result, tuple):
@@ -1336,6 +1366,33 @@ class SubscriptionManager:
             if not self.store.mark_archive_queued(key, download_id, now=now):
                 errors.append(self._persistence_message())
             queued += 1
+        return queued, errors
+
+    def _claim_candidates(self, started, sub_id, candidates, now):
+        """Reserve every candidate, persist, then queue what was claimed.
+
+        The two phases are separate on purpose. ``_enqueue`` reaches the
+        download manager, which persists its own queue synchronously and
+        restores it on the next launch, so a claim that is still only in memory
+        when the process dies leaves a restored download with no archive entry
+        behind it — ``reconcile_downloads`` finds nothing to reap and the next
+        scan queues the same video again. Flushing the reservations first means
+        the archive entry is on disk before anything can be enqueued against
+        it, and the queueing phase then coalesces on its own.
+        """
+        with self.store.batched_saves() as reservation_batch:
+            claimed, skipped, errors = self._reserve_candidates(
+                sub_id, candidates, now,
+            )
+        if reservation_batch.failed:
+            errors.append(self._persistence_message())
+            return 0, skipped + len(claimed), errors
+
+        with self.store.batched_saves() as queue_batch:
+            queued, queue_errors = self._enqueue_claimed(started, claimed, now)
+        errors.extend(queue_errors)
+        if queue_batch.failed:
+            errors.append(self._persistence_message())
         return queued, skipped, errors
 
     def scan_subscription(self, sub_id, *, now=None, manual=False, _claimed=False):
@@ -1393,16 +1450,12 @@ class SubscriptionManager:
                 if candidate:
                     candidates.append(candidate)
 
-            # One persist for the whole candidate loop instead of two per
-            # candidate. See SubscriptionStore.batched_saves for why deferring
-            # is also the safer crash behaviour for a reservation.
-            with self.store.batched_saves():
-                queued, skipped, errors = self._claim_candidates(
-                    started, sub_id, candidates, now,
-                )
-            deferred_failure = self.store.persistence_error()
-            if deferred_failure:
-                errors.append(deferred_failure)
+            # Two coalesced persists for the whole candidate loop instead of
+            # two per candidate; _claim_candidates explains why it is two and
+            # not one.
+            queued, skipped, errors = self._claim_candidates(
+                started, sub_id, candidates, now,
+            )
 
             # Identical failures repeat once per candidate; the user needs
             # the cause, not the count.

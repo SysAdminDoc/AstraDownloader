@@ -1251,6 +1251,80 @@ class SubscriptionTests(unittest.TestCase):
                 "every claim must survive the coalesced write",
             )
 
+    def test_another_thread_still_writes_while_a_scan_batches(self):
+        # A store-wide batch would defer the GUI thread's write and hand it
+        # back success, so Add subscription during a scan would report "Added"
+        # with nothing on disk.
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "concurrent.json"
+            store = self._store(state)
+            barrier = threading.Event()
+            released = threading.Event()
+
+            def batching():
+                with store.batched_saves():
+                    store.add_subscription(
+                        "https://www.youtube.com/@first", interval_minutes=5, now=1000,
+                    )
+                    barrier.set()
+                    released.wait(5)
+
+            worker = threading.Thread(target=batching)
+            worker.start()
+            self.addCleanup(worker.join)
+            self.assertTrue(barrier.wait(5))
+
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@second", interval_minutes=5, now=1000,
+            )
+            self.assertIsNone(error)
+            on_disk = json.loads(state.read_text(encoding="utf-8"))
+            self.assertIn(
+                "https://www.youtube.com/@second",
+                [item["url"] for item in on_disk["subscriptions"]],
+                "a write from outside the batch must not be deferred",
+            )
+            released.set()
+            worker.join(5)
+
+    def test_a_reservation_is_on_disk_before_anything_is_enqueued(self):
+        # _enqueue reaches the download manager, which persists its own queue
+        # and restores it on the next launch. A claim still only in memory when
+        # the process dies leaves a restored download with no archive entry, so
+        # the next scan queues the same video again.
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "ordering.json"
+            store = self._store(state)
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@astra-channel", interval_minutes=5, now=1000,
+            )
+            self.assertIsNone(error)
+
+            candidates = [
+                {"id": f"video{index}", "title": f"Video {index}",
+                 "url": f"https://www.youtube.com/watch?v=video{index:07d}"}
+                for index in range(5)
+            ]
+            reserved_at_first_enqueue = []
+
+            def enqueue(*_args):
+                if not reserved_at_first_enqueue:
+                    document = json.loads(state.read_text(encoding="utf-8"))
+                    reserved_at_first_enqueue.append(len(document["archive"]))
+                return "dl-1", None
+
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: (candidates, None),
+                enqueue=enqueue,
+            )
+            manager.scan_subscription(record["id"], now=2000)
+
+            self.assertEqual(
+                reserved_at_first_enqueue, [5],
+                "every claim must be durable before the first download is queued",
+            )
+
     def test_a_scan_that_cannot_persist_reports_it_once(self):
         # Inside a batch each mutation reports success on the strength of the
         # pending write, so the failure has to surface when the batch flushes.
@@ -2643,7 +2717,9 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn('str(TRANSLATIONS_DIR / "*.qm")', build_source)
         self.assertIn('"--hidden-import", "i18n"', build_source)
         self.assertIn('QCoreApplication.translate("AstraDownloader"', gui_source)
-        self.assertIn("QLabel(tr(text))", gui_source)
+        # make_label picks StatusLabel or QLabel; what this pins is that either
+        # one is constructed from the translated text.
+        self.assertIn("QLabel)(tr(text))", gui_source)
         self.assertIn('"dashboard-german"', renderer_source)
 
     def test_companion_settings_flows_do_not_use_blocking_message_boxes(self):
@@ -7303,21 +7379,58 @@ for forbidden in (
         import gui_support as gs
         if _get_qapp_or_skip(self) is None:
             return
-        from PySide6.QtWidgets import QLabel
 
-        label = QLabel("ready")
+        label = gs.make_label("ready", "fieldHint", status=True)
         self.addCleanup(label.deleteLater)
         with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
-            gs.set_status_tone(label, "error")
+            label.setText("Download rejected.")
         self.assertEqual(posted.call_count, 1)
         event = posted.call_args.args[0]
         self.assertIs(event.object(), label)
         self.assertEqual(event.type(), gs.QAccessible.Event.Alert)
 
+    def test_repeating_the_same_status_says_nothing(self):
+        # _update_output_template_preview runs on every keystroke of the output
+        # template. Announcing an unchanged message would interrupt a screen
+        # reader mid-word 40 times while someone types.
+        import gui_support as gs
+        if _get_qapp_or_skip(self) is None:
+            return
+
+        label = gs.make_label("", "fieldHint", status=True)
+        self.addCleanup(label.deleteLater)
+        label.setText("Preview unavailable until the template is valid.")
         with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
-            gs.set_status_tone(label, "neutral", announce=False)
-        self.assertEqual(posted.call_count, 0,
-                         "clearing a status must not announce it")
+            for _ in range(40):
+                label.setText("Preview unavailable until the template is valid.")
+        self.assertEqual(posted.call_count, 0)
+
+    def test_every_status_label_announces_its_own_writes(self):
+        # Routing the Alert through set_status_tone left every call site that
+        # writes the label directly silent, and there were dozens of them.
+        gs = gui_module_for_tests()
+        import gui_support
+
+        module_dir = Path(ad.__file__).resolve().parent
+        assignments = []
+        for source in sorted(module_dir.glob("gui_*_page.py")):
+            for line in source.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if not stripped.startswith("self.") or "make_label(" not in stripped:
+                    continue
+                name = stripped.split("=", 1)[0].strip()
+                if name.endswith("_status") or name.endswith("status"):
+                    assignments.append((source.name, stripped))
+
+        self.assertTrue(assignments, "the scan must find the status labels")
+        missing = [
+            f"{name}: {line}" for name, line in assignments
+            if "status=True" not in line
+        ]
+        self.assertEqual(
+            missing, [],
+            "a status label must be built with status=True so its writes announce",
+        )
 
     def test_announcing_a_widget_double_is_a_no_op(self):
         # Several harnesses drive lightweight doubles through the same setters.
@@ -8235,6 +8348,40 @@ class Sha256VerifyTests(unittest.TestCase):
                 target_asset="deno.zip",
             ),
             "a block with no Hash line resolves to nothing",
+        )
+
+    def test_get_filehash_blocks_are_paired_not_scanned(self):
+        # denoland publishes arm64 Windows builds too. A last-wins scan over
+        # Hash and Path lines separately would hand one asset's digest to the
+        # other, and the JS resolver that records the digest in the licence
+        # policy pairs them, so both parsers have to agree.
+        two_blocks = "\r\n".join([
+            "Algorithm : SHA256",
+            "Hash      : " + ("a" * 64).upper(),
+            "Path      : C:\\out\\deno-x86_64-pc-windows-msvc.zip",
+            "",
+            "Algorithm : SHA256",
+            "Hash      : " + ("b" * 64).upper(),
+            "Path      : C:\\out\\deno-aarch64-pc-windows-msvc.zip",
+        ])
+        self.assertEqual(
+            ad._parse_sha256_sums(two_blocks, target_asset="deno-x86_64-pc-windows-msvc.zip"),
+            "a" * 64,
+        )
+        self.assertEqual(
+            ad._parse_sha256_sums(two_blocks, target_asset="deno-aarch64-pc-windows-msvc.zip"),
+            "b" * 64,
+        )
+
+        stray_path = "\r\n".join([
+            "Algorithm : SHA256",
+            "Hash      : " + ("a" * 64).upper(),
+            "Path      : C:\\out\\SOMETHING-ELSE.zip",
+            "Path      : C:\\out\\deno-x86_64-pc-windows-msvc.zip",
+        ])
+        self.assertIsNone(
+            ad._parse_sha256_sums(stray_path, target_asset="deno-x86_64-pc-windows-msvc.zip"),
+            "a trailing Path line must not re-point the digest above it",
         )
 
     def test_ffmpeg_checksum_manifest_selects_the_named_archive(self):
@@ -21178,6 +21325,8 @@ class SmallerGapTests(unittest.TestCase):
             inspect.getsource(func) for func in (
                 ad.SubscriptionManager.scan_subscription,
                 ad.SubscriptionManager._claim_candidates,
+                ad.SubscriptionManager._reserve_candidates,
+                ad.SubscriptionManager._enqueue_claimed,
             )
         )
         self.assertIn("self.store.archive_entry(key)", source)

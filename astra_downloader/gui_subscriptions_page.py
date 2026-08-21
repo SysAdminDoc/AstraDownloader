@@ -60,7 +60,7 @@ class SubscriptionsPageMixin:
         self.btn_add_subscription.clicked.connect(self._add_subscription)
         url_row.addWidget(self.btn_add_subscription)
         add_layout.addLayout(url_row)
-        self.subscription_status = make_label("Subscriptions are ready when the local companion is running.", "toolbarMeta", word_wrap=True)
+        self.subscription_status = make_label("Subscriptions are ready when the local companion is running.", "toolbarMeta", word_wrap=True, status=True)
         add_layout.addWidget(self.subscription_status)
         layout.addWidget(add_card)
 

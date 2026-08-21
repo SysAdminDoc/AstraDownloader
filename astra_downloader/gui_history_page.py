@@ -109,7 +109,7 @@ class HistoryPageMixin:
         # widget lives on the Browser extension page — so a permissions error
         # here produced no visible response at all. Every other page has one
         # of these.
-        self.history_page_status = make_label("", "fieldHint", word_wrap=True)
+        self.history_page_status = make_label("", "fieldHint", word_wrap=True, status=True)
         self.history_page_status.setAccessibleName(tr("History status message"))
         self.history_page_status.hide()
         filters_panel_layout.addWidget(self.history_page_status)

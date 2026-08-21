@@ -120,7 +120,7 @@ class SiteLoginsPageMixin:
             "toolbarMeta",
             word_wrap=True,
         ))
-        self.site_login_status = make_label("", "fieldHint", word_wrap=True)
+        self.site_login_status = make_label("", "fieldHint", word_wrap=True, status=True)
         self.site_login_status.setAccessibleName(tr("Site sign-in status"))
         self.site_login_status.hide()
         add_layout.addWidget(self.site_login_status)

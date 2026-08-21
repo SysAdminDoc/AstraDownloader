@@ -89,7 +89,7 @@ class DownloadPageMixin:
         self.first_run_confirm.clicked.connect(self._confirm_first_run_destination)
         destination_row.addWidget(self.first_run_confirm)
         first_run_layout.addLayout(destination_row)
-        self.first_run_status = make_label("", "fieldHint", word_wrap=True)
+        self.first_run_status = make_label("", "fieldHint", word_wrap=True, status=True)
         self.first_run_status.setAccessibleName(tr("First-run setup status"))
         first_run_layout.addWidget(self.first_run_status)
         first_run_layout.addWidget(make_divider())
@@ -330,7 +330,7 @@ class DownloadPageMixin:
         quick_layout.addWidget(self.quick_download_subs_hint)
         # Whether the link in the box serves nothing but SABR streams.
         self._sabr_limited = False
-        self.quick_download_status = make_label("", "fieldHint")
+        self.quick_download_status = make_label("", "fieldHint", status=True)
         self.quick_download_status.setAccessibleName(tr("Quick download status"))
         self.quick_download_status.hide()
         quick_layout.addWidget(self.quick_download_status)
@@ -342,7 +342,7 @@ class DownloadPageMixin:
         # page: it reports on yt-dlp/FFmpeg, which is what makes a download
         # work, and a user who never opens the extension page still needs to
         # see it.
-        self.setup_status = make_label("", "fieldHint")
+        self.setup_status = make_label("", "fieldHint", status=True)
         self.setup_status.setAccessibleName(tr("Download tool setup status"))
         self.setup_status.hide()
         self.setup_progress = QProgressBar()
