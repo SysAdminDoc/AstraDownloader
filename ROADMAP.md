@@ -19,14 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-18 — Put the queue above the fold on the Download page
-  Why: `downloads-active-pending.png` is a scenario *with* active and pending downloads and shows none of them at 1120×760. The page stacks first-run panel → paste box → password → four option rows → four hint lines → setup status → readiness grid → pre-flight panel → notices → divider → toolbar → queue. The design invariant is "downloader first"; the download you just started is last, and the pre-flight panel is fully expanded even when every check passes.
-  Evidence: `astra_downloader/gui_download_page.py:114-445`; `build/companion-ui-smoke/downloads-active-pending.png`, `downloads-queue-full.png`.
-  Touches: `astra_downloader/gui_download_page.py`, `scripts/render-companion-gui.py`, `DownloaderFirstLayoutTests`
-  Acceptance: with one active download, the queue's first row is visible at 1120×760 without scrolling; the readiness strip and pre-flight panel collapse to a one-line summary when nothing is wrong and expand on a failing check; `DownloaderFirstLayoutTests` pins the new order.
-  Note (2026-08-21): uncommitted working-tree edits already disclose password/clip/name behind `quick_download_advanced` and collapse passing preflight (`btn_preflight_toggle`, `preflight_details.hide()`). Do not restack from the 2026-08-14 description — finish the remaining acceptance (queue row visible at 1120×760) on top of that WIP, or drop the WIP and start from HEAD.
-  Complexity: M
-
 - [ ] P1 — AD-23 — Make `SERVICE_API_VERSION` a real handshake
   Why: two independently versioned products share a gate-checked port catalogue with no client-side compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
   Evidence: `astra_downloader/astra_downloader.py:450-460`, `routes.py:449-506`; grep of `C:\repos\Astra-Deck` for `X-MDL-Api` returns no extension hits (2026-08-21).
