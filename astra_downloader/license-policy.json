@@ -121,10 +121,11 @@
       "name": "yt-dlp.exe",
       "version": "2026.08.19",
       "licenseExpression": "GPL-3.0-or-later",
+      "licenseReviewed": true,
       "decision": "approved",
       "distributionUrl": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
       "checksumUrl": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS",
-      "sourceUrl": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.tar.gz",
+      "sourceUrl": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.tar.gz",
       "noticeUrl": "https://github.com/yt-dlp/yt-dlp/blob/master/README.md#license",
       "obligations": [
         "Record the resolved release version and SHA-256, and ship the executable's THIRD_PARTY_LICENSES plus GPL corresponding-source route."
@@ -137,6 +138,7 @@
       "name": "FFmpeg GPL build",
       "version": "master-2026-08-20T171618Z",
       "licenseExpression": "GPL-3.0-or-later",
+      "licenseReviewed": true,
       "decision": "approved",
       "distributionUrl": "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
       "checksumUrl": "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/checksums.sha256",
@@ -153,6 +155,7 @@
       "name": "Deno runtime",
       "version": "2.9.5",
       "licenseExpression": "MIT",
+      "licenseReviewed": true,
       "decision": "approved",
       "distributionUrl": "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip",
       "checksumUrl": "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip.sha256sum",

@@ -1094,7 +1094,7 @@ class SettingsPageMixin:
         # Tools — v1.2.0 downloader-maintenance actions
         tools_card, tools_l = self._make_settings_group("Maintenance")
         tools_l.addWidget(make_label("Installed tools", "fieldLabel"))
-        self.tools_status = make_label("Checking installed tools…", "fieldHint", word_wrap=True)
+        self.tools_status = make_label("Checking installed tools…", "fieldHint", word_wrap=True, status=True)
         self.tools_status.setAccessibleName(tr("Installed tools status"))
         tools_l.addWidget(self.tools_status)
         tools_row = QHBoxLayout()
@@ -1161,7 +1161,7 @@ class SettingsPageMixin:
         save_row = QHBoxLayout(save_bar)
         save_row.setContentsMargins(38, 12, 30, 12)
         save_row.setSpacing(8)
-        self.settings_status = make_label("", "settingsStatus")
+        self.settings_status = make_label("", "settingsStatus", status=True)
         self.settings_status.setAccessibleName(tr("Settings status"))
         save_row.addWidget(self.settings_status, 1)
         btn_save = self._make_tool_button("Save changes", "primary")

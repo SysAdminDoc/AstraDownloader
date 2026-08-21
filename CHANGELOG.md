@@ -14,6 +14,21 @@ repository's git log.
 
 ### Fixed
 
+- **Status announcements now cover every message, and repeat themselves less.**
+  The screen-reader Alert was raised from the tone setter, which meant the
+  first-run sequence, the Settings save result and every subscription message
+  went out silently. The labels announce their own writes now, and only when
+  the text actually changed, so typing in the output template no longer
+  interrupts a screen reader on every keystroke.
+- **An Add subscription during a scan is saved immediately again.** A scan
+  batched its writes across the whole store rather than its own thread, so
+  anything else saved while a scan was running reported success with nothing on
+  disk.
+- **A scan interrupted midway no longer re-queues what it already started.**
+  Every claim is written before the first download is queued, so a restart
+  matches the restored downloads against their archive entries instead of
+  treating them as new.
+
 - **The catch-reason gate now covers handlers that swallow without `pass`.**
   It only examined handlers whose body was nothing but `pass`, so every
   `except Exception: return None` went unread. It now examines any broad
@@ -37,11 +52,12 @@ repository's git log.
 
 ### Fixed
 
-- **Deno downloads are verified again.** Deno publishes its checksum as
-  PowerShell `Get-FileHash` output rather than the `sha256sum` layout yt-dlp
-  and FFmpeg use, and the parser did not recognise it. The sidecar was fetched,
-  read as empty, and the download went through unchecked. It now parses, and
-  the digest still has to name the file it belongs to.
+- **Provisioning the Deno runtime works again.** Deno publishes its checksum
+  as PowerShell `Get-FileHash` output rather than the `sha256sum` layout yt-dlp
+  and FFmpeg use, and the parser did not recognise it. The verification refused
+  the runtime rather than letting it through, which was the right call, but it
+  meant a JavaScript runtime could never be installed from Deno. The sidecar
+  parses now, and a digest still has to name the file it belongs to.
 - **`npm run check` passes every gate except the release tag.** Staging
   resolves the exact version and SHA-256 that each runtime helper's rolling
   download alias currently points at, records them in the licence policy, and

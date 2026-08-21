@@ -1417,8 +1417,8 @@ def _parse_sha256_sums(body, target_asset=None):
       a PowerShell Get-FileHash block: Algorithm / Hash / Path lines
 
     Deno publishes the last one. Without it the digest for
-    deno-x86_64-pc-windows-msvc.zip cannot be read at all, and the runtime
-    download falls through to the unverified path.
+    deno-x86_64-pc-windows-msvc.zip could not be read at all, so verification
+    refused the runtime and Deno could never be provisioned.
 
     Returns the hex digest for target_asset, or the single digest if the file
     contains exactly one entry with no filename and no asset selector was
@@ -1452,24 +1452,31 @@ def _parse_get_filehash_block(lines, target_asset=None):
 
     Deno's `<asset>.zip.sha256sum` is the console rendering of that cmdlet, so
     the digest and the filename arrive on separate lines and the path is a
-    Windows build-agent path. The name still has to match, for the same reason
-    a bare digest is refused when an asset was named.
+    Windows build-agent path. Pairs are built per block — a Path line closes
+    the Hash line above it — because a sidecar covering two assets would
+    otherwise let a last-wins scan hand one asset's digest to the other.
     """
-    digest = None
-    named = None
+    pairs = []
+    pending = None
     for line in lines:
         match = re.match(r'^Hash\s*:\s*([0-9A-Fa-f]{64})$', line)
         if match:
-            digest = match.group(1).lower()
+            pending = match.group(1).lower()
             continue
         match = re.match(r'^Path\s*:\s*(.+)$', line)
-        if match:
-            named = PureWindowsPath(match.group(1).strip()).name
-    if not digest:
+        if match and pending:
+            pairs.append((pending, PureWindowsPath(match.group(1).strip()).name))
+            pending = None
+    if not pairs:
         return None
-    if target_asset and named != target_asset:
-        return None
-    return digest
+    if not target_asset:
+        # No selector to enforce, so a single unambiguous block is the answer
+        # and anything else cannot be resolved.
+        return pairs[0][0] if len(pairs) == 1 else None
+    for digest, named in pairs:
+        if named == target_asset:
+            return digest
+    return None
 
 
 def fetch_expected_sha256(sidecar_url, target_asset=None, timeout=15):

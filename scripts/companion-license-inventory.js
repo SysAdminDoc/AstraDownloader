@@ -480,15 +480,25 @@ function inspectCompanionInventory(sbom, artifactSha256) {
             const resolvedDigest = /^[0-9a-f]{64}$/i.test(propertyValue(component, PROPERTY.downloadSha256));
             if (!resolvedDigest) {
                 issues.push(`${key}: exact download SHA-256 is unresolved`);
-                for (const [label, url] of [
-                    ['distribution', propertyValue(component, PROPERTY.distributionUrl)],
-                    ['checksum', propertyValue(component, PROPERTY.checksumUrl)],
-                    ['source', propertyValue(component, PROPERTY.sourceUrl)]
-                ]) {
-                    if (/\/(?:releases\/)?latest(?:\/|$)|\/download\/latest\//i.test(url)) {
-                        issues.push(`${key}: ${label} URL still uses a moving latest target`);
-                    }
+            }
+            for (const [label, url] of [
+                ['distribution', propertyValue(component, PROPERTY.distributionUrl)],
+                ['checksum', propertyValue(component, PROPERTY.checksumUrl)],
+                ['source', propertyValue(component, PROPERTY.sourceUrl)]
+            ]) {
+                if (!/\/(?:releases\/)?latest(?:\/|$)|\/download\/latest\//i.test(url)) {
+                    continue;
                 }
+                // The digest pins the bytes that were downloaded and the
+                // sidecar they were checked against. It says nothing about
+                // the corresponding-source link, and for a GPL helper that
+                // link is the obligation — a `latest` source URL resolves to
+                // whatever the newest release happens to be, which is not the
+                // source for the version recorded here.
+                if (resolvedDigest && label !== 'source') {
+                    continue;
+                }
+                issues.push(`${key}: ${label} URL still uses a moving latest target`);
             }
         }
     }

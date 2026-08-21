@@ -37,6 +37,10 @@ function assetName(url) {
  *   yt-dlp   SHA2-256SUMS      `<hex>  <name>`, many lines
  *   FFmpeg   checksums.sha256  `<hex>  <name>`, many lines
  *   Deno     <asset>.sha256sum PowerShell Get-FileHash block, `Hash : <HEX>`
+ * Blocks are paired, not scanned independently, and the application's
+ * _parse_get_filehash_block does the same — the evidence written into the
+ * policy claims the reviewed bytes and the shipped bytes are the same check,
+ * so the two parsers have to agree on identical input.
  * A bare single-line digest is accepted only from a sidecar whose own filename
  * names the asset, because nothing else ties those bytes to that download.
  */
@@ -49,14 +53,28 @@ function digestForAsset(body, target, sidecarUrl) {
         }
     }
     // PowerShell Get-FileHash output: Algorithm / Hash / Path, one per line.
-    const hashLine = lines.find((line) => /^Hash\s*:\s*[0-9a-f]{64}$/i.test(line));
-    const pathLine = lines.find((line) => /^Path\s*:/i.test(line));
-    if (hashLine && pathLine) {
-        const named = path.posix.basename(pathLine.split(':').slice(1).join(':').trim().replace(/\\/g, '/'));
-        if (named === target) {
-            return /([0-9a-f]{64})/i.exec(hashLine)[1].toLowerCase();
+    // Paired per block, matching _parse_get_filehash_block in the application,
+    // so a sidecar covering two assets cannot hand one asset's digest to the
+    // other. The two parsers have to agree — the evidence this script records
+    // claims the reviewed bytes and the shipped bytes are the same check.
+    const pairs = [];
+    let pending = null;
+    for (const line of lines) {
+        const hash = /^Hash\s*:\s*([0-9a-f]{64})$/i.exec(line);
+        if (hash) {
+            pending = hash[1].toLowerCase();
+            continue;
+        }
+        const named = /^Path\s*:\s*(.+)$/i.exec(line);
+        if (named && pending) {
+            pairs.push([pending, path.posix.basename(named[1].trim().replace(/\\/g, '/'))]);
+            pending = null;
         }
     }
+    for (const [digest, named] of pairs) {
+        if (named === target) return digest;
+    }
+    if (pairs.length) return null;
     if (lines.length === 1 && /^[0-9a-f]{64}$/i.test(lines[0]) && sidecarUrl) {
         let sidecarName = assetName(sidecarUrl);
         for (const suffix of ['.sha256sum', '.sha256', '.sha256.txt']) {
@@ -149,15 +167,38 @@ async function resolveRuntimeHelpers(policyPath = POLICY_PATH) {
     const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
     const helpers = policy.runtimeHelpers || [];
     const resolvedKeys = [];
+    const skipped = [];
     for (const helper of helpers) {
         if (helper.pinnedInSource) continue;
+        // Resolving a digest is not a licence review. `licenseReviewed` is the
+        // human mark, set by hand once someone has read the helper's terms;
+        // without it this script leaves the entry alone and the inventory gate
+        // keeps refusing the release. Otherwise adding a runtime helper to the
+        // policy would approve it by simply running staging.
+        if (helper.licenseReviewed !== true) {
+            skipped.push(helper.key);
+            continue;
+        }
         const resolved = await resolveHelper(helper);
         helper.version = resolved.version;
         helper.sha256 = resolved.sha256;
         helper.decision = 'approved';
         helper.approvalEvidence = approvalEvidence(helper, resolved);
+        // The corresponding-source link has to name the version this entry
+        // records; the digest does not cover it and the inspection says so.
+        if (resolved.tag && resolved.tag !== 'latest' && helper.sourceUrl) {
+            helper.sourceUrl = helper.sourceUrl
+                .replace('/releases/latest/download/', `/releases/download/${resolved.tag}/`)
+                .replace('/releases/download/latest/', `/releases/download/${resolved.tag}/`);
+        }
         delete helper.resolution;
         resolvedKeys.push(`${helper.key}=${resolved.version}`);
+    }
+    if (skipped.length) {
+        throw new Error(
+            `runtime helper(s) awaiting a human licence review: ${skipped.join(', ')}. `
+            + 'Read the terms, then set "licenseReviewed": true on the policy entry.'
+        );
     }
     fs.writeFileSync(policyPath, JSON.stringify(policy, null, 2) + '\n', 'utf8');
     return resolvedKeys;

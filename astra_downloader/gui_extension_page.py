@@ -43,7 +43,7 @@ class ExtensionPageMixin:
         self.server_badge.setAccessibleName(
             tr("Extension server status indicator: Offline")
         )
-        self.dash_status = make_label("Server offline", "heroTitle")
+        self.dash_status = make_label("Server offline", "heroTitle", status=True)
         state_row.addWidget(self.server_badge)
         state_row.addWidget(self.dash_status)
         state_row.addStretch()
@@ -128,7 +128,7 @@ class ExtensionPageMixin:
         self.btn_register_chrome_host.clicked.connect(self._apply_native_chrome_ids)
         chrome_row.addWidget(self.btn_register_chrome_host)
         layout.addLayout(chrome_row)
-        self.native_pairing_status = make_label("", "fieldHint", word_wrap=True)
+        self.native_pairing_status = make_label("", "fieldHint", word_wrap=True, status=True)
         self.native_pairing_status.setAccessibleName(tr("Chrome pairing status"))
         self.native_pairing_status.hide()
         layout.addWidget(self.native_pairing_status)
