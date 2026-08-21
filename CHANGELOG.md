@@ -12,6 +12,14 @@ repository's git log.
 
 ## [Unreleased]
 
+### Added
+
+- **Status messages now reach screen readers.** Changing a label's text tells
+  assistive technology nothing on its own, so a screen-reader user who pressed
+  Download and got rejected heard silence. Every status setter now posts a Qt
+  accessibility Alert, which is WCAG 2.2 SC 4.1.3. Clearing a status stays
+  quiet.
+
 ### Changed
 
 - **The Qt binding is now PySide6 instead of PyQt6.** Astra Downloader's own
