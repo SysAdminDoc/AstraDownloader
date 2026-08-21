@@ -573,11 +573,11 @@ def build_youtube_extractor_args(url, po_token_provider=None,
     # The default web/mweb clients need GVS proof-of-origin tokens and
     # otherwise return SABR-only formats or HTTP 403. Use only the client
     # chain this plugin-free build has verified as token-exempt: bare `web` is
-    # SABR-only without a GVS token, while android_vr is erratic and rides
-    # last. yt-dlp merges this with formats=duplicate for a deterministic path.
+    # SABR-only without a GVS token. yt-dlp 2026.08.19 dropped android_vr
+    # (client 1.65.10 403s every format), so it is not in this chain.
     args += [
         '--extractor-args',
-        'youtube:player_client=visionos,tv,web_embedded,android_vr',
+        'youtube:player_client=visionos,tv,web_embedded',
     ]
     return args
 
