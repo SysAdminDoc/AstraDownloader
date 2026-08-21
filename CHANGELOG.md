@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A version mismatch with the browser extension says so.** The downloader has
+  refused too-old extensions with a named 426 since 2.7.0, but the extension
+  reported it as a lost connection and offered to repair a downloader that was
+  running fine. Astra Deck now names both directions: an extension older than
+  the downloader accepts, and a downloader newer than the extension
+  understands.
+
 ### Changed
 
 - **The download you just started is visible without scrolling.** At the

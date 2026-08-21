@@ -19,14 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-23 — Make `SERVICE_API_VERSION` a real handshake
-  Why: two independently versioned products share a gate-checked port catalogue with no client-side compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
-  Evidence: `astra_downloader/astra_downloader.py:450-460`, `routes.py:449-506`; grep of `C:\repos\Astra-Deck` for `X-MDL-Api` returns no extension hits (2026-08-21).
-  Touches: the Astra Deck repository (downloader side already shipped)
-  Acceptance: Astra Deck sends `X-MDL-Api` on every companion request and shows a named "companion too old / too new" state on 426; a minimum-supported version is declared on both sides and gate-checked like the port catalogue.
-  Note (2026-08-21): the downloader handshake shipped in 2.7.0 — `/health` advertises `api`, clients sending `X-MDL-Api` below the floor get a named 426, missing header is still served (CHANGELOG 2.7.0; tests at `test_astra_downloader.py:20640-20679`). Astra Deck now sends `X-MDL-Api` on companion health, pair, and download requests. Remaining work is the named 426 UI in the extension.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 — AD-25 — Turn subscriptions into an archive manager
