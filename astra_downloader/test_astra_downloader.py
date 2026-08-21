@@ -129,6 +129,20 @@ class ExecutionFloorPolicyTests(unittest.TestCase):
         self.assertEqual(session.exitstatus, pytest.ExitCode.TESTS_FAILED)
         self.assertIn("yt-dlp integration (1)", "\n".join(reporter.output))
 
+        config.args = ("astra_downloader",)
+        config.option.ignore = []
+        config.option.ignore_glob = []
+        config.option.deselect = []
+        self.assertTrue(
+            suite_policy._is_full_suite_run(config),
+            "an explicit configured test root is still a full-suite run",
+        )
+        config.option.ignore = ["astra_downloader/test_build.py"]
+        self.assertFalse(
+            suite_policy._is_full_suite_run(config),
+            "an ignored test path must disable the full-suite floor",
+        )
+
 _RETAINED_TEST_WINDOWS = []
 
 
@@ -17800,13 +17814,24 @@ class SiteLoginApiTests(unittest.TestCase):
             created = client.post(
                 "/site-logins",
                 json={
-                    "site": "vimeo.com",
+                    "site": "youtube.com",
                     "username": username,
                     "password": password,
                 },
                 headers={"X-Auth-Token": token},
             )
             self.assertEqual(created.status_code, 200)
+            created_payload = created.get_json()
+            self.assertEqual(created_payload["warningCode"], "youtube-account-risk")
+            self.assertTrue(created_payload["warningStatePersisted"])
+            self.assertIn("temporary or permanent bans", created_payload["warning"])
+            self.assertIn("signed-in sessions", created_payload["warning"])
+            self.assertIn("public videos unplayable", created_payload["warning"])
+            self.assertIn("yt-dlp/wiki/Extractors", created_payload["warningUrl"])
+            self.assertTrue(
+                manager.config.get("YouTubeSignInRiskNoticeShown"),
+                "the API must persist the same one-time warning state as the GUI",
+            )
             created_text = created.get_data(as_text=True)
             self.assertNotIn(username, created_text)
             self.assertNotIn(password, created_text)
@@ -17815,6 +17840,99 @@ class SiteLoginApiTests(unittest.TestCase):
             self.assertNotIn(username, listing_text)
             self.assertNotIn(password, listing_text)
             self.assertTrue(listing.get_json()["sites"][0]["credentialed"])
+
+            repeated = client.post(
+                "/site-logins",
+                json={
+                    "site": "youtube.com",
+                    "username": username,
+                    "password": password,
+                },
+                headers={"X-Auth-Token": token},
+            )
+            self.assertEqual(repeated.status_code, 200)
+            self.assertNotIn("warningCode", repeated.get_json())
+
+        class FailingNoticeConfig(FakeConfig):
+            def update(self, mapping):
+                if mapping == {"YouTubeSignInRiskNoticeShown": True}:
+                    return False
+                return super().update(mapping)
+
+        failing_config = FailingNoticeConfig({"ServerToken": token})
+        failing_manager = ad.DownloadManager(failing_config, FakeHistory())
+        failing_api = ad.create_api(failing_config, failing_manager, FakeHistory())
+        failing_client = failing_api.test_client()
+        with tempfile.TemporaryDirectory() as tmp:
+            failing_manager.site_logins = ad.SiteLoginStore(tmp)
+            warning_responses = [
+                failing_client.post(
+                    "/site-logins",
+                    json={
+                        "site": "youtube.com",
+                        "username": username,
+                        "password": password,
+                    },
+                    headers={"X-Auth-Token": token},
+                ).get_json()
+                for _attempt in range(2)
+            ]
+        self.assertFalse(warning_responses[0]["warningStatePersisted"])
+        self.assertNotIn(
+            "warningCode", warning_responses[1],
+            "a failed disk write must not repeat the warning in one API process",
+        )
+
+        update_barrier = threading.Barrier(2)
+
+        class RacingNoticeConfig(FakeConfig):
+            def update(self, mapping):
+                if mapping == {"YouTubeSignInRiskNoticeShown": True}:
+                    try:
+                        update_barrier.wait(timeout=0.5)
+                    except threading.BrokenBarrierError:
+                        # reason: the lock intentionally makes the second party time out
+                        pass
+                return super().update(mapping)
+
+        class RacingStore:
+            @staticmethod
+            def save_credentials(site, _username, _password, source="credentials"):
+                del site, source
+                return {
+                    "site": "youtube.com", "cookies": 0,
+                    "skipped": 0, "credentialed": True,
+                }, None
+
+        racing_config = RacingNoticeConfig({"ServerToken": token})
+        racing_manager = ad.DownloadManager(racing_config, FakeHistory())
+        racing_manager.site_logins = RacingStore()
+        racing_api = ad.create_api(racing_config, racing_manager, FakeHistory())
+        concurrent_payloads = []
+
+        def post_concurrently():
+            response = racing_api.test_client().post(
+                "/site-logins",
+                json={
+                    "site": "youtube.com",
+                    "username": username,
+                    "password": password,
+                },
+                headers={"X-Auth-Token": token},
+            )
+            concurrent_payloads.append(response.get_json())
+
+        workers = [threading.Thread(target=post_concurrently) for _index in range(2)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=5)
+        self.assertTrue(all(not worker.is_alive() for worker in workers))
+        self.assertEqual(
+            sum("warningCode" in payload for payload in concurrent_payloads),
+            1,
+            "threaded API requests must claim the one-time warning atomically",
+        )
 
     def test_private_network_sites_are_refused(self):
         token = "z" * 32
@@ -18004,13 +18122,94 @@ window.close()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_gui_buckets_cover_every_terminal_state(self):
-        # The skipped-state render above exercises the bucket that was once
-        # absent. Keep every shared terminal state tied to visible status copy.
-        for status in ad.DOWNLOAD_TERMINAL_STATES:
-            with self.subTest(status=status):
-                label = ad.human_status(status)
-                self.assertTrue(label)
-                self.assertNotEqual(label, "Unknown")
+        script = r'''
+import os
+import tempfile
+
+temp_dir = tempfile.mkdtemp(prefix="astra-terminal-buckets-")
+os.environ["LOCALAPPDATA"] = temp_dir
+os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
+
+from astra_downloader import astra_downloader as app
+from PySide6.QtWidgets import QApplication, QLabel
+
+app_instance = QApplication(["terminal-buckets"])
+app.MainWindow._start_instance_command_listener = lambda self: None
+app.MainWindow._stop_instance_command_listener = lambda self: None
+app.MainWindow._start_readiness_probe = lambda self: None
+app.MainWindow._refresh_tools_status = lambda self: None
+
+config = app.Config()
+config.update({
+    "CloseToTray": False,
+    "StartMinimized": False,
+    "NotifyOnComplete": False,
+    "DownloadPath": temp_dir,
+    "AudioDownloadPath": temp_dir,
+})
+manager = app.DownloadManager(config, app.History())
+window = app.MainWindow(config, manager, app.History())
+window._animate_page = lambda: None
+window.update_timer.stop()
+window.cleanup_timer.stop()
+window.tools_status_timer.stop()
+window.show()
+
+for index, status in enumerate(sorted(app.DOWNLOAD_TERMINAL_STATES)):
+    download = app.Download(
+        f"dl_{status}",
+        f"https://example.com/{status}",
+        output_dir=temp_dir,
+    )
+    download.status = status
+    download.title = f"Terminal bucket {status}"
+    download.error = f"Fixture detail for {status}"
+    download.start_time += index
+    download.mark_terminal()
+    manager.downloads[download.id] = download
+
+window._nav_click("Download")
+window._downloads_signature = None
+window._update_ui()
+app_instance.processEvents()
+
+for status in app.DOWNLOAD_TERMINAL_STATES:
+    key = ("download", f"dl_{status}")
+    assert key in window._download_widgets, f"{status} did not enter Recent activity"
+    card = window._download_widgets[key]
+    card_copy = " | ".join(
+        label.text() for label in card.findChildren(QLabel) if label.text()
+    )
+    assert f"Terminal bucket {status}" in card_copy, f"{status} card is not visible"
+    assert card.isVisible(), f"{status} card is hidden"
+
+recent_heading = window._download_widgets.get(("section", "recent"))
+assert recent_heading is not None, "Recent activity heading was not rendered"
+assert recent_heading.text() == "Recent activity"
+layout = window.downloads_list_layout
+recent_index = layout.indexOf(recent_heading)
+spacer_index = layout.indexOf(window._download_widgets[("spacer",)])
+assert recent_index >= 0 and spacer_index > recent_index
+for status in app.DOWNLOAD_TERMINAL_STATES:
+    card = window._download_widgets[("download", f"dl_{status}")]
+    card_index = layout.indexOf(card)
+    assert recent_index < card_index < spacer_index, (
+        f"{status} card is not placed under Recent activity"
+    )
+
+window.close()
+'''
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(ad.__file__).resolve().parent.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_skipped_download_can_be_retried(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -18848,7 +19047,7 @@ class SettingsNavigationTests(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
-        window = self._window(FakeConfig())
+        window = self._window(FakeConfig({"MaxConcurrentDownloads": 3}))
         window.cfg_sleep_interval.setValue(5)
         window.cfg_sleep_max.setValue(10)
         window.cfg_pacing_jitter.setValue(0)
@@ -18857,11 +19056,19 @@ class SettingsNavigationTests(unittest.TestCase):
 
         guidance = window.pacing_guidance.text()
         self.assertIn("5 to 10 seconds", guidance)
-        self.assertIn("480 per hour", guidance)
+        self.assertIn("480 per hour each", guidance)
+        self.assertIn("1,440 total with concurrency set to 3", guidance)
         self.assertIn("2 seconds between requests", guidance)
         self.assertIn("300 videos/hour signed out", guidance)
         self.assertIn("2,000/hour signed in", guidance)
         self.assertTrue(window.pacing_guidance.openExternalLinks())
+
+        window.cfg_maxconcurrent.setValue(1)
+        QApplication.processEvents()
+        self.assertIn(
+            "480 total with concurrency set to 1",
+            window.pacing_guidance.text(),
+        )
 
     def test_filter_narrows_rows_without_losing_their_group(self):
         from PySide6.QtWidgets import QApplication

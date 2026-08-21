@@ -2591,8 +2591,8 @@
       <translation>Undo defaults</translation>
     </message>
     <message>
-      <source>Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling</source>
-      <translation>Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling</translation>
+      <source>Current pacing has no pause between downloads with concurrency set to {concurrent}, so this setting does not impose an hourly ceiling</source>
+      <translation>Current pacing has no pause between downloads with concurrency set to {concurrent}, so this setting does not impose an hourly ceiling</translation>
     </message>
     <message>
       <source>, plus {seconds} seconds between requests</source>
@@ -3219,12 +3219,12 @@
       <translation>Restore the settings from before Restore defaults was used.</translation>
     </message>
     <message>
-      <source>Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone</source>
-      <translation>Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone</translation>
+      <source>Current pacing: {minimum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}</source>
+      <translation>Current pacing: {minimum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}</translation>
     </message>
     <message>
-      <source>Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone</source>
-      <translation>Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone</translation>
+      <source>Current pacing: {minimum} to {maximum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}</source>
+      <translation>Current pacing: {minimum} to {maximum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}</translation>
     </message>
     <message>
       <source>Creator, else auto-generated</source>

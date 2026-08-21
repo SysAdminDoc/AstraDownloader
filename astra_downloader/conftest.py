@@ -25,6 +25,7 @@ runtime is available" passed only because this box had none.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -36,6 +37,8 @@ MIN_FULL_SUITE_EXECUTED_TESTS = 1038
 
 _executed_nodeids = set()
 _skipped_nodeids = {}
+_TEST_ROOT = Path(__file__).resolve().parent
+_FULL_SUITE_TARGETS = frozenset({_TEST_ROOT, _TEST_ROOT.parent})
 
 
 def _is_full_suite_run(config):
@@ -49,15 +52,27 @@ def _is_full_suite_run(config):
         getattr(option, "failedfirst", False),
         getattr(option, "newfirst", False),
         getattr(option, "stepwise", False),
+        getattr(option, "ignore", None),
+        getattr(option, "ignore_glob", None),
+        getattr(option, "deselect", None),
     )):
         return False
 
-    invocation_dir = config.invocation_params.dir
-    for argument in config.invocation_params.args:
+    invocation_dir = Path(config.invocation_params.dir).resolve()
+    collection_targets = getattr(config, "args", None)
+    if collection_targets is None:
+        collection_targets = (
+            argument for argument in config.invocation_params.args
+            if not str(argument).startswith("-")
+        )
+    for argument in collection_targets:
         text = str(argument)
         if "::" in text:
             return False
-        if not text.startswith("-") and (invocation_dir / text).exists():
+        target = Path(text)
+        if not target.is_absolute():
+            target = invocation_dir / target
+        if target.resolve() not in _FULL_SUITE_TARGETS:
             return False
     return True
 

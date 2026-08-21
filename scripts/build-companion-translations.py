@@ -566,12 +566,12 @@ CATALOGS = {
             "Pause zwischen Anfragen",
         "Seconds between the data requests inside one download.":
             "Sekunden zwischen den Datenanfragen innerhalb eines Downloads.",
-        "Current pacing has no pause between downloads, so this setting does not impose an hourly ceiling":
-            "Die aktuelle Taktung enthält keine Pause zwischen Downloads. Diese Einstellung setzt daher keine stündliche Obergrenze.",
-        "Current pacing: {minimum} seconds between downloads, about {per_hour} per hour from this pause alone":
-            "Aktuelle Taktung: {minimum} Sekunden zwischen Downloads, allein durch diese Pause etwa {per_hour} pro Stunde",
-        "Current pacing: {minimum} to {maximum} seconds between downloads, about {per_hour} per hour from this pause alone":
-            "Aktuelle Taktung: {minimum} bis {maximum} Sekunden zwischen Downloads, allein durch diese Pause etwa {per_hour} pro Stunde",
+        "Current pacing has no pause between downloads with concurrency set to {concurrent}, so this setting does not impose an hourly ceiling":
+            "Die aktuelle Taktung enthält bei einer Parallelität von {concurrent} keine Pause zwischen Downloads. Diese Einstellung setzt daher keine stündliche Obergrenze.",
+        "Current pacing: {minimum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}":
+            "Aktuelle Taktung: {minimum} Sekunden zwischen Downloads pro Worker, etwa {per_worker} pro Stunde je Worker und insgesamt {aggregate} bei einer Parallelität von {concurrent}",
+        "Current pacing: {minimum} to {maximum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}":
+            "Aktuelle Taktung: {minimum} bis {maximum} Sekunden zwischen Downloads pro Worker, etwa {per_worker} pro Stunde je Worker und insgesamt {aggregate} bei einer Parallelität von {concurrent}",
         ", plus {seconds} seconds between requests":
             ", plus {seconds} Sekunden zwischen Anfragen",
         ". yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors\">Source</a>.":
