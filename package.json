@@ -24,6 +24,7 @@
     "generate:companion-ports": "node scripts/generate-companion-port-modules.js",
     "smoke:gui": "py -3.13 scripts/render-companion-gui.py",
     "smoke:yt-dlp": "py -3.13 scripts/yt-dlp-smoke.py",
+    "smoke:yt-dlp:managed": "py -3.13 scripts/yt-dlp-smoke.py --managed",
     "translations": "py -3.13 scripts/build-companion-translations.py",
     "release:provenance": "node scripts/write-release-provenance.js",
     "release:stage": "node scripts/stage-companion-release.js"

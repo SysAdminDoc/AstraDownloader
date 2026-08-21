@@ -52,21 +52,6 @@ a code change.
 release, update the manifest checksum if the release bytes differ, then submit
 the manifest directory to the official winget-pkgs repository.
 
-## Publish the shipped versions — needs the PyQt distribution decision
-
-**State:** source version `2.6.0` and build artifacts are internally
-consistent, but GitHub has only the older `v2.0.0` release. The release gate
-and the requested intermediate tags can be prepared locally.
-
-**What is blocked:** the companion bundles PyQt6 under a GPL route that the
-policy explicitly marks unresolved. Publishing the executable or presenting a
-new release as shipped requires the maintainer to choose a GPL-compatible
-distribution/source route or provide Riverbank commercial entitlement.
-
-**To unblock:** record that legal/distribution decision in
-`astra_downloader/license-policy.json`, then publish the versioned artifacts
-and enable the release/tag gate.
-
 ## Make `npm run check` pass — needs license-policy decisions
 
 **State:** `npm run check` now runs every gate and prints a per-gate summary
@@ -76,15 +61,17 @@ rather than hidden behind the red one. The inspection is down from 32 issues to
 reviewed policy entries whose SPDX expression was read out of each wheel's
 embedded licence text rather than guessed from a trove classifier.
 
-**What is blocked, precisely — two independent decisions:**
+**What is blocked, precisely — one decision:**
 
-1. **The PyQt distribution route.** `pyqt6` (GPL-3.0-only) and `pyqt6-qt6`
-   (LGPL-3.0-only) are `decision: unresolved`. The companion is MIT and ships
-   both inside a one-file executable, so the maintainer must choose between a
-   GPL-compatible combined-distribution route with a corresponding-source offer
-   and a Riverbank commercial entitlement, and must record the exact Qt wheel
-   source/notice bundle. That is a legal choice, not an engineering one.
-2. **Whether the runtime helpers may keep moving `latest` pointers.** `yt-dlp`,
+The Qt binding question is settled and no longer blocked. The application
+moved from PyQt6 to PySide6-Essentials, which the Qt Company tri-licenses
+LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only. Taking the LGPL arm is what
+lets an MIT application ship Qt inside a combined binary, and
+`AstraDownloader-onedir.zip` is the artifact that keeps the Qt libraries
+replaceable. Both entries are `decision: approved` in
+`astra_downloader/license-policy.json`.
+
+1. **Whether the runtime helpers may keep moving `latest` pointers.** `yt-dlp`,
    `ffmpeg` and `deno` account for the other 16 issues. The inspection refuses a
    distribution URL containing `/latest/` because such a URL cannot resolve to
    the reviewed bytes forever — a correct rule. But the app deliberately fetches
@@ -104,9 +91,7 @@ embedded licence text rather than guessed from a trove classifier.
      have limited retention, so a pruned pin breaks first-run setup for every
      user.
 
-**To unblock:** record the PyQt decision in
-`astra_downloader/license-policy.json`, and decide the helper question one of
-two ways — either pin all three helpers to immutable assets and accept a
+**To unblock:** decide the helper question one of two ways — either pin all three helpers to immutable assets and accept a
 refresh cadence that outruns FFmpeg-Builds retention, or state in the policy
 that a publisher-verified rolling alias is an accepted delivery form and narrow
 the inspection rule to say so. Do not simply delete the rule to make the gate

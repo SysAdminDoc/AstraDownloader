@@ -19,15 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-08 — Migrate PyQt6 → PySide6 6.11.2
-  Why: PyQt6 is GPL-3.0-only, `LICENSE` is MIT, and the shipped one-file exe is a combined work — the two `decision: unresolved` component entries blocking `npm run check` are that contradiction. PySide6 is LGPL, which lets the app's own code stay MIT. This converts the blocker described in `Roadmap_Blocked.md` from a legal decision into a mechanical refactor.
-  Evidence: measured surface — 90 `from PyQt6` imports over 21 files, 17 `pyqtSignal`, 4 submodules, and **0** each of `pyqtSlot`, `pyqtProperty`, `sip`, `QVariant`, `loadUi`, `QtWebEngine`, `QtMultimedia`, `QtSvg`, `QtNetwork`. YTSage (4,516★) and dsymbol/yt-dlp-gui both run this stack on PySide6.
-  Touches: all `astra_downloader/gui*.py`, `astra_downloader.py`, `build.py`, `requirements.txt`, `constraints-release.txt`, `license-policy.json`, `pytest.ini` (`qt_api`), `scripts/render-companion-gui.py`
-  Acceptance: the current pytest collection and all render captures pass on PySide6; `license-policy.json` has no unresolved *component* entry; the onedir zip is documented as the LGPL relinking artifact; the exe size delta is recorded.
-  Note (2026-08-21): retarget **6.11.2** (PyPI 2026-08-18), not 6.11.1. Qt 6.11.2 is the first wheel that contains CVE-2026-8168 (SVG nested-tree overflow). PyQt6-Qt6 has no 6.11.2 wheel; Astra currently imports QtSvg zero times so exposure is low, but AD-08 is the moment the binding and the Qt wheel move together. Qt 6.12 LTS is due 2026-09-22 — do not wait.
-  Note: this supersedes the "needs the PyQt distribution decision" framing in `Roadmap_Blocked.md` — the decision is still the maintainer's, but one of the two options is now a costed engineering task rather than a legal review. Update or retire that blocked entry when this lands.
-  Complexity: L
-
 - [ ] P1 — AD-09 — Resolve the three runtime-helper licence entries as part of staging
   Why: `yt-dlp`, `ffmpeg` and `deno` account for the remaining 16 of 18 licence-inventory issues, and every one is "moving `latest` target, exact version and digest unresolved" — which a real release run can resolve mechanically. Cross-reference `Roadmap_Blocked.md`, which correctly notes FFmpeg-Builds is the asymmetric case (its dated release ships a differently-named archive with a different digest).
   Evidence: `npm run check` output, 18 issues; `astra_downloader/license-policy.json`; `Roadmap_Blocked.md` §"Make `npm run check` pass".
@@ -172,7 +163,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Evidence: `README.md:197`; static `def test_` grep across `test_astra_downloader.py` / `test_feature_upgrades.py` / `test_build.py`; `npm run check` summary; German catalogue contains `Duration → Dauer`; GHSA-6v4j-43gg-vj32 / GHSA-c6mh-fpjc-4pr3 / GHSA-f7j3-774f-rfhj.
   Touches: README.md, SECURITY.md, Roadmap_Blocked.md, CLAUDE.md
   Acceptance: every count and gate list in the docs matches a command that can be run; the stale translation claim is corrected in place with its date.
-  Note (2026-08-21): README line 197 still says `914 tests`. Re-count with `py -3.12 -m pytest --collect-only -q` at the moment this is picked up — do not copy 964 or 988 as a new literal.
+  Note (2026-08-21): README line 197 still says `914 tests`. Re-count with `py -3.13 -m pytest --collect-only -q` at the moment this is picked up — do not copy 964 or 988 as a new literal.
   Complexity: S
 
 - [ ] P2 — AD-40 — Detect archived items the source has since deleted

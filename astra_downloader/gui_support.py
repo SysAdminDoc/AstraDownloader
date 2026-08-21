@@ -5,9 +5,9 @@ their state from ``MainWindowCore`` and use these small, dependency-neutral
 builders for the common visual language.
 """
 
-from PyQt6.QtCore import QCoreApplication, QSize, Qt
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QCoreApplication, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (
     QApplication, QFrame, QLabel, QPushButton, QSizePolicy, QVBoxLayout,
     QWidget,
 )
@@ -107,7 +107,7 @@ def set_status_tone(label, state, *, announce=True):
     "danger" tone so every status label shares the one settingsStatus
     convention instead of setting a `state` property no stylesheet rule ever
     matched. ``announce`` marks the call sites that should raise a
-    screen-reader Alert (WCAG 2.2 SC 4.1.3); PyQt6 does not bind QAccessible,
+    screen-reader Alert (WCAG 2.2 SC 4.1.3); PySide6 binds QAccessible,
     so the event itself can only be wired once the GUI runs on a binding that
     does.
     """

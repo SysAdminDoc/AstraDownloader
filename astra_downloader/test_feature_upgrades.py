@@ -6,7 +6,7 @@ from unittest import mock
 from pathlib import Path
 import tempfile
 
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 import astra_downloader as ad
 

@@ -34,34 +34,30 @@
         "Retain the PyInstaller license and bootloader exception notice."
       ]
     },
-    "pyqt6": {
-      "licenseExpression": "GPL-3.0-only",
-      "decision": "unresolved",
-      "sourceUrl": "https://pypi.org/project/PyQt6/",
-      "noticeUrl": "https://www.riverbankcomputing.com/software/pyqt/",
-      "obligations": [
-        "Record either a GPL-compatible companion distribution route with corresponding source or a valid Riverbank commercial entitlement before release."
-      ],
-      "resolution": "Maintainer legal/licensing decision required; the MIT repository license alone does not select a PyQt distribution route."
-    },
-    "pyqt6-qt6": {
+    "pyside6-essentials": {
+      "name": "PySide6-Essentials",
       "licenseExpression": "LGPL-3.0-only",
-      "decision": "unresolved",
-      "sourceUrl": "https://code.qt.io/cgit/qt/qt5.git/",
+      "decision": "approved",
+      "approvalEvidence": "Read from the wheel metadata rather than a trove classifier: pyside6_essentials-6.11.2.dist-info/METADATA declares \"License: LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only\", and the only licence file the wheel embeds is licenses/LicenseRef-Qt-Commercial.txt, which applies to commercial licensees only. This project takes the LGPL-3.0-only arm, which is what allows an MIT application to distribute a combined binary. That closes the PyQt6 question: Riverbank offered only GPL-3.0-only or a paid entitlement, neither of which the MIT licence selects.",
+      "sourceUrl": "https://code.qt.io/cgit/pyside/pyside-setup.git/",
       "noticeUrl": "https://www.qt.io/licensing/open-source-lgpl-obligations",
       "obligations": [
-        "Ship the LGPL license and Qt notices, preserve replacement/relinking rights, and provide the corresponding Qt source route for the exact wheel build."
-      ],
-      "resolution": "Exact Qt wheel source and redistributable notice/source bundle must be recorded."
+        "Ship the LGPL-3.0 license text and the Qt notices with every artifact.",
+        "Keep AstraDownloader-onedir.zip published alongside the one-file executable: it is the artifact that leaves the Qt libraries replaceable, which is how the relinking right is honoured.",
+        "Record the exact wheel version so the corresponding Qt source for that build can be pointed at."
+      ]
     },
-    "pyqt6-sip": {
-      "licenseExpression": "BSD-2-Clause",
+    "shiboken6": {
+      "name": "shiboken6",
+      "licenseExpression": "LGPL-3.0-only",
       "decision": "approved",
-      "approvalEvidence": "BSD-2-Clause notice location is recorded and retained in the embedded wheel inventory.",
-      "sourceUrl": "https://github.com/Python-SIP/sip",
-      "noticeUrl": "https://github.com/Python-SIP/sip/blob/main/LICENSE",
+      "approvalEvidence": "shiboken6-6.11.2.dist-info/METADATA carries the same tri-licence declaration as PySide6-Essentials and the same commercial-only embedded licence file. It is the binding runtime PySide6 imports, so it takes the same LGPL-3.0-only arm.",
+      "sourceUrl": "https://code.qt.io/cgit/pyside/pyside-setup.git/",
+      "noticeUrl": "https://www.qt.io/licensing/open-source-lgpl-obligations",
       "obligations": [
-        "Retain the BSD copyright notice and disclaimer."
+        "Ship the LGPL-3.0 license text and the Qt notices with every artifact.",
+        "Keep AstraDownloader-onedir.zip published alongside the one-file executable: it is the artifact that leaves the Qt libraries replaceable, which is how the relinking right is honoured.",
+        "Record the exact wheel version so the corresponding Qt source for that build can be pointed at."
       ]
     },
     "blinker": {

@@ -31,10 +31,23 @@ class ReleaseConstraintsTests(unittest.TestCase):
 
     def test_reviewed_constraints_are_exact_and_cover_release_roots(self):
         constraints = build.parse_release_constraints()
-        self.assertGreaterEqual(len(constraints), 28)
-        for required in ('pyinstaller', 'pyqt6', 'flask', 'requests', 'waitress', 'yt-dlp'):
+        for required in ('pyinstaller', 'pyside6-essentials', 'flask', 'requests', 'waitress', 'yt-dlp'):
             self.assertIn(required, constraints)
             self.assertTrue(constraints[required]['version'])
+
+        # A count floor goes stale the moment the graph legitimately shrinks —
+        # dropping PyQt6's three distributions for PySide6's two did exactly
+        # that. What has to hold is that every direct requirement is pinned and
+        # that transitives were captured alongside them.
+        direct = set()
+        for raw in build.REQUIREMENTS.read_text(encoding='utf-8').splitlines():
+            line = raw.split('#', 1)[0].strip()
+            if line:
+                direct.add(build.canonicalize_name(build.Requirement(line).name))
+        self.assertTrue(direct, 'requirements.txt declared no direct dependency')
+        self.assertLessEqual(direct, set(constraints))
+        self.assertGreater(len(constraints), len(direct),
+                           'the reviewed graph must pin transitives, not only the direct set')
 
     def test_constraint_parser_rejects_ranges_and_duplicates(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -214,24 +227,24 @@ class ReleaseConstraintsTests(unittest.TestCase):
             exe = root / 'AstraDownloader.exe'
             exe.write_bytes(b'MZ' + b'app')
             analysis = root / 'onefile-analysis.toc'
-            packaged_pyqt = root / 'site-packages' / 'PyQt6' / '__init__.py'
+            packaged_pyqt = root / 'site-packages' / 'PySide6' / '__init__.py'
             packaged_pyqt.parent.mkdir(parents=True)
             packaged_pyqt.write_text('fixture', encoding='utf-8')
             analysis.write_text(repr([str(packaged_pyqt)]), encoding='utf-8')
             constraints = root / 'constraints-release.txt'
-            constraints.write_text('pyqt6==6.11.0\n', encoding='utf-8')
+            constraints.write_text('pyside6-essentials==6.11.2\n', encoding='utf-8')
             script = root / 'astra_downloader.py'
             script.write_text('APP_VERSION = "2.6.0"\n', encoding='utf-8')
             metadata_path = root / 'companion-build-metadata.json'
-            pyqt = Distribution('PyQt6', [packaged_pyqt])
+            pyqt = Distribution('PySide6-Essentials', [packaged_pyqt])
             pyqt.version = '6.11.0'
             pyinstaller = Distribution('PyInstaller')
 
             environment = {
-                'distributions': {'pyinstaller': pyinstaller, 'pyqt6': pyqt},
+                'distributions': {'pyinstaller': pyinstaller, 'pyside6-essentials': pyqt},
                 'buildNames': {'pyinstaller'},
-                'graph': {'pyinstaller': [], 'pyqt6': []},
-                'directNames': ['pyinstaller', 'pyqt6'],
+                'graph': {'pyinstaller': [], 'pyside6-essentials': []},
+                'directNames': ['pyinstaller', 'pyside6-essentials'],
             }
             with mock.patch.object(build, 'BUILD_METADATA', metadata_path), \
                     mock.patch.object(build, 'OUT_ONEDIR_ZIP', root / 'AstraDownloader-onedir.zip'), \

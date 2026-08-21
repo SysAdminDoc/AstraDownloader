@@ -79,12 +79,18 @@ function writeCompanionInventoryFixture(root, buildDir) {
         path.join(__dirname, '..', 'astra_downloader', 'constraints-release.txt'),
         path.join(root, 'astra_downloader', 'constraints-release.txt')
     );
+    // The gate reads the reviewed interpreter set out of build.py, so the
+    // fixture root has to carry the real file rather than a restated copy.
+    fs.copyFileSync(
+        path.join(__dirname, '..', 'astra_downloader', 'build.py'),
+        path.join(root, 'astra_downloader', 'build.py')
+    );
     const constraintsSha256 = sha256(path.join(root, 'astra_downloader', 'constraints-release.txt'));
     const licenseFile = [{ path: 'package.dist-info/LICENSE', sha256: 'b'.repeat(64) }];
     const resolvedPackages = [
         { name: 'PyInstaller', version: '6.21.0', scope: 'build', license: 'MIT', dependsOn: [] },
-        { name: 'PyQt6', version: '6.11.0', scope: 'embedded', license: 'GPL-3.0-only', dependsOn: ['pyqt6-qt6'] },
-        { name: 'PyQt6-Qt6', version: '6.11.1', scope: 'embedded', license: 'LGPL-3.0-only', dependsOn: [] },
+        { name: 'PySide6-Essentials', version: '6.11.2', scope: 'embedded', license: 'LGPL-3.0-only', dependsOn: ['shiboken6'] },
+        { name: 'shiboken6', version: '6.11.2', scope: 'embedded', license: 'LGPL-3.0-only', dependsOn: [] },
         { name: 'requests', version: '2.34.2', scope: 'validation', license: 'Apache-2.0', dependsOn: [] }
     ];
     const metadata = {
@@ -97,7 +103,7 @@ function writeCompanionInventoryFixture(root, buildDir) {
         },
         python: {
             implementation: 'CPython',
-            version: '3.12.10',
+            version: '3.13.15',
             license: 'Python-2.0',
             sourceUrl: 'https://www.python.org/'
         },
@@ -105,8 +111,8 @@ function writeCompanionInventoryFixture(root, buildDir) {
             schemaVersion: 1,
             constraintsPath: 'astra_downloader/constraints-release.txt',
             constraintsSha256,
-            supportedPythonMinors: ['3.11', '3.12'],
-            direct: ['pyinstaller', 'pyqt6', 'requests'],
+            supportedPythonMinors: ['3.13'],
+            direct: ['pyinstaller', 'pyside6-essentials', 'requests'],
             packages: resolvedPackages
         },
         distributions: [
@@ -120,20 +126,20 @@ function writeCompanionInventoryFixture(root, buildDir) {
                 licenseFiles: licenseFile
             },
             {
-                name: 'PyQt6',
-                version: '6.11.0',
+                name: 'PySide6-Essentials',
+                version: '6.11.2',
                 scope: 'embedded',
-                license: 'GPL-3.0-only',
-                sourceUrl: 'https://pypi.org/project/PyQt6/',
+                license: 'LGPL-3.0-only',
+                sourceUrl: 'https://pypi.org/project/PySide6-Essentials/',
                 recordSha256: '2'.repeat(64),
                 licenseFiles: licenseFile
             },
             {
-                name: 'PyQt6-Qt6',
-                version: '6.11.1',
+                name: 'shiboken6',
+                version: '6.11.2',
                 scope: 'embedded',
                 license: 'LGPL-3.0-only',
-                sourceUrl: 'https://pypi.org/project/PyQt6-Qt6/',
+                sourceUrl: 'https://pypi.org/project/shiboken6/',
                 recordSha256: '3'.repeat(64),
                 licenseFiles: licenseFile
             }
@@ -163,7 +169,7 @@ test('companion SBOM inventory carries the reviewed Python resolution graph', ()
     const { root, buildDir } = writeEmptyBuildTree();
     const { inventory } = writeCompanionInventoryFixture(root, buildDir);
     const requests = inventory.components.find((component) => component['bom-ref'] === 'pkg:pypi/requests@2.34.2');
-    const pyqt = inventory.dependencies.find((entry) => entry.ref === 'pkg:pypi/pyqt6@6.11.0');
+    const pyqt = inventory.dependencies.find((entry) => entry.ref === 'pkg:pypi/pyside6-essentials@6.11.2');
 
     assert.ok(requests, 'a constraints-only package must still appear in the release SBOM');
     assert.equal(requests.scope, 'excluded', 'validation-only packages must not be represented as shipped');
@@ -171,18 +177,50 @@ test('companion SBOM inventory carries the reviewed Python resolution graph', ()
         requests.properties.find((item) => item.name === PROPERTY.resolutionGraph).value,
         'true'
     );
-    assert.deepEqual(pyqt.dependsOn, ['pkg:pypi/pyqt6-qt6@6.11.1']);
+    assert.deepEqual(pyqt.dependsOn, ['pkg:pypi/shiboken6@6.11.2']);
 });
 
 test('companion license inspection covers release components without the auxiliary tag', () => {
     const { root, buildDir } = writeEmptyBuildTree();
     const { artifactSha256, inventory } = writeCompanionInventoryFixture(root, buildDir);
-    const pyqt = inventory.components.find((component) => component.name === 'PyQt6');
+    const pyqt = inventory.components.find((component) => component.name === 'PySide6-Essentials');
     pyqt.properties = pyqt.properties.filter((entry) => entry.name !== PROPERTY.inventory);
     const inspection = inspectCompanionInventory({ components: inventory.components }, artifactSha256);
     assert.ok(
-        inspection.components.some((component) => component.name === 'PyQt6'),
+        inspection.components.some((component) => component.name === 'PySide6-Essentials'),
         'a required component must not disappear when the auxiliary tag is absent'
+    );
+});
+
+test('companion SBOM inventory rejects an interpreter set build.py does not review', () => {
+    const { root, buildDir } = writeEmptyBuildTree();
+    writeCompanionInventoryFixture(root, buildDir);
+    const metadataPath = path.join(buildDir, 'companion-build-metadata.json');
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+
+    // Internally consistent and self-declared: the interpreter that produced
+    // the metadata is in the list the metadata itself carries. Only reading
+    // build.py catches that neither is a reviewed interpreter.
+    metadata.resolution.supportedPythonMinors = ['2.7'];
+    metadata.python.version = '2.7.18';
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + '\n');
+    assert.throws(
+        () => buildCompanionInventory(root, buildDir),
+        /declares Python 2\.7 but astra_downloader\/build\.py reviews 3\.13/
+    );
+});
+
+test('companion SBOM inventory rejects metadata built on an unsupported interpreter', () => {
+    const { root, buildDir } = writeEmptyBuildTree();
+    writeCompanionInventoryFixture(root, buildDir);
+    const metadataPath = path.join(buildDir, 'companion-build-metadata.json');
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+
+    metadata.python.version = '3.12.10';
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + '\n');
+    assert.throws(
+        () => buildCompanionInventory(root, buildDir),
+        /was produced on Python 3\.12, which is not one of the interpreters it declares as supported/
     );
 });
 
@@ -202,15 +240,26 @@ test('companion SBOM inventory links exact embedded versions to the staged artif
     const sbom = { components: inventory.components };
     const inspection = inspectCompanionInventory(sbom, artifactSha256);
 
-    assert.ok(inventory.components.some((component) => component.name === 'CPython' && component.version === '3.12.10'));
-    assert.ok(inventory.components.some((component) => component.name === 'PyQt6' && component.version === '6.11.0'));
+    assert.ok(inventory.components.some((component) => component.name === 'CPython' && component.version === '3.13.15'));
+    assert.ok(inventory.components.some((component) => component.name === 'PySide6-Essentials' && component.version === '6.11.2'));
     assert.equal(
         inventory.components.every((component) => (
             component.properties.find((entry) => entry.name === PROPERTY.artifactSha256).value === artifactSha256
         )),
         true
     );
-    assert.ok(inspection.issues.some((issue) => /pyqt6: decision=unresolved/i.test(issue)));
+    // The Qt binding used to be the headline unresolved decision here. It is
+    // approved under LGPL-3.0-only now, so the invariant worth pinning is that
+    // no reviewed component is left undecided, while the runtime helpers that
+    // genuinely are still get named.
+    assert.deepEqual(
+        inspection.issues
+            .filter((issue) => /decision=unresolved/i.test(issue))
+            .map((issue) => issue.split(':')[0])
+            .sort(),
+        ['deno', 'ffmpeg', 'yt-dlp'],
+        'the runtime helpers are the only components still awaiting a decision'
+    );
     assert.ok(inspection.issues.some((issue) => /ffmpeg: exact version is unresolved/i.test(issue)));
     assert.ok(inspection.issues.some((issue) => /yt-dlp: exact download SHA-256 is unresolved/i.test(issue)));
 });
@@ -237,10 +286,10 @@ test('companion license inspection fails closed on disallowed decisions and clea
     }
     assert.deepEqual(inspectCompanionInventory(sbom, artifactSha256).issues, []);
 
-    const pyqt = sbom.components.find((component) => component.name === 'PyQt6');
+    const pyqt = sbom.components.find((component) => component.name === 'PySide6-Essentials');
     pyqt.properties.find((entry) => entry.name === PROPERTY.decision).value = 'disallowed';
     assert.ok(inspectCompanionInventory(sbom, artifactSha256).issues.some(
-        (issue) => /pyqt6: decision=disallowed/i.test(issue)
+        (issue) => /pyside6-essentials: decision=disallowed/i.test(issue)
     ));
 });
 
@@ -264,11 +313,11 @@ test('the companion gate rejects a planted unresolved component', () => {
         }
     }
     assert.doesNotThrow(() => checkCompanionInventory(sbom, artifactSha256));
-    const pyqt = sbom.components.find((component) => component.name === 'PyQt6');
+    const pyqt = sbom.components.find((component) => component.name === 'PySide6-Essentials');
     pyqt.properties.find((entry) => entry.name === PROPERTY.decision).value = 'unresolved';
     assert.throws(
         () => checkCompanionInventory(sbom, artifactSha256),
-        /companion license inspection failed.*pyqt6: decision=unresolved/is
+        /companion license inspection failed.*pyside6-essentials: decision=unresolved/is
     );
 });
 
@@ -286,12 +335,12 @@ test('companion staging metadata is accepted only for the exact EXE bytes', () =
             onefile: { name: 'AstraDownloader.exe', size: exe.length, sha256: crypto.createHash('sha256').update(exe).digest('hex') },
             onedir: { name: 'AstraDownloader-onedir.zip', version: '1.5.1', buildId: 'c'.repeat(64) }
         },
-        python: { version: '3.12.10' },
+        python: { version: '3.13.15' },
         resolution: {
             schemaVersion: 1,
             constraintsPath: 'astra_downloader/constraints-release.txt',
             constraintsSha256: sha256(path.join(__dirname, '..', 'astra_downloader', 'constraints-release.txt')),
-            supportedPythonMinors: ['3.11', '3.12'],
+            supportedPythonMinors: ['3.13'],
             direct: ['pyinstaller'],
             packages: [{ name: 'PyInstaller', version: '6.21.0', scope: 'build', dependsOn: [] }]
         },

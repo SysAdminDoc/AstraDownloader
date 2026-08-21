@@ -13,12 +13,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import (
+from PySide6.QtCore import (
     QByteArray, QCoreApplication, QEasingCurve, QObject, QPropertyAnimation, QSize,
-    QThread, QTimer, Qt, pyqtSignal,
+    QThread, QTimer, Qt, Signal,
 )
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QTextCursor
-from PyQt6.QtWidgets import (
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QTextCursor
+from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
     QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
     QMenu, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
@@ -145,7 +145,7 @@ def set_gui_theme(theme):
 class ReadinessProbe(QObject):
     """Collect injected toolchain health away from the GUI thread."""
 
-    completed = pyqtSignal(dict)
+    completed = Signal(dict)
 
     def __init__(self, configured_runtime='auto', *, runtime_probe,
                  provider_probe, ytdlp_version, ffmpeg_version, logger,
@@ -401,10 +401,10 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
 
 
 class SetupWorkerCore(QThread):
-    log = pyqtSignal(str)
-    progress = pyqtSignal(int)
-    finished_ok = pyqtSignal()
-    finished_err = pyqtSignal(str)
+    log = Signal(str)
+    progress = Signal(int)
+    finished_ok = Signal()
+    finished_err = Signal(str)
 
     def __init__(self, parent=None, force_ffmpeg=False, auto_update_ytdlp=True,
                  configured_runtime='auto', config=None, *, dependencies):
@@ -1110,14 +1110,14 @@ class MainWindowCore(
     SettingsPageMixin,
     QMainWindow,
 ):
-    log_message = pyqtSignal(str)
-    instance_command = pyqtSignal(str)
-    tools_update_finished = pyqtSignal(dict)
-    tools_status_text_ready = pyqtSignal(str)
-    server_start_finished = pyqtSignal(object)
-    site_login_finished = pyqtSignal(dict)
-    site_login_test_finished = pyqtSignal(dict)
-    format_probe_finished = pyqtSignal(dict)
+    log_message = Signal(str)
+    instance_command = Signal(str)
+    tools_update_finished = Signal(dict)
+    tools_status_text_ready = Signal(str)
+    server_start_finished = Signal(object)
+    site_login_finished = Signal(dict)
+    site_login_test_finished = Signal(dict)
+    format_probe_finished = Signal(dict)
 
     def __init__(self, config, dl_manager, history, start_minimized=False,
                  first_run=False, *, dependencies):

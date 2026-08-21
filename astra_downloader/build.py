@@ -348,8 +348,10 @@ def write_build_metadata(exe_path, analysis_toc=None):
         if included or key == "pyinstaller":
             distributions.append(record)
 
-    if not any(item["name"].casefold() == "pyqt6" for item in distributions):
-        raise SystemExit("PyInstaller analysis did not inventory the embedded PyQt6 distribution")
+    # The wheel spells its metadata Name "PySide6_Essentials"; canonicalize both
+    # sides rather than casefolding, or this gate silently stops guarding.
+    if not any(canonicalize_name(item["name"]) == "pyside6-essentials" for item in distributions):
+        raise SystemExit("PyInstaller analysis did not inventory the embedded PySide6 distribution")
     distributions.sort(key=lambda item: (item["name"].casefold(), item["scope"]))
 
     source = SCRIPT.read_text(encoding="utf-8")
@@ -498,9 +500,9 @@ def pyinstaller_args(mode):
         ),
         "--specpath", str(SPEC_DIR),
         # Required hidden imports
-        "--hidden-import", "PyQt6.QtCore",
-        "--hidden-import", "PyQt6.QtGui",
-        "--hidden-import", "PyQt6.QtWidgets",
+        "--hidden-import", "PySide6.QtCore",
+        "--hidden-import", "PySide6.QtGui",
+        "--hidden-import", "PySide6.QtWidgets",
         "--hidden-import", "flask",
         "--hidden-import", "werkzeug",
         "--hidden-import", "requests",

@@ -4,8 +4,8 @@ The page owns its construction; cross-page actions remain on the
 injected MainWindowCore.
 """
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
     QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )

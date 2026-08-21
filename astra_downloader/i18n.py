@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QLocale, QTranslator, Qt
+from PySide6.QtCore import QLocale, QTranslator, Qt
 
 
 SUPPORTED_LOCALES = (

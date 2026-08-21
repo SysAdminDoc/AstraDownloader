@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Astra Downloader — Desktop GUI + HTTP API server for Astra Deck.
-Manages yt-dlp downloads with a PyQt6 GUI, system tray, and REST API on port 9751.
+Manages yt-dlp downloads with a PySide6 GUI, system tray, and REST API on port 9751.
 
 First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 """
@@ -12,20 +12,21 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
 
-# requirements.txt declares a Python 3.11 floor, one release above what the
-# pinned yt-dlp wheel asks for, because CPython 3.10 reaches end of life in
-# October 2026. On 3.10 the install of requirements.txt fails before this
-# guard would ever run, so the guard has to agree with that floor or it
-# explains nothing. Packaged builds carry their own interpreter and build.py
-# already restricts them to 3.13.
+# requirements.txt declares a Python 3.11 floor. Every pinned wheel would
+# still install on 3.10 — the floor is a policy choice, because CPython 3.10
+# reaches end of life in October 2026 and nothing here is tested on it. That
+# means this guard, not the pip resolve, is what a 3.10 user actually hits, so
+# the message has to say why rather than blame the dependency graph. Packaged
+# builds carry their own interpreter and build.py already restricts them to
+# 3.13.
 _MIN_PYTHON = (3, 11)
 if sys.version_info < _MIN_PYTHON:
     sys.stderr.write(
         f"[Astra Downloader] Python {_MIN_PYTHON[0]}.{_MIN_PYTHON[1]}+ "
         f"required (you're on "
-        f"{sys.version_info.major}.{sys.version_info.minor}). "
-        f"requirements.txt pins a dependency graph that resolves only "
-        f"on 3.11 and newer.\n"
+        f"{sys.version_info.major}.{sys.version_info.minor}). CPython "
+        f"3.10 reaches end of life in October 2026 and this program is not "
+        f"tested on it.\n"
     )
     sys.exit(1)
 
@@ -45,15 +46,15 @@ def source_dependency_error(error):
 
 
 try:
-    from PyQt6.QtWidgets import (
+    from PySide6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QLabel, QPushButton, QTabWidget, QScrollArea, QFrame, QCheckBox, QLineEdit,
         QFileDialog, QSystemTrayIcon, QMenu, QProgressBar, QTextEdit,
         QSpinBox, QComboBox, QGraphicsOpacityEffect, QStyle, QDialog,
         QDialogButtonBox
     )
-    from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread, QSize, QPropertyAnimation, QEasingCurve
-    from PyQt6.QtGui import QIcon, QFont, QTextCursor
+    from PySide6.QtCore import Qt, QTimer, Signal, QObject, QThread, QSize, QPropertyAnimation, QEasingCurve
+    from PySide6.QtGui import QIcon, QFont, QTextCursor
     import requests as http_requests
 except ImportError as exc:
     raise ImportError(source_dependency_error(exc)) from exc
@@ -4759,8 +4760,8 @@ class FolderPickerService(_OwnedFolderPickerService):
 
 
 class _DownloadManagerSignals(QObject):
-    progress_updated = pyqtSignal()
-    download_completed = pyqtSignal(str)
+    progress_updated = Signal()
+    download_completed = Signal(str)
 
 
 class DownloadManager(DownloadManagerCore):

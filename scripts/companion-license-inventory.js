@@ -11,8 +11,8 @@ const POLICY_RELATIVE_PATH = path.join('astra_downloader', 'license-policy.json'
 const REQUIRED_COMPONENT_KEYS = Object.freeze([
     'python',
     'pyinstaller',
-    'pyqt6',
-    'pyqt6-qt6',
+    'pyside6-essentials',
+    'shiboken6',
     'yt-dlp',
     'ffmpeg',
     'deno'
@@ -43,6 +43,31 @@ function sha256(filePath) {
     return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+const BUILD_SCRIPT_RELATIVE_PATH = path.join('astra_downloader', 'build.py');
+
+function reviewedPythonMinors(repoRoot) {
+    // Single source of truth: build.py decides which interpreters may produce a
+    // release, and this gate reads that set rather than keeping its own copy.
+    // Comparing the metadata against a value the same build wrote would only
+    // prove the build is self-consistent.
+    const source = fs.readFileSync(path.join(repoRoot, BUILD_SCRIPT_RELATIVE_PATH), 'utf8');
+    const declaration = /^SUPPORTED_RELEASE_PYTHONS\s*=\s*\{([^}]*)\}/m.exec(source);
+    if (!declaration) {
+        throw new Error('could not read SUPPORTED_RELEASE_PYTHONS from astra_downloader/build.py');
+    }
+    const minors = [];
+    const pair = /\(\s*(\d+)\s*,\s*(\d+)\s*\)/g;
+    let match = pair.exec(declaration[1]);
+    while (match) {
+        minors.push(`${Number(match[1])}.${Number(match[2])}`);
+        match = pair.exec(declaration[1]);
+    }
+    if (!minors.length) {
+        throw new Error('SUPPORTED_RELEASE_PYTHONS declares no interpreter');
+    }
+    return minors.sort();
+}
+
 function canonicalName(value) {
     return String(value || '').trim().toLowerCase().replace(/[_.]+/g, '-');
 }
@@ -65,12 +90,27 @@ function validateResolutionMetadata(metadata, repoRoot = null) {
         || !Array.isArray(resolution.supportedPythonMinors)
         || !resolution.supportedPythonMinors.length
         || !resolution.supportedPythonMinors.every((minor) => /^\d+\.\d+$/.test(String(minor)))
-        || !resolution.supportedPythonMinors.includes(
-            String((metadata.python && metadata.python.version) || '').split('.').slice(0, 2).join('.')
-        )
         || !Array.isArray(resolution.packages) || !resolution.packages.length
     ) {
         throw new Error('companion build metadata is missing the reviewed release resolution graph');
+    }
+    if (repoRoot) {
+        const reviewed = reviewedPythonMinors(repoRoot);
+        const declared = resolution.supportedPythonMinors.map(String).slice().sort();
+        if (declared.join(',') !== reviewed.join(',')) {
+            throw new Error(
+                `companion build metadata declares Python ${declared.join(',')} `
+                + `but astra_downloader/build.py reviews ${reviewed.join(',')}`
+            );
+        }
+    }
+    const builtWith = String((metadata.python && metadata.python.version) || '')
+        .split('.').slice(0, 2).join('.');
+    if (!resolution.supportedPythonMinors.map(String).includes(builtWith)) {
+        throw new Error(
+            `companion build metadata was produced on Python ${builtWith || 'unknown'}, `
+            + 'which is not one of the interpreters it declares as supported'
+        );
     }
     const keys = new Set();
     for (const record of resolution.packages) {
