@@ -80,7 +80,12 @@ These are known and accepted properties, not vulnerabilities:
   `--exec-before-download` and the `--netrc` family. This is deliberate:
   those options hand the transfer, or a command line, to a process this
   program does not control, and 2026 brought code-execution advisories
-  against two of the common choices (CVE-2026-50574, CVE-2026-50019). The
+  against two of the common choices (CVE-2026-50574, CVE-2026-50019). yt-dlp
+  itself has had its own run of advisories in the same period — GHSA-6v4j-43gg-vj32,
+  GHSA-c6mh-fpjc-4pr3 and GHSA-f7j3-774f-rfhj landed on 2026-06-09, and
+  CVE-2026-55404 (`--write-link` shortcut injection) on 2026-07-04. Astra
+  Downloader tracks the pinned release forward and denies every link-file flag
+  at the process boundary regardless. The
   refusal is enforced in `validate_ytdlp_spawn_args` and pinned by test, so
   a future builder change cannot reintroduce one by accident.
 - **yt-dlp is spawned with its plugin directories disabled.**

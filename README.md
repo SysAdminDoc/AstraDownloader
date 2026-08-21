@@ -205,10 +205,20 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1000 tests; scratch state stays under build/pytest
-npm run check               # port catalogue, catch reasons, versions, pip-audit
+py -3.13 -m pytest          # 1014 tests; scratch state stays under build/pytest
+npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
+npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
 ```
+
+`npm run check` runs the unit tests, the companion port catalogue, the
+Python catch-reason gate, the licence inventory, the translation catalogues,
+the version/tag agreement and the Python dependency audit. It prints a result
+line per gate rather than stopping at the first failure, so a red gate does
+not hide the state of the other six.
+
+The test count above is the number `py -3.13 -m pytest --collect-only -q`
+reports; re-run it rather than trusting the figure if the two disagree.
 
 ## The browser extension
 

@@ -97,14 +97,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the jump list shows context-free tasks that work when the app is closed; a simulated restart relaunches with `--start-server`; deleting a finished file from the queue sends it to the Recycle Bin. Toasts with action buttons stay out of scope — they need package identity.
   Complexity: M
 
-- [ ] P2 — AD-39 — Sync the docs to what the repository actually is
-  Why: README claims 914 tests (actual ~988 `def test_` on 2026-08-21) and describes `npm run check` as four gates (it is seven with a per-gate summary); `Roadmap_Blocked.md` claims the History column headers are untranslated, which is now stale — they are extracted and translated, and the residual risk is the fixed width (AD-35). `SECURITY.md` cites two yt-dlp CVEs and three more landed 2026-06-09.
-  Evidence: `README.md:197`; static `def test_` grep across `test_astra_downloader.py` / `test_feature_upgrades.py` / `test_build.py`; `npm run check` summary; German catalogue contains `Duration → Dauer`; GHSA-6v4j-43gg-vj32 / GHSA-c6mh-fpjc-4pr3 / GHSA-f7j3-774f-rfhj.
-  Touches: README.md, SECURITY.md, Roadmap_Blocked.md, CLAUDE.md
-  Acceptance: every count and gate list in the docs matches a command that can be run; the stale translation claim is corrected in place with its date.
-  Note (2026-08-21): README line 197 still says `914 tests`. Re-count with `py -3.13 -m pytest --collect-only -q` at the moment this is picked up — do not copy 964 or 988 as a new literal.
-  Complexity: S
-
 - [ ] P2 — AD-40 — Detect archived items the source has since deleted
   Why: an archive whose upstream entry disappears silently rots. Tartube's "Missing Videos" folder is the only implementation in the field, and pinchflat#805 (11 reactions) asks for the inverse guarantee — do not re-download what the user deleted locally. Both need the same reconciliation between the archive and the last scan.
   Evidence: Tartube README §6.25; pinchflat#805; `astra_downloader/subscriptions.py` archive keys.

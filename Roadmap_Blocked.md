@@ -30,10 +30,11 @@ free for open source) and seed it from
 Astra Deck issue #1 asks for Chinese, which makes `zh_CN` the first one worth
 having.
 
-**Not blocked, and still in `ROADMAP.md`:** the strings the extractor cannot
-see because they are set at runtime through `setText()` rather than built
-through `tr()` — the History column headers render as "Duration", "Format"
-and "Quality" in every locale. That is a code change, not a translation.
+**Corrected 2026-08-21:** the History column headers used to be named here as
+strings the extractor could not see. They are extracted and translated now —
+the German catalogue carries `Duration` as `Dauer`. What is left is the fixed
+column width, which a longer translated header overflows, and that is tracked
+as AD-35 in `ROADMAP.md` rather than here.
 
 ## Submit the portable manifest to the official winget repository — maintainer decision
 
