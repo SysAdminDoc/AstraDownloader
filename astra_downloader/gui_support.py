@@ -6,7 +6,9 @@ builders for the common visual language.
 """
 
 from PySide6.QtCore import QCoreApplication, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import (
+    QAccessible, QAccessibleEvent, QColor, QIcon, QPainter, QPen, QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication, QFrame, QLabel, QPushButton, QSizePolicy, QVBoxLayout,
     QWidget,
@@ -18,8 +20,8 @@ __all__ = (
     "filter_subscription_records", "format_duration", "human_status", "make_card",
     "make_divider", "make_empty_state", "make_label", "make_line_icon", "make_section_label",
     "make_stat", "make_state_label", "make_status_badge", "make_vertical_divider",
-    "refresh_line_icons", "repolish", "sanitize_csv_cell", "set_gui_theme", "set_line_icon",
-    "set_status_tone",
+    "announce_status", "refresh_line_icons", "repolish", "sanitize_csv_cell",
+    "set_gui_theme", "set_line_icon", "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
 )
 
@@ -100,20 +102,42 @@ def repolish(widget):
     widget.update()
 
 
+def announce_status(label):
+    """Raise a screen-reader Alert for a status label whose text just changed.
+
+    WCAG 2.2 SC 4.1.3 asks that a status message reach assistive technology
+    without moving focus. Qt does not infer that from ``setText`` — nothing is
+    delivered unless an accessibility event is posted, so a screen-reader user
+    who presses Download and is rejected otherwise hears nothing.
+
+    Returns whether the event was posted, which is what the test asserts.
+    """
+    if not isinstance(label, QWidget):
+        # Several harnesses drive lightweight doubles through the same status
+        # setters; an accessibility event needs a real QObject.
+        return False
+    if QApplication.instance() is None:
+        return False
+    QAccessible.updateAccessibility(
+        QAccessibleEvent(label, QAccessible.Event.Alert)
+    )
+    return True
+
+
 def set_status_tone(label, state, *, announce=True):
-    """Give a status label a visible tone.
+    """Give a status label a visible tone, and say it out loud.
 
     Accepts the historical setter values — "error" maps onto the stylesheet's
     "danger" tone so every status label shares the one settingsStatus
     convention instead of setting a `state` property no stylesheet rule ever
-    matched. ``announce`` marks the call sites that should raise a
-    screen-reader Alert (WCAG 2.2 SC 4.1.3); PySide6 binds QAccessible,
-    so the event itself can only be wired once the GUI runs on a binding that
-    does.
+    matched. ``announce`` is false only where the caller is clearing a status
+    rather than reporting one; an Alert for "nothing happened" is noise.
     """
     tone = str(state or "neutral")
     tone = {"error": "danger"}.get(tone, tone)
     label.setProperty("tone", tone)
+    if announce:
+        announce_status(label)
     # The caller repolishes: gui.py's imported `repolish` is what the test
     # harnesses patch, and a repolish buried here would bypass that seam.
 

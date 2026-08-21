@@ -26,14 +26,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: staging writes the resolved version + digest actually downloaded for each helper into the policy; the inspection accepts a publisher-verified rolling alias only when a resolved digest accompanies it; `check:companion-inventory` exits 0.
   Complexity: M
 
-- [ ] P1 — AD-10 — Announce status changes to assistive technology
-  Why: `QAccessible` appears zero times in the tree. `setAccessibleName` is used well (125 calls), but changing a label's text fires no accessibility event, so a screen-reader user who presses Download and is rejected gets silence. WCAG 2.2 SC 4.1.3 Status Messages (AA).
-  Evidence: repo-wide grep for `QAccessible`/`updateAccessibility` returns nothing; the five status labels listed in AD-06.
-  Touches: `astra_downloader/gui_support.py`, `gui.py`
-  Acceptance: a helper raises `QAccessible.Event.Alert` (or `NameChanged`) whenever a status label's text changes; every status setter routes through it; a test asserts the event fires.
-  Note (2026-08-14): depends on AD-08 — PyQt6 does not bind QAccessible/QAccessibleEvent at all (verified against PyQt6 6.11: no such names in QtGui/QtCore/QtWidgets); PySide6 binds both. The setters already route through `set_status_tone`, whose `announce` flag marks where the event belongs, so this becomes a ~10-line change once AD-08 lands.
-  Complexity: S
-
 - [ ] P1 — AD-11 — Stop the subscription scan from fsyncing the whole archive per candidate
   Why: `reserve_archive` then `mark_archive_queued`/`release_archive` each run `_save_locked` → `atomic_write_json` → `os.fsync` on the entire document (up to 20,000 archive records) while holding `SubscriptionStore._lock` — ~100–150 full serialize+fsync cycles for one `--playlist-end 50` scan, on the same lock the Qt main thread and `/health` take. The 3.88 ms/call figure in `CLAUDE.md` was measured without a concurrent scan.
   Evidence: `astra_downloader/subscriptions.py:1238-1298`, `:782-828`, `:504-519`; `config.py:1808-1831`; `SUBSCRIPTION_MAX_ARCHIVE_ENTRIES = 20_000` at `subscriptions.py:53`.

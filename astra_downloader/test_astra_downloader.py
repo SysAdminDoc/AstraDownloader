@@ -7209,6 +7209,39 @@ for forbidden in (
                 f'state "{value}" is set somewhere but no stylesheet rule matches it',
             )
 
+    def test_status_change_raises_a_screen_reader_alert(self):
+        # WCAG 2.2 SC 4.1.3: setText() alone delivers nothing to assistive
+        # technology, so assert against the real Qt call rather than a stand-in
+        # helper that could drift from what ships.
+        import gui_support as gs
+        if _get_qapp_or_skip(self) is None:
+            return
+        from PySide6.QtWidgets import QLabel
+
+        label = QLabel("ready")
+        self.addCleanup(label.deleteLater)
+        with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
+            gs.set_status_tone(label, "error")
+        self.assertEqual(posted.call_count, 1)
+        event = posted.call_args.args[0]
+        self.assertIs(event.object(), label)
+        self.assertEqual(event.type(), gs.QAccessible.Event.Alert)
+
+        with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
+            gs.set_status_tone(label, "neutral", announce=False)
+        self.assertEqual(posted.call_count, 0,
+                         "clearing a status must not announce it")
+
+    def test_announcing_a_widget_double_is_a_no_op(self):
+        # Several harnesses drive lightweight doubles through the same setters.
+        import gui_support as gs
+
+        class FakeLabel:
+            def setProperty(self, name, value):
+                pass
+
+        self.assertFalse(gs.announce_status(FakeLabel()))
+
     def test_set_status_tone_maps_error_onto_the_danger_convention(self):
         gs = gui_module_for_tests()
         applied = []
