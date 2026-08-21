@@ -1653,6 +1653,64 @@ def describe_bundle_changes(current, bundle):
     }
 
 
+# Native-host identity lives here rather than in the composition root so
+# sanitize_config can normalise these fields with the same rule that
+# registration enforces. A config edited by hand used to keep IDs the
+# registrar would silently drop.
+CHROME_EXTENSION_ID_RE = re.compile(r'^[a-p]{32}$')
+FIREFOX_EXTENSION_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._%+@-]{0,127}$')
+
+
+def is_valid_native_extension_id(value, browser='chrome'):
+    """Return whether an ID is safe for a browser native-host manifest."""
+    text = str(value or '').strip()
+    browser = str(browser or '').strip().lower()
+    if browser == 'chrome':
+        return bool(CHROME_EXTENSION_ID_RE.fullmatch(text.lower()))
+    if browser == 'firefox':
+        return bool(FIREFOX_EXTENSION_ID_RE.fullmatch(text))
+    return bool(text and len(text) <= 128 and not any(
+        ord(char) < 0x20 or char in '/\\<>' for char in text
+    ))
+
+
+def parse_native_extension_ids(value, fallback=(), browser=None):
+    """Split, deduplicate, and optionally validate native-host IDs.
+
+    ``browser=None`` keeps the generic parser useful for legacy origin
+    settings. Registration and manifest construction always pass the target
+    browser so untrusted text cannot become an ``allowed_origins`` entry.
+    """
+    if isinstance(value, (list, tuple)):
+        raw = value
+    elif isinstance(value, str):
+        raw = re.split(r'[\s,;]+', value)
+    else:
+        raw = []
+    out = []
+    for item in raw:
+        text = str(item or '').strip()
+        if not text:
+            continue
+        if browser and not is_valid_native_extension_id(text, browser):
+            continue
+        if str(browser or '').lower() == 'chrome':
+            text = text.lower()
+        if text not in out:
+            out.append(text)
+    if out:
+        return out
+    for item in fallback or ():
+        text = str(item or '').strip()
+        if not text or (browser and not is_valid_native_extension_id(text, browser)):
+            continue
+        if str(browser or '').lower() == 'chrome':
+            text = text.lower()
+        if text not in out:
+            out.append(text)
+    return out
+
+
 def sanitize_config(raw):
     """Return the bounded, schema-known companion configuration."""
     source = raw if isinstance(raw, dict) else {}
@@ -1769,8 +1827,15 @@ def sanitize_config(raw):
     data["LastFfmpegCheck"] = clean_text(data.get("LastFfmpegCheck"), "", 40)
     data["MaxFileSizeMB"] = clamp_int(data.get("MaxFileSizeMB"), 0, 0, 102400)
     data["OutputTemplate"] = normalize_output_template(data.get("OutputTemplate"))
-    data["NativeChromeExtensionIds"] = clean_text(data.get("NativeChromeExtensionIds"), "", 2048)
-    data["NativeFirefoxExtensionIds"] = clean_text(data.get("NativeFirefoxExtensionIds"), "", 2048)
+    # Store only what the registrar would accept. clean_text alone let an
+    # invalid ID sit in the field looking configured while registration
+    # dropped it, so the Extension page reported IDs that were never paired.
+    data["NativeChromeExtensionIds"] = " ".join(parse_native_extension_ids(
+        clean_text(data.get("NativeChromeExtensionIds"), "", 2048), browser="chrome",
+    ))
+    data["NativeFirefoxExtensionIds"] = " ".join(parse_native_extension_ids(
+        clean_text(data.get("NativeFirefoxExtensionIds"), "", 2048), browser="firefox",
+    ))
     data["LegacyHealthTokenOrigins"] = clean_text(data.get("LegacyHealthTokenOrigins"), "", 2048)
     extra = data.get("ExtraOutputRoots")
     if not isinstance(extra, list):

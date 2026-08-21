@@ -9295,6 +9295,57 @@ class DenoRuntimeHardGateTests(unittest.TestCase):
             self.assertEqual((resp.get_json() or {}).get('code'), expected_code)
 
 
+class NativeExtensionIdSanitizeTests(unittest.TestCase):
+    """A config field that keeps IDs registration would drop is a lie.
+
+    ``clean_text`` only trimmed and truncated, so a hand-edited config could
+    show four Chrome IDs on the Extension page while the native host manifest
+    carried one.
+    """
+
+    def test_sanitize_keeps_only_ids_the_registrar_would_accept(self):
+        valid = "abcdefghijklmnopabcdefghijklmnop"
+        other = "ponmlkjihgfedcbaponmlkjihgfedcba"
+        cleaned = ad.sanitize_config({
+            "NativeChromeExtensionIds": (
+                f"{valid} NOT-AN-ID {other} tooshort {valid}"
+            ),
+        })["NativeChromeExtensionIds"]
+        self.assertEqual(cleaned.split(), [valid, other])
+
+    def test_sanitize_lowercases_chrome_ids_and_deduplicates(self):
+        cleaned = ad.sanitize_config({
+            "NativeChromeExtensionIds": "ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP abcdefghijklmnopabcdefghijklmnop",
+        })["NativeChromeExtensionIds"]
+        self.assertEqual(cleaned, "abcdefghijklmnopabcdefghijklmnop")
+
+    def test_sanitize_uses_the_firefox_rule_for_the_firefox_field(self):
+        # Firefox IDs are an email-like or GUID shape, not the Chrome alphabet.
+        cleaned = ad.sanitize_config({
+            "NativeFirefoxExtensionIds": "astra@example.com  <script>  {a-b-c}",
+        })["NativeFirefoxExtensionIds"]
+        self.assertIn("astra@example.com", cleaned.split())
+        self.assertNotIn("<script>", cleaned)
+
+    def test_sanitize_is_idempotent(self):
+        once = ad.sanitize_config({
+            "NativeChromeExtensionIds": "abcdefghijklmnopabcdefghijklmnop bogus",
+        })["NativeChromeExtensionIds"]
+        twice = ad.sanitize_config({
+            "NativeChromeExtensionIds": once,
+        })["NativeChromeExtensionIds"]
+        self.assertEqual(once, twice)
+
+    def test_the_parser_lives_where_sanitize_can_reach_it(self):
+        # The composition root re-exports it; config.py owns it. A copy in both
+        # is the drift this move exists to prevent.
+        import config as config_module
+        self.assertIs(ad.parse_native_extension_ids,
+                      config_module.parse_native_extension_ids)
+        self.assertIs(ad.is_valid_native_extension_id,
+                      config_module.is_valid_native_extension_id)
+
+
 class NoArchiveLockTests(unittest.TestCase):
     """v1.3.0 removed the download-archive lock so re-downloads always
     run. These tests pin the invariants so the lock can't be silently

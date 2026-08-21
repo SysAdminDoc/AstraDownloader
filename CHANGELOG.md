@@ -12,6 +12,13 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Native-host extension IDs are validated when they are saved.** The setting
+  only trimmed its text, so a hand-edited config could show IDs the browser
+  registration would silently drop. What the field stores is now what actually
+  gets registered.
+
 ## [2.9.0] - 2026-08-21
 
 ### Added
