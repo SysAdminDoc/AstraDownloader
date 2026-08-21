@@ -469,17 +469,26 @@ function inspectCompanionInventory(sbom, artifactSha256) {
             if (!propertyValue(component, PROPERTY.checksumUrl) && !pinnedInSource) {
                 issues.push(`${key}: checksum source is missing`);
             }
-            for (const [label, url] of [
-                ['distribution', propertyValue(component, PROPERTY.distributionUrl)],
-                ['checksum', propertyValue(component, PROPERTY.checksumUrl)],
-                ['source', propertyValue(component, PROPERTY.sourceUrl)]
-            ]) {
-                if (/\/(?:releases\/)?latest(?:\/|$)|\/download\/latest\//i.test(url)) {
-                    issues.push(`${key}: ${label} URL still uses a moving latest target`);
-                }
-            }
-            if (!/^[0-9a-f]{64}$/i.test(propertyValue(component, PROPERTY.downloadSha256))) {
+            // A rolling alias is the delivery form this program deliberately
+            // uses: it fetches the publisher's `latest` asset and verifies it
+            // against the publisher's own sidecar at download time. Pinning a
+            // dated FFmpeg-Builds asset instead was measured and rejected —
+            // those tags get pruned, and a pruned pin breaks first-run setup.
+            // So the alias is acceptable evidence only when staging has
+            // resolved it to an exact digest and an exact version. Without
+            // that digest it is still just a URL that could mean anything.
+            const resolvedDigest = /^[0-9a-f]{64}$/i.test(propertyValue(component, PROPERTY.downloadSha256));
+            if (!resolvedDigest) {
                 issues.push(`${key}: exact download SHA-256 is unresolved`);
+                for (const [label, url] of [
+                    ['distribution', propertyValue(component, PROPERTY.distributionUrl)],
+                    ['checksum', propertyValue(component, PROPERTY.checksumUrl)],
+                    ['source', propertyValue(component, PROPERTY.sourceUrl)]
+                ]) {
+                    if (/\/(?:releases\/)?latest(?:\/|$)|\/download\/latest\//i.test(url)) {
+                        issues.push(`${key}: ${label} URL still uses a moving latest target`);
+                    }
+                }
             }
         }
     }

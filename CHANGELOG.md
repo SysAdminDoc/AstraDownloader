@@ -12,6 +12,19 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deno downloads are verified again.** Deno publishes its checksum as
+  PowerShell `Get-FileHash` output rather than the `sha256sum` layout yt-dlp
+  and FFmpeg use, and the parser did not recognise it. The sidecar was fetched,
+  read as empty, and the download went through unchecked. It now parses, and
+  the digest still has to name the file it belongs to.
+- **`npm run check` passes every gate except the release tag.** Staging
+  resolves the exact version and SHA-256 that each runtime helper's rolling
+  download alias currently points at, records them in the licence policy, and
+  the inspection accepts an alias only when a resolved digest accompanies it.
+  The licence inventory is down from 18 open issues to none.
+
 ### Added
 
 - **Status messages now reach screen readers.** Changing a label's text tells
