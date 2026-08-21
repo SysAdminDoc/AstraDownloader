@@ -114,6 +114,8 @@ CATALOGS = {
             "0 / 200 Aufträge",
         "Pause intake":
             "Annahme pausieren",
+        "Resume queue":
+            "Warteschlange fortsetzen",
         "Clear history":
             "Verlauf löschen",
         "Undo clear":
@@ -1207,6 +1209,12 @@ CATALOGS = {
             "Clipbereiche, Bandbreitenbegrenzung und gleichzeitige Fragmente gelten nicht für SABR-Streams und wurden ignoriert. Aktualisieren Sie yt-dlp, sobald SABR-Unterstützung verfügbar ist, oder versuchen Sie es erneut, nachdem YouTube Standardformate anbietet.",
         "update-ytdlp-or-retry-later":
             "update-ytdlp-or-retry-later",
+        "The stored YouTube sign-in made this public video unplayable on the player client this download uses.":
+            "Die gespeicherte YouTube-Anmeldung hat dieses öffentliche Video auf dem Player-Client dieses Downloads unspielbar gemacht.",
+        "Skip the YouTube sign-in for this public video, or remove the stored YouTube cookies and retry. Members-only and private videos still need a matching sign-in.":
+            "Überspringen Sie die YouTube-Anmeldung für dieses öffentliche Video, oder entfernen Sie die gespeicherten YouTube-Cookies und versuchen Sie es erneut. Mitglieder- und private Videos brauchen weiterhin eine passende Anmeldung.",
+        "retry-without-cookies":
+            "retry-without-cookies",
         "yt-dlp needs the Deno JavaScript runtime to solve recent YouTube signature challenges.":
             "yt-dlp benötigt die Deno-JavaScript-Laufzeit, um aktuelle YouTube-Signatur-Herausforderungen zu lösen.",
         "Install Deno with winget install DenoLand.Deno, then restart Astra Downloader.":
@@ -1707,10 +1715,10 @@ CATALOGS["de"].update({
         "Entfernt. Diese Kopie registriert keine Browser-Hosts.",
     "Register": "Registrieren",
     "Chrome and Edge pairing": "Kopplung mit Chrome und Edge",
-    "Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.":
-        "Firefox wird automatisch registriert. Für Chrome und Edge muss die Erweiterungs-ID von chrome://extensions einmal eingetragen werden.",
-    "32-letter extension ID — several separated by commas":
-        "Erweiterungs-ID aus 32 Buchstaben — mehrere durch Kommas getrennt",
+    "Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.":
+        "Firefox wird automatisch registriert. Chrome und Edge koppeln sich selbst, sobald in Astra Deck ein Download-Button verwendet wird. Die ID von chrome://extensions kann weiterhin hier eingefügt werden.",
+    "32-letter extension ID. Separate multiple IDs with commas.":
+        "Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.",
     "Chrome and Edge extension IDs": "Erweiterungs-IDs für Chrome und Edge",
     "Write the Chrome and Edge native-messaging registration for these IDs.":
         "Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.",

@@ -151,6 +151,8 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'RATE_LIMIT_HEALTH_WINDOW_SECONDS',
     'RATE_LIMIT_UPDATE_MAX',
     'RATE_LIMIT_UPDATE_WINDOW_SECONDS',
+    'RATE_LIMIT_PAIR_MAX',
+    'RATE_LIMIT_PAIR_WINDOW_SECONDS',
     'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS',
     'SERVER_PORT',
     'SERVICE_API_MINIMUM_CLIENT',
@@ -181,6 +183,8 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'media_url_block_reason',
     'MAX_SITE_LOGIN_COOKIES',
     'normalize_extension_origin',
+    'is_extension_origin_shape',
+    'pair_browser_extension',
     'normalize_url',
     'probe_javascript_runtime',
     'probe_po_token_provider',
@@ -213,6 +217,8 @@ def create_api(config, dl_manager, history, *, dependencies):
     RATE_LIMIT_HEALTH_WINDOW_SECONDS = dependencies['RATE_LIMIT_HEALTH_WINDOW_SECONDS']
     RATE_LIMIT_UPDATE_MAX = dependencies['RATE_LIMIT_UPDATE_MAX']
     RATE_LIMIT_UPDATE_WINDOW_SECONDS = dependencies['RATE_LIMIT_UPDATE_WINDOW_SECONDS']
+    RATE_LIMIT_PAIR_MAX = dependencies['RATE_LIMIT_PAIR_MAX']
+    RATE_LIMIT_PAIR_WINDOW_SECONDS = dependencies['RATE_LIMIT_PAIR_WINDOW_SECONDS']
     COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS = dependencies['COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS']
     SERVER_PORT = dependencies['SERVER_PORT']
     SERVICE_API_VERSION = dependencies['SERVICE_API_VERSION']
@@ -243,6 +249,8 @@ def create_api(config, dl_manager, history, *, dependencies):
     media_url_block_reason = dependencies['media_url_block_reason']
     MAX_SITE_LOGIN_COOKIES = dependencies['MAX_SITE_LOGIN_COOKIES']
     normalize_extension_origin = dependencies['normalize_extension_origin']
+    is_extension_origin_shape = dependencies['is_extension_origin_shape']
+    pair_browser_extension = dependencies['pair_browser_extension']
     normalize_url = dependencies['normalize_url']
     probe_javascript_runtime = dependencies['probe_javascript_runtime']
     probe_po_token_provider = dependencies['probe_po_token_provider']
@@ -285,6 +293,10 @@ def create_api(config, dl_manager, history, *, dependencies):
     companion_update_rate_limiter = RateLimiter(
         max_events=RATE_LIMIT_UPDATE_MAX,
         window_seconds=RATE_LIMIT_UPDATE_WINDOW_SECONDS,
+    )
+    pair_rate_limiter = RateLimiter(
+        max_events=RATE_LIMIT_PAIR_MAX,
+        window_seconds=RATE_LIMIT_PAIR_WINDOW_SECONDS,
     )
     companion_update_backoff_lock = threading.Lock()
     companion_update_backoff = {'until': 0.0}
@@ -346,7 +358,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             hostname = host.split(':', 1)[0]
         return hostname in {'127.0.0.1', 'localhost', '::1'}
 
-    def cors_response(data, status=200, extra_headers=None):
+    def cors_response(data, status=200, extra_headers=None, *, allow_origin=None):
         resp = jsonify(data)
         resp.status_code = status
         # v1.5.1 EI12: outgoing-payload size guard. Replace oversized
@@ -369,8 +381,9 @@ def create_api(config, dl_manager, history, *, dependencies):
             })
             resp.status_code = 413
         origin = request.headers.get("Origin", "")
-        if is_allowed_extension_origin(origin):
-            resp.headers["Access-Control-Allow-Origin"] = origin
+        reflected = allow_origin or (origin if is_allowed_extension_origin(origin) else "")
+        if reflected:
+            resp.headers["Access-Control-Allow-Origin"] = reflected
             resp.headers["Vary"] = "Origin"
         resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = (
@@ -465,7 +478,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         claimed = client_api_version()
         if (
             claimed is not None
-            and request.path != '/health'
+            and request.path not in {'/health', '/pair-extension'}
             and claimed < SERVICE_API_MINIMUM_CLIENT
         ):
             return cors_response({
@@ -479,7 +492,13 @@ def create_api(config, dl_manager, history, *, dependencies):
                 "remediation": "Update the Astra Deck browser extension.",
             }, 426)
         if request.method == 'OPTIONS':
-            return cors_response({"ok": True})
+            origin = request.headers.get("Origin", "")
+            allow = None
+            if is_allowed_extension_origin(origin):
+                allow = origin
+            elif request.path == '/pair-extension' and is_extension_origin_shape(origin):
+                allow = normalize_extension_origin(origin)
+            return cors_response({"ok": True}, allow_origin=allow)
 
     @api.route('/health')
     def health():
@@ -597,6 +616,51 @@ def create_api(config, dl_manager, history, *, dependencies):
         ):
             resp["token"] = token
         return cors_response(resp)
+
+    @api.route('/pair-extension', methods=['POST'])
+    def pair_extension():
+        """Let Astra Deck introduce its Chrome/Edge ID over loopback.
+
+        Native messaging cannot start until that ID is in the host manifest.
+        This route does not echo the session token; the extension retries the
+        native channel after a successful pair.
+        """
+        origin = request.headers.get("Origin", "")
+        reflected = normalize_extension_origin(origin) if is_extension_origin_shape(origin) else ""
+        if not reflected:
+            return cors_response({
+                "ok": False,
+                "paired": False,
+                "code": "invalid-origin",
+                "error": "Pairing is only accepted from the Astra Deck extension.",
+            }, 403)
+        allowed, retry_after = pair_rate_limiter.allow(reflected)
+        if not allowed:
+            return cors_response(
+                {
+                    "ok": False,
+                    "paired": False,
+                    "code": "rate-limited",
+                    "error": "Too many pairing requests. Please wait a moment.",
+                },
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+                allow_origin=reflected,
+            )
+        body, body_error = request_json_object()
+        if body_error:
+            return cors_response({
+                "ok": False,
+                "paired": False,
+                "code": "invalid-body",
+                "error": body_error,
+            }, 400, allow_origin=reflected)
+        requested_id = clean_text((body or {}).get("id", ""), "", 128)
+        result = pair_browser_extension(origin, requested_id)
+        status = 200 if result.get("ok") else 403
+        if "token" in result:
+            result = {k: v for k, v in result.items() if k != "token"}
+        return cors_response(result, status, allow_origin=reflected)
 
     @api.route('/provision-deno', methods=['POST'])
     def provision_deno_endpoint():

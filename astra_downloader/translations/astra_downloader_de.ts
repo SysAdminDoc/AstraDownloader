@@ -423,6 +423,14 @@
       <translation>{total} / {limit} Aufträge</translation>
     </message>
     <message>
+      <source>Resume queue</source>
+      <translation>Warteschlange fortsetzen</translation>
+    </message>
+    <message>
+      <source>Pause intake</source>
+      <translation>Annahme pausieren</translation>
+    </message>
+    <message>
       <source>Export Settings</source>
       <translation>Einstellungen exportieren</translation>
     </message>
@@ -559,8 +567,8 @@
       <translation>Wird geprüft …</translation>
     </message>
     <message>
-      <source>Check yt-dlp Update</source>
-      <translation>yt-dlp-Update prüfen</translation>
+      <source>Check for yt-dlp updates</source>
+      <translation>Nach yt-dlp-Updates suchen</translation>
     </message>
     <message>
       <source>Setup is already running.</source>
@@ -1791,10 +1799,6 @@
       <translation>0 / 200 Aufträge</translation>
     </message>
     <message>
-      <source>Pause intake</source>
-      <translation>Annahme pausieren</translation>
-    </message>
-    <message>
       <source>Download a video</source>
       <translation>Video herunterladen</translation>
     </message>
@@ -2391,12 +2395,12 @@
       <translation>Kopplung mit Chrome und Edge</translation>
     </message>
     <message>
-      <source>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</source>
-      <translation>Firefox wird automatisch registriert. Für Chrome und Edge muss die Erweiterungs-ID von chrome://extensions einmal eingetragen werden.</translation>
+      <source>Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.</source>
+      <translation>Firefox wird automatisch registriert. Chrome und Edge koppeln sich selbst, sobald in Astra Deck ein Download-Button verwendet wird. Die ID von chrome://extensions kann weiterhin hier eingefügt werden.</translation>
     </message>
     <message>
       <source>32-letter extension ID. Separate multiple IDs with commas.</source>
-      <translation>32-letter extension ID. Separate multiple IDs with commas.</translation>
+      <translation>Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.</translation>
     </message>
     <message>
       <source>Chrome and Edge extension IDs</source>
@@ -2537,10 +2541,6 @@
     <message>
       <source>Checking installed tools…</source>
       <translation>Installierte Werkzeuge werden geprüft…</translation>
-    </message>
-    <message>
-      <source>Check for yt-dlp updates</source>
-      <translation>Nach yt-dlp-Updates suchen</translation>
     </message>
     <message>
       <source>Reinstall ffmpeg</source>
@@ -3261,6 +3261,18 @@
     <message>
       <source>update-ytdlp-or-retry-later</source>
       <translation>update-ytdlp-or-retry-later</translation>
+    </message>
+    <message>
+      <source>The stored YouTube sign-in made this public video unplayable on the player client this download uses.</source>
+      <translation>Die gespeicherte YouTube-Anmeldung hat dieses öffentliche Video auf dem Player-Client dieses Downloads unspielbar gemacht.</translation>
+    </message>
+    <message>
+      <source>Skip the YouTube sign-in for this public video, or remove the stored YouTube cookies and retry. Members-only and private videos still need a matching sign-in.</source>
+      <translation>Überspringen Sie die YouTube-Anmeldung für dieses öffentliche Video, oder entfernen Sie die gespeicherten YouTube-Cookies und versuchen Sie es erneut. Mitglieder- und private Videos brauchen weiterhin eine passende Anmeldung.</translation>
+    </message>
+    <message>
+      <source>retry-without-cookies</source>
+      <translation>retry-without-cookies</translation>
     </message>
     <message>
       <source>yt-dlp needs the Deno JavaScript runtime to solve recent YouTube signature challenges.</source>

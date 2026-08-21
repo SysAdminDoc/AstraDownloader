@@ -342,7 +342,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.8.0"
+APP_VERSION = "2.9.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -621,6 +621,10 @@ RATE_LIMIT_HEALTH_WINDOW_SECONDS = 60
 RATE_LIMIT_UPDATE_MAX = 3
 RATE_LIMIT_UPDATE_WINDOW_SECONDS = 60
 COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS = 300
+# Pairing writes a native-host allowlist entry. Keep it well below health
+# polling so a compromised local page cannot flood registry writes.
+RATE_LIMIT_PAIR_MAX = 8
+RATE_LIMIT_PAIR_WINDOW_SECONDS = 60
 # Scheduled scans only need the newest bounded window. The archive store is
 # the authority for dedupe; this cap keeps one slow channel from monopolizing
 # a waitress worker or filling the local state document.
@@ -3898,6 +3902,28 @@ def normalize_extension_origin(origin):
     return f"{scheme}://{host}"
 
 
+def is_extension_origin_shape(origin):
+    """True when Origin is a well-formed extension identity, paired or not.
+
+    Used by the one-shot pairing route so Astra Deck can introduce its Chrome
+    ID before that ID is in the native-host allowlist. The host still has to
+    be a Chrome a-p ID or a Firefox UUID; arbitrary web Origins never match.
+    """
+    normalized = normalize_extension_origin(origin)
+    if not normalized:
+        return False
+    parsed = urlparse(normalized)
+    host = (parsed.netloc or "").strip().lower()
+    if parsed.scheme == "chrome-extension":
+        return is_valid_native_extension_id(host, "chrome")
+    if parsed.scheme == "moz-extension":
+        return bool(re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            host,
+        ))
+    return False
+
+
 def parse_legacy_health_token_origins(value):
     origins = []
     for item in parse_native_extension_ids(value):
@@ -3954,6 +3980,40 @@ def _revoke_native_messaging_host(manifest_path, registry_key):
     unregister_native_host_registry_value(registry_key)
 
 
+def write_native_host_launcher(python_exe, script_path, dest):
+    """Write a Windows cmd wrapper so source runs can be native-messaging hosts.
+
+    Chrome's host manifest has a path and no argv. A frozen install points that
+    path at the exe; a source run has to launch Python with this file and
+    ``--native-host`` instead.
+    """
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    command = subprocess.list2cmdline([
+        str(Path(python_exe)),
+        "-u",
+        str(Path(script_path)),
+        "--native-host",
+    ])
+    body = "@echo off\r\n" + command + " %*\r\n"
+    tmp = dest.with_name(dest.name + ".tmp")
+    tmp.write_text(body, encoding="utf-8")
+    tmp.replace(dest)
+    return dest
+
+
+def native_host_executable(target, base_args):
+    """Return the path the native-host manifest should launch."""
+    if not base_args:
+        return str(target)
+    script = Path(base_args[0]).resolve() if base_args else Path(__file__).resolve()
+    return str(write_native_host_launcher(
+        target,
+        script,
+        NATIVE_HOST_DIR / f"{NATIVE_HOST_NAME}.cmd",
+    ))
+
+
 def register_native_messaging_hosts(target, base_args, config):
     if sys.platform != 'win32':
         return
@@ -3983,13 +4043,6 @@ def register_native_messaging_hosts(target, base_args, config):
         for registry_key in chrome_registry_keys:
             unregister_native_host_registry_value(registry_key)
 
-    if base_args:
-        write_persistent_log("Native messaging host registration skipped: source runs need an executable wrapper.")
-        if not chrome_ids:
-            revoke_chromium_host()
-        if not firefox_ids:
-            _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
-        return
     if not chrome_ids and not firefox_ids:
         revoke_chromium_host()
         _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
@@ -3997,14 +4050,15 @@ def register_native_messaging_hosts(target, base_args, config):
         return
     try:
         NATIVE_HOST_DIR.mkdir(parents=True, exist_ok=True)
+        host_path = native_host_executable(target, base_args)
         if chrome_ids:
-            atomic_write_json(chrome_manifest, build_native_host_manifest(target, chrome_ids, browser="chrome"))
+            atomic_write_json(chrome_manifest, build_native_host_manifest(host_path, chrome_ids, browser="chrome"))
             for registry_key in chrome_registry_keys:
                 register_native_host_registry_value(registry_key, chrome_manifest)
         else:
             revoke_chromium_host()
         if firefox_ids:
-            atomic_write_json(firefox_manifest, build_native_host_manifest(target, firefox_ids, browser="firefox"))
+            atomic_write_json(firefox_manifest, build_native_host_manifest(host_path, firefox_ids, browser="firefox"))
             register_native_host_registry_value(
                 firefox_registry_key,
                 firefox_manifest,
@@ -4015,22 +4069,89 @@ def register_native_messaging_hosts(target, base_args, config):
         write_persistent_log(f"Native messaging host registration failed: {e}")
 
 
-def refresh_native_messaging_registration():
+def refresh_native_messaging_registration(config=None):
     """Re-run browser native-host registration for the current install layout.
 
-    The GUI calls this when the configured Chrome/Edge extension IDs change so
-    the registry pointers and manifest follow the setting immediately instead
-    of waiting for the next launch. Returns False when nothing was (or can be)
-    registered: portable copies deliberately register no browser hosts, and a
-    source run has no executable wrapper for the host to launch.
+    The GUI and the pairing route call this when Chrome/Edge extension IDs
+    change so the registry pointers and manifest follow immediately instead of
+    waiting for the next launch. Returns False only for portable copies, which
+    deliberately register no browser hosts. Source runs write a cmd wrapper
+    that launches this file with ``--native-host``.
     """
     if is_portable_mode():
         return False
     target, base_args = launch_command_parts(prefer_installed=True)
-    if base_args:
-        return False
-    register_native_messaging_hosts(target, base_args, Config())
+    register_native_messaging_hosts(target, base_args, config or Config())
     return True
+
+
+def pair_browser_extension(config, origin, requested_id="", refresh=None):
+    """Persist a loopback extension identity and refresh native-host registration.
+
+    Returns a dict. Never includes the session token. Chrome Origins bind the
+    ID (the host *is* the 32-letter ID). Firefox Origins use a profile UUID, so
+    the body must name the known Astra Deck Gecko ID.
+    """
+    normalized_origin = normalize_extension_origin(origin)
+    if not normalized_origin or not is_extension_origin_shape(origin):
+        return {"ok": False, "paired": False, "code": "invalid-origin"}
+    parsed = urlparse(normalized_origin)
+    claimed = str(requested_id or "").strip()
+
+    if parsed.scheme == "chrome-extension":
+        extension_id = parsed.netloc.lower()
+        if claimed:
+            claimed = claimed.lower()
+            if claimed != extension_id:
+                return {"ok": False, "paired": False, "code": "id-mismatch"}
+        key = "NativeChromeExtensionIds"
+        browser = "chrome"
+    else:
+        claimed = claimed or DEFAULT_FIREFOX_EXTENSION_IDS[0]
+        if not is_valid_native_extension_id(claimed, "firefox"):
+            return {"ok": False, "paired": False, "code": "invalid-id"}
+        allowed = set(parse_native_extension_ids(
+            config.get("NativeFirefoxExtensionIds", ""),
+            fallback=DEFAULT_FIREFOX_EXTENSION_IDS,
+            browser="firefox",
+        ))
+        if claimed not in allowed:
+            return {"ok": False, "paired": False, "code": "unknown-firefox-id"}
+        extension_id = claimed
+        key = "NativeFirefoxExtensionIds"
+        browser = "firefox"
+
+    existing = parse_native_extension_ids(config.get(key, ""), browser=browser)
+    already = extension_id in existing
+    if not already:
+        joined = ", ".join(existing + [extension_id])
+        update = getattr(config, "update", None)
+        if callable(update):
+            saved = bool(update({key: joined}))
+        else:
+            setter = getattr(config, "set", None)
+            if not callable(setter):
+                return {"ok": False, "paired": False, "code": "save-failed"}
+            setter(key, joined)
+            saved = True
+        if not saved:
+            return {"ok": False, "paired": False, "code": "save-failed"}
+
+    refresh_fn = refresh_native_messaging_registration if refresh is None else refresh
+    registered = bool(refresh_fn(config) if refresh is None else refresh_fn())
+    write_persistent_log(
+        f"Paired browser extension {extension_id} "
+        f"({'already-present' if already else 'saved'}; native-host={'yes' if registered else 'no'})"
+    )
+    return {
+        "ok": True,
+        "paired": True,
+        "alreadyPaired": already,
+        "id": extension_id,
+        "nativeHostRegistered": registered,
+        "service": SERVICE_ID,
+        "api": SERVICE_API_VERSION,
+    }
 
 
 def ensure_system_integrations(prefer_installed=True, force=False):
@@ -4248,6 +4369,9 @@ QLineEdit, QSpinBox, QComboBox {
 }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #ff7664; background: #151b23; }
 QLineEdit[state="error"], QSpinBox[state="error"] { border-color: #c9675f; background: #1a1214; }
+/* Same cascade trap as heroUrl: the error attribute outranks :focus, so a
+   highlighted field would otherwise lose its keyboard ring. */
+QLineEdit[state="error"]:focus, QSpinBox[state="error"]:focus { border-color: #ff7664; }
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: #687381; background: #0e1319; border-color: #607080; }
 /* The paste box is the product's front door, so it is sized like one.
    An attribute selector outranks a pseudo-class in Qt's CSS2 cascade, so
@@ -4754,6 +4878,8 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'RATE_LIMIT_HEALTH_WINDOW_SECONDS': RATE_LIMIT_HEALTH_WINDOW_SECONDS,
         'RATE_LIMIT_UPDATE_MAX': RATE_LIMIT_UPDATE_MAX,
         'RATE_LIMIT_UPDATE_WINDOW_SECONDS': RATE_LIMIT_UPDATE_WINDOW_SECONDS,
+        'RATE_LIMIT_PAIR_MAX': RATE_LIMIT_PAIR_MAX,
+        'RATE_LIMIT_PAIR_WINDOW_SECONDS': RATE_LIMIT_PAIR_WINDOW_SECONDS,
         'COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS': COMPANION_UPDATE_FAILURE_BACKOFF_SECONDS,
         'SERVER_PORT': SERVER_PORT,
         'SERVICE_API_VERSION': SERVICE_API_VERSION,
@@ -4784,6 +4910,10 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'media_url_block_reason': lambda *args, **kwargs: media_url_block_reason(*args, **kwargs),
         'MAX_SITE_LOGIN_COOKIES': MAX_SITE_LOGIN_COOKIES,
         'normalize_extension_origin': lambda *args, **kwargs: normalize_extension_origin(*args, **kwargs),
+        'is_extension_origin_shape': lambda *args, **kwargs: is_extension_origin_shape(*args, **kwargs),
+        'pair_browser_extension': lambda origin, requested_id='': pair_browser_extension(
+            config, origin, requested_id
+        ),
         'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
         'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
         'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
@@ -5635,9 +5765,15 @@ def argv_requests_native_host(argv):
     manifest path followed by the configured Gecko extension ID. The Firefox
     form is accepted only for the exact manifest we registered and only when
     that manifest explicitly allows the supplied ID, so an arbitrary path or
-    normal application argument cannot enter the stdio-only path.
+    normal application argument cannot enter the stdio-only path. Source
+    installs also pass ``--native-host`` from the cmd wrapper.
     """
     args = list(argv or [])
+    if any(
+        isinstance(a, str) and str(a).strip().lower() in {"--native-host", "-native-host"}
+        for a in args
+    ):
+        return True
     if any(
         isinstance(a, str) and (a.startswith("chrome-extension://") or a.startswith("moz-extension://"))
         for a in args
