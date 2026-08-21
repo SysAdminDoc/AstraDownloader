@@ -142,13 +142,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the constant equals the first yt-dlp stable that contains #13515; `evaluate_sabr_support` returns `"supported"` for that version and `"limited"` below it; the Download-page SABR pill flips without a new UI. Do not invent a version while the PR is open.
   Complexity: S
 
-- [ ] P3 — AD-55 — Pin light-theme non-text contrast in CI
-  Why: `StylesheetContrastTests` parses only dark `STYLESHEET`. Light theme is generated from the replacement map and passed a manual audit this session, but a later token that fails 3:1 in light would not fail CI.
-  Evidence: `StylesheetContrastTests`; `_LIGHT_THEME_COLOR_REPLACEMENTS`
-  Touches: `astra_downloader/test_astra_downloader.py`
-  Acceptance: the same border floor is asserted against `LIGHT_STYLESHEET` backgrounds.
-  Complexity: S
-
 - [ ] P3 — AD-56 — Areas this audit did not exercise
   Why: remaining gaps are the signed-release chain, whisper transcription live path, winget publish, native-host stdio against a real Chrome profile, and the Astra Deck userscript `/health` token echo (still off).
   Evidence: session self-audit 2026-08-21
