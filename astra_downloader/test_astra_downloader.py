@@ -3878,6 +3878,71 @@ class InstalledExecutableTests(unittest.TestCase):
             mock.patch.object(ad, "_probe_companion_version", return_value=installed_version), \
             mock.patch.object(ad, "write_persistent_log")
 
+    def test_adjacent_release_sidecar_accepts_absence_and_matching_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "AstraDownloader.exe"
+            payload = b"MZ" + (b"verified-release" * 128)
+            executable.write_bytes(payload)
+
+            self.assertFalse(ad.verify_adjacent_release_sidecar(executable))
+
+            digest = hashlib.sha256(payload).hexdigest()
+            executable.with_name(executable.name + ".sha256").write_text(
+                f"{digest}  {executable.name}\n",
+                encoding="ascii",
+            )
+            self.assertTrue(ad.verify_adjacent_release_sidecar(executable))
+
+    def test_malformed_adjacent_release_sidecar_has_a_named_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "AstraDownloader.exe"
+            executable.write_bytes(b"MZrelease")
+            executable.with_name(executable.name + ".sha256").write_text(
+                "not-a-checksum\n",
+                encoding="ascii",
+            )
+
+            with self.assertRaises(
+                ad.DownloadedExecutableIntegrityError
+            ) as raised:
+                ad.verify_adjacent_release_sidecar(executable)
+
+            self.assertEqual(
+                raised.exception.code,
+                "download-integrity-check-failed",
+            )
+
+    def test_wrong_download_sidecar_stops_before_the_installer_entry_point(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "Downloads" / "AstraDownloader.exe"
+            executable.parent.mkdir()
+            executable.write_bytes(b"MZdownloaded-release")
+            executable.with_name(executable.name + ".sha256").write_text(
+                f"{'0' * 64}  {executable.name}\n",
+                encoding="ascii",
+            )
+            managed = root / "AppData" / "AstraDownloader" / "AstraDownloader.exe"
+
+            with mock.patch.object(ad.sys, "argv", [str(executable), "--install"]), \
+                    mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                    mock.patch.object(
+                        ad, "current_executable_path", return_value=executable
+                    ), \
+                    mock.patch.object(ad, "companion_install_exit_code") as install:
+                with self.assertRaises(
+                    ad.DownloadedExecutableIntegrityError
+                ) as raised:
+                    ad.main()
+
+            self.assertEqual(
+                raised.exception.code,
+                "download-integrity-check-failed",
+            )
+            self.assertIn("SHA-256", str(raised.exception))
+            install.assert_not_called()
+            self.assertFalse(managed.exists())
+
     def test_newer_managed_exe_is_kept_when_an_older_copy_launches(self):
         with tempfile.TemporaryDirectory() as tmp:
             current, target = self._paths(tmp)

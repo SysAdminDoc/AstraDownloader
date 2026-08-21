@@ -97,13 +97,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: routes are grouped into per-resource registrars (downloads / queue / subscriptions / site-logins / system) taking the same dependency mapping; the `_REQUIRED_*_DEPENDENCIES` contract is unchanged; all route tests pass untouched.
   Complexity: M
 
-- [ ] P2 — AD-52 — Compare the running executable to its SHA-256 sidecar on first launch of a downloaded copy
-  Why: AppWork's 2026-05-06 website-link swap replaced JDownloader installers with malware; in-app RSA updates were fine. Astra's only published channel is GitHub Releases plus a sidecar the README tells the user to check by hand. A first-launch compare against a sidecar sitting next to the exe catches a swapped file without asking for a signature, which this project refuses.
-  Evidence: https://jdownloader.org/incident_8.5.2026.html; https://www.malwarebytes.com/blog/news/2026/05/attackers-replaced-jdownloader-installer-downloads-with-malware; `README.md:141-148`; `SECURITY.md` unsigned-by-design clause; existing `atomic_copy_verified` / sidecar readers in `health.py`.
-  Touches: `astra_downloader/astra_downloader.py` (`main` / first-run), `health.py` (hash helper already used by self-update)
-  Acceptance: if `AstraDownloader.exe.sha256` exists beside the running image and the digest mismatches, setup stops with a named error and does not copy into `%LOCALAPPDATA%`; if the sidecar is absent (portable/dev/source), behaviour is unchanged; a test plants a wrong sidecar and asserts the named stop.
-  Complexity: S
-
 ### P3
 
 - [ ] P3 — AD-46 — Also persist the queue outside the manager lock
