@@ -19,6 +19,7 @@ CAPTURE_NAMES = (
     "dashboard-starting",
     "dashboard-online",
     "dashboard-light-theme",
+    "dashboard-log-populated",
     "dashboard-error-degraded",
     "dashboard-german",
     "dashboard-spanish",
@@ -32,6 +33,8 @@ CAPTURE_NAMES = (
     "downloads-first-run",
     "downloads-arabic-rtl",
     "downloads-active-pending",
+    "downloads-advanced-options",
+    "downloads-health-error",
     "downloads-focus-1x",
     "downloads-light-theme",
     "downloads-clipboard-staged",
@@ -43,6 +46,7 @@ CAPTURE_NAMES = (
     "downloads-queue-full",
     "downloads-format-probe",
     "history-populated",
+    "history-light-theme",
     "history-cleared-undo",
     "history-restored",
     "history-unreadable",
@@ -50,15 +54,18 @@ CAPTURE_NAMES = (
     "history-pagination",
     "subscriptions-empty",
     "subscriptions-populated",
+    "subscriptions-light-theme",
     "subscriptions-scanning",
     "subscriptions-error",
     "subscriptions-filter-empty",
     "subscriptions-disabled",
     "site-logins-empty",
     "site-logins-stored",
+    "site-logins-light-theme",
     "site-logins-error",
     "site-logins-filter-empty",
     "settings-dirty",
+    "settings-light-theme",
     "settings-subtitles",
     "settings-bundle-imported",
     "settings-fallback-port",
@@ -70,6 +77,11 @@ CAPTURE_NAMES = (
     "settings-focus-125x",
     "reflow-900x620-hidpi-large-font",
     "diagnostics-review",
+    "diagnostics-review-light-theme",
+    "playlist-review",
+    "playlist-review-light-theme",
+    "command-review",
+    "command-review-light-theme",
 )
 
 LOCALE_SCENARIOS = {
@@ -144,7 +156,7 @@ def main():
         from PyQt6.QtCore import QPoint, QRect, Qt, QTimer
         from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QImage
         from PyQt6.QtTest import QTest
-        from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea
+        from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 
         install_dir = Path(temp_dir) / "AstraDownloader"
         install_dir.mkdir(parents=True, exist_ok=True)
@@ -381,8 +393,24 @@ def main():
                 raise RuntimeError(f"Undeclared companion fixture: {name}")
             app.processEvents()
             window.repaint()
+            # Qt's offscreen backing store can discard untouched sibling
+            # regions after a tall page scroll. Repaint the rail subtree and
+            # warm its native backing surface before grabbing the complete
+            # window, otherwise a valid Settings state can produce a blank
+            # navigation rail in the evidence image.
+            window.sidebar.update()
+            for rail_widget in (
+                    window.brand_widget,
+                    *window.nav_buttons,
+                    *window.sidebar.findChildren(QWidget)):
+                rail_widget.update()
+            window.sidebar.repaint()
             app.processEvents()
-            QTest.qWait(80)
+            QTest.qWait(100)
+            rail_probe = window.sidebar.grab().toImage()
+            if rail_probe.isNull():
+                raise RuntimeError(f"Native navigation rail probe failed for {name}")
+            app.processEvents()
             logical_size = window.size()
             # Grab the complete native backing store in one pass. This pins the
             # shipped rail/page composition instead of recreating it in QPainter.
@@ -404,6 +432,28 @@ def main():
             }
             if len(rail_colors) < 3:
                 raise RuntimeError(f"Native navigation rail did not paint for {name}")
+            for rail_widget in (window.brand_widget, *window.nav_buttons):
+                top_left = rail_widget.mapTo(window, QPoint(0, 0))
+                x0 = max(0, int(round(top_left.x() * actual_dpr)))
+                y0 = max(0, int(round(top_left.y() * actual_dpr)))
+                x1 = min(
+                    image.width(),
+                    x0 + int(round(rail_widget.width() * actual_dpr)),
+                )
+                y1 = min(
+                    image.height(),
+                    y0 + int(round(rail_widget.height() * actual_dpr)),
+                )
+                colors = {
+                    image.pixelColor(x, y).name()
+                    for y in range(y0, y1, max(1, int(round(4 * actual_dpr))))
+                    for x in range(x0, x1, max(1, int(round(4 * actual_dpr))))
+                }
+                if len(colors) < 3:
+                    raise RuntimeError(
+                        f"Navigation control did not paint for {name}: "
+                        f"{rail_widget.accessibleName() or type(rail_widget).__name__}"
+                    )
             output = OUTPUT_DIR / f"{name}.png"
             if not image.save(str(output), "PNG"):
                 raise RuntimeError(f"Failed to save companion render: {output}")
@@ -575,7 +625,9 @@ def main():
                     "Starting", "Starting local server",
                     "Checking the local API and installed tools…",
                 })
-            elif scenario in {"dashboard-online", "dashboard-light-theme"}:
+            elif scenario in {
+                    "dashboard-online", "dashboard-light-theme",
+                    "dashboard-log-populated"}:
                 window.status_label.setText("Running")
                 window.status_label.setProperty("tone", "success")
                 window.status_dot.setProperty("tone", "success")
@@ -598,6 +650,15 @@ def main():
                 select_page(window, "Download")
                 assert_visible_text(window, {"2026.07.04", "7.1", "Deno 2.7.11"})
                 select_page(window, "Browser extension")
+                if scenario == "dashboard-log-populated":
+                    window._append_log("Browser extension paired with the local server.")
+                    window._append_log("Download request accepted from Astra Deck.")
+                    window._restore_log_view()
+                    scroll_current_page_to_bottom(window)
+                    if not window.log_text.isVisible():
+                        raise RuntimeError("Populated server log is hidden")
+                    if "Download request accepted" not in window.log_text.toPlainText():
+                        raise RuntimeError("Populated server log text is missing")
             else:
                 window.status_label.setText("Server error")
                 window.status_label.setProperty("tone", "danger")
@@ -774,6 +835,32 @@ def main():
             elif scenario == "downloads-active-pending":
                 scroll_current_page_to_top(window)
                 assert_visible_text(window, {"Downloading documentary", "Queued lecture"})
+            elif scenario == "downloads-advanced-options":
+                window.btn_quick_options.setChecked(True)
+                app.processEvents()
+                scroll_current_page_to_top(window)
+                if not window.quick_download_advanced.isVisible():
+                    raise RuntimeError("Advanced download controls did not open")
+                if window.quick_download_video_password.placeholderText() != (
+                        "Video password (one link only, optional)"):
+                    raise RuntimeError("Advanced password guidance is missing")
+                assert_visible_text(
+                    window,
+                    {"Clip from", "Save as"},
+                )
+            elif scenario == "downloads-health-error":
+                for key in window.preflight_values:
+                    window._set_preflight_row(key, "ok")
+                window._set_preflight_row("javascript-runtime", "error")
+                window._update_preflight_summary()
+                app.processEvents()
+                scroll_current_page_to_top(window)
+                if not window.preflight_details.isVisible():
+                    raise RuntimeError("Failing download health checks stayed collapsed")
+                assert_visible_text(
+                    window,
+                    {"One check needs repair. Open the checks to see the fix."},
+                )
             elif scenario == "downloads-subtitles-only":
                 # Subtitles is a third download type, not a settings toggle.
                 # Neither picker beside it describes a subtitle, so both are
@@ -835,7 +922,7 @@ def main():
                     )
                 elif scenario == "downloads-rate-limited":
                     rendered = visible_text(window)
-                    if not any("retry in" in text for text in rendered):
+                    if not any("retry in" in text.lower() for text in rendered):
                         raise RuntimeError("Rate-limited queue item has no host countdown")
                     if not any("This host is paused" in text for text in rendered):
                         raise RuntimeError("Rate-limited recovery callout is missing")
@@ -921,7 +1008,7 @@ def main():
                 window._move_history_page(1)
                 if not window.btn_history_prev.isEnabled():
                     raise RuntimeError("History pagination fixture did not enable previous")
-                if "51–55 of 55 filtered" not in window.history_meta.text():
+                if "51 to 55 of 55 filtered" not in window.history_meta.text():
                     raise RuntimeError(
                         f"History pagination metadata is wrong: {window.history_meta.text()!r}"
                     )
@@ -952,7 +1039,7 @@ def main():
                     raise RuntimeError("Subscription scan fixture did not expose its active state")
             elif scenario == "subscriptions-empty":
                 assert_visible_text(window, {"No scheduled subscriptions"})
-            elif scenario == "subscriptions-populated":
+            elif scenario in {"subscriptions-populated", "subscriptions-light-theme"}:
                 assert_visible_text(window, {"Astra channel"})
                 if not any("Every 60 min" in text for text in visible_text(window)):
                     raise RuntimeError("Subscription fixture did not render its scan interval")
@@ -985,6 +1072,10 @@ def main():
 
         def capture_site_login_state(window):
             select_page(window, "Sign-ins")
+            if window.site_login_profile.width() < 160:
+                raise RuntimeError(
+                    "Browser profile field is clipped in the standard viewport"
+                )
             store = window.dl_manager.site_logins
             if scenario == "site-logins-error":
                 def failing_entries():
@@ -1033,6 +1124,8 @@ def main():
             if scenario == "settings-dirty":
                 window.cfg_dl_path.setText(str(Path(temp_dir) / "Videos" / "Edited"))
                 expected = "Unsaved changes"
+            elif scenario == "settings-light-theme":
+                expected = "Settings"
             elif scenario == "settings-bundle-imported":
                 # Drive the real round trip: export the live settings, change
                 # them, import the bundle back, and check the FORM shows the
@@ -1181,7 +1274,7 @@ def main():
                     "until the update passes."
                 )
                 window._show_settings_status(expected, "warning")
-            if scenario == "settings-fallback-port":
+            if scenario in {"settings-fallback-port", "settings-light-theme"}:
                 # The Connection card is the top of the page.
                 scroll_current_page_to_top(window)
             elif scenario == "settings-search-active":
@@ -1210,24 +1303,121 @@ def main():
                 dpr=SCALE_SCENARIOS.get(scenario, 1.0),
             )
 
-        def capture_diagnostics(window):
-            diagnostics_output = OUTPUT_DIR / "diagnostics-review.png"
+        def capture_modal_dialog(output_name, expected_title, trigger, validate):
+            dialog_output = OUTPUT_DIR / f"{output_name}.png"
 
             def capture_dialog():
                 dialog = app.activeModalWidget()
-                if dialog is None or dialog.windowTitle() != "Review Diagnostics":
-                    raise RuntimeError("Diagnostics review dialog did not open")
-                preview = dialog.findChild(app_module.QTextEdit)
-                if preview is None or '"schemaVersion": 1' not in preview.toPlainText():
-                    raise RuntimeError("Diagnostics review does not expose the redacted payload")
+                if dialog is None or dialog.windowTitle() != expected_title:
+                    raise RuntimeError(f"{expected_title} dialog did not open")
+                validate(dialog)
+                dialog.repaint()
+                app.processEvents()
+                QTest.qWait(80)
                 image = dialog.grab().toImage()
-                if not image.save(str(diagnostics_output), "PNG"):
-                    raise RuntimeError("Failed to save diagnostics review render")
-                print("captured diagnostics-review", flush=True)
+                if image.isNull() or image.deviceIndependentSize().toSize() != dialog.size():
+                    raise RuntimeError(
+                        f"Dialog capture geometry is invalid for {output_name}"
+                    )
+                if not image.save(str(dialog_output), "PNG"):
+                    raise RuntimeError(f"Failed to save {output_name} render")
+                print(f"captured {output_name}", flush=True)
                 dialog.reject()
 
             QTimer.singleShot(150, capture_dialog)
-            window._copy_diagnostics()
+            trigger()
+
+        def capture_diagnostics(window):
+            def validate(dialog):
+                preview = dialog.findChild(app_module.QTextEdit)
+                if preview is None or '"schemaVersion": 1' not in preview.toPlainText():
+                    raise RuntimeError(
+                        "Diagnostics review does not expose the redacted payload"
+                    )
+
+            capture_modal_dialog(
+                scenario,
+                "Review Diagnostics",
+                window._copy_diagnostics,
+                validate,
+            )
+
+        def capture_playlist_review(window):
+            preview = {
+                "title": "Design Systems Field Notes",
+                "channel": "Astra Studio",
+                "items": [
+                    {"index": 1, "title": "Build a dependable spacing scale", "duration": 612},
+                    {"index": 2, "title": "Keyboard focus that survives every theme", "duration": 845},
+                    {"index": 3, "title": "Writing recovery states people can use", "duration": 497},
+                    {"index": 4, "title": "Testing desktop layouts at minimum size", "duration": 731},
+                ],
+            }
+
+            def trigger():
+                dialog = app_module.PlaylistStagingDialog(window, preview)
+                dialog.exec()
+
+            def validate(dialog):
+                if len(dialog.checkboxes) != 4:
+                    raise RuntimeError("Playlist review did not render all videos")
+                if not all(cb.accessibleName() for cb, _item in dialog.checkboxes):
+                    raise RuntimeError("Playlist review checkboxes lack accessible names")
+                if dialog.btn_download.text() != "Download selected (4)":
+                    raise RuntimeError(
+                        "Playlist review count is not reflected in its action"
+                    )
+
+            capture_modal_dialog(
+                scenario, "Review Playlist", trigger, validate
+            )
+
+        def capture_command_review(window, manager):
+            download = fixture_download(
+                manager,
+                "command",
+                "Design Systems Field Notes",
+                "complete",
+                1,
+            )
+            download.command_args = [
+                "yt-dlp.exe",
+                "--format",
+                "bestvideo+bestaudio",
+                "--output",
+                r"C:\Users\<redacted>\Videos\%(title)s.%(ext)s",
+                "<redacted-url>",
+            ]
+
+            def validate(dialog):
+                preview = dialog.findChild(app_module.QTextEdit)
+                if preview is None or "--format" not in preview.toPlainText():
+                    raise RuntimeError(
+                        "Command review does not expose the redacted command"
+                    )
+                copy_button = next(
+                    (
+                        button
+                        for button in dialog.findChildren(app_module.QPushButton)
+                        if button.text() == "Copy command"
+                    ),
+                    None,
+                )
+                if copy_button is None:
+                    raise RuntimeError("Command review has no copy action")
+                copy_button.click()
+                app.processEvents()
+                if "Copied to clipboard." not in visible_text(dialog):
+                    raise RuntimeError(
+                        "Copy command action has no visible confirmation"
+                    )
+
+            capture_modal_dialog(
+                scenario,
+                "yt-dlp Command",
+                lambda: window._show_download_command_dialog(download),
+                validate,
+            )
 
         capture_failures = []
 
@@ -1246,8 +1436,14 @@ def main():
                     capture_site_login_state(window)
                 elif scenario.startswith("settings-"):
                     capture_settings_state(window, config)
-                else:
+                elif scenario.startswith("diagnostics-review"):
                     capture_diagnostics(window)
+                elif scenario.startswith("playlist-review"):
+                    capture_playlist_review(window)
+                elif scenario.startswith("command-review"):
+                    capture_command_review(window, manager)
+                else:
+                    raise RuntimeError(f"Unhandled companion fixture: {scenario}")
                 output = OUTPUT_DIR / f"{scenario}.png"
                 if not output.exists() or output.stat().st_size < 10_000:
                     raise RuntimeError(
