@@ -12,8 +12,17 @@ repository's git log.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-08-21
+
 ### Added
 
+- **Astra Deck can pair Chrome and Edge itself.** Download buttons in the
+  extension used to fail until you pasted the 32-letter ID from
+  chrome://extensions: native messaging is the only token channel, and that
+  ID was never in the host manifest after a fresh install. The extension now
+  posts its ID to a loopback `/pair-extension` route (Origin-bound, no token
+  echo). Source runs register a cmd wrapper so the browser can launch the
+  native host without a packaged exe.
 - **Download health now starts with a useful summary.** Six readiness checks
   stay one click away when everything is ready and open automatically when a
   repair is needed.
@@ -41,6 +50,32 @@ repository's git log.
   plain missing-value labels, and pagination reads naturally at a glance.
 - Recovery messages now use short sentences with direct next steps instead of
   punctuation-heavy fragments across setup, downloads, updates, and sign-ins.
+
+### Fixed
+
+- **YouTube downloads no longer send the dead `android_vr` player client.**
+  yt-dlp 2026.08.19 403s that client, and auto-update would fetch it while
+  argv still listed it last in the token-exempt chain.
+- **Cookie jars that make a public YouTube video UNPLAYABLE are named as
+  such.** Those logs used to classify as sign-in-required and tell you to
+  add cookies. The downloader now retries once without the jar, and the
+  recovery copy tells you to skip the YouTube sign-in.
+- **A SABR leftover 360p run is no longer marked complete.** yt-dlp exits 0
+  after downloading the combined stream; the queue now treats the SABR
+  warning as a failure even when progress lines bury it.
+- **The Windows system-proxy setting actually saves.** Toggling it and
+  clicking Save reported success while the config kept the old value.
+- **Keyboard focus stays visible on invalid Settings fields.** The error
+  border used to outrank the focus ring.
+- **Buttons that change their label now update the name a screen reader
+  hears.** Start/Stop server, Pause intake, Saved, and the yt-dlp update
+  check used to keep their original accessible name.
+- **History export no longer stops at 500 filtered rows.**
+- **Clearing a clipboard-staged link lets the same copied URL stage again.**
+- **A stale format probe no longer blocks looking up the same URL.**
+- **Playlist review now waits for the first-run folder confirmation.**
+- **Importing a settings bundle restarts the local API when the port
+  changed.** The restore-defaults path already did this.
 
 ## [2.8.0] - 2026-08-14
 

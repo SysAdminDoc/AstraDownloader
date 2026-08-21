@@ -3,20 +3,20 @@
 Last reviewed: 2026-08-11.
 
 This document covers how the separate Astra Deck browser extension moves
-YouTube cookies into Astra Downloader 2.8.0 for authenticated yt-dlp downloads.
+YouTube cookies into Astra Downloader 2.9.0 for authenticated yt-dlp downloads.
 It is the store-review and maintainer-facing explanation for the `cookies`
 permission and for Astra Downloader's cookie-jar lifecycle. Astra Deck is the
 extension project; Astra Downloader is the Windows application and local
 service described here.
 
-Astra Downloader 2.8.0 downloads from any public site yt-dlp supports, not only
+Astra Downloader 2.9.0 downloads from any public site yt-dlp supports, not only
 YouTube. The extension's cookie bridge is intentionally narrower: that jar is
 still built solely from `ALLOWED_COOKIE_DOMAINS` (YouTube/Google) and is
 attached only to YouTube extractions. The SSRF control that the old YouTube-only
 URL allowlist provided is preserved as an explicit private-network denylist —
 see the threats table.
 
-Astra Downloader 2.8.0 also has a second, separate cookie path: **site
+Astra Downloader 2.9.0 also has a second, separate cookie path: **site
 sign-ins**, a durable per-site store the user populates deliberately
 (`SiteLoginStore`, one jar per registrable domain under
 `%LOCALAPPDATA%\AstraDownloader\site-logins`). It exists because sites other
@@ -78,7 +78,7 @@ baseline for CVE-2023-35934.
 | Cookie jar is readable by other local users. | The writer creates an empty file, removes inherited Windows ACEs with `icacls /inheritance:r`, grants full control only to the current account, verifies the resulting ACL has no inherited entries, and only then writes cookie bytes. POSIX platforms require verified mode `0600`; ACL failure aborts the download. |
 | YouTube cookies leak to third-party APIs. | Background fetch policy sends credentials only to YouTube/nocookie and local companion origins; SponsorBlock, DeArrow, RYD, Reddit, AI providers, and Cobalt use credentialless requests. |
 | DNS rebinding or localhost aliasing reaches another local service. | Extension and companion use literal `127.0.0.1` loopback ports, not `localhost`; the companion also validates Host headers. |
-| A token holder aims the downloader (and its cookie jar) at a LAN service or the cloud-metadata endpoint. | Astra Downloader 2.8.0 uses `media_url_block_reason()` instead of the old YouTube-only URL allowlist: `/download`, `/formats`, `/playlist`, and `DownloadManagerCore.start_download()` reject loopback, private, link-local, reserved, multicast, single-label, `.local`/`.internal`/`.lan`, credential-bearing, and non-public-TLD targets before yt-dlp is spawned. Cookies are additionally YouTube-scoped (row above). |
+| A token holder aims the downloader (and its cookie jar) at a LAN service or the cloud-metadata endpoint. | Astra Downloader 2.9.0 uses `media_url_block_reason()` instead of the old YouTube-only URL allowlist: `/download`, `/formats`, `/playlist`, and `DownloadManagerCore.start_download()` reject loopback, private, link-local, reserved, multicast, single-label, `.local`/`.internal`/`.lan`, credential-bearing, and non-public-TLD targets before yt-dlp is spawned. Cookies are additionally YouTube-scoped (row above). |
 | An imported browser export carries every site's cookies, not just the one being signed in to. | `SiteLoginStore` filters records to the target registrable domain three times over — at import, when the protected jar is written (`write_cookies_netscape(domain_filter=…)`), and again when the per-download copy is exported. `cookie_domain_in_site()` matches exactly or on a leading dot, so `notx.com` / `x.com.evil.net` never match `x.com`. The import result reports how many foreign cookies were discarded. |
 | The full-browser jar produced while reading a browser's cookie store leaks. | `import_site_login_from_browser()` writes yt-dlp's `--cookies` output to a staging file inside the install dir, filters it, and deletes it in a `finally` — it never outlives the call and is never the file handed to a download. |
 | A stored sign-in is sent to a site it does not belong to. | `Download.cookies_scope` records the site each jar was built for and `_cookie_jar_matches_target()` gates the `--cookies` flag, so a request pairing one site's URL with another site's cookies sends nothing. Verified by a mutation test: removing the gate fails the suite. |
