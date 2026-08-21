@@ -153,10 +153,10 @@ def main():
         sys.path.insert(0, str(ROOT))
 
         from astra_downloader import astra_downloader as app_module
-        from PyQt6.QtCore import QPoint, QRect, Qt, QTimer
-        from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QImage
-        from PyQt6.QtTest import QTest
-        from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
+        from PySide6.QtCore import QPoint, QRect, Qt, QTimer
+        from PySide6.QtGui import QFont, QFontDatabase, QIcon, QImage
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 
         install_dir = Path(temp_dir) / "AstraDownloader"
         install_dir.mkdir(parents=True, exist_ok=True)

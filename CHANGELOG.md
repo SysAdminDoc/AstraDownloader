@@ -14,6 +14,14 @@ repository's git log.
 
 ### Changed
 
+- **The Qt binding is now PySide6 instead of PyQt6.** Astra Downloader's own
+  code is MIT, and PyQt6 offered only GPL-3.0 or a paid Riverbank entitlement,
+  which left the licence of the shipped executable genuinely unsettled. PySide6
+  comes from the Qt Company under LGPL-3.0, so the combined binary has a clean
+  route. `AstraDownloader-onedir.zip` is the artifact that keeps the Qt
+  libraries replaceable, and it ships with every release for that reason. The
+  one-file executable grew by about 2.9 MB.
+
 - **Release builds now run on CPython 3.13.** python.org shipped no Windows
   installer after 3.12.10, so the build interpreter had been sitting on a
   branch that gets no more binaries. Running from source still works on 3.11

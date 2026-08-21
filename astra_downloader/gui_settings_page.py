@@ -7,8 +7,8 @@ injected MainWindowCore.
 import json
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
     QLineEdit, QProgressBar, QScrollArea, QSpinBox, QTextEdit, QVBoxLayout,
     QWidget,

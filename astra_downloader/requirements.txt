@@ -2,9 +2,10 @@
 #
 # Floor: Python 3.11 — one release above the yt-dlp wheel's own >=3.10, because
 # CPython 3.10 reaches end of life in October 2026 and the packaged build has
-# never run on it. Hard-failed at runtime in astra_downloader.py module load,
-# which has to agree with this floor: on an older interpreter the resolve of
-# this file fails first and the guard that exists to explain it never runs.
+# never run on it. Every pin here would still resolve on 3.10, so the floor is
+# enforced at runtime by the version guard in astra_downloader.py rather than
+# by pip. Move the two together or the guard starts explaining the wrong
+# thing.
 #
 # Upper bounds are per-package — prevents Dependabot or a fresh
 # pip resolve from silently landing PyQt7/Flask4/requests3/waitress4
@@ -21,7 +22,13 @@
 # users actually run.
 yt-dlp==2026.8.19
 curl_cffi==0.16.0
-PyQt6>=6.6.0,<7
+# PySide6 is the Qt Company's own binding, tri-licensed LGPL-3.0-only OR
+# GPL-2.0-only OR GPL-3.0-only. The LGPL route is what lets this MIT
+# application ship Qt inside a combined binary; PyQt6 offered only GPL or a
+# Riverbank commercial entitlement. Essentials, not the full PySide6
+# metapackage: QtCore/QtGui/QtWidgets/QtTest are the whole surface, and the
+# Addons wheel would add QtWebEngine and friends to every download.
+PySide6-Essentials>=6.11.2,<7
 # v1.4.0 NX11: Flask >=3.1.3 closes CVE-2026-27205 (session cache-control
 # leak via the `in` operator). Astra Downloader doesn't use Flask
 # sessions, so the CVE is structurally inapplicable — but we pin defensively

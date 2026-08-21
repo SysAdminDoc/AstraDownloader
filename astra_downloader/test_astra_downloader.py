@@ -89,7 +89,7 @@ def _retire_test_window(window):
     freed memory and the interpreter dies with an access violation. Application
     shutdown performs the final disposal.
     """
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     try:
         window.tray.hide()
@@ -1041,7 +1041,7 @@ class PersistenceTests(unittest.TestCase):
             self.assertTrue(gui.MainWindowCore._history_is_quarantined(window))
 
     def test_history_view_explains_loading_and_unreadable_states(self):
-        from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
+        from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
         _get_qapp_or_skip(self)
 
@@ -2491,7 +2491,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         files instead of another repository's.
         """
         import i18n as i18n_module
-        from PyQt6.QtCore import QTranslator
+        from PySide6.QtCore import QTranslator
 
         translations = i18n_module.companion_translations_dir()
         shipped = {
@@ -2691,7 +2691,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             self.assertIn(color, ad.STYLESHEET)
 
     def test_companion_theme_switch_resolves_palette_and_icon_scheme(self):
-        from PyQt6.QtCore import Qt
+        from PySide6.QtCore import Qt
         import gui as gui_module
 
         self.assertEqual(ad.resolve_theme("system", Qt.ColorScheme.Light), "light")
@@ -3211,7 +3211,7 @@ class InstanceCommandTests(unittest.TestCase):
         self.assertEqual(received, ["s" * 32 + " show"])
 
     def test_instance_control_listener_rejects_an_untokened_command(self):
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtWidgets import QApplication, QPushButton
 
         _get_qapp_or_skip(self)
         token = "c" * 32
@@ -3953,7 +3953,7 @@ class QuarantinedStateFileTests(unittest.TestCase):
             self.assertIn("set aside", notice)
 
     def test_the_download_page_offers_to_restore_a_quarantined_file(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         with tempfile.TemporaryDirectory() as tmp:
@@ -3984,7 +3984,7 @@ class QuarantinedStateFileTests(unittest.TestCase):
                     _retire_test_window(window)
 
     def test_dismiss_hides_the_notice_without_restoring(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         with tempfile.TemporaryDirectory() as tmp:
@@ -4014,7 +4014,7 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
     """"Show, Show, Show" tells a screen-reader user nothing about which file."""
 
     def test_every_history_row_action_names_its_own_file(self):
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtWidgets import QApplication, QPushButton
 
         _get_qapp_or_skip(self)
 
@@ -4054,7 +4054,7 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_failed_history_row_shows_status_error_and_terminal_filters(self):
-        from PyQt6.QtWidgets import QApplication, QLabel
+        from PySide6.QtWidgets import QApplication, QLabel
 
         _get_qapp_or_skip(self)
 
@@ -4090,7 +4090,7 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_retryable_failed_card_exposes_retry_link_and_error_actions(self):
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtWidgets import QApplication, QPushButton
 
         _get_qapp_or_skip(self)
         history = FakeHistory()
@@ -4123,7 +4123,7 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_rate_limited_card_shows_the_live_host_countdown(self):
-        from PyQt6.QtWidgets import QApplication, QLabel
+        from PySide6.QtWidgets import QApplication, QLabel
 
         _get_qapp_or_skip(self)
         history = FakeHistory()
@@ -4406,7 +4406,7 @@ class PerDownloadDestinationTests(unittest.TestCase):
             return ad.MainWindow(FakeConfig(), manager, FakeHistory()), manager
 
     def test_a_chosen_folder_applies_to_one_download_then_clears(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window, manager = self._window()
@@ -4473,8 +4473,8 @@ class DragAndDropTests(unittest.TestCase):
             return ad.MainWindow(FakeConfig(), manager, FakeHistory()), manager
 
     def _drop(self, text=None, urls=()):
-        from PyQt6.QtCore import QMimeData, QUrl, QPointF, Qt
-        from PyQt6.QtGui import QDropEvent
+        from PySide6.QtCore import QMimeData, QUrl, QPointF, Qt
+        from PySide6.QtGui import QDropEvent
 
         mime = QMimeData()
         if text is not None:
@@ -4493,7 +4493,7 @@ class DragAndDropTests(unittest.TestCase):
         )
 
     def test_a_dropped_link_is_queued(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window, manager = self._window()
@@ -4516,8 +4516,8 @@ class DragAndDropTests(unittest.TestCase):
             _retire_test_window(window)
 
     def test_a_dropped_text_file_of_links_becomes_a_batch(self):
-        from PyQt6.QtCore import QUrl
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtCore import QUrl
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window, manager = self._window()
@@ -4547,7 +4547,7 @@ class DragAndDropTests(unittest.TestCase):
             _retire_test_window(window)
 
     def test_an_oversized_link_file_is_ignored(self):
-        from PyQt6.QtCore import QUrl
+        from PySide6.QtCore import QUrl
 
         _get_qapp_or_skip(self)
         window, _manager = self._window()
@@ -4764,7 +4764,7 @@ class UiRefreshCoalescingTests(unittest.TestCase):
             return ad.MainWindow(FakeConfig(), manager, history), manager
 
     def test_a_burst_of_progress_signals_causes_one_refresh(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window, manager = self._window()
@@ -4794,7 +4794,7 @@ class UiRefreshCoalescingTests(unittest.TestCase):
             _retire_test_window(window)
 
     def test_typing_in_the_history_search_reloads_once(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
 
@@ -4827,8 +4827,8 @@ class UiRefreshCoalescingTests(unittest.TestCase):
 
 class DownloadCardFocusTests(unittest.TestCase):
     def test_focus_survives_a_card_rebuild_on_status_change(self):
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication, QPushButton
 
         _get_qapp_or_skip(self)
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
@@ -4974,18 +4974,18 @@ class FatalErrorReportingTests(unittest.TestCase):
                     mock.patch.object(ad.sys, "platform", "win32"), \
                     mock.patch.object(_ctypes, "windll", FakeWindll(), create=True):
                 try:
-                    raise RuntimeError("PyQt6 plugin missing")
+                    raise RuntimeError("PySide6 plugin missing")
                 except RuntimeError as error:
                     ad.report_fatal_error(f"Fatal startup error: {error}")
 
             self.assertTrue(crash_log.exists(), "the crash log must be written")
             body = crash_log.read_text(encoding="utf-8")
-            self.assertIn("PyQt6 plugin missing", body)
+            self.assertIn("PySide6 plugin missing", body)
 
         self.assertEqual(len(shown), 1)
         caption, text = shown[0]
         self.assertEqual(caption, ad.APP_NAME)
-        self.assertIn("PyQt6 plugin missing", text)
+        self.assertIn("PySide6 plugin missing", text)
         self.assertIn(str(crash_log), text,
                       "the dialog must name the file the user should send")
 
@@ -6990,7 +6990,7 @@ class ApiSecurityTests(unittest.TestCase):
                 self.assertEqual(resp.status_code, 200, f"Expected 200 for Host={good_host}")
 
     def test_missing_source_dependency_message_requires_explicit_virtualenv_setup(self):
-        error = ModuleNotFoundError("missing PyQt6", name="PyQt6")
+        error = ModuleNotFoundError("missing PySide6", name="PySide6")
         message = ad.source_dependency_error(error)
         self.assertIn("will not install packages during import", message)
         self.assertIn("py -3.13 -m venv .venv", message)
@@ -7049,10 +7049,10 @@ assert download.build_subprocess_env(
 
 for forbidden in (
     "astra_downloader.astra_downloader",
-    "PyQt6",
-    "PyQt6.QtCore",
-    "PyQt6.QtGui",
-    "PyQt6.QtWidgets",
+    "PySide6",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
     "flask",
 ):
     assert forbidden not in sys.modules, f"boundary import loaded {forbidden}"
@@ -7243,7 +7243,7 @@ import importlib
 import sys
 
 gui = importlib.import_module("astra_downloader.gui")
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 assert QApplication.instance() is None
 assert gui.human_status("needs-auth") == "Needs sign-in"
 assert gui.format_duration(3660) == "1h 1m"
@@ -8632,7 +8632,7 @@ class FolderPickerWatchdogTests(unittest.TestCase):
         )
 
     def test_watchdog_emits_log_when_dialog_blocks_past_threshold(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
 
@@ -11516,7 +11516,7 @@ def _get_qapp_or_skip(test_case):
         test_case.skipTest(f"QApplication unavailable: {_qapp_init_error}")
         return None
     try:
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         _qapp_singleton = QApplication.instance() or QApplication([])
         return _qapp_singleton
     except Exception as e:  # noqa: BLE001
@@ -11554,12 +11554,12 @@ class GuiSmokeTests(unittest.TestCase):
 
     def test_qapplication_constructs(self):
         # If we got past setUp without skipping, QApplication is alive.
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         self.assertIsNotNone(QApplication.instance(),
                              "QApplication.instance() must be available after setUp")
 
     def test_main_window_construction_defers_executable_version_probes(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         calls = []
 
@@ -11612,7 +11612,7 @@ class GuiSmokeTests(unittest.TestCase):
                 self._retained_windows.append(window)
 
     def test_download_progress_patches_one_card_and_preserves_scroll_and_focus(self):
-        from PyQt6.QtWidgets import QApplication, QProgressBar, QPushButton
+        from PySide6.QtWidgets import QApplication, QProgressBar, QPushButton
 
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
         for index in range(24):
@@ -11692,8 +11692,8 @@ class GuiSmokeTests(unittest.TestCase):
                 self._retained_windows.append(window)
 
     def test_download_queue_and_settings_actions_stay_in_the_primary_view(self):
-        from PyQt6.QtCore import QPoint
-        from PyQt6.QtWidgets import QApplication, QScrollArea
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QApplication, QScrollArea
 
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
         with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
@@ -11753,7 +11753,7 @@ class GuiSmokeTests(unittest.TestCase):
                 self._retained_windows.append(window)
 
     def test_make_line_icon_renders_glyph_at_native_requested_size(self):
-        from PyQt6.QtCore import QSize
+        from PySide6.QtCore import QSize
         # The default 18 px icon cannot satisfy a 36 px request without
         # upscaling, so QIcon.actualSize caps at the stored 18 px pixmap.
         small = ad.make_line_icon("history")
@@ -11816,7 +11816,7 @@ class GuiSmokeTests(unittest.TestCase):
         response_q = queue.Queue(maxsize=1)
         ad._folder_pick_q.put({'initial': '', 'response': response_q})
 
-        from PyQt6.QtWidgets import QFileDialog as RealQFileDialog
+        from PySide6.QtWidgets import QFileDialog as RealQFileDialog
         fake_dialog = mock.MagicMock()
         fake_dialog.exec.return_value = RealQFileDialog.DialogCode.Accepted
         fake_dialog.selectedFiles.return_value = ['/tmp/picked-folder']
@@ -11847,7 +11847,7 @@ class GuiSmokeTests(unittest.TestCase):
         response_q = queue.Queue(maxsize=1)
         ad._folder_pick_q.put({'initial': '', 'response': response_q})
 
-        from PyQt6.QtWidgets import QFileDialog as RealQFileDialog
+        from PySide6.QtWidgets import QFileDialog as RealQFileDialog
         fake_dialog = mock.MagicMock()
         fake_dialog.exec.return_value = RealQFileDialog.DialogCode.Rejected
         fake_dialog.windowFlags.return_value = 0
@@ -11881,7 +11881,7 @@ class GuiSmokeTests(unittest.TestCase):
         response_b = queue_mod.Queue(maxsize=1)
         ad._folder_pick_q.put({'initial': '', 'response': response_a})
 
-        from PyQt6.QtWidgets import QFileDialog as RealQFileDialog
+        from PySide6.QtWidgets import QFileDialog as RealQFileDialog
         created = []
         svc_ref = {}
 
@@ -11937,7 +11937,7 @@ class GuiSmokeTests(unittest.TestCase):
         cancellation_b = threading.Event()
         ad._folder_pick_q.put({'initial': '', 'response': response_a})
 
-        from PyQt6.QtWidgets import QFileDialog as RealQFileDialog
+        from PySide6.QtWidgets import QFileDialog as RealQFileDialog
         created = []
 
         def fake_dialog(*_args, **_kwargs):
@@ -11990,7 +11990,7 @@ class GuiSmokeTests(unittest.TestCase):
         response_q = queue.Queue(maxsize=1)
         ad._folder_pick_q.put({'initial': '/initial/path', 'response': response_q})
 
-        from PyQt6.QtWidgets import QFileDialog as RealQFileDialog
+        from PySide6.QtWidgets import QFileDialog as RealQFileDialog
         fake_dialog = mock.MagicMock()
         fake_dialog.exec.return_value = RealQFileDialog.DialogCode.Rejected
         fake_dialog.windowFlags.return_value = 0
@@ -15270,7 +15270,7 @@ class RightToLeftLayoutTests(unittest.TestCase):
 
     def test_arabic_is_the_only_right_to_left_locale_advertised(self):
         import i18n as i18n_module
-        from PyQt6.QtCore import Qt, QLocale
+        from PySide6.QtCore import Qt, QLocale
         rtl = {
             locale for locale in i18n_module.SUPPORTED_LOCALES
             if QLocale(locale).textDirection() == Qt.LayoutDirection.RightToLeft
@@ -17065,7 +17065,7 @@ os.environ["LOCALAPPDATA"] = temp_dir
 os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
 
 from astra_downloader import astra_downloader as app
-from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 app_instance = QApplication(["skip-surface"])
 app.MainWindow._start_instance_command_listener = lambda self: None
@@ -17184,7 +17184,7 @@ os.environ["LOCALAPPDATA"] = temp_dir
 os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
 
 from astra_downloader import astra_downloader as app
-from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 class RaisingSubscriptions:
     def snapshot(self):
@@ -17284,8 +17284,8 @@ os.environ["LOCALAPPDATA"] = temp_dir
 os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
 
 from astra_downloader import astra_downloader as app
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QCheckBox, QPushButton
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QCheckBox, QPushButton
 
 qt_app = QApplication(["focus-pin"])
 qt_app.setStyleSheet(app.STYLESHEET)
@@ -17315,11 +17315,11 @@ def focus_changes_pixels(widget):
     widget.clearFocus()
     qt_app.processEvents()
     first = widget.grab().toImage()
-    before = bytes(first.constBits().asstring(first.sizeInBytes()))
+    before = bytes(first.constBits())[:first.sizeInBytes()]
     widget.setFocus(Qt.FocusReason.TabFocusReason)
     qt_app.processEvents()
     second = widget.grab().toImage()
-    after = bytes(second.constBits().asstring(second.sizeInBytes()))
+    after = bytes(second.constBits())[:second.sizeInBytes()]
     return before != after
 
 
@@ -17385,8 +17385,8 @@ os.environ["LOCALAPPDATA"] = temp_dir
 os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
 
 from astra_downloader import astra_downloader as app
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QAbstractButton, QAbstractSpinBox, QApplication, QComboBox, QLineEdit,
     QTextEdit, QWidget,
 )
@@ -17512,8 +17512,8 @@ os.environ["LOCALAPPDATA"] = temp_dir
 os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
 
 from astra_downloader import gui
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 
 app = QApplication(["plaintext-pin"])
 hostile = 'Clip <img src="http://198.51.100.7/beacon.png" width="40" height="40">'
@@ -17848,7 +17848,7 @@ class SettingsFormReloadTests(unittest.TestCase):
         # screen. A widget missing from the table keeps its pre-import value,
         # and the next Save writes that value straight back over the import —
         # so a new setting that forgets this table is a silent data loss.
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         gui = gui_module_for_tests()
@@ -17936,7 +17936,7 @@ class SettingsNavigationTests(unittest.TestCase):
         return window
 
     def test_filter_narrows_rows_without_losing_their_group(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window = self._window(FakeConfig())
@@ -17983,7 +17983,7 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.cfg_site_profiles.isHidden())
 
     def test_browse_buttons_have_distinct_accessible_names(self):
-        from PyQt6.QtWidgets import QPushButton
+        from PySide6.QtWidgets import QPushButton
 
         _get_qapp_or_skip(self)
         window = self._window(FakeConfig())
@@ -18010,7 +18010,7 @@ class SettingsNavigationTests(unittest.TestCase):
         )
 
     def test_empty_states_offer_recovery_actions_and_log_has_a_real_empty_state(self):
-        from PyQt6.QtWidgets import QPushButton
+        from PySide6.QtWidgets import QPushButton
 
         _get_qapp_or_skip(self)
         subscriptions = types.SimpleNamespace(snapshot=lambda: {
@@ -18048,7 +18048,7 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertTrue(window.log_text.isHidden())
 
     def test_live_wait_setting_is_labeled_as_a_retry_interval(self):
-        from PyQt6.QtWidgets import QApplication, QLabel
+        from PySide6.QtWidgets import QApplication, QLabel
 
         _get_qapp_or_skip(self)
         window = self._window(FakeConfig())
@@ -18088,7 +18088,7 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertTrue(window.btn_undo_settings_import.isHidden())
 
     def test_every_registered_settings_control_marks_the_form_dirty(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window = self._window(FakeConfig())
@@ -18150,7 +18150,7 @@ class SettingsNavigationTests(unittest.TestCase):
                 self.undo.pop(key, None)
                 return True
 
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         config = MutableConfig({
@@ -18199,7 +18199,7 @@ class SettingsNavigationTests(unittest.TestCase):
                 self.undo.pop(key, None)
                 return True
 
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         config = MutableConfig(ad.sanitize_config({
@@ -18236,7 +18236,7 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertNotIn("settingsImport", config.undo)
 
     def test_sign_in_browser_list_marks_chromium_entries_before_selection(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window = self._window(FakeConfig())
@@ -18247,7 +18247,7 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertNotIn("likely unreadable", window.site_login_browser.itemText(firefox_index))
 
     def test_sign_in_page_can_store_credentials_without_rendering_them(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         window = self._window(FakeConfig())
@@ -18505,7 +18505,7 @@ class CompletionNotificationTests(unittest.TestCase):
         self.assertEqual(window.shown, ["shown"])
 
     def test_the_signal_is_connected(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         config = FakeConfig()
@@ -20788,7 +20788,7 @@ class ButtonLabelCaseTests(unittest.TestCase):
     """Labels are sentence case, matching the rest of the product."""
 
     def test_no_tool_button_label_is_title_case(self):
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtWidgets import QApplication, QPushButton
 
         _get_qapp_or_skip(self)
         config = FakeConfig()
@@ -21381,8 +21381,8 @@ os.environ["LOCALAPPDATA"] = temp_dir
 os.environ["ASTRA_DOWNLOADER_NO_BOOTSTRAP"] = "1"
 
 from astra_downloader import astra_downloader as app
-from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QPushButton
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QPushButton
 
 qt = QApplication(["recovery-pin"])
 qt.setStyleSheet(app.STYLESHEET)
@@ -21752,7 +21752,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         )
 
     def test_first_run_confirms_destination_before_queueing_and_reaches_pairing(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
 
@@ -21812,7 +21812,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_first_run_launches_setup_from_the_visible_download_page(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         config = FakeConfig({"LastPage": "History"})
         manager = ad.DownloadManager(config, FakeHistory())
@@ -21857,7 +21857,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         self.assertFalse(window.btn_startstop.isEnabled())
 
     def test_server_page_is_named_for_the_extension_it_serves(self):
-        from PyQt6.QtWidgets import QLabel
+        from PySide6.QtWidgets import QLabel
 
         window = self._window()
         page = window.tabs.widget(window._page_names.index("Browser extension"))
@@ -21869,7 +21869,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         )
 
     def test_download_tool_readiness_lives_with_the_paste_box(self):
-        from PyQt6.QtWidgets import QLabel, QScrollArea
+        from PySide6.QtWidgets import QLabel, QScrollArea
 
         window = self._window()
         download_page = window.tabs.widget(0)
@@ -21915,7 +21915,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 self.assertNotEqual(window.readiness_values[key][1].text(), "")
 
     def test_provider_readiness_row_is_built_on_the_download_page(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
@@ -21936,7 +21936,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_a_storage_failure_is_shown_on_the_download_page(self):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         _get_qapp_or_skip(self)
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
@@ -21964,7 +21964,7 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
                 _retire_test_window(window)
 
     def test_empty_queue_points_at_the_paste_box_not_the_server(self):
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtWidgets import QApplication, QPushButton
 
         window = self._window()
         focused = []

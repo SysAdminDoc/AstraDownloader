@@ -4,8 +4,8 @@ Only the page builder lives here; actions and lifecycle stay on the
 injected MainWindowCore so the existing dependency contract is unchanged.
 """
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
     QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
     QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )

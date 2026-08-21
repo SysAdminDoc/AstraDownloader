@@ -44,9 +44,27 @@ def run_command(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def managed_binary_path() -> str:
+    """Resolve the managed yt-dlp the application spawns, or an empty string.
+
+    ``--managed`` is the flag npm's smoke:yt-dlp:managed passes; the
+    environment variable stays supported so a release run can point at a
+    staged build instead of the installed one.
+    """
+    configured = os.environ.get("ASTRA_YTDLP_SMOKE_BINARY", "").strip()
+    if configured:
+        return configured
+    if "--managed" not in sys.argv[1:]:
+        return ""
+    local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+    if not local_app_data:
+        return ""
+    return str(Path(local_app_data) / "AstraDownloader" / "yt-dlp.exe")
+
+
 def uses_managed_binary() -> bool:
-    """True when the release gate points the smoke at a managed build."""
-    return bool(os.environ.get("ASTRA_YTDLP_SMOKE_BINARY", "").strip())
+    """True when the smoke runs the standalone build, not the wheel."""
+    return bool(managed_binary_path())
 
 
 def hardening_flags() -> list[str]:
@@ -57,8 +75,8 @@ def hardening_flags() -> list[str]:
 
 
 def yt_dlp_command(*args: str) -> list[str]:
-    """Use the managed executable when the release gate supplies one."""
-    configured = os.environ.get("ASTRA_YTDLP_SMOKE_BINARY", "").strip()
+    """Use the managed executable when one is selected."""
+    configured = managed_binary_path()
     executable = configured or sys.executable
     prefix = [executable] if configured else [executable, "-m", "yt_dlp"]
     return prefix + list(args)
@@ -66,6 +84,14 @@ def yt_dlp_command(*args: str) -> list[str]:
 
 def main() -> int:
     smoke_url = os.environ.get("ASTRA_YTDLP_SMOKE_URL", DEFAULT_SMOKE_URL)
+    managed = managed_binary_path()
+    if managed and not Path(managed).is_file():
+        sys.stderr.write(
+            f"managed yt-dlp not found: {managed}\n"
+            "Run the application once so it provisions the managed binary, or set "
+            "ASTRA_YTDLP_SMOKE_BINARY to a staged build.\n"
+        )
+        return 1
     with tempfile.TemporaryDirectory(prefix="astra-ytdlp-smoke-") as tmp:
         output_dir = Path(tmp)
         version = run_command(yt_dlp_command("--version"), output_dir)

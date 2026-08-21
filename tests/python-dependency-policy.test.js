@@ -34,7 +34,19 @@ test('requirements stay pinned for local companion dependency review', () => {
     const pins = constraints.split(/\r?\n/)
         .map((line) => line.replace(/#.*/, '').trim())
         .filter(Boolean);
-    assert.ok(pins.length >= 28, 'the reviewed release graph must include direct and transitive packages');
+    // Counting to a magic number goes stale whenever the graph legitimately
+    // shrinks. What matters is that every direct requirement is pinned and
+    // that transitives were captured alongside them.
+    const pinnedNames = new Set(pins.map((line) => line.split('==')[0].toLowerCase().replace(/[-_.]+/g, '-')));
+    const directNames = requirements.split(/\r?\n/)
+        .map((line) => line.replace(/#.*/, '').trim())
+        .filter(Boolean)
+        .map((line) => line.split(/[><=!~]/)[0].trim().toLowerCase().replace(/[-_.]+/g, '-'));
+    for (const name of directNames) {
+        assert.ok(pinnedNames.has(name), `${name} is a direct requirement but is not pinned in the release graph`);
+    }
+    assert.ok(pins.length > directNames.length,
+        'the reviewed release graph must include transitive packages, not only the direct ones');
     assert.ok(pins.every((line) => /^[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+$/.test(line)),
         'every release constraint must be an exact name==version pin');
     const pyinstallerPin = /^pyinstaller==(\d+)\.(\d+)\.(\d+)$/m.exec(constraints);
@@ -104,11 +116,11 @@ test('Python companion audit emits release-review JSON and fails closed', () => 
 
     const minimum = audit.minimumRequirementsFor([
         'yt-dlp==2026.7.4',
-        'PyQt6>=6.6.0,<7',
+        'PySide6-Essentials>=6.11.2,<7',
         'requests>=2.33.0,<3'
     ].join('\n'));
     assert.match(minimum, /^yt-dlp==2026\.7\.4$/m);
-    assert.match(minimum, /^PyQt6==6\.6\.0$/m);
+    assert.match(minimum, /^PySide6-Essentials==6\.11\.2$/m);
     assert.match(minimum, /^requests==2\.33\.0$/m);
 
     const combined = audit.combineAuditReports(

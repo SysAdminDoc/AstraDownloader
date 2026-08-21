@@ -183,6 +183,17 @@ plus `AstraDownloader-onedir.zip` and a matching sidecar. The zip contains a
 normal PyInstaller one-folder build, so it is the recommended antivirus
 fallback when the one-file executable is flagged: it avoids runtime
 self-extraction at the cost of a larger download and an extracted folder.
+
+The zip is also how this project honours the LGPL. Astra Downloader's own code
+is MIT, and it bundles Qt through PySide6-Essentials under the LGPL-3.0-only
+arm of the Qt Company's tri-licence. LGPL section 4 asks that you be able to
+replace the covered libraries with your own build; the one-folder layout leaves
+every Qt DLL sitting next to the executable where you can swap it, which the
+one-file executable does not. Both artifacts ship with every release for that
+reason. The Qt sources for the exact wheel are at
+[code.qt.io](https://code.qt.io/cgit/pyside/pyside-setup.git/), and the
+obligations are recorded in
+[`astra_downloader/license-policy.json`](astra_downloader/license-policy.json).
 Both artifacts are tied to the same version and one-file analysis build ID;
 the portable zip carries the shared build metadata for staging verification.
 `npm run release:provenance` writes the CycloneDX SBOM and the PEP 751
