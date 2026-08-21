@@ -163,13 +163,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: the constant equals the first yt-dlp stable that contains #13515; `evaluate_sabr_support` returns `"supported"` for that version and `"limited"` below it; the Download-page SABR pill flips without a new UI. Do not invent a version while the PR is open.
   Complexity: S
 
-- [ ] P3 — AD-54 — Normalize native-host extension IDs in `sanitize_config`
-  Why: `NativeChromeExtensionIds` and `NativeFirefoxExtensionIds` are `clean_text` only. A hand-edited config can keep invalid IDs in the field while registration silently drops them. `parse_native_extension_ids` lives in the composition root, so config.py cannot call it without a boundary move.
-  Evidence: `astra_downloader/config.py:1772-1773`; `astra_downloader.py` `parse_native_extension_ids`
-  Touches: `astra_downloader/config.py`, `astra_downloader.py`
-  Acceptance: sanitize stores only IDs the parser would accept; a test plants a mixed string and asserts the cleaned value.
-  Complexity: S
-
 - [ ] P3 — AD-55 — Pin light-theme non-text contrast in CI
   Why: `StylesheetContrastTests` parses only dark `STYLESHEET`. Light theme is generated from the replacement map and passed a manual audit this session, but a later token that fails 3:1 in light would not fail CI.
   Evidence: `StylesheetContrastTests`; `_LIGHT_THEME_COLOR_REPLACEMENTS`

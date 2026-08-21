@@ -78,7 +78,8 @@ try:
         normalize_download_section, normalize_playlist_items, normalize_output_dir,
         normalize_output_name, MAX_OUTPUT_NAME_LENGTH,
         parse_wininet_proxy_server, resolve_effective_proxy,
-        normalize_output_template, normalize_proxy,
+        is_valid_native_extension_id, normalize_output_template, normalize_proxy,
+        parse_native_extension_ids,
         output_template_preview,
         normalize_force_ip_version, normalize_source_address, normalize_xff,
         validate_site_profiles,
@@ -219,7 +220,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         normalize_download_section, normalize_playlist_items, normalize_output_dir,
         normalize_output_name, MAX_OUTPUT_NAME_LENGTH,
         parse_wininet_proxy_server, resolve_effective_proxy,
-        normalize_output_template, normalize_proxy,
+        is_valid_native_extension_id, normalize_output_template, normalize_proxy,
+        parse_native_extension_ids,
         output_template_preview,
         normalize_force_ip_version, normalize_source_address, normalize_xff,
         validate_site_profiles,
@@ -550,8 +552,6 @@ FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT = (
 # Gecko IDs are commonly email-shaped, but may also be generated opaque IDs;
 # reject separators, control characters, and URL-like values without imposing
 # Chrome's alphabet on Firefox.
-CHROME_EXTENSION_ID_RE = re.compile(r'^[a-p]{32}$')
-FIREFOX_EXTENSION_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._%+@-]{0,127}$')
 DENO_ZIP_URL = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
 DENO_SHA256_URL = DENO_ZIP_URL + ".sha256sum"
 DENO_SHA256_ASSET = Path(urlparse(DENO_ZIP_URL).path).name
@@ -3884,56 +3884,6 @@ def register_uninstall_entry(target, base_args):
         winreg.CloseKey(key)
     except Exception as e:
         write_persistent_log(f"Uninstall registration failed: {e}")
-
-
-def is_valid_native_extension_id(value, browser='chrome'):
-    """Return whether an ID is safe for a browser native-host manifest."""
-    text = str(value or '').strip()
-    browser = str(browser or '').strip().lower()
-    if browser == 'chrome':
-        return bool(CHROME_EXTENSION_ID_RE.fullmatch(text.lower()))
-    if browser == 'firefox':
-        return bool(FIREFOX_EXTENSION_ID_RE.fullmatch(text))
-    return bool(text and len(text) <= 128 and not any(
-        ord(char) < 0x20 or char in '/\\<>' for char in text
-    ))
-
-
-def parse_native_extension_ids(value, fallback=(), browser=None):
-    """Split, deduplicate, and optionally validate native-host IDs.
-
-    ``browser=None`` keeps the generic parser useful for legacy origin
-    settings. Registration and manifest construction always pass the target
-    browser so untrusted text cannot become an ``allowed_origins`` entry.
-    """
-    if isinstance(value, (list, tuple)):
-        raw = value
-    elif isinstance(value, str):
-        raw = re.split(r'[\s,;]+', value)
-    else:
-        raw = []
-    out = []
-    for item in raw:
-        text = str(item or '').strip()
-        if not text:
-            continue
-        if browser and not is_valid_native_extension_id(text, browser):
-            continue
-        if str(browser or '').lower() == 'chrome':
-            text = text.lower()
-        if text not in out:
-            out.append(text)
-    if out:
-        return out
-    for item in fallback or ():
-        text = str(item or '').strip()
-        if not text or (browser and not is_valid_native_extension_id(text, browser)):
-            continue
-        if str(browser or '').lower() == 'chrome':
-            text = text.lower()
-        if text not in out:
-            out.append(text)
-    return out
 
 
 def normalize_extension_origin(origin):
