@@ -27,6 +27,11 @@ repository's git log.
 
 ### Changed
 
+- **The local API is split by resource.** Download, queue, subscription,
+  site-sign-in and system routes now have separate registrars while keeping the
+  same dependency contract and HTTP behavior. `create_api` retains the shared
+  request guards, error handling and rate-limit state instead of owning all 27
+  handlers in one closure.
 - **The full-suite floor recognizes the real collection shape.** Running the
   configured test root explicitly still enforces the floor, while intentional
   ignore and deselect filters do not produce a false failure. The terminal
