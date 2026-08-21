@@ -1496,7 +1496,7 @@ class MainWindowCore(
         outer.setContentsMargins(18, 16, 18, 16)
         outer.setSpacing(26)
         heading = make_label(title, "settingsSection")
-        heading.setFixedWidth(150)
+        heading.setMinimumWidth(150)
         heading.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         outer.addWidget(heading)
         content = QVBoxLayout()
@@ -5477,7 +5477,7 @@ class MainWindowCore(
             )
             for value in values:
                 label = make_label(str(value), "tableValue")
-                label.setFixedWidth(92)
+                label.setMinimumWidth(92)
                 card_l.addWidget(label)
             if filename:
                 btn_show = self._make_tool_button(

@@ -30,6 +30,10 @@ repository's git log.
   recorded execution floor and name skipped yt-dlp or Qt groups. Brittle tests
   that searched implementation text now exercise the real UI, API, queue and
   subscription behavior instead.
+- **Long translations get their own visual checks.** History, Settings,
+  Sign-ins and Subscriptions now render in German and Arabic RTL. Column and
+  section labels can grow past their old pixel widths instead of being cut
+  off.
 
 ## [2.10.0] - 2026-08-21
 ### Changed

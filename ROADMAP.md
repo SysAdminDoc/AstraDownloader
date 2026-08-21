@@ -54,13 +54,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: tests are split by domain (download / gui / routes / subscriptions / health / config / build); `-n auto` is the default and the suite is green under it; wall-clock is recorded in CLAUDE.md.
   Complexity: L
 
-- [ ] P2 — AD-35 — Render History and Settings in German and Arabic RTL
-  Why: 54 render scenarios exist but locale variants cover only the Download and Browser extension pages — while the fixed pixel widths live elsewhere: `label.setFixedWidth(92)` on translated column headers and `heading.setFixedWidth(142)` on translated section headings. Nothing has ever looked at those pages in a longer language.
-  Evidence: `scripts/render-companion-gui.py` scenario list; `astra_downloader/gui_history_page.py:135`; `gui.py:1304, 5122`; `build/companion-ui-smoke/`.
-  Touches: `scripts/render-companion-gui.py`, `astra_downloader/gui_history_page.py`, `gui.py`
-  Acceptance: German and Arabic captures exist for History, Settings, Sign-ins and Subscriptions; no translated label is clipped or elided in any of them; fixed widths become minimums where a translation needs more.
-  Complexity: M
-
 - [ ] P2 — AD-38 — Take the cheap Windows shell integrations
   Why: one prerequisite — a stable AppUserModelID set early in `main()` plus a Start-menu `.lnk` carrying it — unlocks jump-list Tasks ("Paste and download", "Open downloads folder"), correct taskbar grouping, and recent-items. Separately `RegisterApplicationRestart` makes a Windows Update reboot resume the queue instead of silently ending it, and `IFileOperation`/`send2trash` makes a queue delete recoverable.
   Evidence: https://learn.microsoft.com/en-us/windows/win32/shell/taskbar-extensions; RESEARCH.md "Security, Privacy, and Reliability"; taskbar progress is already implemented, so the COM plumbing exists.
