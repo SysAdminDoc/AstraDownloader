@@ -10615,7 +10615,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_9_0(self):
+    def test_app_version_bumped_to_2_10_0(self):
         # v2.8.0: playlists stage for review before queueing, progress names
         # its pipeline step, every job records a redacted argv (queue menu,
         # API, diagnostics), Chrome/Edge pair from the Extension page, Deno
