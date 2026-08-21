@@ -21,7 +21,7 @@ wrong in ways nobody here can review. The roadmap research already recorded
 what comparable projects do: ytDownloader uses Crowdin across 23 languages
 and Parabolic uses Weblate. Both outsource exactly this.
 
-`py -3.12 scripts/build-companion-translations.py` prints current coverage per
+`py -3.13 scripts/build-companion-translations.py` prints current coverage per
 locale, so the gap is measured rather than assumed.
 
 **To unblock:** stand up a translation platform (Crowdin and Weblate are both

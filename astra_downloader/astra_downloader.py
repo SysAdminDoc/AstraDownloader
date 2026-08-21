@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlparse
 # October 2026. On 3.10 the install of requirements.txt fails before this
 # guard would ever run, so the guard has to agree with that floor or it
 # explains nothing. Packaged builds carry their own interpreter and build.py
-# already restricts them to 3.11 and 3.12.
+# already restricts them to 3.13.
 _MIN_PYTHON = (3, 11)
 if sys.version_info < _MIN_PYTHON:
     sys.stderr.write(
@@ -39,7 +39,7 @@ def source_dependency_error(error):
     return (
         f"Astra Downloader source dependencies are missing or unusable ({missing}). "
         "The application will not install packages during import. Create a virtual "
-        "environment with `py -3.12 -m venv .venv`, then run "
+        "environment with `py -3.13 -m venv .venv`, then run "
         f"`.\\.venv\\Scripts\\python.exe -m pip install --require-virtualenv -r \"{REQUIREMENTS_PATH}\"`."
     )
 

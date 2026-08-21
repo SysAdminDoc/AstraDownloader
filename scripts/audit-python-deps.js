@@ -274,7 +274,7 @@ function auditCandidates(env = process.env) {
         out.push({ command: env.ASTRA_PIP_AUDIT_PYTHON, prefixArgs: ['-m', 'pip_audit'] });
     }
     out.push(
-        { command: 'py', prefixArgs: ['-3.12', '-m', 'pip_audit'] },
+        { command: 'py', prefixArgs: ['-3.13', '-m', 'pip_audit'] },
         { command: 'python', prefixArgs: ['-m', 'pip_audit'] },
         { command: 'pip-audit', prefixArgs: [] }
     );
@@ -322,7 +322,7 @@ function runPipAudit(options = {}) {
         });
     }
     throw new Error(
-        'pip-audit is required for local release checks. Install it with `py -3.12 -m pip install --user pip-audit`. ' +
+        'pip-audit is required for local release checks. Install it with `py -3.13 -m pip install --user pip-audit`. ' +
         `Attempts: ${errors.join('; ')}`
     );
 }

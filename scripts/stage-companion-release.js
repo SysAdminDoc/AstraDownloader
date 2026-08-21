@@ -330,7 +330,7 @@ function assertBuildDirExists() {
         stat = fs.statSync(BUILD_DIR);
     } catch (err) {
         if (err && err.code === 'ENOENT') {
-            throw new Error('build/ does not exist. Run `py -3.12 astra_downloader/build.py` before staging the companion EXE.');
+            throw new Error('build/ does not exist. Run `py -3.13 astra_downloader/build.py` before staging the companion EXE.');
         }
         throw err;
     }

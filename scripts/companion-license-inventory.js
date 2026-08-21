@@ -63,7 +63,11 @@ function validateResolutionMetadata(metadata, repoRoot = null) {
         || resolution.constraintsPath !== 'astra_downloader/constraints-release.txt'
         || !/^[0-9a-f]{64}$/i.test(String(resolution.constraintsSha256 || ''))
         || !Array.isArray(resolution.supportedPythonMinors)
-        || resolution.supportedPythonMinors.join(',') !== '3.11,3.12'
+        || !resolution.supportedPythonMinors.length
+        || !resolution.supportedPythonMinors.every((minor) => /^\d+\.\d+$/.test(String(minor)))
+        || !resolution.supportedPythonMinors.includes(
+            String((metadata.python && metadata.python.version) || '').split('.').slice(0, 2).join('.')
+        )
         || !Array.isArray(resolution.packages) || !resolution.packages.length
     ) {
         throw new Error('companion build metadata is missing the reviewed release resolution graph');

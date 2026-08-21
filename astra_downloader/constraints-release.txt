@@ -1,7 +1,7 @@
 # Astra Downloader reviewed Windows release graph.
 # Reviewed: 2026-08-10
-# Supported builders: CPython 3.11 and 3.12 on Windows x64.
-# Refresh with pip --dry-run reports for both interpreters, review every change,
+# Supported builder: CPython 3.13 on Windows x64.
+# Refresh with a pip --dry-run report on that interpreter, review every change,
 # then update build.py tests and the generated companion SBOM together.
 altgraph==0.17.5
 blinker==1.9.0

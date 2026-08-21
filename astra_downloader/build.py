@@ -45,7 +45,12 @@ SPEC_DIR = BUILD_DIR / "spec"
 BUILD_METADATA = BUILD_DIR / "companion-build-metadata.json"
 REQUIREMENTS = HERE / "requirements.txt"
 RELEASE_CONSTRAINTS = HERE / "constraints-release.txt"
-SUPPORTED_RELEASE_PYTHONS = {(3, 11), (3, 12)}
+# python.org shipped no Windows installer after 3.12.10 (2025-04-08);
+# 3.12.11 onward are source-only and the devguide marks the branch
+# security-fix-only. Release builds move with the interpreter that still
+# gets binaries. The 3.11 floor in requirements.txt is about running from
+# source and is deliberately unrelated to this.
+SUPPORTED_RELEASE_PYTHONS = {(3, 13)}
 RELEASE_PLATFORM = {
     "system": "Windows",
     "minimumVersion": "10",
@@ -383,7 +388,12 @@ def write_build_metadata(exe_path, analysis_toc=None):
             "schemaVersion": 1,
             "constraintsPath": "astra_downloader/constraints-release.txt",
             "constraintsSha256": sha256_file(RELEASE_CONSTRAINTS),
-            "supportedPythonMinors": ["3.11", "3.12"],
+            # Derived, never a literal: a hand-kept copy of this set drifts
+            # from the gate that enforces it on the next interpreter move.
+            "supportedPythonMinors": [
+                ".".join(map(str, value))
+                for value in sorted(SUPPORTED_RELEASE_PYTHONS)
+            ],
             "direct": release_environment["directNames"],
             "packages": resolved_packages,
         },

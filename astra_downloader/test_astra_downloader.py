@@ -6993,7 +6993,7 @@ class ApiSecurityTests(unittest.TestCase):
         error = ModuleNotFoundError("missing PyQt6", name="PyQt6")
         message = ad.source_dependency_error(error)
         self.assertIn("will not install packages during import", message)
-        self.assertIn("py -3.12 -m venv .venv", message)
+        self.assertIn("py -3.13 -m venv .venv", message)
         self.assertIn("--require-virtualenv -r", message)
         self.assertIn(str(ad.REQUIREMENTS_PATH), message)
 

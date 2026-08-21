@@ -72,13 +72,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Note (2026-08-21): uncommitted working-tree edits already disclose password/clip/name behind `quick_download_advanced` and collapse passing preflight (`btn_preflight_toggle`, `preflight_details.hide()`). Do not restack from the 2026-08-14 description — finish the remaining acceptance (queue row visible at 1120×760) on top of that WIP, or drop the WIP and start from HEAD.
   Complexity: M
 
-- [ ] P1 — AD-20 — Move the build interpreter to Python 3.13.15
-  Why: python.org shipped no Windows installer after **3.12.10 (2025-04-08)**; 3.12.11/12/13 are source-only and the devguide marks 3.12 `security` ("no more binaries are released"). The build interpreter is frozen ~16 months behind CPython security fixes. PyQt6, PySide6, PyInstaller 6.22 and yt-dlp all ship the identical `cp310-abi3-win_amd64` wheels on 3.13.
-  Evidence: https://www.python.org/downloads/release/python-31213/; https://devguide.python.org/versions/.
-  Touches: `astra_downloader/build.py`, `constraints-release.txt`, `package.json` scripts, README, CLAUDE.md
-  Acceptance: the release build runs on 3.13.15; 964 tests and 54 render captures pass; the 3.11 source floor is unchanged; every `py -3.12` reference in scripts and docs is updated together.
-  Complexity: M
-
 - [ ] P1 — AD-23 — Make `SERVICE_API_VERSION` a real handshake
   Why: two independently versioned products share a gate-checked port catalogue with no client-side compatibility check, so a breaking wire change surfaces as an unexplained extension failure.
   Evidence: `astra_downloader/astra_downloader.py:450-460`, `routes.py:449-506`; grep of `C:\repos\Astra-Deck` for `X-MDL-Api` returns no extension hits (2026-08-21).
