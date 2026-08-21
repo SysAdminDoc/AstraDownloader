@@ -54,13 +54,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: tests are split by domain (download / gui / routes / subscriptions / health / config / build); `-n auto` is the default and the suite is green under it; wall-clock is recorded in CLAUDE.md.
   Complexity: L
 
-- [ ] P2 — AD-34 — Remove the last source pins and assert a test-count floor
-  Why: three `inspect.getsource` assertions survive plus one exact-source-line pin, and a previous pass recorded zero — the claim was wrong. Separately, six tests skip on "yt-dlp is not installed" and `_qapp_init_error` is a *module global*, so one `QApplication` failure disables every subsequent GUI test in the run. Nothing asserts how many tests actually executed, so a hollowed-out run reports green.
-  Evidence: `test_astra_downloader.py:2472, 20004, 20099, 20402`; `:11044-11052`; skip sites at `:4153, 10762, 14550, 15118, 18978, 19356`.
-  Touches: `astra_downloader/test_astra_downloader.py`, `astra_downloader/conftest.py`
-  Acceptance: zero `getsource`/source-text assertions remain; a session-level check fails the run when executed-test count falls below a recorded floor, naming which group was skipped.
-  Complexity: M
-
 - [ ] P2 — AD-35 — Render History and Settings in German and Arabic RTL
   Why: 54 render scenarios exist but locale variants cover only the Download and Browser extension pages — while the fixed pixel widths live elsewhere: `label.setFixedWidth(92)` on translated column headers and `heading.setFixedWidth(142)` on translated section headings. Nothing has ever looked at those pages in a longer language.
   Evidence: `scripts/render-companion-gui.py` scenario list; `astra_downloader/gui_history_page.py:135`; `gui.py:1304, 5122`; `build/companion-ui-smoke/`.
@@ -91,8 +84,8 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: S
 
 - [ ] P2 — AD-43 — Split `create_api` by resource
-  Why: it is a single 1,262-line function holding 27 routes and 54 unpacked dependencies in one closure, and it is one of the three remaining `inspect.getsource` targets (AD-34) precisely because there is no smaller unit to assert against.
-  Evidence: `astra_downloader/routes.py:196`; `test_astra_downloader.py:20004`.
+  Why: it is a single 1,262-line function holding 27 routes and 54 unpacked dependencies in one closure. Tests can exercise it through Flask now, but there is still no smaller route unit to maintain.
+  Evidence: `astra_downloader/routes.py:196`; route behavior tests in `test_astra_downloader.py`.
   Touches: `astra_downloader/routes.py`
   Acceptance: routes are grouped into per-resource registrars (downloads / queue / subscriptions / site-logins / system) taking the same dependency mapping; the `_REQUIRED_*_DEPENDENCIES` contract is unchanged; all route tests pass untouched.
   Complexity: M

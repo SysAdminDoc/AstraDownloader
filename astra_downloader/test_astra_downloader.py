@@ -78,6 +78,57 @@ class FakeHistory:
         return list(self.entries)
 
 
+class ExecutionFloorPolicyTests(unittest.TestCase):
+    def test_full_suite_floor_fails_and_names_the_skipped_group(self):
+        import pytest
+
+        suite_policy = sys.modules["conftest"]
+
+        class Reporter:
+            def __init__(self):
+                self.output = []
+
+            def write_sep(self, separator, title, **_kwargs):
+                self.output.append(f"{separator}{title}")
+
+            def write_line(self, message, **_kwargs):
+                self.output.append(message)
+
+        reporter = Reporter()
+        config = types.SimpleNamespace(
+            option=types.SimpleNamespace(
+                collectonly=False, keyword="", markexpr="", lf=False,
+                failedfirst=False, newfirst=False, stepwise=False,
+            ),
+            invocation_params=types.SimpleNamespace(
+                args=(), dir=Path.cwd()
+            ),
+            pluginmanager=types.SimpleNamespace(
+                get_plugin=lambda name: reporter if name == "terminalreporter" else None
+            ),
+        )
+        session = types.SimpleNamespace(
+            config=config, exitstatus=pytest.ExitCode.OK
+        )
+        executed_before = set(suite_policy._executed_nodeids)
+        skipped_before = dict(suite_policy._skipped_nodeids)
+        try:
+            suite_policy._executed_nodeids.clear()
+            suite_policy._executed_nodeids.add("one-test")
+            suite_policy._skipped_nodeids.clear()
+            suite_policy._skipped_nodeids["sixth-test"] = (
+                "yt-dlp is not installed in this environment"
+            )
+            suite_policy.pytest_sessionfinish(session, pytest.ExitCode.OK)
+        finally:
+            suite_policy._executed_nodeids.clear()
+            suite_policy._executed_nodeids.update(executed_before)
+            suite_policy._skipped_nodeids.clear()
+            suite_policy._skipped_nodeids.update(skipped_before)
+
+        self.assertEqual(session.exitstatus, pytest.ExitCode.TESTS_FAILED)
+        self.assertIn("yt-dlp integration (1)", "\n".join(reporter.output))
+
 _RETAINED_TEST_WINDOWS = []
 
 
@@ -2759,52 +2810,62 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             <= set(i18n_module.SUPPORTED_LOCALES)
         )
 
-    def test_companion_build_packages_qm_catalogues_and_gui_uses_translation(self):
-        root = Path(ad.__file__).parents[1]
-        build_source = (root / "astra_downloader" / "build.py").read_text(
-            encoding="utf-8"
-        )
-        gui_source = "\n".join(
-            (root / "astra_downloader" / name).read_text(encoding="utf-8")
-            for name in ("gui.py", "gui_support.py")
-        )
-        renderer_source = (
-            root / "scripts" / "render-companion-gui.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("prepare_translations()", build_source)
-        self.assertIn('str(TRANSLATIONS_DIR / "*.qm")', build_source)
-        self.assertIn('"--hidden-import", "i18n"', build_source)
-        self.assertIn('QCoreApplication.translate("AstraDownloader"', gui_source)
-        # make_label picks StatusLabel or QLabel; what this pins is that either
-        # one is constructed from the translated text.
-        self.assertIn("QLabel)(tr(text))", gui_source)
-        self.assertIn('"dashboard-german"', renderer_source)
+    def test_companion_build_packages_qm_catalogues_and_renders_german(self):
+        import importlib.util
 
-    def test_companion_settings_flows_do_not_use_blocking_message_boxes(self):
-        src = (
-            Path(ad.__file__).read_text(encoding='utf-8')
-            + Path(ad.__file__).with_name('gui.py').read_text(encoding='utf-8')
+        root = Path(ad.__file__).parents[1]
+        build_spec = importlib.util.spec_from_file_location(
+            "astra_translation_build", root / "astra_downloader" / "build.py"
         )
-        self.assertNotIn(
-            "QMessageBox",
-            src,
-            "Companion settings/uninstall flows must report through in-window status, tray toasts, and logs.",
+        build_module = importlib.util.module_from_spec(build_spec)
+        build_spec.loader.exec_module(build_module)
+        args = build_module.pyinstaller_args("onefile")
+        add_data = args[args.index("--add-data") + 1]
+        self.assertIn("*.qm", add_data)
+        self.assertTrue(add_data.endswith(os.pathsep + "translations"))
+        hidden_imports = [
+            args[index + 1]
+            for index, value in enumerate(args[:-1])
+            if value == "--hidden-import"
+        ]
+        self.assertIn("i18n", hidden_imports)
+
+        render_spec = importlib.util.spec_from_file_location(
+            "astra_translation_renderer",
+            root / "scripts" / "render-companion-gui.py",
         )
-        self.assertIn("self.btn_undo_clear_history.show()", src)
-        self.assertIn("self.history_mgr.replace(self._cleared_history_snapshot)", src)
-        self.assertIn("restart_now = connection_changed and self.server_running", src)
+        renderer = importlib.util.module_from_spec(render_spec)
+        render_spec.loader.exec_module(renderer)
+        self.assertIn("dashboard-german", renderer.CAPTURE_NAMES)
+
+    def test_companion_settings_save_reports_in_window_without_a_dialog(self):
+        from PySide6.QtWidgets import QApplication, QMessageBox
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({
+                "ServerToken": "a" * 32,
+                "DownloadPath": tmp,
+                "AudioDownloadPath": tmp,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(config, manager, FakeHistory())
+            try:
+                with mock.patch.object(
+                    QMessageBox, "exec", side_effect=AssertionError("blocking dialog")
+                ), mock.patch.object(
+                    QMessageBox, "open", side_effect=AssertionError("blocking dialog")
+                ):
+                    window._save_settings()
+                    QApplication.processEvents()
+                self.assertIn("Settings saved", window.settings_status.text())
+            finally:
+                _retire_test_window(window)
 
     def test_companion_uses_premium_command_center_and_async_readiness(self):
-        gui_source = "\n".join(
-            Path(ad.__file__).with_name(name).read_text(encoding="utf-8")
-            for name in (
-                "gui.py", "gui_support.py", "gui_download_page.py",
-                "gui_history_page.py", "gui_site_logins_page.py",
-                "gui_subscriptions_page.py", "gui_extension_page.py",
-                "gui_settings_page.py",
-            )
-        )
-        source = Path(ad.__file__).read_text(encoding="utf-8") + gui_source
         probe_calls = []
         probe_payloads = []
         probe = gui_module_for_tests().ReadinessProbe(
@@ -2824,44 +2885,55 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn("#ff6552", ad.STYLESHEET)
         self.assertIn('QFrame[class="readiness"]', ad.STYLESHEET)
         self.assertIn('QLabel[class="errorCallout"]', ad.STYLESHEET)
-        self.assertIn("self.readiness_worker.moveToThread", source)
-        self.assertIn("if is_frozen_app() and not visual_smoke", source)
-        # The throwaway smoke render must not delegate to a live companion.
-        self.assertIn("if not visual_smoke:\n        try:\n            lock = check_single_instance", source)
-        self.assertIn("if visual_smoke:", source)
+        import importlib.util
+
         renderer_path = Path(ad.__file__).parents[1] / "scripts" / "render-companion-gui.py"
         self.assertTrue(renderer_path.exists())
-        renderer_source = renderer_path.read_text(encoding="utf-8")
-        self.assertIn("btn.setCheckable(True)", source)
-        self.assertIn("btn.setAutoExclusive(True)", source)
-        self.assertIn('self._show_settings_status("Unsaved changes", "warning")', source)
-        self.assertIn('set_line_icon(glyph, "Download" if "Queue" in title else "History", size=36)', gui_source)
+        render_spec = importlib.util.spec_from_file_location(
+            "astra_command_center_renderer", renderer_path
+        )
+        renderer = importlib.util.module_from_spec(render_spec)
+        render_spec.loader.exec_module(renderer)
         self.assertIn('QFrame[class="settingsGroup"]', ad.STYLESHEET)
         self.assertIn('QLabel[class="stateLabel"]', ad.STYLESHEET)
-        self.assertIn("window.grab().toImage()", renderer_source)
-        self.assertIn("for nav_button in window.nav_buttons", renderer_source)
-        self.assertIn("Companion navigation rail is incomplete", renderer_source)
-        self.assertNotIn("QPainter(", renderer_source)
-        self.assertNotIn("import QPainter", renderer_source)
-        self.assertIn('ASTRA_COMPANION_RENDER_SCENARIO', renderer_source)
-        self.assertIn('"dashboard-error-degraded"', renderer_source)
-        self.assertIn('"downloads-first-run"', renderer_source)
-        self.assertIn('"downloads-recovery-terminal"', renderer_source)
-        self.assertIn('"history-cleared-undo"', renderer_source)
-        self.assertIn('"settings-save-failed"', renderer_source)
-        self.assertIn('"settings-update-busy"', renderer_source)
-        self.assertIn('"reflow-900x620-hidpi-large-font"', renderer_source)
-        self.assertIn("self.quick_download_options_layout", gui_source)
-        self.assertIn("self.download_page_scroll", gui_source)
-        self.assertIn("assert_download_options_reflow(window)", renderer_source)
-        self.assertIn("SCALE_SCENARIOS", renderer_source)
-        self.assertIn('"downloads-focus-1x": 1.0', renderer_source)
-        self.assertIn('"settings-focus-125x": 1.25', renderer_source)
-        self.assertIn('os.environ["QT_SCALE_FACTOR"]', renderer_source)
+        required_states = {
+            "dashboard-error-degraded", "downloads-first-run",
+            "downloads-recovery-terminal", "history-cleared-undo",
+            "settings-save-failed", "settings-update-busy",
+            "reflow-900x620-hidpi-large-font",
+        }
+        self.assertTrue(required_states <= set(renderer.CAPTURE_NAMES))
+        self.assertEqual(renderer.SCALE_SCENARIOS["downloads-focus-1x"], 1.0)
+        self.assertEqual(renderer.SCALE_SCENARIOS["settings-focus-125x"], 1.25)
         self.assertTrue(callable(ad.make_line_icon))
-        self.assertIn("self.btn_clear_history.setEnabled(bool(data))", source)
-        self.assertIn('"Paste a link"', source)
-        self.assertIn('"View download queue"', source)
+
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({
+                "ServerToken": "a" * 32,
+                "DownloadPath": tmp,
+                "AudioDownloadPath": tmp,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(config, manager, FakeHistory())
+            try:
+                self.assertTrue(all(button.isCheckable() for button in window.nav_buttons))
+                self.assertTrue(all(button.autoExclusive() for button in window.nav_buttons))
+                self.assertTrue(hasattr(window, "quick_download_options_layout"))
+                self.assertTrue(hasattr(window, "download_page_scroll"))
+                window.cfg_proxy.setText("https://proxy.example:8443")
+                QApplication.processEvents()
+                self.assertEqual(window.settings_status.text(), "Unsaved changes")
+                window._refresh_history()
+                QApplication.processEvents()
+                self.assertFalse(window.btn_clear_history.isEnabled())
+            finally:
+                _retire_test_window(window)
 
     def test_companion_status_palette_meets_wcag_aa_on_its_real_surfaces(self):
         import gui as gui_module
@@ -7313,11 +7385,26 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertIn(str(ad.REQUIREMENTS_PATH), message)
 
     def test_source_import_has_no_package_install_path(self):
-        source = Path(ad.__file__).read_text(encoding="utf-8")
-        self.assertNotIn("def _bootstrap", source)
-        self.assertNotIn("--break-system-packages", source)
-        self.assertNotIn("subprocess.check_call", source)
-        self.assertIn("raise ImportError(source_dependency_error(exc))", source)
+        script = r'''
+import subprocess
+
+calls = []
+def refuse_install(*args, **kwargs):
+    calls.append((args, kwargs))
+    raise AssertionError("package installation attempted during import")
+
+subprocess.check_call = refuse_install
+import astra_downloader.astra_downloader  # noqa: F401
+assert calls == []
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(ad.__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_boundary_module_imports_do_not_load_gui_server_or_legacy_root(self):
         script = r'''
@@ -8732,8 +8819,24 @@ class SetupChecksumTests(unittest.TestCase):
             self.assertEqual(list(path.parent.glob(".yt-dlp.exe.*.verified")), [])
 
     def test_setup_worker_passes_ffmpeg_asset_name_to_checksum_manifest(self):
-        source = Path(ad.__file__).with_name('gui.py').read_text(encoding='utf-8')
-        self.assertIn("asset_name=self._value('FFMPEG_SHA256_ASSET')", source)
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / ad.FFMPEG_SHA256_ASSET
+            archive.write_bytes(b"ffmpeg archive")
+            worker = ad.SetupWorker()
+            with mock.patch.object(
+                ad, "fetch_expected_sha256", return_value="f" * 64
+            ) as fetch, mock.patch.object(ad, "verify_file_sha256") as verify:
+                worker._verify_required_checksum(
+                    archive,
+                    ad.FFMPEG_SHA256_URL,
+                    asset_name=worker._value("FFMPEG_SHA256_ASSET"),
+                    label="ffmpeg",
+                )
+        fetch.assert_called_once_with(
+            ad.FFMPEG_SHA256_URL,
+            target_asset=ad.FFMPEG_SHA256_ASSET,
+        )
+        verify.assert_called_once_with(archive, "f" * 64)
 
     def test_setup_worker_routes_updates_through_staged_rollback_updater(self):
         config = FakeConfig({'AutoUpdateYtDlp': True})
@@ -9691,14 +9794,18 @@ class NoArchiveLockTests(unittest.TestCase):
                          'DownloadArchive must not be a default config key.')
 
     def test_source_does_not_pass_download_archive_to_ytdlp(self):
-        # Hard sentinel: searching the source rather than mocking the
-        # subprocess catches the case where someone re-adds the flag
-        # without going through the config knob.
-        src = Path(ad.__file__).read_text(encoding='utf-8')
-        self.assertNotIn("'--download-archive'", src,
-                         "yt-dlp argv must not include --download-archive.")
-        self.assertNotIn('"--download-archive"', src,
-                         "yt-dlp argv must not include --download-archive.")
+        harness = AnySiteDownloadArgvTests()
+        for url in (
+            "https://example.com/video",
+            "https://example.com/playlist/season-one",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ):
+            with self.subTest(url=url):
+                argv = harness._argv_for(url, with_cookies=False)
+                self.assertNotIn(
+                    "--download-archive", argv,
+                    "yt-dlp argv must not reintroduce the archive lock",
+                )
 
 class VideoFormatSelectorTests(unittest.TestCase):
     """Codec-aware format selection — the previous selector picked the
@@ -12252,7 +12359,6 @@ class ResponseSizeCapTests(unittest.TestCase):
 
 
 _qapp_singleton = None
-_qapp_init_error = None
 
 
 def _get_qapp_or_skip(test_case):
@@ -12264,19 +12370,15 @@ def _get_qapp_or_skip(test_case):
     SSH session without X-forwarding), construction raises — the
     test is skipped rather than failing the whole pytest run.
     """
-    global _qapp_singleton, _qapp_init_error
+    global _qapp_singleton
     if _qapp_singleton is not None:
         return _qapp_singleton
-    if _qapp_init_error is not None:
-        test_case.skipTest(f"QApplication unavailable: {_qapp_init_error}")
-        return None
     try:
         from PySide6.QtWidgets import QApplication
         _qapp_singleton = QApplication.instance() or QApplication([])
         return _qapp_singleton
     except Exception as e:  # noqa: BLE001
-        _qapp_init_error = repr(e)
-        test_case.skipTest(f"QApplication construction failed: {_qapp_init_error}")
+        test_case.skipTest(f"QApplication construction failed: {e!r}")
         return None
 
 
@@ -14991,11 +15093,12 @@ class MediaSourcePolicyTests(unittest.TestCase):
         # shared. Verified against the real binary: this template yields
         # "Playlist/…" when the fields are missing and the real title when they
         # are present.
-        source = Path(ad.__file__).resolve().parent.joinpath("download.py").read_text(
-            encoding="utf-8"
+        argv = AnySiteDownloadArgvTests()._argv_for(
+            "https://example.com/playlist/season-one", with_cookies=False
         )
-        self.assertIn("%(playlist_title,playlist_id|Playlist).200B", source)
-        self.assertNotIn('"%(playlist_title).200B"', source)
+        template = argv[argv.index("-o") + 1]
+        self.assertIn("%(playlist_title,playlist_id|Playlist).200B", template)
+        self.assertNotEqual(template, "%(playlist_title).200B/%(title).200B.%(ext)s")
 
     def test_recovered_queue_keeps_non_youtube_entries(self):
         # Before v1.8.0 the restore path dropped every non-YouTube row, so a
@@ -15043,7 +15146,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             return ('', '')
 
     def _argv_for(self, url, *, config_overrides=None, with_cookies=True,
-                  profile_name=None):
+                  profile_name=None, output_name=""):
         attempts = []
 
         def popen(args, **_kwargs):
@@ -15061,7 +15164,8 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             config = FakeConfig(settings)
             manager = ad.DownloadManager(config, FakeHistory())
             download = ad.Download(
-                "dl_argv", url, output_dir=tmpdir, profile_name=profile_name
+                "dl_argv", url, output_dir=tmpdir, profile_name=profile_name,
+                output_name=output_name,
             )
             download.status = "queued"
             if with_cookies:
@@ -15956,76 +16060,80 @@ class TranslationCoverageTests(unittest.TestCase):
 class RightToLeftLayoutTests(unittest.TestCase):
     """Arabic flips the layout, and the smoke set now renders one."""
 
-    def _renderer_source(self):
+    def _renderer(self):
+        import importlib.util
+
         root = Path(ad.__file__).parents[1]
-        return (root / "scripts" / "render-companion-gui.py").read_text(
-            encoding="utf-8"
+        path = root / "scripts" / "render-companion-gui.py"
+        spec = importlib.util.spec_from_file_location(
+            "astra_rtl_renderer", path
         )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _render(self, scenario):
+        renderer = self._renderer()
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["ASTRA_COMPANION_RENDER_SCENARIO"] = scenario
+        result = subprocess.run(
+            [sys.executable, str(Path(renderer.__file__))],
+            cwd=Path(ad.__file__).parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        capture = renderer.OUTPUT_DIR / f"{scenario}.png"
+        self.assertTrue(capture.is_file())
+        self.assertGreater(capture.stat().st_size, 10_000)
 
     def test_an_rtl_scenario_is_in_the_smoke_set(self):
         # No RTL locale was ever rendered, so no gate could see what the
         # mirrored layout did to the page.
-        source = self._renderer_source()
-        self.assertIn('"downloads-arabic-rtl"', source)
-        self.assertIn('install_companion_translator(app, "ar")', source)
+        from PySide6.QtCore import Qt
+        import i18n
+
+        renderer = self._renderer()
+        self.assertIn("downloads-arabic-rtl", renderer.CAPTURE_NAMES)
+        app = _get_qapp_or_skip(self)
+        translator = i18n.install_companion_translator(app, "ar")
+        try:
+            self.assertEqual(
+                app.layoutDirection(), Qt.LayoutDirection.RightToLeft
+            )
+            self.assertEqual(app.property("astraLocale"), "ar")
+        finally:
+            if translator is not None:
+                app.removeTranslator(translator)
+            i18n.install_companion_translator(app, "en")
 
     def test_the_rtl_scenario_asserts_the_row_actually_mirrors(self):
-        source = self._renderer_source()
-        self.assertIn("check_rtl_hero_proportions", source)
-
-    def _german_scenario_block(self):
-        source = self._renderer_source()
-        start = source.index('if scenario == "dashboard-german":')
-        end = source.index('elif scenario == "dashboard-starting":', start)
-        return source[start:end]
+        self._render("downloads-arabic-rtl")
 
     def test_the_german_scenario_covers_every_page(self):
-        # The rail is the one surface every locale translates, so a rail-only
-        # assertion passes against a catalogue with nothing else in it —
-        # which is exactly what nine of the eleven locales still are.
-        block = self._german_scenario_block()
-        for page in ("Download", "History", "Sign-ins", "Subscriptions",
-                     "Browser extension", "Settings"):
-            with self.subTest(page=page):
-                self.assertIn(f'"{page}"', block)
+        self._render("dashboard-german")
 
     def test_the_german_strings_it_asserts_are_really_in_the_catalogue(self):
-        # A scenario asserting a translation that no longer exists would fail
-        # for the wrong reason, and one asserting an English string would
-        # pass while proving nothing.
-        import ast
-        import re
-        import xml.etree.ElementTree as ET
+        import i18n
 
-        catalogue = (
-            Path(ad.__file__).parent / "translations" / "astra_downloader_de.ts"
-        )
-        german = {
-            element.text or ""
-            for element in ET.parse(catalogue).getroot().iter("translation")
-        }
-        block = self._german_scenario_block()
-        # The sets asserted per page, as written in the scenario.
-        asserted = set()
-        for chunk in re.findall(r"\{([^{}]*)\}", block):
-            for literal in re.findall(r'"((?:[^"\\]|\\.)*)"', chunk):
-                # ast, not unicode_escape: the scenario mixes literal
-                # UTF-8 with \u escapes, and encode/decode round-tripping
-                # the former turns 'für' into mojibake.
-                try:
-                    value = ast.literal_eval(f'"{literal}"')
-                except (SyntaxError, ValueError):
-                    continue
-                if value and not value.isascii():
-                    asserted.add(value)
-        self.assertGreaterEqual(
-            len(asserted), 3,
-            "the scenario should assert several translated strings",
-        )
-        self.assertEqual(
-            sorted(asserted - german), [],
-            "these asserted strings are not in the German catalogue",
-        )
+        app = _get_qapp_or_skip(self)
+        translator = i18n.install_companion_translator(app, "de")
+        self.assertIsNotNone(translator)
+        try:
+            for page in (
+                "Download", "History", "Sign-ins", "Subscriptions",
+                "Browser extension", "Settings",
+            ):
+                with self.subTest(page=page):
+                    self.assertNotEqual(
+                        translator.translate("AstraDownloader", page), page
+                    )
+        finally:
+            app.removeTranslator(translator)
+            i18n.install_companion_translator(app, "en")
 
     def test_arabic_is_the_only_right_to_left_locale_advertised(self):
         import i18n as i18n_module
@@ -17888,15 +17996,13 @@ window.close()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_gui_buckets_cover_every_terminal_state(self):
-        # Source pin: the "recent" bucket must read the shared constant so the
-        # next status added to DOWNLOAD_TERMINAL_STATES cannot go unrendered.
-        source = Path(ad.__file__).resolve().parent.joinpath("gui.py").read_text(
-            encoding="utf-8"
-        )
-        start = source.index("recent = [d for d in downloads")
-        block = source[start:start + 200]
-        self.assertIn("DOWNLOAD_TERMINAL_STATES", block)
-        self.assertNotIn("'complete', 'failed', 'cancelled'", block)
+        # The skipped-state render above exercises the bucket that was once
+        # absent. Keep every shared terminal state tied to visible status copy.
+        for status in ad.DOWNLOAD_TERMINAL_STATES:
+            with self.subTest(status=status):
+                label = ad.human_status(status)
+                self.assertTrue(label)
+                self.assertNotEqual(label, "Unknown")
 
     def test_skipped_download_can_be_retried(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -18117,12 +18223,9 @@ window.close()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_every_button_variant_restates_its_focus_ring(self):
-        # Source pin: a bare QPushButton:focus rule cannot survive a later
-        # equally specific class rule, so each variant needs its own.
-        source = Path(ad.__file__).resolve().parent.joinpath(
-            "astra_downloader.py"
-        ).read_text(encoding="utf-8")
-        sheet = source.split('STYLESHEET = """', 1)[1].split('"""', 1)[0]
+        # A bare QPushButton:focus rule cannot survive a later equally
+        # specific class rule, so each exported variant needs its own.
+        sheet = ad.STYLESHEET
         for variant in ("ghost", "primary", "secondary", "danger"):
             self.assertIn(
                 f'QPushButton[class="{variant}"]:focus', sheet,
@@ -18307,29 +18410,40 @@ assert benign.sizeHint().height() == attack.sizeHint().height(), (
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_every_label_constructor_pins_the_text_format(self):
-        # Source pin: a new QLabel(...) without a format defaults to AutoText,
-        # which is the defect. Every construction site must set it.
-        source = Path(ad.__file__).resolve().parent.joinpath("gui.py").read_text(
-            encoding="utf-8"
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QLabel
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({
+                "ServerToken": "a" * 32,
+                "DownloadPath": tmp,
+                "AudioDownloadPath": tmp,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(config, manager, FakeHistory())
+            try:
+                labels = window.findChildren(QLabel)
+                offenders = [
+                    (label.objectName(), label.text())
+                    for label in labels
+                    if label.text()
+                    and label.textFormat() != Qt.TextFormat.PlainText
+                    and not (
+                        label.openExternalLinks()
+                        and "<a href=" in label.text()
+                    )
+                ]
+            finally:
+                _retire_test_window(window)
+        self.assertTrue(labels, "the real window should build labels")
+        self.assertEqual(
+            offenders, [],
+            "every text-carrying label must render markup as plain text",
         )
-        constructors = [
-            index for index in range(len(source))
-            if source.startswith("QLabel(", index)
-        ]
-        self.assertTrue(constructors, "gui.py should build labels")
-        for position, index in enumerate(constructors):
-            # Bound each slice by the NEXT constructor rather than a fixed
-            # byte window: a fixed window silently breaks the moment the block
-            # grows (a comment is enough) and then passes for the wrong reason.
-            end = (constructors[position + 1]
-                   if position + 1 < len(constructors) else len(source))
-            block = source[index:end]
-            if block.startswith("QLabel()"):
-                continue  # icon-only labels carry no text
-            self.assertIn(
-                "setTextFormat(Qt.TextFormat.PlainText)", block,
-                "every text-carrying QLabel must pin PlainText near construction",
-            )
 
 
 class SettingsBundleTests(unittest.TestCase):
@@ -18665,13 +18779,41 @@ class SettingsFormReloadTests(unittest.TestCase):
     def test_every_form_key_is_written_on_save(self):
         # Reload coverage used to hide a save hole: UseSystemProxy was in
         # the form table and survived an import, then Save dropped it.
-        source = inspect.getsource(ad.MainWindow._save_settings)
-        missing = [
+        from PySide6.QtWidgets import QApplication
+
+        class RecordingConfig(FakeConfig):
+            def __init__(self, data=None):
+                super().__init__(data)
+                self.updates = []
+
+            def update(self, mapping):
+                self.updates.append(dict(mapping))
+                return super().update(mapping)
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            config = RecordingConfig({
+                "ServerToken": "a" * 32,
+                "DownloadPath": tmp,
+                "AudioDownloadPath": tmp,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(config, manager, FakeHistory())
+            try:
+                config.updates.clear()
+                window._save_settings()
+                QApplication.processEvents()
+                written = set(config.updates[-1])
+            finally:
+                _retire_test_window(window)
+        expected = {
             key for _name, key, _kind
             in ad.MainWindow._SETTINGS_FORM_FIELDS
-            if f'"{key}"' not in source
-        ]
-        self.assertEqual(missing, [])
+        }
+        self.assertEqual(expected - written, set())
 
 
 class SettingsNavigationTests(unittest.TestCase):
@@ -21672,12 +21814,29 @@ class SmallerGapTests(unittest.TestCase):
     def test_the_download_cookie_cap_matches_the_store_that_accepts_them(self):
         # A hardcoded 200 here halved a jar the sign-in store keeps whole, and
         # the only symptom was yt-dlp failing to authenticate.
-        import routes
-
-        source = inspect.getsource(routes.create_api)
-        self.assertNotIn("> 200", source)
-        self.assertIn("len(cookies) > MAX_SITE_LOGIN_COOKIES", source)
-        self.assertEqual(ad.MAX_SITE_LOGIN_COOKIES, 400)
+        token = "c" * 32
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        cookies = [
+            {"name": f"cookie-{index}", "value": "v", "domain": ".example.com"}
+            for index in range(ad.MAX_SITE_LOGIN_COOKIES + 23)
+        ]
+        with mock.patch.object(
+            manager, "start_download", return_value=("dl-cookie-cap", None)
+        ) as start:
+            response = api.test_client().post(
+                "/download",
+                json={"url": "https://example.com/video", "cookies": cookies},
+                headers={"X-Auth-Token": token},
+            )
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        self.assertEqual(
+            len(start.call_args.kwargs["cookies"]), ad.MAX_SITE_LOGIN_COOKIES
+        )
+        self.assertEqual(
+            response.get_json()["cookiesTruncated"], ad.MAX_SITE_LOGIN_COOKIES
+        )
 
     def test_the_precondition_cache_drops_expired_entries(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -21769,18 +21928,33 @@ class SmallerGapTests(unittest.TestCase):
             self.assertNotEqual(store.archive_entry(key).get("title"), "mutated")
 
     def test_the_retry_exhausted_branch_reads_a_single_entry(self):
-        # The loop lives in _claim_candidates since the batched-save change;
-        # both are pinned so the read cannot drift back into either one.
-        source = "".join(
-            inspect.getsource(func) for func in (
-                ad.SubscriptionManager.scan_subscription,
-                ad.SubscriptionManager._claim_candidates,
-                ad.SubscriptionManager._reserve_candidates,
-                ad.SubscriptionManager._enqueue_claimed,
-            )
+        subs = subscriptions_module()
+        store = mock.Mock()
+        store.reserve_archive.return_value = subs.RESERVE_RETRY_EXHAUSTED
+        store.archive_entry.return_value = {
+            "attempts": subs.SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS,
+            "lastError": "provider refused the request",
+        }
+        store._clean.side_effect = lambda value, default, maximum: (
+            str(value)[:maximum] if value else default
         )
-        self.assertIn("self.store.archive_entry(key)", source)
-        self.assertNotIn("self.store.archive_entries().get(key", source)
+        store.archive_entries.side_effect = AssertionError(
+            "the retry path copied the whole archive"
+        )
+        manager = ad.SubscriptionManager(
+            store=store,
+            probe=lambda _url: ([], None),
+            enqueue=lambda *_args: ("dl", None),
+        )
+        candidate = {"id": "onlyone", "title": "Only one"}
+        claimed, skipped, errors = manager._reserve_candidates(
+            "sub-one", [candidate], 1000
+        )
+        self.assertEqual(claimed, [])
+        self.assertEqual(skipped, 1)
+        self.assertTrue(errors)
+        store.archive_entry.assert_called_once_with("id:onlyone")
+        store.archive_entries.assert_not_called()
 
 
 class ClientApiHandshakeTests(unittest.TestCase):
@@ -22081,9 +22255,17 @@ class OutputNameTests(unittest.TestCase):
     def test_the_argv_uses_the_name_for_a_single_download_only(self):
         # A playlist shares one output template across every entry, so a single
         # stem would have each item overwrite the last.
-        source = inspect.getsource(ad.DownloadManagerCore._run_download)
-        self.assertIn("if requested_name and not is_playlist:", source)
-        self.assertIn("out_tpl = f'{requested_name}.%(ext)s'", source)
+        harness = AnySiteDownloadArgvTests()
+        single = harness._argv_for(
+            "https://example.com/video", with_cookies=False,
+            output_name="Holiday clip",
+        )
+        playlist = harness._argv_for(
+            "https://example.com/playlist/season-one", with_cookies=False,
+            output_name="Holiday clip",
+        )
+        self.assertEqual(single[single.index("-o") + 1], "Holiday clip.%(ext)s")
+        self.assertNotEqual(playlist[playlist.index("-o") + 1], "Holiday clip.%(ext)s")
 
     def test_the_api_accepts_the_field(self):
         self.assertIn("outputName", ad.DOWNLOAD_REQUEST_ALLOWED_FIELDS)
@@ -22311,17 +22493,9 @@ window.close()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_skipped_size_message_names_a_control_that_exists(self):
-        gui_dir = Path(ad.__file__).resolve().parent
-        gui_source = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in (
-                gui_dir / "gui.py",
-                gui_dir / "gui_settings_page.py",
-            )
-        )
-        self.assertIn('make_label("Max file size", "fieldLabel")', gui_source)
-        self.assertIn('"MaxFileSizeMB": self.cfg_maxsize.value()', gui_source)
-
+        # The preceding real-window round trip proves the control persists.
+        # This check ties the terminal explanation to that stored setting.
+        self.assertIn("MaxFileSizeMB", ad.DEFAULT_CONFIG)
         with tempfile.TemporaryDirectory() as tmpdir:
             config = FakeConfig({
                 "DownloadPath": tmpdir,

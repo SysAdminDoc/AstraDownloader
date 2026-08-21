@@ -24,6 +24,13 @@ repository's git log.
   managed install. This detects mismatched release files; it is not a code
   signature.
 
+### Changed
+
+- **A green test run now means the full suite ran.** Full runs fail below the
+  recorded execution floor and name skipped yt-dlp or Qt groups. Brittle tests
+  that searched implementation text now exercise the real UI, API, queue and
+  subscription behavior instead.
+
 ## [2.10.0] - 2026-08-21
 ### Changed
 
