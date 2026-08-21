@@ -107,6 +107,58 @@ function checkWingetManifest(version) {
     return record('winget manifest PackageVersion', version);
 }
 
+function checkScoopManifest(version) {
+    // Same failure the winget manifest had at 2.7.0: a manifest that names a
+    // version nobody published, or a hash that matches no artifact, installs
+    // nothing and says nothing. Both are read from the staged sidecar.
+    const relativePath = path.posix.join('packaging', 'scoop', 'astra-downloader.json');
+    let manifest;
+    try {
+        manifest = JSON.parse(read(relativePath));
+    } catch (error) {
+        failures.push(`scoop manifest: could not read ${relativePath}: ${error.message}`);
+        return null;
+    }
+
+    const archive = 'AstraDownloader-onedir.zip';
+    const expectedUrl =
+        `https://github.com/SysAdminDoc/AstraDownloader/releases/download/v${version}/${archive}`;
+    const arch = (manifest.architecture || {})['64bit'] || {};
+    if (arch.url !== expectedUrl) {
+        failures.push(`scoop manifest: 64bit url must be ${expectedUrl}`);
+    }
+    if (!/^[0-9a-f]{64}$/i.test(String(arch.hash || ''))) {
+        failures.push('scoop manifest: 64bit hash must be a SHA-256 digest');
+    } else {
+        let sidecar = null;
+        for (const candidate of [`build/${archive}.sha256`, `${archive}.sha256`]) {
+            try {
+                sidecar = read(candidate);
+                break;
+            } catch (error) {
+                sidecar = null;
+            }
+        }
+        const staged = sidecar && /^([0-9a-f]{64})/i.exec(sidecar.trim());
+        if (staged && staged[1].toLowerCase() !== String(arch.hash).toLowerCase()) {
+            failures.push(
+                `scoop manifest: hash ${arch.hash} does not match the staged ${archive} `
+                + `(${staged[1]})`
+            );
+        }
+    }
+    if (manifest.license !== 'MIT') {
+        failures.push('scoop manifest: license must match the repository LICENSE');
+    }
+    if (manifest.bin !== 'AstraDownloader.exe') {
+        failures.push('scoop manifest: bin must be AstraDownloader.exe');
+    }
+    if (!manifest.autoupdate || !manifest.checkver) {
+        failures.push('scoop manifest: checkver and autoupdate are required by Extras');
+    }
+    return record('scoop manifest version', manifest.version);
+}
+
 const sources = [
     record('package.json', JSON.parse(read('package.json')).version),
     match('astra_downloader/astra_downloader.py', /^APP_VERSION = "([^"]+)"/m,
@@ -116,6 +168,14 @@ const sources = [
     match('CHANGELOG.md', /^## \[([0-9]+\.[0-9]+\.[0-9]+)\]/m,
         'CHANGELOG newest entry'),
 ].filter(Boolean);
+
+const appVersionForManifests = sources.find(
+    (source) => source.label.includes('APP_VERSION')
+);
+if (appVersionForManifests) {
+    const scoop = checkScoopManifest(appVersionForManifests.value);
+    if (scoop) sources.push(scoop);
+}
 
 const appVersion = sources.find((source) => source.label.includes('APP_VERSION'));
 if (appVersion) {
