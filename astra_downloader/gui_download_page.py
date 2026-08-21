@@ -38,7 +38,7 @@ class DownloadPageMixin:
         layout.setSpacing(12)
         layout.addLayout(self._make_page_header(
             "Download a video",
-            "Paste a link from almost any site — YouTube, Reddit, X, TikTok, "
+            "Paste a link from almost any site. YouTube, Reddit, X, TikTok, "
             "Vimeo, Instagram, Twitch and hundreds more.",
         ))
 
@@ -157,7 +157,7 @@ class DownloadPageMixin:
             tr("One-link video password")
         )
         self.quick_download_video_password.setPlaceholderText(
-            tr("Video password — one link only (optional)")
+            tr("Video password (one link only, optional)")
         )
         self.quick_download_video_password.setClearButtonEnabled(True)
         password_row.addWidget(self.quick_download_video_password, 1)

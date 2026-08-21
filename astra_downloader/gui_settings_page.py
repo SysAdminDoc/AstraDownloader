@@ -1124,8 +1124,8 @@ class SettingsPageMixin:
         transfer_l.addWidget(make_label(
             "Move this install to another machine, or recover from a config "
             "you cannot open. The bundle carries settings and subscriptions. "
-            "Stored sign-ins are listed by site but never exported — "
-            "cookies stay on this machine.",
+            "Stored sign-ins are listed by site but never exported. "
+            "Cookies stay on this machine.",
             "fieldHint", word_wrap=True,
         ))
         bundle_row = QHBoxLayout()

@@ -116,7 +116,7 @@ class ExtensionPageMixin:
             str(self.config.get("NativeChromeExtensionIds", "") or "")
         )
         self.cfg_native_chrome_ids.setPlaceholderText(
-            tr("32-letter extension ID — several separated by commas")
+            tr("32-letter extension ID. Separate multiple IDs with commas.")
         )
         self.cfg_native_chrome_ids.setAccessibleName(tr("Chrome and Edge extension IDs"))
         chrome_row.addWidget(self.cfg_native_chrome_ids, 1)

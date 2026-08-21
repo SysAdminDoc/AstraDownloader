@@ -59,8 +59,8 @@
       <translation>Downloads {kind} in {languages}{format}, without the video. Change this under Settings, Post-processing.</translation>
     </message>
     <message>
-      <source>{signed_in} {site} — {count} {stored}.</source>
-      <translation>{signed_in} {site} — {count} {stored}.</translation>
+      <source>{signed_in} {site}. {count} {stored}.</source>
+      <translation>{signed_in} {site}. {count} {stored}.</translation>
     </message>
     <message>
       <source>The subscription was restored.</source>
@@ -99,12 +99,12 @@
       <translation>Error copied.</translation>
     </message>
     <message>
-      <source>Copy command</source>
-      <translation>Copy command</translation>
-    </message>
-    <message>
       <source>Close</source>
       <translation>Close</translation>
+    </message>
+    <message>
+      <source>Copy command</source>
+      <translation>Copy command</translation>
     </message>
     <message>
       <source>Link ready. Check the options, then choose Download.</source>
@@ -151,6 +151,14 @@
       <translation>Review Playlist</translation>
     </message>
     <message>
+      <source>Review playlist videos</source>
+      <translation>Review playlist videos</translation>
+    </message>
+    <message>
+      <source>Choose which videos should be added to the download queue.</source>
+      <translation>Choose which videos should be added to the download queue.</translation>
+    </message>
+    <message>
       <source>(untitled playlist)</source>
       <translation>(untitled playlist)</translation>
     </message>
@@ -159,20 +167,40 @@
       <translation>Select all</translation>
     </message>
     <message>
+      <source>Select every video in this playlist preview.</source>
+      <translation>Select every video in this playlist preview.</translation>
+    </message>
+    <message>
       <source>Deselect all</source>
       <translation>Deselect all</translation>
+    </message>
+    <message>
+      <source>Clear every selection in this playlist preview.</source>
+      <translation>Clear every selection in this playlist preview.</translation>
     </message>
     <message>
       <source>Invert</source>
       <translation>Invert</translation>
     </message>
     <message>
+      <source>Select unselected videos and clear selected videos.</source>
+      <translation>Select unselected videos and clear selected videos.</translation>
+    </message>
+    <message>
       <source>Cancel</source>
       <translation>Cancel</translation>
     </message>
     <message>
+      <source>Close the playlist review without adding anything to the queue.</source>
+      <translation>Close the playlist review without adding anything to the queue.</translation>
+    </message>
+    <message>
       <source>Download selected</source>
       <translation>Download selected</translation>
+    </message>
+    <message>
+      <source>Add the selected playlist videos to the download queue.</source>
+      <translation>Add the selected playlist videos to the download queue.</translation>
     </message>
     <message>
       <source>{selected} of {total} selected</source>
@@ -245,10 +273,6 @@
     <message>
       <source>webm</source>
       <translation>webm</translation>
-    </message>
-    <message>
-      <source>—</source>
-      <translation>—</translation>
     </message>
     <message>
       <source>Hide checks</source>
@@ -359,8 +383,8 @@
       <translation>Test</translation>
     </message>
     <message>
-      <source>{signed_in} {site} — {stored}</source>
-      <translation>{signed_in} {site} — {stored}</translation>
+      <source>{signed_in} {site}. {stored}</source>
+      <translation>{signed_in} {site}. {stored}</translation>
     </message>
     <message>
       <source>Reading cookies from the browser…</source>
@@ -435,6 +459,10 @@
       <translation>Loading history…</translation>
     </message>
     <message>
+      <source>Not set</source>
+      <translation>Not set</translation>
+    </message>
+    <message>
       <source>Download history is already clear.</source>
       <translation>Download history is already clear.</translation>
     </message>
@@ -485,6 +513,26 @@
     <message>
       <source>yt-dlp Command</source>
       <translation>yt-dlp Command</translation>
+    </message>
+    <message>
+      <source>Review redacted yt-dlp command</source>
+      <translation>Review redacted yt-dlp command</translation>
+    </message>
+    <message>
+      <source>Review or copy the redacted command used for this download.</source>
+      <translation>Review or copy the redacted command used for this download.</translation>
+    </message>
+    <message>
+      <source>Redacted yt-dlp command</source>
+      <translation>Redacted yt-dlp command</translation>
+    </message>
+    <message>
+      <source>Read-only command text with private values removed.</source>
+      <translation>Read-only command text with private values removed.</translation>
+    </message>
+    <message>
+      <source>Copy command status</source>
+      <translation>Copy command status</translation>
     </message>
     <message>
       <source>Scanning playlist items...</source>
@@ -559,8 +607,8 @@
       <translation>The private API token cannot be empty.</translation>
     </message>
     <message>
-      <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.</source>
-      <translation>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.</translation>
+      <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.</source>
+      <translation>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.</translation>
     </message>
     <message>
       <source>Check the highlighted fields before saving.</source>
@@ -619,16 +667,36 @@
       <translation>Review Diagnostics</translation>
     </message>
     <message>
+      <source>Review redacted diagnostics</source>
+      <translation>Review redacted diagnostics</translation>
+    </message>
+    <message>
+      <source>Review the support data before saving or copying it.</source>
+      <translation>Review the support data before saving or copying it.</translation>
+    </message>
+    <message>
       <source>Redacted diagnostics preview</source>
       <translation>Redacted diagnostics preview</translation>
+    </message>
+    <message>
+      <source>Read-only support data with private values removed.</source>
+      <translation>Read-only support data with private values removed.</translation>
     </message>
     <message>
       <source>Save diagnostics</source>
       <translation>Save diagnostics</translation>
     </message>
     <message>
-      <source>Copy to Clipboard</source>
-      <translation>Copy to Clipboard</translation>
+      <source>Save the redacted diagnostics as a JSON file.</source>
+      <translation>Save the redacted diagnostics as a JSON file.</translation>
+    </message>
+    <message>
+      <source>Copy to clipboard</source>
+      <translation>Copy to clipboard</translation>
+    </message>
+    <message>
+      <source>Copy the redacted diagnostics and close this review.</source>
+      <translation>Copy the redacted diagnostics and close this review.</translation>
     </message>
     <message>
       <source>Installing required download tools...</source>
@@ -641,6 +709,10 @@
     <message>
       <source>(untitled)</source>
       <translation>(untitled)</translation>
+    </message>
+    <message>
+      <source>Select playlist item {index}: {title}</source>
+      <translation>Select playlist item {index}: {title}</translation>
     </message>
     <message>
       <source>{name} {page}</source>
@@ -779,8 +851,8 @@
       <translation>Add a site sign-in</translation>
     </message>
     <message>
-      <source>Username/password — stored securely</source>
-      <translation>Username/password — stored securely</translation>
+      <source>Username and password. Stored securely.</source>
+      <translation>Username and password. Stored securely.</translation>
     </message>
     <message>
       <source>cookies + username/password</source>
@@ -943,8 +1015,8 @@
       <translation>The Undo record is still available; clear it before closing.</translation>
     </message>
     <message>
-      <source>{count} stored sign-ins are listed by site only — add them again after importing.</source>
-      <translation>{count} stored sign-ins are listed by site only — add them again after importing.</translation>
+      <source>{count} stored sign-ins are listed by site only. Add them again after importing.</source>
+      <translation>{count} stored sign-ins are listed by site only. Add them again after importing.</translation>
     </message>
     <message>
       <source>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</source>
@@ -987,8 +1059,8 @@
       <translation>Could not read download history. The unreadable file was set aside; restore it from the state notice or inspect diagnostics.</translation>
     </message>
     <message>
-      <source>{start}–{end} of {filtered} filtered · {total} retained · limit {limit}</source>
-      <translation>{start}–{end} of {filtered} filtered · {total} retained · limit {limit}</translation>
+      <source>{start} to {end} of {filtered} filtered · {total} retained · limit {limit}</source>
+      <translation>{start} to {end} of {filtered} filtered · {total} retained · limit {limit}</translation>
     </message>
     <message>
       <source>0 of {filtered} filtered · {total} retained · limit {limit}</source>
@@ -1031,12 +1103,16 @@
       <translation>Command for {title}</translation>
     </message>
     <message>
-      <source>This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.</source>
-      <translation>This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.</translation>
+      <source>This is the exact command line used for this job. Credentials, tokens, and cookie paths are redacted.</source>
+      <translation>This is the exact command line used for this job. Credentials, tokens, and cookie paths are redacted.</translation>
     </message>
     <message>
       <source>No command recorded.</source>
       <translation>No command recorded.</translation>
+    </message>
+    <message>
+      <source>Copied to clipboard.</source>
+      <translation>Copied to clipboard.</translation>
     </message>
     <message>
       <source>Paste a playlist link first.</source>
@@ -1087,8 +1163,12 @@
       <translation>Video link staged. Open Downloads to review it before adding it to the queue.</translation>
     </message>
     <message>
-      <source>Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.</source>
-      <translation>Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.</translation>
+      <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
+      <translation>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</translation>
+    </message>
+    <message>
+      <source>Close the diagnostics review without copying anything.</source>
+      <translation>Close the diagnostics review without copying anything.</translation>
     </message>
     <message>
       <source>Reveal</source>
@@ -1149,6 +1229,18 @@
     <message>
       <source>Setup failed. Check the log for details.</source>
       <translation>Setup failed. Check the log for details.</translation>
+    </message>
+    <message>
+      <source>Duration {duration}</source>
+      <translation>Duration {duration}</translation>
+    </message>
+    <message>
+      <source>No videos found</source>
+      <translation>No videos found</translation>
+    </message>
+    <message>
+      <source>This playlist did not return any videos. Close this review and try the link again.</source>
+      <translation>This playlist did not return any videos. Close this review and try the link again.</translation>
     </message>
     <message>
       <source>{label} status indicator: {value}</source>
@@ -1251,8 +1343,8 @@
       <translation>Try a different search or choose All sign-ins.</translation>
     </message>
     <message>
-      <source>Expired — sign in again to refresh it</source>
-      <translation>Expired — sign in again to refresh it</translation>
+      <source>Expired. Sign in again to refresh it.</source>
+      <translation>Expired. Sign in again to refresh it.</translation>
     </message>
     <message>
       <source>username/password</source>
@@ -1483,8 +1575,8 @@
       <translation>cookie session expired</translation>
     </message>
     <message>
-      <source>Missing on disk — import it again</source>
-      <translation>Missing on disk — import it again</translation>
+      <source>Missing on disk. Import it again.</source>
+      <translation>Missing on disk. Import it again.</translation>
     </message>
     <message>
       <source>cookie</source>
@@ -1575,8 +1667,8 @@
       <translation>{label} {date}</translation>
     </message>
     <message>
-      <source>Session cookies — valid until the site signs you out</source>
-      <translation>Session cookies — valid until the site signs you out</translation>
+      <source>Session cookies. Valid until the site signs you out.</source>
+      <translation>Session cookies. Valid until the site signs you out.</translation>
     </message>
     <message>
       <source>from</source>
@@ -1587,8 +1679,8 @@
       <translation>Removed the stored sign-in for</translation>
     </message>
     <message>
-      <source>This host is paused — retry in {duration}.</source>
-      <translation>This host is paused — retry in {duration}.</translation>
+      <source>This host is paused. Retry in {duration}.</source>
+      <translation>This host is paused. Retry in {duration}.</translation>
     </message>
     <message>
       <source>Generating subtitles</source>
@@ -1707,8 +1799,8 @@
       <translation>Download a video</translation>
     </message>
     <message>
-      <source>Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
-      <translation>Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</translation>
+      <source>Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
+      <translation>Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</translation>
     </message>
     <message>
       <source>Welcome to Astra Downloader</source>
@@ -1759,8 +1851,8 @@
       <translation>One-link video password</translation>
     </message>
     <message>
-      <source>Video password — one link only (optional)</source>
-      <translation>Video password — one link only (optional)</translation>
+      <source>Video password (one link only, optional)</source>
+      <translation>Video password (one link only, optional)</translation>
     </message>
     <message>
       <source>Profile</source>
@@ -2091,8 +2183,8 @@
       <translation>Site address for the sign-in</translation>
     </message>
     <message>
-      <source>Site address you signed in to — x.com, instagram.com, vimeo.com</source>
-      <translation>Site address you signed in to — x.com, instagram.com, vimeo.com</translation>
+      <source>Site address you signed in to, such as x.com, instagram.com, or vimeo.com</source>
+      <translation>Site address you signed in to, such as x.com, instagram.com, or vimeo.com</translation>
     </message>
     <message>
       <source>Site sign-in username</source>
@@ -2163,12 +2255,12 @@
       <translation>Read from</translation>
     </message>
     <message>
-      <source>{browser} — {warning}</source>
-      <translation>{browser} — {warning}</translation>
+      <source>{browser}. {warning}</source>
+      <translation>{browser}. {warning}</translation>
     </message>
     <message>
-      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
-      <translation>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</translation>
+      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
+      <translation>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</translation>
     </message>
     <message>
       <source>likely unreadable on Windows 127+</source>
@@ -2303,8 +2395,8 @@
       <translation>Firefox is registered automatically. Chrome and Edge need the extension's ID from chrome://extensions entered once.</translation>
     </message>
     <message>
-      <source>32-letter extension ID — several separated by commas</source>
-      <translation>32-letter extension ID — several separated by commas</translation>
+      <source>32-letter extension ID. Separate multiple IDs with commas.</source>
+      <translation>32-letter extension ID. Separate multiple IDs with commas.</translation>
     </message>
     <message>
       <source>Chrome and Edge extension IDs</source>
@@ -3063,8 +3155,8 @@
       <translation>Download a fresh ffmpeg and verify its checksum. The installed copy stays in place until the replacement verifies.</translation>
     </message>
     <message>
-      <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported — cookies stay on this machine.</source>
-      <translation>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported — cookies stay on this machine.</translation>
+      <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.</source>
+      <translation>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.</translation>
     </message>
     <message>
       <source>Write settings and subscriptions to a JSON bundle.</source>
@@ -3299,8 +3391,8 @@
       <translation>The site refused the request (HTTP 403).</translation>
     </message>
     <message>
-      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</source>
-      <translation>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</translation>
+      <source>Set a browser to imitate in Settings. This is usually the fix for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</source>
+      <translation>Set a browser to imitate in Settings. This is usually the fix for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</translation>
     </message>
     <message>
       <source>impersonate-and-retry</source>
@@ -3323,8 +3415,8 @@
       <translation>The site refused further requests for now (HTTP 429).</translation>
     </message>
     <message>
-      <source>This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.</source>
-      <translation>This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.</translation>
+      <source>This site is paused for the rest of its retry window. Raise the request pacing in Settings. A bandwidth cap won't help here. Then retry. Other sites can continue downloading.</source>
+      <translation>This site is paused for the rest of its retry window. Raise the request pacing in Settings. A bandwidth cap won't help here. Then retry. Other sites can continue downloading.</translation>
     </message>
     <message>
       <source>slow-down-and-retry</source>

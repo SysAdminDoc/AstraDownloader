@@ -43,7 +43,7 @@ class SiteLoginsPageMixin:
         self.site_login_url = QLineEdit()
         self.site_login_url.setAccessibleName(tr("Site address for the sign-in"))
         self.site_login_url.setPlaceholderText(
-            tr("Site address you signed in to — x.com, instagram.com, vimeo.com")
+            tr("Site address you signed in to, such as x.com, instagram.com, or vimeo.com")
         )
         site_row.addWidget(self.site_login_url, 1)
         add_layout.addLayout(site_row)
@@ -69,9 +69,9 @@ class SiteLoginsPageMixin:
         credentials_row.addWidget(self.btn_site_login_credentials)
         add_layout.addLayout(credentials_row)
 
-        source_row = QHBoxLayout()
-        source_row.setSpacing(8)
-        source_row.addWidget(make_label(tr("Read from"), "fieldHint"))
+        source_fields = QHBoxLayout()
+        source_fields.setSpacing(8)
+        source_fields.addWidget(make_label(tr("Read from"), "fieldHint"))
         self.site_login_browser = QComboBox()
         self.site_login_browser.setAccessibleName(tr("Browser to read cookies from"))
         for browser in self._value('SITE_LOGIN_BROWSERS'):
@@ -79,7 +79,7 @@ class SiteLoginsPageMixin:
             warning = self._dependencies['describe_browser_cookie_readiness'](browser)
             if warning:
                 label = tr_format(
-                    "{browser} — {warning}",
+                    "{browser}. {warning}",
                     browser=label,
                     warning=tr("likely unreadable on Windows 127+"),
                 )
@@ -90,25 +90,31 @@ class SiteLoginsPageMixin:
         firefox_index = self.site_login_browser.findData("firefox")
         if firefox_index >= 0:
             self.site_login_browser.setCurrentIndex(firefox_index)
-        source_row.addWidget(self.site_login_browser)
+        self.site_login_browser.setMinimumWidth(170)
+        source_fields.addWidget(self.site_login_browser)
         self.site_login_profile = QLineEdit()
         self.site_login_profile.setAccessibleName(tr("Browser profile name or path"))
         self.site_login_profile.setPlaceholderText(tr("Profile (optional)"))
-        self.site_login_profile.setMaximumWidth(220)
-        source_row.addWidget(self.site_login_profile)
+        self.site_login_profile.setMinimumWidth(180)
+        self.site_login_profile.setMaximumWidth(300)
+        source_fields.addWidget(self.site_login_profile, 1)
+        add_layout.addLayout(source_fields)
+
+        source_actions = QHBoxLayout()
+        source_actions.setSpacing(8)
+        source_actions.addStretch()
         self.btn_site_login_browser = self._make_tool_button("Read from browser", "primary")
         self.btn_site_login_browser.clicked.connect(self._import_site_login_from_browser)
-        source_row.addWidget(self.btn_site_login_browser)
+        source_actions.addWidget(self.btn_site_login_browser)
         self.btn_site_login_file = self._make_tool_button("Import cookies.txt", "ghost")
         self.btn_site_login_file.clicked.connect(self._import_site_login_from_file)
-        source_row.addWidget(self.btn_site_login_file)
-        source_row.addStretch()
-        add_layout.addLayout(source_row)
+        source_actions.addWidget(self.btn_site_login_file)
+        add_layout.addLayout(source_actions)
 
         add_layout.addWidget(make_label(
             tr("Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, "
                "and Chromium 127+ encrypt their cookie store, so reading them "
-               "from outside the browser usually fails — export a cookies.txt "
+               "from outside the browser usually fails. Export a cookies.txt "
                "file or use username/password instead. Firefox can normally be "
                "read directly."),
             "toolbarMeta",

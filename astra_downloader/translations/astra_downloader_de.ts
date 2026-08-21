@@ -59,8 +59,8 @@
       <translation>Lädt {kind} in {languages}{format} ohne Video herunter. Ändern Sie das unter Einstellungen, Nachbearbeitung.</translation>
     </message>
     <message>
-      <source>{signed_in} {site} — {count} {stored}.</source>
-      <translation>{signed_in} {site} — {count} {stored}.</translation>
+      <source>{signed_in} {site}. {count} {stored}.</source>
+      <translation>{signed_in} {site}. {count} {stored}.</translation>
     </message>
     <message>
       <source>The subscription was restored.</source>
@@ -99,12 +99,12 @@
       <translation>Fehler kopiert.</translation>
     </message>
     <message>
-      <source>Copy command</source>
-      <translation>Befehl kopieren</translation>
-    </message>
-    <message>
       <source>Close</source>
       <translation>Schließen</translation>
+    </message>
+    <message>
+      <source>Copy command</source>
+      <translation>Befehl kopieren</translation>
     </message>
     <message>
       <source>Link ready. Check the options, then choose Download.</source>
@@ -151,6 +151,14 @@
       <translation>Playlist überprüfen</translation>
     </message>
     <message>
+      <source>Review playlist videos</source>
+      <translation>Playlist-Videos überprüfen</translation>
+    </message>
+    <message>
+      <source>Choose which videos should be added to the download queue.</source>
+      <translation>Wählen Sie aus, welche Videos zur Download-Warteschlange hinzugefügt werden sollen.</translation>
+    </message>
+    <message>
       <source>(untitled playlist)</source>
       <translation>(unbenannte Playlist)</translation>
     </message>
@@ -159,20 +167,40 @@
       <translation>Alle auswählen</translation>
     </message>
     <message>
+      <source>Select every video in this playlist preview.</source>
+      <translation>Alle Videos in dieser Playlist-Vorschau auswählen.</translation>
+    </message>
+    <message>
       <source>Deselect all</source>
       <translation>Alle abwählen</translation>
+    </message>
+    <message>
+      <source>Clear every selection in this playlist preview.</source>
+      <translation>Alle Auswahlen in dieser Playlist-Vorschau aufheben.</translation>
     </message>
     <message>
       <source>Invert</source>
       <translation>Umkehren</translation>
     </message>
     <message>
+      <source>Select unselected videos and clear selected videos.</source>
+      <translation>Nicht ausgewählte Videos auswählen und ausgewählte Videos abwählen.</translation>
+    </message>
+    <message>
       <source>Cancel</source>
       <translation>Abbrechen</translation>
     </message>
     <message>
+      <source>Close the playlist review without adding anything to the queue.</source>
+      <translation>Playlist-Prüfung schließen, ohne etwas zur Warteschlange hinzuzufügen.</translation>
+    </message>
+    <message>
       <source>Download selected</source>
       <translation>Auswahl herunterladen</translation>
+    </message>
+    <message>
+      <source>Add the selected playlist videos to the download queue.</source>
+      <translation>Ausgewählte Playlist-Videos zur Download-Warteschlange hinzufügen.</translation>
     </message>
     <message>
       <source>{selected} of {total} selected</source>
@@ -245,10 +273,6 @@
     <message>
       <source>webm</source>
       <translation>webm</translation>
-    </message>
-    <message>
-      <source>—</source>
-      <translation>—</translation>
     </message>
     <message>
       <source>Hide checks</source>
@@ -359,8 +383,8 @@
       <translation>Test</translation>
     </message>
     <message>
-      <source>{signed_in} {site} — {stored}</source>
-      <translation>{signed_in} {site} — {stored}</translation>
+      <source>{signed_in} {site}. {stored}</source>
+      <translation>{signed_in} {site}. {stored}</translation>
     </message>
     <message>
       <source>Reading cookies from the browser…</source>
@@ -435,6 +459,10 @@
       <translation>Verlauf wird geladen…</translation>
     </message>
     <message>
+      <source>Not set</source>
+      <translation>Nicht festgelegt</translation>
+    </message>
+    <message>
       <source>Download history is already clear.</source>
       <translation>Der Downloadverlauf ist bereits leer.</translation>
     </message>
@@ -485,6 +513,26 @@
     <message>
       <source>yt-dlp Command</source>
       <translation>yt-dlp-Befehl</translation>
+    </message>
+    <message>
+      <source>Review redacted yt-dlp command</source>
+      <translation>Geschwärzten yt-dlp-Befehl prüfen</translation>
+    </message>
+    <message>
+      <source>Review or copy the redacted command used for this download.</source>
+      <translation>Den für diesen Download verwendeten geschwärzten Befehl prüfen oder kopieren.</translation>
+    </message>
+    <message>
+      <source>Redacted yt-dlp command</source>
+      <translation>Geschwärzter yt-dlp-Befehl</translation>
+    </message>
+    <message>
+      <source>Read-only command text with private values removed.</source>
+      <translation>Schreibgeschützter Befehlstext, aus dem private Werte entfernt wurden.</translation>
+    </message>
+    <message>
+      <source>Copy command status</source>
+      <translation>Status beim Kopieren des Befehls</translation>
     </message>
     <message>
       <source>Scanning playlist items...</source>
@@ -559,8 +607,8 @@
       <translation>Das private API-Token darf nicht leer sein.</translation>
     </message>
     <message>
-      <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, %(uploader)s — no absolute paths or '..'.</source>
-      <translation>Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s, %(uploader)s — keine absoluten Pfade oder '..'.</translation>
+      <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.</source>
+      <translation>Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s oder %(uploader)s. Absolute Pfade und '..' sind nicht erlaubt.</translation>
     </message>
     <message>
       <source>Check the highlighted fields before saving.</source>
@@ -619,16 +667,36 @@
       <translation>Diagnose prüfen</translation>
     </message>
     <message>
+      <source>Review redacted diagnostics</source>
+      <translation>Geschwärzte Diagnose prüfen</translation>
+    </message>
+    <message>
+      <source>Review the support data before saving or copying it.</source>
+      <translation>Prüfen Sie die Supportdaten vor dem Speichern oder Kopieren.</translation>
+    </message>
+    <message>
       <source>Redacted diagnostics preview</source>
       <translation>Vorschau der redigierten Diagnosedaten</translation>
+    </message>
+    <message>
+      <source>Read-only support data with private values removed.</source>
+      <translation>Schreibgeschützte Supportdaten, aus denen private Werte entfernt wurden.</translation>
     </message>
     <message>
       <source>Save diagnostics</source>
       <translation>Diagnose speichern</translation>
     </message>
     <message>
-      <source>Copy to Clipboard</source>
+      <source>Save the redacted diagnostics as a JSON file.</source>
+      <translation>Geschwärzte Diagnose als JSON-Datei speichern.</translation>
+    </message>
+    <message>
+      <source>Copy to clipboard</source>
       <translation>In Zwischenablage kopieren</translation>
+    </message>
+    <message>
+      <source>Copy the redacted diagnostics and close this review.</source>
+      <translation>Geschwärzte Diagnose kopieren und diese Prüfung schließen.</translation>
     </message>
     <message>
       <source>Installing required download tools...</source>
@@ -641,6 +709,10 @@
     <message>
       <source>(untitled)</source>
       <translation>(ohne Titel)</translation>
+    </message>
+    <message>
+      <source>Select playlist item {index}: {title}</source>
+      <translation>Playlist-Eintrag {index} auswählen: {title}</translation>
     </message>
     <message>
       <source>{name} {page}</source>
@@ -779,8 +851,8 @@
       <translation>Website-Anmeldung hinzufügen</translation>
     </message>
     <message>
-      <source>Username/password — stored securely</source>
-      <translation>Benutzername/Passwort — sicher gespeichert</translation>
+      <source>Username and password. Stored securely.</source>
+      <translation>Benutzername und Passwort. Sicher gespeichert.</translation>
     </message>
     <message>
       <source>cookies + username/password</source>
@@ -943,8 +1015,8 @@
       <translation>Der Rückgängig-Eintrag ist weiterhin verfügbar; löschen Sie ihn vor dem Schließen.</translation>
     </message>
     <message>
-      <source>{count} stored sign-ins are listed by site only — add them again after importing.</source>
-      <translation>{count} gespeicherte Anmeldungen sind nur nach Website aufgeführt — fügen Sie sie nach dem Import erneut hinzu.</translation>
+      <source>{count} stored sign-ins are listed by site only. Add them again after importing.</source>
+      <translation>{count} gespeicherte Anmeldungen sind nur nach Website aufgeführt. Fügen Sie sie nach dem Import erneut hinzu.</translation>
     </message>
     <message>
       <source>Could not prepare the import undo snapshot. Nothing changed; check disk permissions and retry.</source>
@@ -987,8 +1059,8 @@
       <translation>Downloadverlauf konnte nicht gelesen werden. Die unlesbare Datei wurde beiseitegelegt; stellen Sie sie aus dem Status-Hinweis wieder her oder prüfen Sie die Diagnose.</translation>
     </message>
     <message>
-      <source>{start}–{end} of {filtered} filtered · {total} retained · limit {limit}</source>
-      <translation>{start}–{end} von {filtered} gefiltert · {total} behalten · Limit {limit}</translation>
+      <source>{start} to {end} of {filtered} filtered · {total} retained · limit {limit}</source>
+      <translation>{start} bis {end} von {filtered} gefiltert · {total} behalten · Limit {limit}</translation>
     </message>
     <message>
       <source>0 of {filtered} filtered · {total} retained · limit {limit}</source>
@@ -1031,12 +1103,16 @@
       <translation>Befehl für {title}</translation>
     </message>
     <message>
-      <source>This is the exact command line executed for this job with credentials, tokens, and cookie paths redacted.</source>
-      <translation>Dies ist die exakte Befehlszeile dieses Auftrags; Zugangsdaten, Token und Cookie-Pfade sind geschwärzt.</translation>
+      <source>This is the exact command line used for this job. Credentials, tokens, and cookie paths are redacted.</source>
+      <translation>Dies ist die exakte Befehlszeile dieses Auftrags. Zugangsdaten, Token und Cookie-Pfade sind geschwärzt.</translation>
     </message>
     <message>
       <source>No command recorded.</source>
       <translation>Kein Befehl aufgezeichnet.</translation>
+    </message>
+    <message>
+      <source>Copied to clipboard.</source>
+      <translation>In die Zwischenablage kopiert.</translation>
     </message>
     <message>
       <source>Paste a playlist link first.</source>
@@ -1087,8 +1163,12 @@
       <translation>Videolink vorgemerkt. Öffnen Sie Downloads, um ihn vor dem Einreihen zu prüfen.</translation>
     </message>
     <message>
-      <source>Saved. This copy registers no browser hosts (portable or source run) — pair from an installed copy.</source>
-      <translation>Gespeichert. Diese Kopie registriert keine Browser-Hosts (portabel oder Quellstart) — von einer installierten Kopie aus koppeln.</translation>
+      <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
+      <translation>Gespeichert. Diese portable Kopie registriert keine Browser-Hosts. Koppeln Sie über eine installierte Kopie.</translation>
+    </message>
+    <message>
+      <source>Close the diagnostics review without copying anything.</source>
+      <translation>Diagnoseprüfung schließen, ohne etwas zu kopieren.</translation>
     </message>
     <message>
       <source>Reveal</source>
@@ -1149,6 +1229,18 @@
     <message>
       <source>Setup failed. Check the log for details.</source>
       <translation>Die Einrichtung ist fehlgeschlagen. Details finden Sie im Protokoll.</translation>
+    </message>
+    <message>
+      <source>Duration {duration}</source>
+      <translation>Dauer {duration}</translation>
+    </message>
+    <message>
+      <source>No videos found</source>
+      <translation>Keine Videos gefunden</translation>
+    </message>
+    <message>
+      <source>This playlist did not return any videos. Close this review and try the link again.</source>
+      <translation>Diese Playlist hat keine Videos zurückgegeben. Schließen Sie die Prüfung und versuchen Sie den Link erneut.</translation>
     </message>
     <message>
       <source>{label} status indicator: {value}</source>
@@ -1251,8 +1343,8 @@
       <translation>Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Anmeldungen“.</translation>
     </message>
     <message>
-      <source>Expired — sign in again to refresh it</source>
-      <translation>Abgelaufen — melden Sie sich erneut an, um sie zu erneuern</translation>
+      <source>Expired. Sign in again to refresh it.</source>
+      <translation>Abgelaufen. Melden Sie sich erneut an, um die Anmeldung zu erneuern.</translation>
     </message>
     <message>
       <source>username/password</source>
@@ -1483,8 +1575,8 @@
       <translation>Cookie-Sitzung abgelaufen</translation>
     </message>
     <message>
-      <source>Missing on disk — import it again</source>
-      <translation>Auf dem Datenträger nicht gefunden — erneut importieren</translation>
+      <source>Missing on disk. Import it again.</source>
+      <translation>Auf dem Datenträger nicht gefunden. Importieren Sie die Anmeldung erneut.</translation>
     </message>
     <message>
       <source>cookie</source>
@@ -1575,8 +1667,8 @@
       <translation>{label} {date}</translation>
     </message>
     <message>
-      <source>Session cookies — valid until the site signs you out</source>
-      <translation>Sitzungscookies — gültig, bis die Website Sie abmeldet</translation>
+      <source>Session cookies. Valid until the site signs you out.</source>
+      <translation>Sitzungscookies. Gültig, bis die Website Sie abmeldet.</translation>
     </message>
     <message>
       <source>from</source>
@@ -1587,8 +1679,8 @@
       <translation>Gespeicherte Anmeldung entfernt für</translation>
     </message>
     <message>
-      <source>This host is paused — retry in {duration}.</source>
-      <translation>Dieser Host ist pausiert — erneut versuchen in {duration}.</translation>
+      <source>This host is paused. Retry in {duration}.</source>
+      <translation>Dieser Host ist pausiert. Erneuter Versuch in {duration}.</translation>
     </message>
     <message>
       <source>Generating subtitles</source>
@@ -1707,8 +1799,8 @@
       <translation>Video herunterladen</translation>
     </message>
     <message>
-      <source>Paste a link from almost any site — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
-      <translation>Fügen Sie einen Link von fast jeder Website ein — YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.</translation>
+      <source>Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
+      <translation>Fügen Sie einen Link von fast jeder Website ein. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.</translation>
     </message>
     <message>
       <source>Welcome to Astra Downloader</source>
@@ -1759,8 +1851,8 @@
       <translation>Videopasswort für einen Link</translation>
     </message>
     <message>
-      <source>Video password — one link only (optional)</source>
-      <translation>Videopasswort — nur ein Link (optional)</translation>
+      <source>Video password (one link only, optional)</source>
+      <translation>Videopasswort (nur ein Link, optional)</translation>
     </message>
     <message>
       <source>Profile</source>
@@ -2091,8 +2183,8 @@
       <translation>Adresse der Website für die Anmeldung</translation>
     </message>
     <message>
-      <source>Site address you signed in to — x.com, instagram.com, vimeo.com</source>
-      <translation>Adresse der Website, bei der Sie angemeldet sind — x.com, instagram.com, vimeo.com</translation>
+      <source>Site address you signed in to, such as x.com, instagram.com, or vimeo.com</source>
+      <translation>Adresse der Website, bei der Sie angemeldet sind, zum Beispiel x.com, instagram.com oder vimeo.com</translation>
     </message>
     <message>
       <source>Site sign-in username</source>
@@ -2163,12 +2255,12 @@
       <translation>Lesen aus</translation>
     </message>
     <message>
-      <source>{browser} — {warning}</source>
-      <translation>{browser} — {warning}</translation>
+      <source>{browser}. {warning}</source>
+      <translation>{browser}. {warning}</translation>
     </message>
     <message>
-      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails — export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
-      <translation>Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt — exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername/Passwort. Firefox lässt sich normalerweise direkt lesen.</translation>
+      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
+      <translation>Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt. Exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername und Passwort. Firefox lässt sich normalerweise direkt lesen.</translation>
     </message>
     <message>
       <source>likely unreadable on Windows 127+</source>
@@ -2303,8 +2395,8 @@
       <translation>Firefox wird automatisch registriert. Für Chrome und Edge muss die Erweiterungs-ID von chrome://extensions einmal eingetragen werden.</translation>
     </message>
     <message>
-      <source>32-letter extension ID — several separated by commas</source>
-      <translation>Erweiterungs-ID aus 32 Buchstaben — mehrere durch Kommas getrennt</translation>
+      <source>32-letter extension ID. Separate multiple IDs with commas.</source>
+      <translation>32-letter extension ID. Separate multiple IDs with commas.</translation>
     </message>
     <message>
       <source>Chrome and Edge extension IDs</source>
@@ -3063,8 +3155,8 @@
       <translation>Frisches ffmpeg herunterladen und Prüfsumme verifizieren. Die installierte Kopie bleibt erhalten, bis der Ersatz verifiziert ist.</translation>
     </message>
     <message>
-      <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported — cookies stay on this machine.</source>
-      <translation>Diese Installation auf einen anderen Computer übertragen oder eine nicht mehr lesbare Konfiguration wiederherstellen. Das Paket enthält Einstellungen und Abonnements. Gespeicherte Anmeldungen werden nur nach Website aufgeführt, aber nie exportiert — Cookies bleiben auf diesem Computer.</translation>
+      <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.</source>
+      <translation>Diese Installation auf einen anderen Computer übertragen oder eine nicht mehr lesbare Konfiguration wiederherstellen. Das Paket enthält Einstellungen und Abonnements. Gespeicherte Anmeldungen werden nur nach Website aufgeführt, aber nie exportiert. Cookies bleiben auf diesem Computer.</translation>
     </message>
     <message>
       <source>Write settings and subscriptions to a JSON bundle.</source>
@@ -3299,8 +3391,8 @@
       <translation>Die Website hat die Anfrage abgelehnt (HTTP 403).</translation>
     </message>
     <message>
-      <source>Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</source>
-      <translation>Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls. Wenn eine Dual-Stack-Route den 403 verursacht, versuchen Sie `--force-ipv4` in den Einstellungen.</translation>
+      <source>Set a browser to imitate in Settings. This is usually the fix for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps. If a dual-stack route is returning the 403, try `--force-ipv4` in Settings.</source>
+      <translation>Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein. Dies behebt normalerweise eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls. Wenn eine Dual-Stack-Route den 403 verursacht, versuchen Sie `--force-ipv4` in den Einstellungen.</translation>
     </message>
     <message>
       <source>impersonate-and-retry</source>
@@ -3323,8 +3415,8 @@
       <translation>Die Website hat weitere Anfragen vorerst abgelehnt (HTTP 429).</translation>
     </message>
     <message>
-      <source>This site is paused for the rest of its retry window. Raise the request pacing in Settings — a bandwidth cap does not help here — then retry. Other sites can continue downloading.</source>
-      <translation>Diese Website ist für den Rest des Wiederholungsfensters pausiert. Erhöhen Sie in den Einstellungen das Anfrage-Pacing — eine Bandbreitenbegrenzung hilft hier nicht — und versuchen Sie es erneut. Andere Websites können weiter herunterladen.</translation>
+      <source>This site is paused for the rest of its retry window. Raise the request pacing in Settings. A bandwidth cap won't help here. Then retry. Other sites can continue downloading.</source>
+      <translation>Diese Website ist für den Rest des Wiederholungsfensters pausiert. Erhöhen Sie in den Einstellungen das Anfrage-Pacing. Eine Bandbreitenbegrenzung hilft hier nicht. Versuchen Sie es dann erneut. Andere Websites können weiter herunterladen.</translation>
     </message>
     <message>
       <source>slow-down-and-retry</source>

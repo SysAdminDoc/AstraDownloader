@@ -2619,12 +2619,12 @@ def maybe_auto_update_ytdlp(config, active_count_fn=None):
             # unknown activity state is therefore unsafe; defer and retry on
             # the next scheduled check instead of failing open into a race.
             write_persistent_log(
-                f"yt-dlp auto-update deferred — active-count probe failed: {e}"
+                f"yt-dlp auto-update deferred. Active-count probe failed: {e}"
             )
             return
         if in_flight > 0:
             write_persistent_log(
-                f"yt-dlp auto-update deferred — {in_flight} active download(s); "
+                f"yt-dlp auto-update deferred. {in_flight} active download(s); "
                 f"next check at the configured 24h throttle."
             )
             return
@@ -3336,9 +3336,14 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
                     f"Companion update aborted: {in_flight} download(s) started "
                     f"while the update was being prepared."
                 )
+                active_downloads = (
+                    f"{in_flight} download is"
+                    if in_flight == 1
+                    else f"{in_flight} downloads are"
+                )
                 return {
                     'ok': False,
-                    'error': f"{in_flight} download(s) in flight — wait for them to finish, then try again. "
+                    'error': f"{active_downloads} still in flight. Wait for them to finish, then try again. "
                              f"The companion update must restart Astra Downloader after atomically replacing the executable.",
                     'error_code': 'downloads-in-flight',
                     'inFlight': in_flight,
@@ -4317,6 +4322,12 @@ QFrame[class="filterBar"] {
     border: 1px solid #252d37;
     border-radius: 10px;
 }
+QFrame[class="playlistRow"] {
+    background: #0d1218;
+    border: 1px solid #252d37;
+    border-radius: 8px;
+}
+QFrame[class="playlistRow"]:hover { background: #11161d; border-color: #607080; }
 QFrame[class="listHeader"] { background: transparent; border: none; border-bottom: 1px solid #2a323c; }
 QFrame[class="historyRow"], QFrame[class="download"] {
     background: transparent;
@@ -4340,6 +4351,7 @@ QTextEdit {
     padding: 12px;
 }
 QTextEdit:focus { border-color: #ff7664; background: #11161d; }
+QTextEdit[class="monospaceLog"] { background: #080b0f; color: #d8dde3; }
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; border: none; margin: 2px; }
