@@ -5,9 +5,9 @@
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.13-3776ab)](astra_downloader/requirements.txt)
 
-A desktop video downloader for Windows. Paste a link — from YouTube, Reddit,
+A desktop video downloader for Windows. Paste a link from YouTube, Reddit,
 X, TikTok, Vimeo, Instagram, Twitch, or any of the hundreds of sites
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) supports — and it downloads.
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) supports. It downloads.
 
 It also runs a local API so the
 [Astra Deck](https://github.com/SysAdminDoc/Astra-Deck) browser extension can
@@ -35,7 +35,12 @@ pasting a link never needs it.
   for a yt-dlp-native tail clip.
 - **Sign in to sites.** Private and members-only videos work: import a
   `cookies.txt`, or read a browser profile. One jar per site, filtered to
-  that site's registrable domain and attached to that site alone.
+  that site's registrable domain and attached to that site alone. A one-time
+  YouTube warning explains the account-ban and public-video risks, with a link
+  to [yt-dlp's guidance](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies).
+- **See what pacing means.** Settings turns the configured pause into an
+  approximate hourly rate. It puts that beside yt-dlp's published YouTube
+  estimates and its recommended 5 to 10 second delay.
 - **Site profiles.** Name a domain-bound profile in Settings for automatic
   format, quality, proxy, impersonation and pacing defaults. The paste box
   shows the matched profile and offers a one-off profile or no-profile choice;
@@ -88,9 +93,9 @@ pasting a link never needs it.
   beside it. The pinned multilingual Whisper model is downloaded during setup
   only after you opt in; audio-only and subtitle-only jobs never invoke it.
 - **Sets itself up.** First launch fetches yt-dlp and ffmpeg, plus a
-  JavaScript runtime if YouTube needs one — Deno if it can be had, otherwise a
-  2 MB QuickJS build. No separate installer, no PATH surgery. yt-dlp keeps
-  itself current.
+  JavaScript runtime if YouTube needs one. It uses Deno if available,
+  otherwise a 2 MB QuickJS build. No separate installer, no PATH surgery.
+  yt-dlp keeps itself current.
 - **Move it, or put it back.** Export settings and subscriptions to one JSON
   bundle and import it on another machine. Stored sign-ins are listed by site
   but never exported; cookies stay where they are. Proxy credentials, network
@@ -138,7 +143,7 @@ running copy then owns its state beside itself. `--install` always selects the
 managed install layout. A portable one-folder copy cannot self-update by
 replacing only its executable; extract the next one-folder archive instead.
 
-The build is unsigned, so SmartScreen will warn on first run — choose **More
+The build is unsigned, so SmartScreen will warn on first run. Choose **More
 info → Run anyway**. That is permanent policy, not an oversight: verify the
 download against the SHA-256 published beside it instead of relying on a
 signature.
@@ -205,7 +210,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1032 tests; scratch state stays under build/pytest
+py -3.13 -m pytest          # 1034 tests; scratch state stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
@@ -235,7 +240,7 @@ rebinding.
 
 ## Security
 
-Downloads only reach public internet addresses — loopback, RFC1918,
+Downloads only reach public internet addresses. Loopback, RFC1918,
 link-local, reserved, and multicast targets are refused, as are URLs that
 embed credentials. Stored cookies and site username/password credentials
 never leave the machine and are never readable through the API, the GUI, the

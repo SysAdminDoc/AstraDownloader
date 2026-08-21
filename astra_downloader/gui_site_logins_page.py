@@ -124,6 +124,25 @@ class SiteLoginsPageMixin:
         self.site_login_status.setAccessibleName(tr("Site sign-in status"))
         self.site_login_status.hide()
         add_layout.addWidget(self.site_login_status)
+        self.youtube_sign_in_warning = QLabel(tr(
+            "YouTube sign-ins are risky. yt-dlp warns that account use can "
+            "cause temporary or permanent bans, and some signed-in sessions "
+            "can make public videos unplayable. Use cookies only for "
+            "account-required videos, keep a 5 to 10 second pause, and retry "
+            "public videos signed out. <a href=\"https://github.com/yt-dlp/"
+            "yt-dlp/wiki/Extractors#exporting-youtube-cookies\">Read yt-dlp's "
+            "YouTube guidance.</a>"
+        ))
+        self.youtube_sign_in_warning.setTextFormat(Qt.TextFormat.RichText)
+        self.youtube_sign_in_warning.setOpenExternalLinks(True)
+        self.youtube_sign_in_warning.setWordWrap(True)
+        self.youtube_sign_in_warning.setProperty("class", "settingsStatus")
+        self.youtube_sign_in_warning.setProperty("tone", "warning")
+        self.youtube_sign_in_warning.setAccessibleName(
+            tr("YouTube sign-in risk warning")
+        )
+        self.youtube_sign_in_warning.hide()
+        add_layout.addWidget(self.youtube_sign_in_warning)
         layout.addWidget(add_card)
 
         site_login_filter_panel = make_card("filterBar")

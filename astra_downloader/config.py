@@ -355,6 +355,10 @@ DEFAULT_CONFIG = {
     # Privacy-sensitive clipboard monitoring is opt-in. Matching links are
     # staged in the GUI and never enqueued without an explicit user action.
     "ClipboardLinkGrabber": False,
+    # A YouTube account warning is shown after the first stored sign-in. Keep
+    # the acknowledgement durable so repeated imports do not turn useful risk
+    # guidance into routine noise.
+    "YouTubeSignInRiskNoticeShown": False,
     "LastYtDlpUpdateCheck": "",
     "LastYtDlpUpdateAttempt": "",
     "LastYtDlpUpdateFailure": "",
@@ -1780,6 +1784,7 @@ def sanitize_config(raw):
         "UseSystemProxy",
         "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",
         "FirstRunComplete", "LegacyHealthTokenEcho",
+        "YouTubeSignInRiskNoticeShown",
     ):
         data[key] = coerce_bool(data.get(key), DEFAULT_CONFIG[key])
     data["WindowGeometry"] = clean_text(data.get("WindowGeometry"), "", 8192)
