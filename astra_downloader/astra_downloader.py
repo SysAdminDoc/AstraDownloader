@@ -177,6 +177,9 @@ try:
         REQUIRED_FFMPEG_FILTERS, evaluate_preflight_checks,
         probe_output_folder, probe_state_location,
         measure_system_clock_offset, parse_http_date_epoch,
+        MANAGED_BINARY_NAMES, MANAGED_BINARY_SECURITY_FLOORS,
+        evaluate_managed_binary_pin, filter_managed_binary_pins,
+        managed_binary_pin,
     )
     from .i18n import (
         SUPPORTED_LOCALES, install_companion_translator,
@@ -322,6 +325,9 @@ except ImportError:  # Direct script / flat source-path compatibility.
         REQUIRED_FFMPEG_FILTERS, evaluate_preflight_checks,
         probe_output_folder, probe_state_location,
         measure_system_clock_offset, parse_http_date_epoch,
+        MANAGED_BINARY_NAMES, MANAGED_BINARY_SECURITY_FLOORS,
+        evaluate_managed_binary_pin, filter_managed_binary_pins,
+        managed_binary_pin,
     )
     from i18n import (
         SUPPORTED_LOCALES, install_companion_translator,
@@ -1844,7 +1850,7 @@ def _evaluate_javascript_runtime(runtime, path, source):
     )
 
 
-def provision_deno():
+def provision_deno(config=None):
     """Download Deno into DENO_DIR if not already present.
 
     Returns the path to the provisioned deno.exe, or None on failure.
@@ -1856,10 +1862,21 @@ def provision_deno():
         floor_reason = _deno_version_floor_reason(version)
         if floor_reason is None:
             return str(DENO_PATH)
+        if managed_binary_pin_for(config, 'deno') == version:
+            # A pin cannot hold a runtime below the security floor — the pin
+            # setter refuses that — so reaching here means the *floor* moved
+            # after the pin was stored. Say so and keep the user's choice
+            # rather than silently replacing what they froze.
+            write_persistent_log(
+                f"Deno {version} is pinned and now below the "
+                f"{floor_reason} floor; not replacing it."
+            )
+            return str(DENO_PATH)
         floor_label = 'security' if floor_reason == 'security' else 'runtime'
         write_persistent_log(
             f"Bundled Deno {version or 'unknown'} is below the {floor_label} floor; refreshing"
         )
+    retain_managed_binary_rollback('deno')
     DENO_DIR.mkdir(parents=True, exist_ok=True)
     tmp_zip = DENO_DIR / f'.deno.{uuid.uuid4().hex}.zip'
     try:
@@ -2288,6 +2305,230 @@ def reset_ffmpeg_capabilities_cache():
         _ffmpeg_filter_probe_checked_at = 0.0
 
 
+# health.py declares the floors it knows about; ffmpeg's lives here beside
+# the capability probe that also uses it. One merged table so a pin and a
+# capability check can never disagree about what "too old" means.
+MANAGED_BINARY_FLOORS = {
+    **MANAGED_BINARY_SECURITY_FLOORS,
+    'ffmpeg': _FFMPEG_MIN_VERSION,
+}
+# FFmpeg-Builds ships master snapshots with no semver, so the pin is measured
+# against the same dated floor the capability probe uses.
+MANAGED_BINARY_SNAPSHOT_FLOORS = {'ffmpeg': _FFMPEG_MIN_SNAPSHOT_DATE}
+
+
+def _probe_ffmpeg_binary_version(path):
+    output = _run_captured([str(path), '-version'], timeout=10)
+    return parse_ffmpeg_version_output(output or '') or ''
+
+
+def _probe_whisper_binary_version(path):
+    return str((probe_whisper_runtime(path) or {}).get('version') or '')
+
+
+def managed_binary_paths():
+    """Map each pinnable binary to the file a pin or rollback acts on."""
+    return {
+        'yt-dlp': YTDLP_PATH,
+        'ffmpeg': FFMPEG_PATH,
+        'deno': DENO_PATH,
+        'quickjs': QUICKJS_PATH,
+        'whisper': WHISPER_BIN_PATH,
+    }
+
+
+_MANAGED_BINARY_PROBES = {
+    'yt-dlp': lambda path: _probe_ytdlp_binary(path),
+    'ffmpeg': _probe_ffmpeg_binary_version,
+    'deno': _probe_deno_binary_version,
+    'quickjs': _probe_quickjs_binary_version,
+    'whisper': _probe_whisper_binary_version,
+}
+
+
+def probe_managed_binary_version(name, path=None):
+    """Return the version one managed binary reports, or ''."""
+    name = str(name or '').strip().lower()
+    probe = _MANAGED_BINARY_PROBES.get(name)
+    if probe is None:
+        return ''
+    target = Path(path) if path is not None else managed_binary_paths().get(name)
+    if target is None or not managed_binary_usable(target):
+        return ''
+    try:
+        return str(probe(target) or '')
+    except Exception:
+        # reason: an unprobeable binary reports no version, which every caller already renders
+        return ''
+
+
+def managed_binary_rollback_path(name):
+    """Return where the previous copy of one managed binary is retained."""
+    name = str(name or '').strip().lower()
+    if name == 'yt-dlp':
+        # The updater has retained this name since before pinning existed.
+        return INSTALL_DIR / YTDLP_ROLLBACK_FILENAME
+    path = managed_binary_paths().get(name)
+    return None if path is None else path.with_name(f'.{path.name}.last-known-good')
+
+
+def retain_managed_binary_rollback(name):
+    """Copy the installed binary aside before something replaces it.
+
+    Without this a rollback has nothing to roll back to. Best-effort by
+    design: failing to retain a copy must not stop a security refresh, it
+    only means this particular version cannot be returned to.
+    """
+    path = managed_binary_paths().get(str(name or '').strip().lower())
+    backup = managed_binary_rollback_path(name)
+    if path is None or backup is None or not managed_binary_usable(path):
+        return ''
+    try:
+        return atomic_copy_verified(path, backup) or ''
+    except Exception as exc:  # noqa: BLE001
+        write_persistent_log(f'Could not retain a rollback copy of {name}: {exc}')
+        return ''
+
+
+def evaluate_binary_pin(name, version):
+    return evaluate_managed_binary_pin(
+        name, version, floors=MANAGED_BINARY_FLOORS,
+        snapshot_floors=MANAGED_BINARY_SNAPSHOT_FLOORS,
+    )
+
+
+def active_managed_binary_pins(config):
+    """Return the stored pins that would still be accepted today."""
+    try:
+        raw = config.get('ManagedBinaryPins', {}) if config is not None else {}
+    except AttributeError:
+        raw = {}
+    return filter_managed_binary_pins(
+        raw, floors=MANAGED_BINARY_FLOORS,
+        snapshot_floors=MANAGED_BINARY_SNAPSHOT_FLOORS,
+    )
+
+
+def managed_binary_pin_for(config, name):
+    return managed_binary_pin(active_managed_binary_pins(config), name)
+
+
+def set_managed_binary_pin(config, name, version):
+    """Pin or unpin one managed binary, naming the reason when refused."""
+    decision = evaluate_binary_pin(name, version)
+    if not decision['ok']:
+        return decision
+    pins = active_managed_binary_pins(config)
+    if decision['version']:
+        pins[decision['name']] = decision['version']
+    else:
+        pins.pop(decision['name'], None)
+    try:
+        written = config.update({'ManagedBinaryPins': pins})
+    except Exception as exc:  # noqa: BLE001
+        write_persistent_log(f'Could not store the {name} pin: {exc}')
+        written = False
+    if written is False:
+        return {
+            **decision, 'ok': False, 'reason': 'pin-not-saved',
+            'message': 'The pin could not be written to settings.',
+        }
+    write_persistent_log(
+        f"{decision['name']} pinned to {decision['version']}"
+        if decision['version'] else f"{decision['name']} pin cleared"
+    )
+    return decision
+
+
+def rollback_managed_binary(config, name):
+    """Restore the retained previous copy of one binary and pin to it.
+
+    A rollback that left the binary free to auto-update again would be undone
+    within a day, so restoring and pinning are one action.
+    """
+    name = str(name or '').strip().lower()
+    path = managed_binary_paths().get(name)
+    backup = managed_binary_rollback_path(name)
+    if path is None or backup is None:
+        return {
+            'ok': False, 'name': name, 'version': '',
+            'reason': 'unknown-managed-binary',
+            'message': f"{name or 'That tool'} is not a managed binary.",
+        }
+    if not managed_binary_usable(backup):
+        return {
+            'ok': False, 'name': name, 'version': '',
+            'reason': 'no-retained-copy',
+            'message': (
+                f'No previous {name} was retained, so there is nothing to roll '
+                'back to yet.'
+            ),
+        }
+    retained_version = probe_managed_binary_version(name, backup)
+    if not retained_version:
+        return {
+            'ok': False, 'name': name, 'version': '',
+            'reason': 'retained-copy-unverified',
+            'message': f'The retained {name} could not report its version.',
+        }
+    try:
+        atomic_copy_verified(backup, path)
+    except Exception as exc:  # noqa: BLE001
+        write_persistent_log(f'{name} rollback failed: {exc}')
+        return {
+            'ok': False, 'name': name, 'version': retained_version,
+            'reason': 'rollback-failed',
+            'message': f'The retained {name} could not be put back.',
+        }
+    restored_version = probe_managed_binary_version(name, path)
+    if restored_version != retained_version:
+        return {
+            'ok': False, 'name': name, 'version': restored_version,
+            'reason': 'rollback-verification-failed',
+            'message': (
+                f'{name} was restored but reports {restored_version or "no version"} '
+                f'rather than {retained_version}.'
+            ),
+        }
+    if name == 'yt-dlp':
+        _ytdlp_version_probe.prime(restored_version)
+    elif name == 'ffmpeg':
+        reset_ffmpeg_capabilities_cache()
+    elif name in ('deno', 'quickjs'):
+        reset_deno_runtime_cache()
+    pinned = set_managed_binary_pin(config, name, restored_version)
+    write_persistent_log(f'{name} rolled back to {restored_version}.')
+    return {
+        'ok': True, 'name': name, 'version': restored_version,
+        'reason': '' if pinned['ok'] else pinned['reason'],
+        'message': (
+            f'{name} was rolled back to {restored_version} and pinned there.'
+            if pinned['ok'] else
+            f'{name} was rolled back to {restored_version}, but the pin was not '
+            'stored, so it may update again.'
+        ),
+    }
+
+
+def managed_binary_inventory(config):
+    """Report every managed binary's installed version, pin and rollback."""
+    pins = active_managed_binary_pins(config)
+    inventory = []
+    for name in MANAGED_BINARY_NAMES:
+        backup = managed_binary_rollback_path(name)
+        inventory.append({
+            'name': name,
+            'installed': probe_managed_binary_version(name),
+            'pinned': pins.get(name, ''),
+            'floor': MANAGED_BINARY_FLOORS.get(name, ''),
+            'rollback': (
+                probe_managed_binary_version(name, backup)
+                if backup is not None and managed_binary_usable(backup) else ''
+            ),
+        })
+    return inventory
+
+
 # ── v1.2.0: throttled yt-dlp auto-update helpers ──
 # v1.5.4: 24h -> 12h. The check now fires on the download path (initiation +
 # queue-idle), not just at the rare server restart, so a shorter throttle keeps
@@ -2566,8 +2807,13 @@ def _run_ytdlp_self_update(config, source_tag):
             channel = 'nightly'
         # `--update-to <channel>@latest` both switches channel and updates,
         # replacing the old plain `-U` (which was locked to whatever channel the
-        # binary shipped as — stable — and so lagged YouTube breakage).
-        update_args = [str(stage_path), '--update-to', f'{channel}@latest']
+        # binary shipped as — stable — and so lagged YouTube breakage). A pin
+        # names a release instead of the alias, and yt-dlp will move down to
+        # it as readily as up, which is what makes "roll back and stay there"
+        # work without a retained copy.
+        pinned_version = managed_binary_pin_for(config, 'yt-dlp')
+        target = pinned_version or 'latest'
+        update_args = [str(stage_path), '--update-to', f'{channel}@{target}']
         try:
             result = subprocess.run(
                 update_args,
@@ -2759,6 +3005,11 @@ def maybe_auto_update_ytdlp(config, active_count_fn=None):
     if not YTDLP_PATH.exists():
         return
     if not config.get("AutoUpdateYtDlp", True):
+        return
+    pinned_version = managed_binary_pin_for(config, 'yt-dlp')
+    if pinned_version and get_ytdlp_version() == pinned_version:
+        # Already where the user asked it to stay. Running the updater would
+        # spawn a process, stage a copy and hash it to conclude nothing.
         return
     if not should_check_ytdlp_update(config):
         return
@@ -5120,7 +5371,10 @@ class SetupWorker(SetupWorkerCore):
                 'download_file_atomic': lambda *args, **kwargs: download_file_atomic(*args, **kwargs),
                 'extract_archive_executable_atomic': lambda *args, **kwargs: extract_archive_executable_atomic(*args, **kwargs),
                 'fetch_expected_sha256': lambda *args, **kwargs: fetch_expected_sha256(*args, **kwargs),
+                'get_ffmpeg_version': lambda *args, **kwargs: get_ffmpeg_version(*args, **kwargs),
                 'get_ytdlp_version': lambda *args, **kwargs: get_ytdlp_version(*args, **kwargs),
+                'managed_binary_pin_for': lambda *args, **kwargs: managed_binary_pin_for(*args, **kwargs),
+                'retain_managed_binary_rollback': lambda *args, **kwargs: retain_managed_binary_rollback(*args, **kwargs),
                 'http_get': lambda *args, **kwargs: http_requests.get(*args, **kwargs),
                 'launch_command_parts': lambda *args, **kwargs: launch_command_parts(*args, **kwargs),
                 'log_crash': lambda *args, **kwargs: log_crash(*args, **kwargs),

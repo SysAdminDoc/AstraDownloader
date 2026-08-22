@@ -379,6 +379,8 @@ class FolderPickerService(QObject):
 
 
 _REQUIRED_SETUP_DEPENDENCIES = frozenset({
+    'managed_binary_pin_for',
+    'retain_managed_binary_rollback',
     'MANAGED_BINARY_ANTIVIRUS_ADVICE',
     'managed_binary_state',
     'check_ffmpeg_capabilities',
@@ -405,6 +407,7 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'download_file_atomic',
     'extract_archive_executable_atomic',
     'fetch_expected_sha256',
+    'get_ffmpeg_version',
     'get_ytdlp_version',
     'http_get',
     'launch_command_parts',
@@ -482,8 +485,20 @@ class SetupWorkerCore(QThread):
         return state
 
     def _ffmpeg_needs_refresh(self, state):
-        """Return whether ffmpeg is absent, stale, damaged, or forced."""
-        if self.force_ffmpeg or state != 'ok':
+        """Return whether ffmpeg is absent, stale, damaged, or forced.
+
+        A pin outranks the staleness check but not a missing or damaged file:
+        freezing a version cannot mean running one that will not execute.
+        """
+        if state != 'ok':
+            return True
+        pinned = self._dependencies['managed_binary_pin_for'](self.config, 'ffmpeg')
+        if pinned and pinned == self._dependencies['get_ffmpeg_version']():
+            message = f"ffmpeg is pinned to {pinned}; leaving it in place."
+            self.log.emit(message)
+            self._dependencies['write_persistent_log'](message)
+            return False
+        if self.force_ffmpeg:
             return True
         try:
             capabilities = self._dependencies['check_ffmpeg_capabilities'](force=True)
@@ -575,7 +590,9 @@ class SetupWorkerCore(QThread):
         ready = False
         if runtime.get('canProvisionDeno'):
             self.log.emit("Downloading Deno runtime...")
-            ready = bool(self._dependencies['provision_deno']())
+            ready = bool(
+                self._dependencies['provision_deno'](getattr(self, 'config', None))
+            )
             self.log.emit(
                 "  Done" if ready else "  Deno download failed; trying QuickJS"
             )
@@ -682,6 +699,9 @@ class SetupWorkerCore(QThread):
                         # Verification failed — cleanup handled by finally + raise
                         raise
                     self.progress.emit(56)
+                    # Keep the copy about to be overwritten, or a rollback
+                    # after a bad refresh has nothing to return to.
+                    self._dependencies['retain_managed_binary_rollback']('ffmpeg')
                     self._dependencies['extract_archive_executable_atomic'](
                         tmp_zip,
                         self._value('FFMPEG_PATH'),

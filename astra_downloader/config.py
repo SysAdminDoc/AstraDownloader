@@ -50,6 +50,7 @@ __all__ = (
     "clamp_int", "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_site_profile_domain", "normalize_site_profiles",
+    "normalize_managed_binary_pins", "MANAGED_BINARY_PIN_NAMES",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
     "output_template_preview", "truncate_utf8_bytes", "WINDOWS_MAX_PATH",
     "normalize_sublangs", "normalize_subtitle_sleep",
@@ -75,6 +76,7 @@ _OWNED_EXPORTS = {
     "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_site_profile_domain", "normalize_site_profiles",
+    "normalize_managed_binary_pins", "MANAGED_BINARY_PIN_NAMES",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
     "output_template_preview", "truncate_utf8_bytes", "WINDOWS_MAX_PATH",
     "normalize_sublangs", "normalize_subtitle_sleep",
@@ -340,6 +342,10 @@ DEFAULT_CONFIG = {
     # Named per-domain defaults. Secrets deliberately do not belong here:
     # cookies and credentials remain in SiteLoginStore, scoped by site.
     "SiteProfiles": [],
+    # Freeze a managed binary at the version installed now. An auto-update is
+    # survival for yt-dlp and it also silently breaks working setups, so this
+    # is the way out of one. Empty means "follow the published release".
+    "ManagedBinaryPins": {},
     # The default follows the operating system's light/dark preference. An
     # explicit choice is kept in settings so the GUI can switch immediately
     # and restore the same presentation on the next launch.
@@ -700,6 +706,29 @@ def normalize_site_profiles(value):
     """Fail closed when loading named profiles from local or imported state."""
     profiles, _error = validate_site_profiles(value)
     return profiles if profiles is not None else []
+
+
+# The managed binaries a user can freeze. config.py owns the schema — which
+# names exist and what a version may look like — and health.py owns the
+# security floors that decide whether a given version may be pinned at all. A
+# test keeps the two name lists identical.
+MANAGED_BINARY_PIN_NAMES = ("yt-dlp", "ffmpeg", "deno", "quickjs", "whisper")
+# yt-dlp ships `2026.08.19`, FFmpeg `8.1.2` and snapshots `N-125875-g0a1b2c3`,
+# Deno `2.8.1`. One shape covers all of them and admits no path, flag or
+# argument, because this value reaches an argv.
+_MANAGED_BINARY_PIN_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$")
+
+
+def normalize_managed_binary_pins(value):
+    """Keep only well-shaped pins for binaries this app actually manages."""
+    pins = {}
+    if not isinstance(value, dict):
+        return pins
+    for name in MANAGED_BINARY_PIN_NAMES:
+        version = clean_text(value.get(name), "", 64)
+        if version and _MANAGED_BINARY_PIN_RE.fullmatch(version):
+            pins[name] = version
+    return pins
 
 
 def normalize_sublangs(value):
@@ -1865,6 +1894,8 @@ def sanitize_config(raw):
     data["Xff"] = normalize_xff(data.get("Xff"))
     data["GeoVerificationProxy"] = normalize_proxy(data.get("GeoVerificationProxy"))
     data["SiteProfiles"] = normalize_site_profiles(data.get("SiteProfiles"))
+    data["ManagedBinaryPins"] = normalize_managed_binary_pins(
+        data.get("ManagedBinaryPins"))
     theme = clean_text(data.get("Theme"), "system", 16).lower()
     data["Theme"] = theme if theme in {"system", "light", "dark"} else "system"
     language = clean_text(data.get("Language"), "system", 16).replace("-", "_")
