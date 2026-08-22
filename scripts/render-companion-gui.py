@@ -1548,27 +1548,46 @@ def main():
 
         def capture_modal_dialog(output_name, expected_title, trigger, validate):
             dialog_output = OUTPUT_DIR / f"{output_name}.png"
+            failure = []
 
             def capture_dialog():
+                # Anything raised here escapes into Qt's event loop, and the
+                # modal exec() below is still running with nothing left to
+                # close it. That is a hang, not a failure: the gate stopped
+                # at capture 73 of 80 and printed nothing at all. Keep the
+                # reason, always close the dialog, and raise after the loop
+                # has returned.
                 dialog = app.activeModalWidget()
-                if dialog is None or dialog.windowTitle() != expected_title:
-                    raise RuntimeError(f"{expected_title} dialog did not open")
-                validate(dialog)
-                dialog.repaint()
-                app.processEvents()
-                QTest.qWait(80)
-                image = dialog.grab().toImage()
-                if image.isNull() or image.deviceIndependentSize().toSize() != dialog.size():
-                    raise RuntimeError(
-                        f"Dialog capture geometry is invalid for {output_name}"
-                    )
-                if not image.save(str(dialog_output), "PNG"):
-                    raise RuntimeError(f"Failed to save {output_name} render")
-                print(f"captured {output_name}", flush=True)
-                dialog.reject()
+                try:
+                    if dialog is None:
+                        raise RuntimeError(f"{expected_title} dialog did not open")
+                    if dialog.windowTitle() != expected_title:
+                        raise RuntimeError(
+                            f"expected the {expected_title!r} dialog, found "
+                            f"{dialog.windowTitle()!r}"
+                        )
+                    validate(dialog)
+                    dialog.repaint()
+                    app.processEvents()
+                    QTest.qWait(80)
+                    image = dialog.grab().toImage()
+                    if image.isNull() or image.deviceIndependentSize().toSize() != dialog.size():
+                        raise RuntimeError(
+                            f"Dialog capture geometry is invalid for {output_name}"
+                        )
+                    if not image.save(str(dialog_output), "PNG"):
+                        raise RuntimeError(f"Failed to save {output_name} render")
+                    print(f"captured {output_name}", flush=True)
+                except Exception as error:  # noqa: BLE001
+                    failure.append(error)
+                finally:
+                    if dialog is not None:
+                        dialog.reject()
 
             QTimer.singleShot(150, capture_dialog)
             trigger()
+            if failure:
+                raise failure[0]
 
         def capture_diagnostics(window):
             def validate(dialog):
@@ -1580,7 +1599,7 @@ def main():
 
             capture_modal_dialog(
                 scenario,
-                "Review Diagnostics",
+                "Review diagnostics",
                 window._copy_diagnostics,
                 validate,
             )
@@ -1633,7 +1652,7 @@ def main():
                     raise RuntimeError("Batch apply is not on the dialog")
 
             capture_modal_dialog(
-                scenario, "Review Playlist", trigger, validate
+                scenario, "Review playlist", trigger, validate
             )
 
         def capture_subscription_delivery(window):
@@ -1763,7 +1782,7 @@ def main():
 
             capture_modal_dialog(
                 scenario,
-                "yt-dlp Command",
+                "yt-dlp command",
                 lambda: window._show_download_command_dialog(download),
                 validate,
             )
