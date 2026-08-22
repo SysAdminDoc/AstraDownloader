@@ -923,6 +923,84 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
             finally:
                 _retire_test_window(window)
 
+    def test_a_terminal_card_offers_its_menu_without_a_right_click(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication, QPushButton
+
+        _get_qapp_or_skip(self)
+
+        history = FakeHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                download = types.SimpleNamespace(
+                    id="dl-1", url="https://example.com/a", title="A",
+                    status="cancelled", filename="", error="", error_code="",
+                    progress=0, speed="", eta="", size="", command_args=None,
+                    quality="1080", format="mp4", audio_only=False,
+                    subscription_id="", archive_key="", recovery=None,
+                )
+                card = window._download_card(download, recent=True)
+                QApplication.processEvents()
+                labels = [
+                    button.text() for button in card.findChildren(QPushButton)
+                ]
+                self.assertIn(
+                    "More", labels,
+                    "a cancelled card has no button at all, and six of its "
+                    f"eight actions live only in the menu: {labels}",
+                )
+                more = next(
+                    button for button in card.findChildren(QPushButton)
+                    if button.text() == "More"
+                )
+                # Tab-reachable, unlike the right-click the actions used to
+                # need, and it says what it opens.
+                self.assertNotEqual(
+                    more.focusPolicy(), Qt.FocusPolicy.NoFocus
+                )
+                self.assertTrue(more.toolTip())
+
+                menu = window._download_card_menu(download, card)
+                actions = [action.text() for action in menu.actions()]
+                for expected in ("Play", "Delete file", "Copy link",
+                                 "Download again"):
+                    self.assertIn(expected, actions)
+                menu.deleteLater()
+                card.deleteLater()
+            finally:
+                _retire_test_window(window)
+
+    def test_a_rejected_settings_field_says_why_on_screen(self):
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+
+        history = FakeHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                # The reason used to go to setAccessibleDescription only, so a
+                # sighted user got a slightly redder border and "Check the
+                # highlighted fields before saving."
+                window.cfg_token.setText("")
+                window._save_settings()
+                QApplication.processEvents()
+                self.assertEqual(window.cfg_token.property("state"), "error")
+                reason = "The private API token cannot be empty."
+                self.assertEqual(window.cfg_token.toolTip(), reason)
+                self.assertEqual(
+                    window.cfg_token.accessibleDescription(), reason)
+                self.assertEqual(window.settings_status.text(), reason)
+            finally:
+                _retire_test_window(window)
+
     def test_failed_history_row_shows_status_error_and_terminal_filters(self):
         from PySide6.QtWidgets import QApplication, QLabel
 
@@ -982,7 +1060,9 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 QApplication.processEvents()
                 self.assertEqual(
                     [button.text() for button in card.findChildren(QPushButton)],
-                    ["Retry"],
+                    ["Retry", "More"],
+                    "a terminal card carries its one immediate action and the "
+                    "button that opens the rest",
                 )
                 menu = window._download_card_menu(download, card)
                 action_text = [action.text() for action in menu.actions()]

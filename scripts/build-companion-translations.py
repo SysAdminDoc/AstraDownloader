@@ -1544,6 +1544,11 @@ CATALOGS["de"].update({
     "No filtered history rows are available to export.":
         "Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.",
     "Export download history": "Downloadverlauf exportieren",
+    "More": "Mehr",
+    "Play, reveal, delete, copy the link or error, or download this again.":
+        "Abspielen, im Ordner zeigen, löschen, Link oder Fehler kopieren oder erneut herunterladen.",
+    "Right-click, or use More, for play, delete, copy and download again.":
+        "Rechtsklick oder „Mehr“ für Abspielen, Löschen, Kopieren und erneutes Herunterladen.",
     "Both dates need to be YYYY-MM-DD, so neither is being used.":
         "Beide Datumsangaben müssen das Format JJJJ-MM-TT haben; keine von beiden wird verwendet.",
     "The saved-from date needs to be YYYY-MM-DD, so it is not being used.":

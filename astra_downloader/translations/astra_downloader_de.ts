@@ -611,6 +611,10 @@
       <translation>●  {status}</translation>
     </message>
     <message>
+      <source>More</source>
+      <translation>Mehr</translation>
+    </message>
+    <message>
       <source>{total} / {limit} jobs</source>
       <translation>{total} / {limit} Aufträge</translation>
     </message>
@@ -817,10 +821,6 @@
     <message>
       <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.</source>
       <translation>Behalten Sie %(ext)s bei und verwenden Sie nur sichere yt-dlp-Felder wie %(title)s, %(id)s oder %(uploader)s. Absolute Pfade und '..' sind nicht erlaubt.</translation>
-    </message>
-    <message>
-      <source>Check the highlighted fields before saving.</source>
-      <translation>Prüfen Sie die markierten Felder vor dem Speichern.</translation>
     </message>
     <message>
       <source>Could not save settings. Nothing changed; check disk permissions and retry.</source>
@@ -1231,6 +1231,10 @@
       <translation>Download wird vorbereitet</translation>
     </message>
     <message>
+      <source>Right-click, or use More, for play, delete, copy and download again.</source>
+      <translation>Rechtsklick oder „Mehr“ für Abspielen, Löschen, Kopieren und erneutes Herunterladen.</translation>
+    </message>
+    <message>
       <source>Up</source>
       <translation>Hoch</translation>
     </message>
@@ -1245,6 +1249,10 @@
     <message>
       <source>Add sign-in</source>
       <translation>Anmeldung hinzufügen</translation>
+    </message>
+    <message>
+      <source>Play, reveal, delete, copy the link or error, or download this again.</source>
+      <translation>Abspielen, im Ordner zeigen, löschen, Link oder Fehler kopieren oder erneut herunterladen.</translation>
     </message>
     <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
@@ -1437,6 +1445,10 @@
     <message>
       <source>The rendered template path is too long for Windows.</source>
       <translation>Der gerenderte Vorlagenpfad ist für Windows zu lang.</translation>
+    </message>
+    <message>
+      <source>Check the highlighted fields before saving.</source>
+      <translation>Prüfen Sie die markierten Felder vor dem Speichern.</translation>
     </message>
     <message>
       <source>Settings saved. Restart Astra Downloader to apply the language.</source>
