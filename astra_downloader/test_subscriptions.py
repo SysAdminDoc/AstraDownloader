@@ -1529,6 +1529,168 @@ class SubscriptionArchiveManagerTests(unittest.TestCase):
             coerce_bool=ad.coerce_bool,
         )
 
+    def _captured(self, store, sub_id, video_id, *, now=100,
+                  file_path="", height=720):
+        module = subscriptions_module()
+        candidate = {
+            "id": video_id,
+            "url": f"https://www.youtube.com/watch?v={video_id}0000000",
+            "title": f"Upload {video_id}",
+        }
+        key = module.subscription_archive_key(candidate)
+        store.reserve_archive(key, candidate, sub_id, now=now)
+        store.mark_archive_queued(key, f"dl_{video_id}", now=now)
+        store.mark_download(
+            f"dl_{video_id}", "complete", now=now + 1,
+            delivered_height=height, file_path=file_path,
+        )
+        return key, candidate
+
+    def test_a_scan_that_saw_the_whole_source_marks_what_vanished(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            kept_key, kept = self._captured(store, sub_id, "keep")
+            gone_key, gone = self._captured(store, sub_id, "gone")
+
+            # First complete scan: both are still listed, so both are seen and
+            # neither is missing. Nothing can be called missing before there
+            # is a sighting to compare against.
+            store.mark_scan_sightings(
+                sub_id, [kept_key, gone_key], complete_listing=True, now=300)
+            self.assertFalse(store.archive_entry(gone_key)["missingUpstream"])
+
+            # Second complete scan without it: deleted upstream.
+            store.mark_scan_sightings(
+                sub_id, [kept_key], complete_listing=True, now=400)
+            self.assertTrue(store.archive_entry(gone_key)["missingUpstream"])
+            self.assertFalse(store.archive_entry(kept_key)["missingUpstream"])
+
+            # Nothing was deleted: the record, its file and its claim survive.
+            entry = store.archive_entry(gone_key)
+            self.assertEqual(entry["status"], "complete")
+            self.assertEqual(entry["title"], "Upload gone")
+            self.assertEqual(
+                store.reserve_archive(gone_key, gone, sub_id, now=500),
+                subscriptions_module().RESERVE_ALREADY_PRESENT,
+                "a missing item is flagged, not re-queued behind the user's back",
+            )
+
+    def test_a_truncated_scan_never_calls_anything_missing(self):
+        # The scan is bounded, so an old upload legitimately falls out of the
+        # window as new ones arrive. Calling that a deletion would flag half
+        # a large channel.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            key, _candidate = self._captured(store, sub_id, "old")
+            store.mark_scan_sightings(
+                sub_id, [key], complete_listing=True, now=300)
+            store.mark_scan_sightings(
+                sub_id, [], complete_listing=False, now=400)
+            self.assertFalse(store.archive_entry(key)["missingUpstream"])
+            store.mark_scan_sightings(
+                sub_id, [], complete_listing=True, now=500)
+            self.assertTrue(store.archive_entry(key)["missingUpstream"])
+
+    def test_another_subscriptions_scan_does_not_judge_this_one(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            mine, _error = store.add_subscription(
+                "https://www.youtube.com/@mine")
+            theirs, _error = store.add_subscription(
+                "https://www.youtube.com/@theirs")
+            key, _candidate = self._captured(store, mine["id"], "mine")
+            store.mark_scan_sightings(
+                mine["id"], [key], complete_listing=True, now=300)
+            store.mark_scan_sightings(
+                theirs["id"], [], complete_listing=True, now=400)
+            self.assertFalse(store.archive_entry(key)["missingUpstream"])
+
+    def test_a_returning_video_clears_the_flag(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            key, _candidate = self._captured(store, sub_id, "back")
+            store.mark_scan_sightings(
+                sub_id, [key], complete_listing=True, now=300)
+            store.mark_scan_sightings(
+                sub_id, [], complete_listing=True, now=400)
+            self.assertTrue(store.archive_entry(key)["missingUpstream"])
+            store.mark_scan_sightings(
+                sub_id, [key], complete_listing=True, now=500)
+            self.assertFalse(store.archive_entry(key)["missingUpstream"])
+
+    def test_a_locally_deleted_file_is_recorded_and_not_refetched(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "Upload local.mp4"
+            media.write_bytes(b"downloaded")
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            key, candidate = self._captured(
+                store, sub_id, "local", file_path=str(media))
+            self.assertEqual(store.archive_entry(key)["filePath"], str(media))
+
+            media.unlink()
+            # The claim outlives the file, which is what stops a silent
+            # re-fetch of something the user chose to delete.
+            self.assertEqual(
+                store.reserve_archive(key, candidate, sub_id, now=600),
+                subscriptions_module().RESERVE_ALREADY_PRESENT,
+            )
+            page = store.archive_page(sub_id)
+            row = next(item for item in page["items"] if item["key"] == key)
+            self.assertEqual(row["filePath"], str(media))
+
+            # Reversible by the same action that reverses a missing upstream.
+            forgotten, error = store.forget_archive_entry(key)
+            self.assertTrue(forgotten, error)
+            self.assertEqual(
+                store.reserve_archive(key, candidate, sub_id, now=700),
+                subscriptions_module().RESERVE_OK,
+            )
+
+    def test_the_probe_limit_the_scheduler_uses_is_the_probe_s_own(self):
+        # The scheduler decides whether a scan saw the whole source by
+        # comparing against this number. If the two drift, it either never
+        # marks anything or marks a windowed scan's whole tail.
+        self.assertEqual(
+            subscriptions_module().SUBSCRIPTION_PROBE_LIMIT,
+            ad.SUBSCRIPTION_PROBE_LIMIT,
+        )
+
+    def test_the_archive_view_reports_both_states(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "still here.mp4"
+            media.write_bytes(b"downloaded")
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            here_key, _c = self._captured(
+                store, sub_id, "here", file_path=str(media))
+            gone_key, _c = self._captured(
+                store, sub_id, "vanished", file_path=str(media) + ".missing")
+            store.mark_scan_sightings(
+                sub_id, [here_key, gone_key], complete_listing=True, now=300)
+            store.mark_scan_sightings(
+                sub_id, [here_key], complete_listing=True, now=400)
+
+            rows = {item["key"]: item for item in store.archive_page(sub_id)["items"]}
+            self.assertFalse(rows[here_key]["missingUpstream"])
+            self.assertTrue(rows[gone_key]["missingUpstream"])
+            self.assertTrue(rows[here_key]["filePath"])
+            # The store never asks the filesystem; the page's caller does.
+            self.assertNotIn("fileMissing", rows[here_key])
+
     def test_a_subscription_carries_its_own_delivery(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = self._store(tmpdir)

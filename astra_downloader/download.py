@@ -7042,6 +7042,12 @@ class DownloadManagerCore:
             dl = self.downloads.get(dl_id)
             return max(0, int(getattr(dl, 'delivered_height', 0) or 0)) if dl else 0
 
+    def delivered_file_of(self, dl_id):
+        """Return the file a download wrote, or ''."""
+        with self._lock:
+            dl = self.downloads.get(dl_id)
+            return str(getattr(dl, 'filename', '') or '') if dl else ''
+
     def snapshot_of(self, dl_id):
         """Return a ``to_dict()`` snapshot taken under the manager lock, or None."""
         with self._lock:

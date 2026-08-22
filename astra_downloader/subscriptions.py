@@ -26,7 +26,7 @@ except ImportError:  # Flat source-path compatibility.
 
 
 __all__ = (
-    "SUBSCRIPTION_SCHEMA_VERSION",
+    "SUBSCRIPTION_SCHEMA_VERSION", "SUBSCRIPTION_PROBE_LIMIT",
     "SUBSCRIPTION_VIDEO_FORMATS", "SUBSCRIPTION_AUDIO_FORMATS",
     "SUBSCRIPTION_QUALITY_CHOICES", "sanitize_subscription_delivery",
     "SUBSCRIPTION_MIN_INTERVAL_MINUTES",
@@ -52,6 +52,11 @@ __all__ = (
 # unchanged: every new field has a default that means "use the global
 # setting", which is exactly what a version-1 record did.
 SUBSCRIPTION_SCHEMA_VERSION = 2
+
+# How many uploads one scan asks for. Declared here as well as in the
+# composition root's probe because the scheduler has to know whether a scan
+# saw the whole source or only a window of it; a test pins the two together.
+SUBSCRIPTION_PROBE_LIMIT = 50
 
 # What a subscription may override about how its videos are delivered. An
 # empty value always means "fall back to the global setting", so the absence
@@ -998,6 +1003,12 @@ class SubscriptionStore:
                 "deliveredHeight": _safe_nonnegative_int(
                     (existing or {}).get("deliveredHeight")
                 ),
+                "filePath": self._clean((existing or {}).get("filePath"), "", 4096),
+                "lastSeenAt": _finite_timestamp(
+                    (existing or {}).get("lastSeenAt"), None
+                ),
+                # A reservation is proof the scan just saw it.
+                "missingUpstream": False,
             }
             removed = self._trim_archive_locked()
             if not self._save_locked():
@@ -1024,7 +1035,7 @@ class SubscriptionStore:
         )
 
     def mark_download(self, download_id, status, error="", now=None,
-                      delivered_height=0):
+                      delivered_height=0, file_path=""):
         download_id = self._clean(download_id, "", 120)
         if not download_id:
             return 0
@@ -1049,6 +1060,11 @@ class SubscriptionStore:
                     height = _safe_nonnegative_int(delivered_height)
                     if height:
                         entry["deliveredHeight"] = height
+                    path = self._clean(file_path, "", 4096)
+                    if path:
+                        entry["filePath"] = path
+                    # A completed item is present again by definition.
+                    entry["missingUpstream"] = False
                 else:
                     entry["attempts"] = max(
                         1, _safe_nonnegative_int(entry.get("attempts"))
@@ -1126,8 +1142,61 @@ class SubscriptionStore:
     # What the archive view shows. The same scalars plus the attempt count and
     # the download it produced, which is what "why is this one failed?" needs.
     _ARCHIVE_PAGE_FIELDS = _ARCHIVE_HISTORY_FIELDS + (
-        "attempts", "downloadId", "nextRetryAt",
+        "attempts", "downloadId", "nextRetryAt", "deliveredHeight",
+        "filePath", "lastSeenAt", "missingUpstream",
     )
+
+    def mark_scan_sightings(self, subscription_id, seen_keys, *,
+                            complete_listing=False, now=None):
+        """Record which archived items this scan still saw, and which it did not.
+
+        `complete_listing` is the whole of the honesty here. The scan is
+        bounded (`--playlist-end`), so an old upload legitimately falls out of
+        the window as new ones arrive, and calling that a deletion would flag
+        half a large channel. Only a scan that returned FEWER items than its
+        own limit has demonstrably seen the entire source, and only then can
+        an absent archive entry be called missing.
+
+        Nothing is deleted. A missing entry keeps its file, its history and
+        its claim; it gains a flag the user can see and clear.
+        """
+        subscription_id = self._clean(subscription_id, "", 120)
+        now = _finite_timestamp(now, self._clock()) or self._clock()
+        seen = {self._clean(key, "", 430) for key in seen_keys or ()}
+        seen.discard("")
+        with self._lock:
+            if not self._compatible:
+                return 0
+            before = {}
+            changed = 0
+            for key, entry in self._data["archive"].items():
+                if entry.get("subscriptionId") != subscription_id:
+                    continue
+                if key in seen:
+                    if entry.get("lastSeenAt") != now or entry.get("missingUpstream"):
+                        self._snapshot_archive_entry_locked(before, key)
+                        entry["lastSeenAt"] = now
+                        entry["missingUpstream"] = False
+                        changed += 1
+                    continue
+                if not complete_listing:
+                    continue
+                # Never seen by any scan: it predates this bookkeeping, so
+                # there is no "it used to be there" to compare against.
+                if _finite_timestamp(entry.get("lastSeenAt"), None) is None:
+                    continue
+                if entry.get("missingUpstream"):
+                    continue
+                self._snapshot_archive_entry_locked(before, key)
+                entry["missingUpstream"] = True
+                entry["updatedAt"] = now
+                changed += 1
+            if not changed:
+                return 0
+            if not self._save_locked():
+                self._restore_archive_locked(before)
+                return 0
+            return changed
 
     def archive_page(self, subscription_id="", *, limit=200, offset=0):
         """One subscription's captured items, newest first.
@@ -1167,6 +1236,10 @@ class SubscriptionStore:
 
     def forget_archive_entry(self, key):
         """Drop one archive claim so the next scan may fetch it again.
+
+        This is also how both flags below are cleared: an item marked missing
+        upstream, or one whose file the user deleted locally, is allowed
+        through again by removing the claim and nothing else.
 
         Deliberately not a re-download: the archive is the record of what has
         been taken, and removing the record is the whole of "let this one
@@ -1315,10 +1388,12 @@ class SubscriptionManager:
         status_reader=None,
         height_probe=None,
         delivered_height_reader=None,
+        delivered_file_reader=None,
         logger=None,
         activity_registry=None,
         clock=time.time,
         tick_seconds=15,
+        probe_limit=SUBSCRIPTION_PROBE_LIMIT,
     ):
         self.store = store
         self._probe = probe
@@ -1331,10 +1406,18 @@ class SubscriptionManager:
         self._delivered_height_reader = (
             delivered_height_reader or (lambda _download_id: 0)
         )
+        # Where the media landed, so the archive can say when the user has
+        # since deleted it. Recorded, never acted on: the file is theirs.
+        self._delivered_file_reader = (
+            delivered_file_reader or (lambda _download_id: "")
+        )
         self._logger = logger or (lambda _message: None)
         self._activity_registry = activity_registry
         self._clock = clock
         self._tick_seconds = max(1.0, float(tick_seconds))
+        # How many entries the probe asks for. A scan that comes back short
+        # of this has seen the whole source; one that fills it has not.
+        self._probe_limit = max(1, int(probe_limit or 1))
         self._lock = threading.RLock()
         self._scan_ids = set()
         # Bounds concurrent yt-dlp scan processes across every entry path
@@ -1685,17 +1768,33 @@ class SubscriptionManager:
                 started, sub_id, candidates, now,
             )
 
+
             # Identical failures repeat once per candidate; the user needs
             # the cause, not the count.
             unique_errors = list(dict.fromkeys(errors))
             error = "; ".join(unique_errors[:3])
-            finished = self.store.finish_scan(
-                sub_id,
-                queued=queued,
-                skipped=skipped,
-                error=error,
-                now=now,
-            )
+            # An archived item the source no longer lists has been deleted
+            # upstream. Only a scan that returned fewer entries than its own
+            # limit has seen the whole source, so only that scan may say so.
+            # Batched with finish_scan: both write the same document, and the
+            # coalescing budget this scan is held to counts writes, not calls.
+            with self.store.batched_saves() as finish_batch:
+                self.store.mark_scan_sightings(
+                    sub_id,
+                    [subscription_archive_key(candidate)
+                     for candidate in candidates],
+                    complete_listing=len(candidates) < self._probe_limit,
+                    now=now,
+                )
+                finished = self.store.finish_scan(
+                    sub_id,
+                    queued=queued,
+                    skipped=skipped,
+                    error=error,
+                    now=now,
+                )
+            if finish_batch.failed:
+                finished = False
             if not finished and not error:
                 error = self._persistence_message()
             return {
@@ -1721,11 +1820,17 @@ class SubscriptionManager:
         except Exception as error:  # noqa: BLE001
             self._logger(f"Could not read the delivered height: {error}")
             delivered_height = 0
+        try:
+            file_path = self._delivered_file_reader(download_id)
+        except Exception as error:  # noqa: BLE001
+            self._logger(f"Could not read the delivered file path: {error}")
+            file_path = ""
         return self.store.mark_download(
             download_id,
             status,
             error="Scheduled download failed." if status != "complete" else "",
             delivered_height=delivered_height,
+            file_path=file_path,
         )
 
     def reconcile_downloads(self, downloads):
