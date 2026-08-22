@@ -791,6 +791,38 @@
       <translation>{open_label} {name}</translation>
     </message>
     <message>
+      <source>Refresh yt-dlp</source>
+      <translation>yt-dlp aktualisieren</translation>
+    </message>
+    <message>
+      <source>Provision runtime</source>
+      <translation>Laufzeit bereitstellen</translation>
+    </message>
+    <message>
+      <source>Refresh FFmpeg</source>
+      <translation>FFmpeg aktualisieren</translation>
+    </message>
+    <message>
+      <source>Open sign-ins</source>
+      <translation>Anmeldungen öffnen</translation>
+    </message>
+    <message>
+      <source>Try again later</source>
+      <translation>Später erneut versuchen</translation>
+    </message>
+    <message>
+      <source>Choose a folder</source>
+      <translation>Ordner wählen</translation>
+    </message>
+    <message>
+      <source>Open settings</source>
+      <translation>Einstellungen öffnen</translation>
+    </message>
+    <message>
+      <source>Check the clock</source>
+      <translation>Uhr prüfen</translation>
+    </message>
+    <message>
       <source>Choose a download folder this machine can write to.</source>
       <translation>Wählen Sie einen Download-Ordner, in den dieser Rechner schreiben kann.</translation>
     </message>
@@ -1341,6 +1373,10 @@
     <message>
       <source>{label} status: {value}</source>
       <translation>{label} Status: {value}</translation>
+    </message>
+    <message>
+      <source>Fix</source>
+      <translation>Beheben</translation>
     </message>
     <message>
       <source>{action} for {label}</source>
@@ -2105,6 +2141,86 @@
     <message>
       <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
       <translation>Für einen einzelnen geschützten Link. Gespeicherte Zugangsdaten finden Sie unter Anmeldungen.</translation>
+    </message>
+    <message>
+      <source>yt-dlp freshness</source>
+      <translation>Aktualität von yt-dlp</translation>
+    </message>
+    <message>
+      <source>JavaScript runtime</source>
+      <translation>JavaScript-Laufzeitumgebung</translation>
+    </message>
+    <message>
+      <source>FFmpeg security and filters</source>
+      <translation>FFmpeg-Sicherheit und Filter</translation>
+    </message>
+    <message>
+      <source>Stored sign-in expiry</source>
+      <translation>Ablauf gespeicherter Anmeldungen</translation>
+    </message>
+    <message>
+      <source>Anonymous GitHub API budget</source>
+      <translation>Anonymes GitHub-API-Budget</translation>
+    </message>
+    <message>
+      <source>Proof-of-origin token provider</source>
+      <translation>Proof-of-Origin-Token-Anbieter</translation>
+    </message>
+    <message>
+      <source>Download folder</source>
+      <translation>Download-Ordner</translation>
+    </message>
+    <message>
+      <source>Settings and queue storage</source>
+      <translation>Speicherort für Einstellungen und Warteschlange</translation>
+    </message>
+    <message>
+      <source>Site availability</source>
+      <translation>Verfügbarkeit der Website</translation>
+    </message>
+    <message>
+      <source>System clock</source>
+      <translation>Systemuhr</translation>
+    </message>
+    <message>
+      <source>refresh-ytdlp</source>
+      <translation>yt-dlp aktualisieren</translation>
+    </message>
+    <message>
+      <source>provision-runtime</source>
+      <translation>Laufzeit bereitstellen</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
+    </message>
+    <message>
+      <source>refresh-sign-in</source>
+      <translation>Anmeldung aktualisieren</translation>
+    </message>
+    <message>
+      <source>retry-github</source>
+      <translation>GitHub erneut versuchen</translation>
+    </message>
+    <message>
+      <source>use-sign-in</source>
+      <translation>Anmeldung verwenden</translation>
+    </message>
+    <message>
+      <source>choose-output-folder</source>
+      <translation>Ordner wählen</translation>
+    </message>
+    <message>
+      <source>review-state-location</source>
+      <translation>Einstellungen öffnen</translation>
+    </message>
+    <message>
+      <source>review-site-refusals</source>
+      <translation>Anmeldungen öffnen</translation>
+    </message>
+    <message>
+      <source>sync-system-clock</source>
+      <translation>Uhr prüfen</translation>
     </message>
     <message>
       <source>Clear history</source>
@@ -3147,10 +3263,6 @@
       <translation>Installierte yt-dlp-Version wird geprüft…</translation>
     </message>
     <message>
-      <source>JavaScript runtime</source>
-      <translation>JavaScript-Laufzeitumgebung</translation>
-    </message>
-    <message>
       <source>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</source>
       <translation>Automatisch bevorzugt Deno, dann Node 22+, dann die QuickJS-Laufzeitumgebung, die die App selbst herunterlädt (2 MB).</translation>
     </message>
@@ -3509,10 +3621,6 @@
     <message>
       <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
       <translation>Öffnen Sie Astra Downloader und aktualisieren Sie ffmpeg, bevor Sie es erneut versuchen.</translation>
-    </message>
-    <message>
-      <source>refresh-ffmpeg</source>
-      <translation>refresh-ffmpeg</translation>
     </message>
     <message>
       <source>Astra Downloader could not reach the site or a required provider.</source>

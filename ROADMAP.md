@@ -47,13 +47,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: a scan that no longer sees a previously-archived item marks it, without deleting anything; a locally-deleted file is not silently re-fetched; both states are visible and reversible. Depends on AD-25.
   Complexity: M
 
-- [ ] P2 — AD-57 — Translate the pre-flight repair button labels
-  Why: `_set_preflight_row` picks its button text from an `action_labels` dict and calls `tr(action_labels.get(...))`. The extractor only sees string *literals* inside a translating call, so a `.get()` result is invisible and none of the ten repair buttons ("Refresh yt-dlp", "Provision runtime", "Choose a folder", ...) reach any catalogue. The German window shows English buttons in an otherwise translated panel.
-  Evidence: `astra_downloader/gui.py` `_set_preflight_row`; CLAUDE.md 2026-08-11 "A module-level string constant is invisible to the i18n extractor"; found while landing AD-32.
-  Touches: `astra_downloader/gui.py`, `scripts/build-companion-translations.py`
-  Acceptance: every repair button label is declared in all eleven catalogues, and a German render capture shows a translated button; a test fails if a new action code arrives without one.
-  Complexity: S
-
 ### P3
 
 - [ ] P3 — AD-46 — Also persist the queue outside the manager lock

@@ -10462,19 +10462,14 @@ class PreflightHealthTests(unittest.TestCase):
         # The row table has to be the one BOTH sides use: the page builds
         # widgets from it and _apply_preflight writes statuses through it.
         import gui_download_page
-        import gui_support
 
         rows = {
             key: action
-            for key, _label, action in gui_support.PREFLIGHT_ROW_SPECS
+            for key, _label, action in gui_download_page.PREFLIGHT_ROW_SPECS
         }
         self.assertIs(
-            gui_download_page.PREFLIGHT_ROW_SPECS,
-            gui_support.PREFLIGHT_ROW_SPECS,
-        )
-        self.assertIs(
             gui_module_for_tests().PREFLIGHT_ROW_SPECS,
-            gui_support.PREFLIGHT_ROW_SPECS,
+            gui_download_page.PREFLIGHT_ROW_SPECS,
         )
         produced = {
             item['id']: item['action']
@@ -16293,6 +16288,54 @@ class TranslationCoverageTests(unittest.TestCase):
         self.assertTrue(identical, "expected at least one identical rendering")
         declared, total = builder.catalogue_coverage()["de"]
         self.assertEqual(declared, total)
+
+    def test_every_preflight_repair_button_reaches_the_catalogues(self):
+        # `tr(labels.get(action))` passes a Call, and the extractor only reads
+        # literals passed to tr(), so ten repair buttons stayed English inside
+        # a fully translated panel. Each label has to be its own tr("...").
+        import ast
+        import textwrap
+
+        import gui_download_page
+
+        builder = self._builder()
+        known = set(builder.SOURCE_STRINGS)
+        source = textwrap.dedent(
+            inspect.getsource(ad.MainWindow._set_preflight_row))
+        labels = {}
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Dict):
+                continue
+            for key, value in zip(node.keys, node.values):
+                if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                    continue
+                if not (isinstance(value, ast.Call)
+                        and getattr(value.func, "id", "") == "tr"
+                        and value.args
+                        and isinstance(value.args[0], ast.Constant)):
+                    continue
+                labels[key.value] = value.args[0].value
+
+        actions = {action for _key, _label, action
+                   in gui_download_page.PREFLIGHT_ROW_SPECS}
+        self.assertTrue(actions)
+        missing_labels = sorted(actions - set(labels))
+        self.assertEqual(
+            missing_labels, [],
+            "a repair action with no tr() label falls back to a bare Fix button",
+        )
+        for action in sorted(actions):
+            with self.subTest(action=action):
+                label = labels[action]
+                self.assertIn(
+                    label, known,
+                    f"{label!r} never reaches the extractor, so no locale can "
+                    "translate it",
+                )
+                for locale, catalogue in builder.CATALOGS.items():
+                    if locale in self.KNOWN_INCOMPLETE or locale == "en":
+                        continue
+                    self.assertIn(label, catalogue, f"{locale} lacks {label!r}")
 
     def test_the_incomplete_locales_are_exactly_the_declared_ones(self):
         # A new locale added with only its nav strings joins this list
