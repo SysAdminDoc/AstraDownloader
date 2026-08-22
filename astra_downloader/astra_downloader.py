@@ -91,7 +91,7 @@ try:
         SUBTITLE_MODES, SUBTITLE_FORMATS, JAVASCRIPT_RUNTIME_CHOICES,
         build_settings_bundle, read_settings_bundle, describe_bundle_changes,
         SETTINGS_BUNDLE_SCHEMA, SETTINGS_BUNDLE_VERSION, BUNDLE_EXCLUDED_SETTINGS,
-        normalize_url, sanitize_config,
+        normalize_url, sanitize_config, MANAGED_BINARY_PIN_NAMES,
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
         FORMAT_SORT_FRAME_RATES,
@@ -239,7 +239,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         SUBTITLE_MODES, SUBTITLE_FORMATS, JAVASCRIPT_RUNTIME_CHOICES,
         build_settings_bundle, read_settings_bundle, describe_bundle_changes,
         SETTINGS_BUNDLE_SCHEMA, SETTINGS_BUNDLE_VERSION, BUNDLE_EXCLUDED_SETTINGS,
-        normalize_url, sanitize_config,
+        normalize_url, sanitize_config, MANAGED_BINARY_PIN_NAMES,
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
         FORMAT_SORT_FRAME_RATES,
@@ -5207,6 +5207,10 @@ class DownloadManager(DownloadManagerCore):
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
                 'subscription_archive_key': lambda *args, **kwargs: subscription_archive_key(*args, **kwargs),
+                'MANAGED_BINARY_NAMES': lambda: MANAGED_BINARY_NAMES,
+                'managed_binary_inventory': lambda *args, **kwargs: managed_binary_inventory(*args, **kwargs),
+                'set_managed_binary_pin': lambda *args, **kwargs: set_managed_binary_pin(*args, **kwargs),
+                'rollback_managed_binary': lambda *args, **kwargs: rollback_managed_binary(*args, **kwargs),
                 'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
@@ -5638,7 +5642,8 @@ class ReadinessProbe(_OwnedReadinessProbe):
                  readiness_sink=None, preflight_evaluator=None,
                  ffmpeg_capabilities=None, sign_in_entries=None,
                  github_api_budget=None, output_folder=None,
-                 state_location=None, site_refusals=None, system_clock=None):
+                 state_location=None, site_refusals=None, system_clock=None,
+                 managed_binaries=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -5682,6 +5687,7 @@ class ReadinessProbe(_OwnedReadinessProbe):
                 or (lambda: get_preflight_state_location())
             ),
             site_refusals=site_refusals,
+            managed_binaries=managed_binaries,
             system_clock=(
                 system_clock
                 or (lambda: get_system_clock_state())
@@ -5787,6 +5793,10 @@ class MainWindow(MainWindowCore):
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
                 'subscription_archive_key': lambda *args, **kwargs: subscription_archive_key(*args, **kwargs),
+                'MANAGED_BINARY_NAMES': lambda: MANAGED_BINARY_NAMES,
+                'managed_binary_inventory': lambda *args, **kwargs: managed_binary_inventory(*args, **kwargs),
+                'set_managed_binary_pin': lambda *args, **kwargs: set_managed_binary_pin(*args, **kwargs),
+                'rollback_managed_binary': lambda *args, **kwargs: rollback_managed_binary(*args, **kwargs),
                 'normalize_proxy': lambda *args, **kwargs: normalize_proxy(*args, **kwargs),
                 'normalize_force_ip_version': lambda *args, **kwargs: normalize_force_ip_version(*args, **kwargs),
                 'normalize_source_address': lambda *args, **kwargs: normalize_source_address(*args, **kwargs),

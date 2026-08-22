@@ -1709,6 +1709,27 @@ CATALOGS["de"].update({
     "Download selected": "Auswahl herunterladen",
     "{selected} of {total} selected": "{selected} von {total} ausgewählt",
     "Download selected ({count})": "Auswahl herunterladen ({count})",
+    "Version pins": "Versions-Fixierungen",
+    "More than one video is named {name}. Give each a different name, or leave the name empty.":
+        "Mehrere Videos heißen {name}. Geben Sie jedem einen anderen Namen "
+        "oder lassen Sie das Feld leer.",
+    "An update keeps downloads working and can also take away something that was working, such as a hardware encoder. Pin a tool to hold it at the version installed now. Roll back puts the previous copy back and pins there.":
+        "Ein Update hält Downloads am Laufen und kann zugleich etwas "
+        "wegnehmen, das funktioniert hat, etwa einen Hardware-Encoder. "
+        "Fixieren Sie ein Werkzeug auf die jetzt installierte Version. "
+        "Zurückrollen stellt die vorherige Kopie wieder her und fixiert sie.",
+    "Pin": "Fixieren",
+    "Unpin": "Fixierung aufheben",
+    "Roll back": "Zurückrollen",
+    "Not pinned": "Nicht fixiert",
+    "Not pinned — {version} installed": "Nicht fixiert — {version} installiert",
+    "Not installed": "Nicht installiert",
+    "Installed {version}": "Installiert {version}",
+    "Pinned version for {tool}": "Fixierte Version für {tool}",
+    "Put {version} back and pin there.": "{version} wiederherstellen und dort fixieren.",
+    "Nothing has been replaced yet, so there is nothing to go back to.":
+        "Es wurde noch nichts ersetzt, also gibt es nichts, wohin zurückgerollt werden könnte.",
+    "Version pin result": "Ergebnis der Versions-Fixierung",
     "Choose which videos should be added to the download queue, and change the format, quality or name of any of them.":
         "Wählen Sie, welche Videos in die Warteschlange kommen, und ändern Sie "
         "Format, Qualität oder Namen einzelner Videos.",

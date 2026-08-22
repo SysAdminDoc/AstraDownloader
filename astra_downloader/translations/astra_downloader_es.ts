@@ -803,6 +803,10 @@
       <translation>GitHub's anonymous budget is exhausted; retry after its reset.</translation>
     </message>
     <message>
+      <source>Unpin</source>
+      <translation>Unpin</translation>
+    </message>
+    <message>
       <source>Unavailable</source>
       <translation>Unavailable</translation>
     </message>
@@ -1203,6 +1207,10 @@
       <translation>No playlist items selected.</translation>
     </message>
     <message>
+      <source>More than one video is named {name}. Give each a different name, or leave the name empty.</source>
+      <translation>More than one video is named {name}. Give each a different name, or leave the name empty.</translation>
+    </message>
+    <message>
       <source>Queued {count} items; the rest were refused: {reason}</source>
       <translation>Queued {count} items; the rest were refused: {reason}</translation>
     </message>
@@ -1345,6 +1353,34 @@
     <message>
       <source>{target} (unavailable)</source>
       <translation>{target} (unavailable)</translation>
+    </message>
+    <message>
+      <source>Installed {version}</source>
+      <translation>Installed {version}</translation>
+    </message>
+    <message>
+      <source>Not installed</source>
+      <translation>Not installed</translation>
+    </message>
+    <message>
+      <source>Not pinned — {version} installed</source>
+      <translation>Not pinned — {version} installed</translation>
+    </message>
+    <message>
+      <source>Not pinned</source>
+      <translation>Not pinned</translation>
+    </message>
+    <message>
+      <source>Pin</source>
+      <translation>Pin</translation>
+    </message>
+    <message>
+      <source>Put {version} back and pin there.</source>
+      <translation>Put {version} back and pin there.</translation>
+    </message>
+    <message>
+      <source>Nothing has been replaced yet, so there is nothing to go back to.</source>
+      <translation>Nothing has been replaced yet, so there is nothing to go back to.</translation>
     </message>
     <message>
       <source>Repair needed</source>
@@ -2061,86 +2097,6 @@
     <message>
       <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
       <translation>For a single protected link. Stored site credentials live under Sign-ins.</translation>
-    </message>
-    <message>
-      <source>yt-dlp freshness</source>
-      <translation>yt-dlp freshness</translation>
-    </message>
-    <message>
-      <source>JavaScript runtime</source>
-      <translation>JavaScript runtime</translation>
-    </message>
-    <message>
-      <source>FFmpeg security and filters</source>
-      <translation>FFmpeg security and filters</translation>
-    </message>
-    <message>
-      <source>Stored sign-in expiry</source>
-      <translation>Stored sign-in expiry</translation>
-    </message>
-    <message>
-      <source>Anonymous GitHub API budget</source>
-      <translation>Anonymous GitHub API budget</translation>
-    </message>
-    <message>
-      <source>Proof-of-origin token provider</source>
-      <translation>Proof-of-origin token provider</translation>
-    </message>
-    <message>
-      <source>Download folder</source>
-      <translation>Download folder</translation>
-    </message>
-    <message>
-      <source>Settings and queue storage</source>
-      <translation>Settings and queue storage</translation>
-    </message>
-    <message>
-      <source>Site availability</source>
-      <translation>Site availability</translation>
-    </message>
-    <message>
-      <source>System clock</source>
-      <translation>System clock</translation>
-    </message>
-    <message>
-      <source>refresh-ytdlp</source>
-      <translation>refresh-ytdlp</translation>
-    </message>
-    <message>
-      <source>provision-runtime</source>
-      <translation>provision-runtime</translation>
-    </message>
-    <message>
-      <source>refresh-ffmpeg</source>
-      <translation>refresh-ffmpeg</translation>
-    </message>
-    <message>
-      <source>refresh-sign-in</source>
-      <translation>refresh-sign-in</translation>
-    </message>
-    <message>
-      <source>retry-github</source>
-      <translation>retry-github</translation>
-    </message>
-    <message>
-      <source>use-sign-in</source>
-      <translation>use-sign-in</translation>
-    </message>
-    <message>
-      <source>choose-output-folder</source>
-      <translation>choose-output-folder</translation>
-    </message>
-    <message>
-      <source>review-state-location</source>
-      <translation>review-state-location</translation>
-    </message>
-    <message>
-      <source>review-site-refusals</source>
-      <translation>review-site-refusals</translation>
-    </message>
-    <message>
-      <source>sync-system-clock</source>
-      <translation>sync-system-clock</translation>
     </message>
     <message>
       <source>Clear history</source>
@@ -3183,6 +3139,10 @@
       <translation>Checking installed yt-dlp…</translation>
     </message>
     <message>
+      <source>JavaScript runtime</source>
+      <translation>JavaScript runtime</translation>
+    </message>
+    <message>
       <source>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</source>
       <translation>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</translation>
     </message>
@@ -3303,6 +3263,22 @@
       <translation>Download a fresh ffmpeg and verify its checksum. The installed copy stays in place until the replacement verifies.</translation>
     </message>
     <message>
+      <source>Version pins</source>
+      <translation>Version pins</translation>
+    </message>
+    <message>
+      <source>An update keeps downloads working and can also take away something that was working, such as a hardware encoder. Pin a tool to hold it at the version installed now. Roll back puts the previous copy back and pins there.</source>
+      <translation>An update keeps downloads working and can also take away something that was working, such as a hardware encoder. Pin a tool to hold it at the version installed now. Roll back puts the previous copy back and pins there.</translation>
+    </message>
+    <message>
+      <source>Roll back</source>
+      <translation>Roll back</translation>
+    </message>
+    <message>
+      <source>Version pin result</source>
+      <translation>Version pin result</translation>
+    </message>
+    <message>
       <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.</source>
       <translation>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.</translation>
     </message>
@@ -3377,6 +3353,10 @@
     <message>
       <source>SponsorBlock data and API are licensed CC BY-NC-SA 4.0; Astra Downloader is MIT.</source>
       <translation>SponsorBlock data and API are licensed CC BY-NC-SA 4.0; Astra Downloader is MIT.</translation>
+    </message>
+    <message>
+      <source>Pinned version for {tool}</source>
+      <translation>Pinned version for {tool}</translation>
     </message>
     <message>
       <source>No preference</source>
@@ -3521,6 +3501,10 @@
     <message>
       <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
       <translation>Open Astra Downloader and refresh ffmpeg before retrying.</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
     </message>
     <message>
       <source>Astra Downloader could not reach the site or a required provider.</source>

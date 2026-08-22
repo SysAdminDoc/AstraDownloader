@@ -10455,12 +10455,23 @@ class PreflightHealthTests(unittest.TestCase):
     def test_every_check_has_a_panel_row_with_a_named_remedy(self):
         # A check the panel has no row for is a check nobody sees, and a row
         # whose action the handler does not know reads "Fix" and does nothing.
+        # The row table has to be the one BOTH sides use: the page builds
+        # widgets from it and _apply_preflight writes statuses through it.
         import gui_download_page
+        import gui_support
 
         rows = {
             key: action
-            for key, _label, action in gui_download_page._PREFLIGHT_ROW_SPECS
+            for key, _label, action in gui_support.PREFLIGHT_ROW_SPECS
         }
+        self.assertIs(
+            gui_download_page.PREFLIGHT_ROW_SPECS,
+            gui_support.PREFLIGHT_ROW_SPECS,
+        )
+        self.assertIs(
+            gui_module_for_tests().PREFLIGHT_ROW_SPECS,
+            gui_support.PREFLIGHT_ROW_SPECS,
+        )
         produced = {
             item['id']: item['action']
             for item in self._base(
@@ -10479,6 +10490,48 @@ class PreflightHealthTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.assertIn(f'"{action}"', handler)
                 self.assertIn(f'"{action}":', labels)
+
+    def test_apply_preflight_writes_every_check_the_evaluator_produces(self):
+        # The panel test above proves the two tables agree. This one proves
+        # the write actually lands: a row nobody updates sits on "Checking"
+        # forever, and the summary short-circuits on it.
+        _get_qapp_or_skip(self)
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"),                 mock.patch.object(ad.MainWindow, "_start_readiness_probe"),                 mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            healthy = self._base(
+                output_folder={'configured': True, 'exists': True, 'writable': True},
+                state_location={'portable': False, 'exists': True,
+                                'writable': True, 'protected': False},
+                site_refusals=[],
+                system_clock={'measured': True, 'offsetSeconds': 0},
+                po_token_provider=None,
+            )
+            window._apply_preflight(healthy)
+            self.assertNotIn(
+                "unknown", set(window._preflight_statuses.values()),
+                f"a row was left unwritten: {window._preflight_statuses}",
+            )
+            self.assertEqual(
+                window.preflight_summary.text(),
+                f"All {len(window.preflight_values)} checks passed. "
+                "Downloads are ready.",
+            )
+            broken = self._base(
+                output_folder={'configured': True, 'exists': False, 'writable': False},
+                state_location={'portable': False, 'exists': True,
+                                'writable': True, 'protected': False},
+                site_refusals=[],
+                system_clock={'measured': True, 'offsetSeconds': 0},
+                po_token_provider=None,
+            )
+            window._apply_preflight(broken)
+            self.assertEqual(window._preflight_statuses["output-folder"], "error")
+            self.assertIn("repair", window.preflight_summary.text().lower())
+        finally:
+            _retire_test_window(window)
 
     def test_health_exposes_preflight_without_network_or_site_metadata(self):
         config = FakeConfig({'ServerToken': 'p' * 32})
@@ -13492,6 +13545,9 @@ class SabrReadinessTests(unittest.TestCase):
             # The readiness method also refreshes the browser-impersonation
             # choices; this fixture only exercises the status rows.
             _apply_impersonate_targets=lambda _targets: None,
+            # ... and the managed-tool version pins, which have their own
+            # tests; this fixture only exercises the status rows.
+            _apply_managed_binaries=lambda _inventory: None,
             _dependencies={
                 'evaluate_sabr_support': lambda v: self._sabr_result,
                 'managed_binary_state': lambda _path: 'ok',
@@ -15371,7 +15427,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             return ('', '')
 
     def _argv_for(self, url, *, config_overrides=None, with_cookies=True,
-                  profile_name=None, output_name=""):
+                  profile_name=None, output_name="", playlist_items=None):
         attempts = []
 
         def popen(args, **_kwargs):
@@ -15390,7 +15446,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             manager = ad.DownloadManager(config, FakeHistory())
             download = ad.Download(
                 "dl_argv", url, output_dir=tmpdir, profile_name=profile_name,
-                output_name=output_name,
+                output_name=output_name, playlist_items=playlist_items,
             )
             download.status = "queued"
             if with_cookies:
@@ -17115,15 +17171,65 @@ class FormatSortTests(unittest.TestCase):
                          ad.build_video_format_args("mp4", "1080")[1])
 
     def test_the_upscale_preference_falls_back_rather_than_excluding(self):
-        # Deprioritise, not exclude: the unfiltered chain still trails the
+        # Deprioritise, not exclude: an unfiltered tier always trails the
         # filtered one, so a site that only offers an upscale still downloads.
-        selector = ad.build_video_format_args(
-            "mp4", "best", avoid_upscaled=True)[1]
-        tiers = selector.split("/")
-        self.assertTrue(all("AI-upscaled" in tier for tier in tiers[:7]))
-        self.assertTrue(all("AI-upscaled" not in tier for tier in tiers[7:]))
+        tiers = ad.build_video_format_args(
+            "mp4", "best", avoid_upscaled=True)[1].split("/")
+        self.assertTrue(any("AI-upscaled" in tier for tier in tiers))
+        self.assertNotIn("AI-upscaled", tiers[-1])
+
+    def test_the_height_cap_outranks_the_upscale_preference(self):
+        # Every capped tier has to come before every uncapped one, or asking
+        # for 1080p on a video whose only 1080p rendition is upscaled fetches
+        # the native 2160p instead and exceeds the cap the user set.
+        tiers = ad.build_video_format_args(
+            "mp4", "1080", avoid_upscaled=True)[1].split("/")
+        capped = [index for index, tier in enumerate(tiers)
+                  if "height<=1080" in tier]
+        uncapped = [index for index, tier in enumerate(tiers)
+                    if "height<=1080" not in tier]
+        self.assertTrue(capped and uncapped)
+        self.assertLess(max(capped), min(uncapped))
+        # Within the capped block, native still comes first.
+        native = [index for index in capped if "AI-upscaled" in tiers[index]]
+        plain = [index for index in capped if "AI-upscaled" not in tiers[index]]
+        self.assertLess(max(native), min(plain))
+
+    # A progressive (muxed) table: the native upload is above the cap and the
+    # only rendition inside it is the AI upscale. This is the shape that
+    # turns a preference into a cap violation.
+    _CAPPED_UPSCALE_FIXTURE = {
+        "id": "c", "title": "c", "_type": "video",
+        "extractor": "generic", "extractor_key": "Generic",
+        "webpage_url": "https://example.test/c",
+        "formats": [
+            {"format_id": "native-2160", "url": "https://example.test/a",
+             "ext": "mp4", "height": 2160, "width": 3840, "fps": 30,
+             "vcodec": "avc1.640028", "acodec": "mp4a.40.2",
+             "protocol": "https", "format_note": "2160p"},
+            {"format_id": "sr-1080", "url": "https://example.test/b",
+             "ext": "mp4", "height": 1080, "width": 1920, "fps": 30,
+             "vcodec": "avc1.640028", "acodec": "mp4a.40.2",
+             "protocol": "https", "format_note": "1080p, AI-upscaled"},
+        ],
+    }
+
+    def test_the_real_binary_keeps_the_cap_when_only_an_upscale_fits(self):
         self.assertEqual(
-            tiers[7:], ad.build_video_format_args("mp4", "best")[1].split("/"))
+            self._selected_from(
+                self._CAPPED_UPSCALE_FIXTURE,
+                ad.build_video_format_args("any", "1080")[:2],
+            ),
+            "sr-1080",
+        )
+        self.assertEqual(
+            self._selected_from(
+                self._CAPPED_UPSCALE_FIXTURE,
+                ad.build_video_format_args(
+                    "any", "1080", avoid_upscaled=True)[:2],
+            ),
+            "sr-1080",
+        )
 
     def test_the_real_binary_takes_the_native_upload_over_the_upscale(self):
         # yt-dlp's own ordering puts the 2160p upscale first...
@@ -22804,6 +22910,25 @@ class OutputNameTests(unittest.TestCase):
         self.assertEqual(single[single.index("-o") + 1], "Holiday clip.%(ext)s")
         self.assertNotEqual(playlist[playlist.index("-o") + 1], "Holiday clip.%(ext)s")
 
+    def test_a_playlist_run_that_names_one_item_keeps_the_name(self):
+        # The staging dialog queues a renamed row as its own download with a
+        # single --playlist-items entry. That is one file, so one stem cannot
+        # overwrite anything, and dropping the name discarded the whole
+        # per-item naming feature.
+        harness = AnySiteDownloadArgvTests()
+        one = harness._argv_for(
+            "https://example.com/playlist/season-one", with_cookies=False,
+            output_name="Holiday clip", playlist_items=[3],
+        )
+        self.assertEqual(one[one.index("-o") + 1], "Holiday clip.%(ext)s")
+        self.assertEqual(one[one.index("--playlist-items") + 1], "3")
+        several = harness._argv_for(
+            "https://example.com/playlist/season-one", with_cookies=False,
+            output_name="Holiday clip", playlist_items=[3, 4],
+        )
+        self.assertNotEqual(
+            several[several.index("-o") + 1], "Holiday clip.%(ext)s")
+
     def test_the_api_accepts_the_field(self):
         self.assertIn("outputName", ad.DOWNLOAD_REQUEST_ALLOWED_FIELDS)
 
@@ -23774,10 +23899,45 @@ class PlaylistStagingDialogTests(unittest.TestCase):
                 [row["quality"].currentData() for row in dialog.rows],
                 ["1080", "1080", "best"],
             )
-            self.assertEqual(dialog.lbl_selected_count.text(),
-                             "Applied to 2 videos")
+            self.assertEqual(dialog.batch_result.text(), "Applied to 2 videos")
+            # The selected-count readout is not the place for that message.
+            self.assertEqual(dialog.lbl_selected_count.text(), "2 of 3 selected")
         finally:
             dialog.deleteLater()
+
+    def test_two_rows_with_the_same_name_are_refused_rather_than_overwritten(self):
+        from PySide6.QtWidgets import QDialog
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "FirstRunComplete": True})
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"),                     mock.patch.object(ad.MainWindow, "_start_readiness_probe"),                     mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(config, manager, FakeHistory())
+            queued = []
+
+            def fake_exec(dialog_self):
+                dialog_self.rows[0]["name"].setText("Same name")
+                dialog_self.rows[1]["name"].setText("Same name")
+                return QDialog.DialogCode.Accepted
+
+            try:
+                window.quick_download_url.setText(
+                    "https://www.youtube.com/playlist?list=PLtest")
+                with mock.patch.object(
+                    manager, "preview_playlist",
+                    return_value=(self._PREVIEW, None),
+                ), mock.patch.object(
+                    manager, "start_download",
+                    side_effect=lambda **kwargs: queued.append(kwargs) or ("d", None),
+                ), mock.patch.object(
+                    ad.PlaylistStagingDialog, "exec", fake_exec,
+                ):
+                    window._open_playlist_staging()
+                self.assertEqual(queued, [])
+                self.assertIn("Same name", window.quick_download_status.text())
+            finally:
+                _retire_test_window(window)
 
     def test_staging_queues_one_download_per_distinct_choice(self):
         from PySide6.QtWidgets import QDialog
@@ -23825,6 +23985,228 @@ class PlaylistStagingDialogTests(unittest.TestCase):
                 self.assertIn("Queued 3 items", window.quick_download_status.text())
             finally:
                 _retire_test_window(window)
+
+
+class ManagedBinaryPinTests(unittest.TestCase):
+    """A pin freezes a managed binary; a rollback puts the previous one back."""
+
+    def test_a_pin_below_a_declared_security_floor_is_refused_by_name(self):
+        for name, version, floor in (
+            ("deno", "2.7.0", "2.8.1"),
+            ("quickjs", "0.15.0", "0.16.1"),
+            ("ffmpeg", "8.0.1", "8.1.2"),
+        ):
+            with self.subTest(binary=name):
+                decision = ad.evaluate_binary_pin(name, version)
+                self.assertFalse(decision["ok"])
+                self.assertEqual(decision["reason"], "pin-below-security-floor")
+                self.assertEqual(decision["floor"], floor)
+                self.assertIn(floor, decision["message"])
+
+    def test_a_pin_at_or_above_the_floor_is_accepted(self):
+        for name, version in (
+            ("deno", "2.8.1"), ("quickjs", "0.17.0"), ("ffmpeg", "8.2.0"),
+            # No version floor is declared for these, so any well-shaped
+            # release is pinnable — including an old one, which is the point.
+            ("yt-dlp", "2026.07.04"), ("whisper", "1.7.4"),
+        ):
+            with self.subTest(binary=name):
+                self.assertTrue(ad.evaluate_binary_pin(name, version)["ok"])
+
+    def test_an_ffmpeg_snapshot_is_measured_against_the_dated_floor(self):
+        # FFmpeg-Builds master snapshots carry no semver at all, so a semver
+        # comparison reads every one of them as "below 8.1.2".
+        fresh = ad.evaluate_binary_pin("ffmpeg", "N-126229-gf101fce22d-20260820")
+        self.assertTrue(fresh["ok"], fresh)
+        stale = ad.evaluate_binary_pin("ffmpeg", "N-120000-gabcdef123-20260101")
+        self.assertFalse(stale["ok"])
+        self.assertEqual(stale["reason"], "pin-below-security-floor")
+        self.assertEqual(stale["floor"], ad._FFMPEG_MIN_SNAPSHOT_DATE)
+
+    def test_a_shape_that_is_not_a_version_is_refused_before_any_comparison(self):
+        for value in ("../../evil.exe", "--update-to", "; rm -rf", "abc"):
+            with self.subTest(value=value):
+                decision = ad.evaluate_binary_pin("ffmpeg", value)
+                self.assertFalse(decision["ok"])
+                self.assertEqual(decision["reason"], "pin-version-unreadable")
+        self.assertEqual(
+            ad.evaluate_binary_pin("notatool", "1.0")["reason"],
+            "unknown-managed-binary",
+        )
+
+    def test_clearing_a_pin_is_always_allowed(self):
+        decision = ad.evaluate_binary_pin("deno", "")
+        self.assertTrue(decision["ok"])
+        self.assertEqual(decision["version"], "")
+
+    def test_a_stored_pin_that_the_floor_has_overtaken_is_dropped_on_read(self):
+        # The floor rises between releases. A pin that would be refused today
+        # must not keep holding a binary below it.
+        config = FakeConfig({"ManagedBinaryPins": {
+            "deno": "2.7.0", "yt-dlp": "2026.07.04",
+        }})
+        self.assertEqual(
+            ad.active_managed_binary_pins(config), {"yt-dlp": "2026.07.04"},
+        )
+
+    def test_config_sanitisation_keeps_only_well_shaped_pins(self):
+        # config.py checks the shape and nothing else. A version no publisher
+        # ships survives here and is simply never matched; a version below a
+        # floor is dropped one layer up, by active_managed_binary_pins.
+        self.assertEqual(
+            ad.sanitize_config({"ManagedBinaryPins": {
+                "yt-dlp": "2026.07.04",
+                "ffmpeg": "../../evil",
+                "unknown-tool": "1.0",
+                "deno": 5,
+            }})["ManagedBinaryPins"],
+            {"yt-dlp": "2026.07.04", "deno": "5"},
+        )
+        self.assertEqual(ad.sanitize_config({})["ManagedBinaryPins"], {})
+
+    def test_config_and_health_agree_on_which_binaries_exist(self):
+        # config.py owns the schema and health.py owns the floors; neither may
+        # gain a binary the other does not know.
+        self.assertEqual(
+            set(ad.MANAGED_BINARY_PIN_NAMES), set(ad.MANAGED_BINARY_NAMES),
+        )
+        self.assertTrue(
+            set(ad.MANAGED_BINARY_FLOORS).issubset(set(ad.MANAGED_BINARY_NAMES))
+        )
+
+    def test_setting_a_pin_writes_it_and_a_refusal_writes_nothing(self):
+        stored = {}
+
+        class PinConfig(FakeConfig):
+            def update(self, mapping):
+                stored.update(mapping)
+                self.data.update(mapping)
+                return True
+
+        config = PinConfig({"ManagedBinaryPins": {}})
+        with mock.patch.object(ad, "write_persistent_log", return_value=None):
+            accepted = ad.set_managed_binary_pin(config, "yt-dlp", "2026.07.04")
+            self.assertTrue(accepted["ok"])
+            self.assertEqual(
+                stored["ManagedBinaryPins"], {"yt-dlp": "2026.07.04"})
+
+            refused = ad.set_managed_binary_pin(config, "deno", "2.0.0")
+            self.assertFalse(refused["ok"])
+            self.assertEqual(
+                stored["ManagedBinaryPins"], {"yt-dlp": "2026.07.04"})
+
+            cleared = ad.set_managed_binary_pin(config, "yt-dlp", "")
+            self.assertTrue(cleared["ok"])
+            self.assertEqual(stored["ManagedBinaryPins"], {})
+
+    def test_the_ytdlp_updater_targets_the_pin_instead_of_the_alias(self):
+        source = inspect.getsource(ad._run_ytdlp_self_update)
+        self.assertIn("managed_binary_pin_for(config, 'yt-dlp')", source)
+        self.assertIn("f'{channel}@{target}'", source)
+
+    def test_the_auto_update_stops_asking_once_the_pin_is_satisfied(self):
+        ran = []
+        config = FakeConfig({
+            "AutoUpdateYtDlp": True,
+            "ManagedBinaryPins": {"yt-dlp": "2026.07.04"},
+        })
+        with mock.patch.object(ad, "get_ytdlp_version", return_value="2026.07.04"), \
+                mock.patch.object(ad, "should_check_ytdlp_update",
+                                  side_effect=lambda *_a, **_k: ran.append(1) or True):
+            ad.maybe_auto_update_ytdlp(config)
+        self.assertEqual(ran, [], "a satisfied pin must not reach the throttle")
+
+        with mock.patch.object(ad, "get_ytdlp_version", return_value="2026.08.19"), \
+                mock.patch.object(ad, "should_check_ytdlp_update",
+                                  side_effect=lambda *_a, **_k: ran.append(1) or False):
+            ad.maybe_auto_update_ytdlp(config)
+        self.assertEqual(ran, [1], "a pin that is not satisfied still updates")
+
+    def test_a_rollback_restores_the_retained_copy_and_pins_to_it(self):
+        stored = {}
+
+        class PinConfig(FakeConfig):
+            def update(self, mapping):
+                stored.update(mapping)
+                self.data.update(mapping)
+                return True
+
+        config = PinConfig({"ManagedBinaryPins": {}})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            active = Path(tmpdir) / "yt-dlp.exe"
+            backup = Path(tmpdir) / "yt-dlp.rollback.exe"
+            active.write_bytes(b"new" + b"\0" * (2 * 1024 * 1024))
+            versions = {str(active): "2026.08.19", str(backup): "2026.07.04"}
+
+            def probe(name, path=None):
+                return versions.get(str(path or active), "")
+
+            with mock.patch.object(ad, "managed_binary_paths",
+                                   return_value={"yt-dlp": active}), \
+                    mock.patch.object(ad, "managed_binary_rollback_path",
+                                      return_value=backup), \
+                    mock.patch.object(ad, "write_persistent_log", return_value=None):
+                # Nothing retained yet: the reason is named, not guessed.
+                empty = ad.rollback_managed_binary(config, "yt-dlp")
+                self.assertFalse(empty["ok"])
+                self.assertEqual(empty["reason"], "no-retained-copy")
+
+                backup.write_bytes(b"old" + b"\0" * (2 * 1024 * 1024))
+                with mock.patch.object(ad, "probe_managed_binary_version",
+                                       side_effect=probe):
+                    versions[str(active)] = "2026.07.04"
+                    result = ad.rollback_managed_binary(config, "yt-dlp")
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["version"], "2026.07.04")
+            self.assertEqual(active.read_bytes(), backup.read_bytes())
+            self.assertEqual(
+                stored["ManagedBinaryPins"], {"yt-dlp": "2026.07.04"})
+
+    def test_retaining_a_rollback_copy_survives_a_missing_binary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "gone.exe"
+            with mock.patch.object(ad, "managed_binary_paths",
+                                   return_value={"ffmpeg": missing}):
+                self.assertEqual(ad.retain_managed_binary_rollback("ffmpeg"), "")
+
+    def test_the_settings_rows_render_the_inventory_and_pin_from_the_form(self):
+        _get_qapp_or_skip(self)
+        config = FakeConfig({"ManagedBinaryPins": {}})
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            self.assertEqual(
+                set(window.managed_pin_rows), set(ad.MANAGED_BINARY_NAMES))
+            window._apply_managed_binaries([
+                {"name": "yt-dlp", "installed": "2026.08.19",
+                 "pinned": "", "rollback": "2026.07.04"},
+                {"name": "deno", "installed": "", "pinned": "", "rollback": ""},
+            ])
+            ytdlp = window.managed_pin_rows["yt-dlp"]
+            self.assertIn("2026.08.19", ytdlp["installed"].text())
+            self.assertTrue(ytdlp["rollback"].isEnabled())
+            self.assertFalse(window.managed_pin_rows["deno"]["rollback"].isEnabled())
+
+            applied = []
+            window._dependencies['set_managed_binary_pin'] = (
+                lambda _config, name, version: applied.append((name, version))
+                or {"ok": True, "name": name, "version": version,
+                    "message": "pinned"}
+            )
+            ytdlp["field"].setText("2026.07.04")
+            ytdlp["pin"].click()
+            self.assertEqual(applied, [("yt-dlp", "2026.07.04")])
+            self.assertEqual(ytdlp["pin"].text(), "Unpin")
+
+            # The button now reads Unpin, so pressing it clears the pin
+            # whatever text is left in the field.
+            ytdlp["pin"].click()
+            self.assertEqual(applied[-1], ("yt-dlp", ""))
+        finally:
+            _retire_test_window(window)
 
 
 if __name__ == "__main__":

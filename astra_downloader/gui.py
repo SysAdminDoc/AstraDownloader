@@ -110,7 +110,8 @@ def system_reduced_motion_enabled():
 try:
     from . import gui_support as _gui_support
     from .gui_support import (
-        GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
+        GUI_ACCESSIBILITY_COLORS, PREFLIGHT_ROW_SPECS,
+        SUBTITLE_LANGUAGE_CHOICES,
         describe_rejected_links, download_status_tone,
         filter_site_login_entries, filter_subscription_records,
         format_duration, human_status, make_card, make_divider,
@@ -122,7 +123,8 @@ try:
 except ImportError:  # Flat source-path compatibility.
     import gui_support as _gui_support
     from gui_support import (
-        GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
+        GUI_ACCESSIBILITY_COLORS, PREFLIGHT_ROW_SPECS,
+        SUBTITLE_LANGUAGE_CHOICES,
         describe_rejected_links, download_status_tone,
         filter_site_login_entries, filter_subscription_records,
         format_duration, human_status, make_card, make_divider,
@@ -155,7 +157,8 @@ class ReadinessProbe(QObject):
                  preflight_evaluator=None, ffmpeg_capabilities=None,
                  sign_in_entries=None, github_api_budget=None,
                  output_folder=None, state_location=None,
-                 site_refusals=None, system_clock=None):
+                 site_refusals=None, system_clock=None,
+                 managed_binaries=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -175,6 +178,7 @@ class ReadinessProbe(QObject):
         self._state_location = state_location
         self._site_refusals = site_refusals
         self._system_clock = system_clock
+        self._managed_binaries = managed_binaries
 
     def _environment_probe(self, probe, label):
         if probe is None:
@@ -210,6 +214,8 @@ class ReadinessProbe(QObject):
                 "impersonateTargets": targets or [],
                 "whisperModel": whisper_model,
                 "whisperRuntime": whisper_runtime,
+                "managedBinaries": self._environment_probe(
+                    self._managed_binaries, "Managed binary inventory") or [],
             }
             if self._preflight_evaluator is not None:
                 ffmpeg_capabilities = None
@@ -276,16 +282,6 @@ class ReadinessProbe(QObject):
             except Exception as error:
                 self._logger(f"Readiness cache update failed: {error}")
         self.completed.emit(payload)
-
-
-_PREFLIGHT_ROW_SPECS = (
-    ("ytdlp-freshness", "yt-dlp freshness", "refresh-ytdlp"),
-    ("javascript-runtime", "JavaScript runtime", "provision-runtime"),
-    ("ffmpeg-capabilities", "FFmpeg security and filters", "refresh-ffmpeg"),
-    ("sign-in-expiry", "Stored sign-in expiry", "refresh-sign-in"),
-    ("github-api-budget", "Anonymous GitHub API budget", "retry-github"),
-    ("po-token-provider", "Proof-of-origin token provider", "use-sign-in"),
-)
 
 
 class FolderPickerService(QObject):
@@ -936,6 +932,10 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'probe_output_folder',
     'group_playlist_selection',
     'subscription_archive_key',
+    'MANAGED_BINARY_NAMES',
+    'managed_binary_inventory',
+    'set_managed_binary_pin',
+    'rollback_managed_binary',
     'normalize_proxy',
     'normalize_force_ip_version',
     'normalize_source_address',
@@ -1085,6 +1085,10 @@ class PlaylistStagingDialog(QDialog):
         )
         self.btn_batch_apply.clicked.connect(self._apply_batch)
         batch.addWidget(self.btn_batch_apply)
+        # Its own label: writing the result over the selected-count readout
+        # left that count wrong until the next checkbox toggle.
+        self.batch_result = make_label("", "fieldHint")
+        batch.addWidget(self.batch_result)
         batch.addStretch()
         layout.addLayout(batch)
 
@@ -1254,7 +1258,7 @@ class PlaylistStagingDialog(QDialog):
                 if found >= 0:
                     combo.setCurrentIndex(found)
             applied += 1
-        self.lbl_selected_count.setText(
+        self.batch_result.setText(
             tr_format("Applied to {count} videos", count=applied)
         )
 
@@ -2119,7 +2123,7 @@ class MainWindowCore(
             for item in checks or ()
             if isinstance(item, dict) and item.get("id")
         }
-        for key, _label, fallback_action in _PREFLIGHT_ROW_SPECS:
+        for key, _label, fallback_action in PREFLIGHT_ROW_SPECS:
             item = by_id.get(key) or {}
             self._set_preflight_row(
                 key,
@@ -2205,6 +2209,8 @@ class MainWindowCore(
                 if callable(getattr(self.dl_manager, 'refusing_sites', None))
                 else []
             ),
+            'managed_binaries': lambda: self._dependencies[
+                'managed_binary_inventory'](self.config),
         }
         readiness_sink = getattr(self.dl_manager, 'update_readiness_snapshot', None)
         if callable(readiness_sink):
@@ -2276,6 +2282,75 @@ class MainWindowCore(
         finally:
             combo.blockSignals(False)
 
+    def _apply_managed_binaries(self, inventory):
+        """Show each managed tool's version, pin and rollback candidate.
+
+        The readiness worker owns the probes; every one of them spawns a
+        process, so none of this may happen on the Qt thread.
+        """
+        rows = getattr(self, "managed_pin_rows", None)
+        if not rows:
+            return
+        for entry in inventory or []:
+            row = rows.get(str((entry or {}).get("name", "")))
+            if row is None:
+                continue
+            installed = str(entry.get("installed") or "")
+            pinned = str(entry.get("pinned") or "")
+            rollback = str(entry.get("rollback") or "")
+            row["installed"].setText(
+                tr_format("Installed {version}", version=installed)
+                if installed else tr("Not installed")
+            )
+            if not row["field"].hasFocus():
+                row["field"].setText(pinned)
+            row["field"].setPlaceholderText(
+                tr_format("Not pinned — {version} installed", version=installed)
+                if installed else tr("Not pinned")
+            )
+            row["pin"].setText(tr("Unpin") if pinned else tr("Pin"))
+            row["rollback"].setEnabled(bool(rollback))
+            row["rollback"].setToolTip(
+                tr_format("Put {version} back and pin there.", version=rollback)
+                if rollback else
+                tr("Nothing has been replaced yet, so there is nothing to go back to.")
+            )
+
+    def _show_managed_pin_result(self, result):
+        label = getattr(self, "managed_pin_status", None)
+        if label is None:
+            return
+        label.setText(tr(str(result.get("message") or "")))
+        set_status_tone(label, "success" if result.get("ok") else "danger")
+        repolish(label)
+        label.show()
+
+    def _apply_managed_binary_pin(self, name):
+        row = getattr(self, "managed_pin_rows", {}).get(name)
+        if row is None:
+            return
+        # The button reads Unpin while a pin is stored, so pressing it then
+        # clears the pin whatever is left in the field.
+        version = (
+            "" if row["pin"].text() == tr("Unpin") else row["field"].text().strip()
+        )
+        result = self._dependencies['set_managed_binary_pin'](
+            self.config, name, version,
+        )
+        self._show_managed_pin_result(result)
+        self._append_log(str(result.get("message") or ""))
+        if result.get("ok"):
+            row["field"].setText(result.get("version") or "")
+            row["pin"].setText(tr("Unpin") if result.get("version") else tr("Pin"))
+
+    def _roll_back_managed_binary(self, name):
+        result = self._dependencies['rollback_managed_binary'](self.config, name)
+        self._show_managed_pin_result(result)
+        self._append_log(str(result.get("message") or ""))
+        if result.get("ok"):
+            # Versions changed under the panel; re-probe rather than guess.
+            self._start_readiness_probe()
+
     def _apply_readiness(self, payload):
         subtitles_enabled = bool(
             getattr(self, 'config', {}).get("GenerateSubtitles", False)
@@ -2302,6 +2377,7 @@ class MainWindowCore(
         if callable(apply_preflight):
             apply_preflight(payload.get("preflight") or {})
         self._apply_impersonate_targets(payload.get("impersonateTargets"))
+        self._apply_managed_binaries(payload.get("managedBinaries"))
         self._set_tool_readiness("ytDlp", yt_dlp, self._value('YTDLP_PATH'))
         self._set_tool_readiness("ffmpeg", ffmpeg, self._value('FFMPEG_PATH'))
 
@@ -6066,6 +6142,20 @@ class MainWindowCore(
         selection = dialog.get_selection()
         if not selection:
             self._set_quick_download_status(tr("No playlist items selected."), "warning")
+            return
+        # Two rows given the same name would write the same file twice, and
+        # the second would silently replace the first. Say so instead.
+        names = [entry['output_name'] for entry in selection if entry['output_name']]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            self._set_quick_download_status(
+                tr_format(
+                    "More than one video is named {name}. Give each a "
+                    "different name, or leave the name empty.",
+                    name=duplicates[0],
+                ),
+                "error",
+            )
             return
         kind = self.quick_download_type.currentData()
         groups = self._dependencies['group_playlist_selection'](selection)

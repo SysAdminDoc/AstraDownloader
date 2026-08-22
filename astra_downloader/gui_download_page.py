@@ -20,18 +20,6 @@ except ImportError:  # Flat source-path compatibility.
     from i18n import ADVERTISED_LOCALES
 
 
-_PREFLIGHT_ROW_SPECS = (
-    ("ytdlp-freshness", "yt-dlp freshness", "refresh-ytdlp"),
-    ("javascript-runtime", "JavaScript runtime", "provision-runtime"),
-    ("ffmpeg-capabilities", "FFmpeg security and filters", "refresh-ffmpeg"),
-    ("sign-in-expiry", "Stored sign-in expiry", "refresh-sign-in"),
-    ("github-api-budget", "Anonymous GitHub API budget", "retry-github"),
-    ("po-token-provider", "Proof-of-origin token provider", "use-sign-in"),
-    ("output-folder", "Download folder", "choose-output-folder"),
-    ("state-location", "Settings and queue storage", "review-state-location"),
-    ("site-availability", "Site availability", "review-site-refusals"),
-    ("system-clock", "System clock", "sync-system-clock"),
-)
 
 
 class DownloadPageMixin:
@@ -426,7 +414,7 @@ class DownloadPageMixin:
         preflight_details_layout.setContentsMargins(0, 3, 0, 0)
         preflight_details_layout.setSpacing(1)
         self._preflight_statuses = {}
-        for key, label_text, action_text in _PREFLIGHT_ROW_SPECS:
+        for key, label_text, action_text in PREFLIGHT_ROW_SPECS:
             preflight_details_layout.addWidget(
                 self._make_preflight_row(key, label_text, action_text)
             )

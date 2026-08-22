@@ -803,6 +803,10 @@
       <translation>Das anonyme GitHub-Budget ist erschöpft; versuchen Sie es nach dem Zurücksetzen erneut.</translation>
     </message>
     <message>
+      <source>Unpin</source>
+      <translation>Fixierung aufheben</translation>
+    </message>
+    <message>
       <source>Unavailable</source>
       <translation>Nicht verfügbar</translation>
     </message>
@@ -1203,6 +1207,10 @@
       <translation>Keine Playlist-Einträge ausgewählt.</translation>
     </message>
     <message>
+      <source>More than one video is named {name}. Give each a different name, or leave the name empty.</source>
+      <translation>Mehrere Videos heißen {name}. Geben Sie jedem einen anderen Namen oder lassen Sie das Feld leer.</translation>
+    </message>
+    <message>
       <source>Queued {count} items; the rest were refused: {reason}</source>
       <translation>{count} Einträge eingereiht; der Rest wurde abgelehnt: {reason}</translation>
     </message>
@@ -1345,6 +1353,34 @@
     <message>
       <source>{target} (unavailable)</source>
       <translation>{target} (nicht verfügbar)</translation>
+    </message>
+    <message>
+      <source>Installed {version}</source>
+      <translation>Installiert {version}</translation>
+    </message>
+    <message>
+      <source>Not installed</source>
+      <translation>Nicht installiert</translation>
+    </message>
+    <message>
+      <source>Not pinned — {version} installed</source>
+      <translation>Nicht fixiert — {version} installiert</translation>
+    </message>
+    <message>
+      <source>Not pinned</source>
+      <translation>Nicht fixiert</translation>
+    </message>
+    <message>
+      <source>Pin</source>
+      <translation>Fixieren</translation>
+    </message>
+    <message>
+      <source>Put {version} back and pin there.</source>
+      <translation>{version} wiederherstellen und dort fixieren.</translation>
+    </message>
+    <message>
+      <source>Nothing has been replaced yet, so there is nothing to go back to.</source>
+      <translation>Es wurde noch nichts ersetzt, also gibt es nichts, wohin zurückgerollt werden könnte.</translation>
     </message>
     <message>
       <source>Repair needed</source>
@@ -2061,86 +2097,6 @@
     <message>
       <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
       <translation>Für einen einzelnen geschützten Link. Gespeicherte Zugangsdaten finden Sie unter Anmeldungen.</translation>
-    </message>
-    <message>
-      <source>yt-dlp freshness</source>
-      <translation>Aktualität von yt-dlp</translation>
-    </message>
-    <message>
-      <source>JavaScript runtime</source>
-      <translation>JavaScript-Laufzeitumgebung</translation>
-    </message>
-    <message>
-      <source>FFmpeg security and filters</source>
-      <translation>FFmpeg-Sicherheit und Filter</translation>
-    </message>
-    <message>
-      <source>Stored sign-in expiry</source>
-      <translation>Ablauf gespeicherter Anmeldungen</translation>
-    </message>
-    <message>
-      <source>Anonymous GitHub API budget</source>
-      <translation>Anonymes GitHub-API-Budget</translation>
-    </message>
-    <message>
-      <source>Proof-of-origin token provider</source>
-      <translation>Proof-of-Origin-Token-Anbieter</translation>
-    </message>
-    <message>
-      <source>Download folder</source>
-      <translation>Download-Ordner</translation>
-    </message>
-    <message>
-      <source>Settings and queue storage</source>
-      <translation>Speicherort für Einstellungen und Warteschlange</translation>
-    </message>
-    <message>
-      <source>Site availability</source>
-      <translation>Verfügbarkeit der Website</translation>
-    </message>
-    <message>
-      <source>System clock</source>
-      <translation>Systemuhr</translation>
-    </message>
-    <message>
-      <source>refresh-ytdlp</source>
-      <translation>yt-dlp aktualisieren</translation>
-    </message>
-    <message>
-      <source>provision-runtime</source>
-      <translation>Laufzeit bereitstellen</translation>
-    </message>
-    <message>
-      <source>refresh-ffmpeg</source>
-      <translation>refresh-ffmpeg</translation>
-    </message>
-    <message>
-      <source>refresh-sign-in</source>
-      <translation>Anmeldung aktualisieren</translation>
-    </message>
-    <message>
-      <source>retry-github</source>
-      <translation>GitHub erneut versuchen</translation>
-    </message>
-    <message>
-      <source>use-sign-in</source>
-      <translation>Anmeldung verwenden</translation>
-    </message>
-    <message>
-      <source>choose-output-folder</source>
-      <translation>Ordner wählen</translation>
-    </message>
-    <message>
-      <source>review-state-location</source>
-      <translation>Einstellungen öffnen</translation>
-    </message>
-    <message>
-      <source>review-site-refusals</source>
-      <translation>Anmeldungen öffnen</translation>
-    </message>
-    <message>
-      <source>sync-system-clock</source>
-      <translation>Uhr prüfen</translation>
     </message>
     <message>
       <source>Clear history</source>
@@ -3183,6 +3139,10 @@
       <translation>Installierte yt-dlp-Version wird geprüft…</translation>
     </message>
     <message>
+      <source>JavaScript runtime</source>
+      <translation>JavaScript-Laufzeitumgebung</translation>
+    </message>
+    <message>
       <source>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</source>
       <translation>Automatisch bevorzugt Deno, dann Node 22+, dann die QuickJS-Laufzeitumgebung, die die App selbst herunterlädt (2 MB).</translation>
     </message>
@@ -3303,6 +3263,22 @@
       <translation>Frisches ffmpeg herunterladen und Prüfsumme verifizieren. Die installierte Kopie bleibt erhalten, bis der Ersatz verifiziert ist.</translation>
     </message>
     <message>
+      <source>Version pins</source>
+      <translation>Versions-Fixierungen</translation>
+    </message>
+    <message>
+      <source>An update keeps downloads working and can also take away something that was working, such as a hardware encoder. Pin a tool to hold it at the version installed now. Roll back puts the previous copy back and pins there.</source>
+      <translation>Ein Update hält Downloads am Laufen und kann zugleich etwas wegnehmen, das funktioniert hat, etwa einen Hardware-Encoder. Fixieren Sie ein Werkzeug auf die jetzt installierte Version. Zurückrollen stellt die vorherige Kopie wieder her und fixiert sie.</translation>
+    </message>
+    <message>
+      <source>Roll back</source>
+      <translation>Zurückrollen</translation>
+    </message>
+    <message>
+      <source>Version pin result</source>
+      <translation>Ergebnis der Versions-Fixierung</translation>
+    </message>
+    <message>
       <source>Move this install to another machine, or recover from a config you cannot open. The bundle carries settings and subscriptions. Stored sign-ins are listed by site but never exported. Cookies stay on this machine.</source>
       <translation>Diese Installation auf einen anderen Computer übertragen oder eine nicht mehr lesbare Konfiguration wiederherstellen. Das Paket enthält Einstellungen und Abonnements. Gespeicherte Anmeldungen werden nur nach Website aufgeführt, aber nie exportiert. Cookies bleiben auf diesem Computer.</translation>
     </message>
@@ -3377,6 +3353,10 @@
     <message>
       <source>SponsorBlock data and API are licensed CC BY-NC-SA 4.0; Astra Downloader is MIT.</source>
       <translation>Daten und API von SponsorBlock stehen unter CC BY-NC-SA 4.0; Astra Downloader steht unter MIT.</translation>
+    </message>
+    <message>
+      <source>Pinned version for {tool}</source>
+      <translation>Fixierte Version für {tool}</translation>
     </message>
     <message>
       <source>No preference</source>
@@ -3521,6 +3501,10 @@
     <message>
       <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
       <translation>Öffnen Sie Astra Downloader und aktualisieren Sie ffmpeg, bevor Sie es erneut versuchen.</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
     </message>
     <message>
       <source>Astra Downloader could not reach the site or a required provider.</source>

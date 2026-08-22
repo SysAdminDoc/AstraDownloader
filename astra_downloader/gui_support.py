@@ -23,7 +23,7 @@ __all__ = (
     "make_vertical_divider",
     "announce_status", "refresh_line_icons", "repolish", "sanitize_csv_cell",
     "set_gui_theme", "set_line_icon", "set_status_tone",
-    "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
+    "SUBTITLE_LANGUAGE_CHOICES", "PREFLIGHT_ROW_SPECS", "tr", "tr_format",
 )
 
 
@@ -242,6 +242,24 @@ def make_state_label(text, tone="neutral"):
 # Matched in order, first hit wins, so a more specific name has to come first:
 # "Undo remove" is an undo, not a remove, and "Import settings" is an import,
 # not the Settings page. The fallback is reserved for a name nothing here
+# One table, because there were two: the Download page built its rows from
+# its own copy while `_apply_preflight` wrote statuses from another, so a
+# check added to one list existed as a row nobody ever updated. Both modules
+# import gui_support, so this is the only place both can see.
+PREFLIGHT_ROW_SPECS = (
+    ("ytdlp-freshness", "yt-dlp freshness", "refresh-ytdlp"),
+    ("javascript-runtime", "JavaScript runtime", "provision-runtime"),
+    ("ffmpeg-capabilities", "FFmpeg security and filters", "refresh-ffmpeg"),
+    ("sign-in-expiry", "Stored sign-in expiry", "refresh-sign-in"),
+    ("github-api-budget", "Anonymous GitHub API budget", "retry-github"),
+    ("po-token-provider", "Proof-of-origin token provider", "use-sign-in"),
+    ("output-folder", "Download folder", "choose-output-folder"),
+    ("state-location", "Settings and queue storage", "review-state-location"),
+    ("site-availability", "Site availability", "review-site-refusals"),
+    ("system-clock", "System clock", "sync-system-clock"),
+)
+
+
 # claims — a named button reaching it is the bug this table exists to prevent,
 # and a test enumerates every button label to say so.
 _ICON_MATCHERS = (
@@ -250,7 +268,8 @@ _ICON_MATCHERS = (
     ("download", lambda key: key == "downloads" or "download" in key),
     ("history", lambda key: key == "history"),
     ("undo", lambda key: "undo" in key),
-    ("restore", lambda key: "restore" in key),
+    ("restore", lambda key: "restore" in key or "roll back" in key),
+    ("pin", lambda key: key in ("pin", "unpin") or key.startswith("pin ")),
     ("start", lambda key: "start" in key or "resume" in key),
     ("stop", lambda key: "stop" in key),
     ("pause", lambda key: "pause" in key),
@@ -333,6 +352,13 @@ def _paint_line_icon(painter, glyph):
         painter.drawLine(3, 8, 8, 8)
         painter.drawLine(9, 7, 9, 11)
         painter.drawLine(7, 9, 11, 9)
+    elif glyph == "pin":
+        # A pushpin seen from the side: head, shaft, point.
+        painter.drawLine(5, 3, 13, 3)
+        painter.drawLine(7, 3, 7, 9)
+        painter.drawLine(11, 3, 11, 9)
+        painter.drawLine(4, 9, 14, 9)
+        painter.drawLine(9, 9, 9, 16)
     elif glyph == "start":
         painter.drawLine(5, 3, 15, 9)
         painter.drawLine(15, 9, 5, 15)

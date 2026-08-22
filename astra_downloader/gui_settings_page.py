@@ -1210,6 +1210,56 @@ class SettingsPageMixin:
         tools_row.addWidget(btn_reinstall_ffmpeg)
         tools_row.addStretch()
         tools_l.addLayout(tools_row)
+        tools_l.addWidget(make_divider())
+        tools_l.addWidget(make_label("Version pins", "fieldLabel"))
+        tools_l.addWidget(make_label(
+            "An update keeps downloads working and can also take away "
+            "something that was working, such as a hardware encoder. Pin a "
+            "tool to hold it at the version installed now. Roll back puts the "
+            "previous copy back and pins there.",
+            "fieldHint", word_wrap=True,
+        ))
+        # Deliberately not named cfg_*: the settings reload gate treats every
+        # cfg_ widget as a form field belonging to _SETTINGS_FORM_FIELDS, and
+        # these are live state with their own buttons, not a saved form.
+        self.managed_pin_rows = {}
+        for name in self._value('MANAGED_BINARY_NAMES'):
+            pin_row = QHBoxLayout()
+            pin_row.setSpacing(8)
+            title = make_label(name, "fieldLabel")
+            title.setMinimumWidth(72)
+            pin_row.addWidget(title)
+            installed = make_label("", "fieldHint")
+            installed.setMinimumWidth(150)
+            pin_row.addWidget(installed, 1)
+            field = QLineEdit()
+            field.setPlaceholderText(tr("Not pinned"))
+            field.setAccessibleName(
+                tr_format("Pinned version for {tool}", tool=name)
+            )
+            field.setMaximumWidth(200)
+            pin_row.addWidget(field)
+            pin_button = self._make_tool_button("Pin", "ghost", name)
+            pin_button.clicked.connect(
+                lambda _checked=False, tool=name: self._apply_managed_binary_pin(tool)
+            )
+            pin_row.addWidget(pin_button)
+            rollback_button = self._make_tool_button("Roll back", "ghost", name)
+            rollback_button.clicked.connect(
+                lambda _checked=False, tool=name: self._roll_back_managed_binary(tool)
+            )
+            rollback_button.setEnabled(False)
+            pin_row.addWidget(rollback_button)
+            self.managed_pin_rows[name] = {
+                "installed": installed,
+                "field": field,
+                "pin": pin_button,
+                "rollback": rollback_button,
+            }
+            tools_l.addLayout(pin_row)
+        self.managed_pin_status = make_label("", "fieldHint", word_wrap=True, status=True)
+        self.managed_pin_status.setAccessibleName(tr("Version pin result"))
+        tools_l.addWidget(self.managed_pin_status)
         transfer_card, transfer_l = self._make_settings_group("Import and export")
         transfer_l.addWidget(make_label(
             "Move this install to another machine, or recover from a config "
