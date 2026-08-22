@@ -1287,6 +1287,270 @@ class PlaylistStagingDialog(QDialog):
         return selection
 
 
+class SubscriptionDeliveryDialog(QDialog):
+    """Where one subscription's videos land, and in what shape.
+
+    Every field is optional and empty means "use the global setting", so a
+    subscription nobody has configured behaves exactly as it did before these
+    fields existed.
+    """
+
+    VIDEO_FORMATS = (("MP4", "mp4"), ("MKV", "mkv"), ("WebM", "webm"))
+    AUDIO_FORMATS = (
+        ("MP3", "mp3"), ("M4A", "m4a"), ("Opus", "opus"),
+        ("FLAC", "flac"), ("WAV", "wav"),
+    )
+    QUALITIES = (
+        ("Best", "best"), ("2160p", "2160"), ("1440p", "1440"),
+        ("1080p", "1080"), ("720p", "720"), ("480p", "480"),
+    )
+
+    def __init__(self, parent, record):
+        super().__init__(parent)
+        self.record = record or {}
+        self.setWindowTitle(tr("Subscription delivery"))
+        self.setModal(True)
+        self.setMinimumWidth(560)
+        self.setAccessibleName(tr("Subscription delivery settings"))
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
+        title = self.record.get("title") or self.record.get("url") or tr("Subscription")
+        layout.addWidget(make_label(title, "panelTitle", word_wrap=True))
+        layout.addWidget(make_label(
+            "Anything left empty follows the settings every other download "
+            "uses. Fill one in to give this subscription its own.",
+            "fieldHint", word_wrap=True,
+        ))
+
+        self.audio_only = QCheckBox(tr("Download audio only"))
+        self.audio_only.setChecked(bool(self.record.get("audioOnly")))
+        self.audio_only.toggled.connect(self._sync_formats)
+        layout.addWidget(self.audio_only)
+
+        self.upgrade_if_better = QCheckBox(
+            tr("Fetch again when a better version appears")
+        )
+        self.upgrade_if_better.setChecked(bool(self.record.get("upgradeIfBetter")))
+        self.upgrade_if_better.setToolTip(tr(
+            "Re-download a captured video only when the site offers a taller "
+            "one than the copy on disk. This checks every captured video on "
+            "every scan, so it costs a lookup per item."
+        ))
+        layout.addWidget(self.upgrade_if_better)
+
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(make_label("Save to", "fieldLabel"))
+        self.output_dir = QLineEdit(str(self.record.get("outputDir") or ""))
+        self.output_dir.setPlaceholderText(tr("The usual download folder"))
+        self.output_dir.setAccessibleName(tr("Subscription download folder"))
+        folder_row.addWidget(self.output_dir, 1)
+        browse = QPushButton(tr("Browse"))
+        browse.setProperty("class", "ghost")
+        browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_line_icon(browse, "Browse", size=15)
+        browse.setAccessibleDescription(tr("Choose where this subscription saves"))
+        browse.clicked.connect(self._choose_folder)
+        folder_row.addWidget(browse)
+        layout.addLayout(folder_row)
+
+        picker_row = QHBoxLayout()
+        picker_row.addWidget(make_label("Format", "fieldLabel"))
+        self.format_combo = QComboBox()
+        self.format_combo.setAccessibleName(tr("Subscription format"))
+        picker_row.addWidget(self.format_combo)
+        picker_row.addWidget(make_label("Quality", "fieldLabel"))
+        self.quality_combo = QComboBox()
+        self.quality_combo.setAccessibleName(tr("Subscription quality"))
+        self.quality_combo.addItem(tr("No preference"), "")
+        for label, value in self.QUALITIES:
+            self.quality_combo.addItem(tr(label), value)
+        quality = str(self.record.get("quality") or "")
+        self.quality_combo.setCurrentIndex(
+            max(0, self.quality_combo.findData(quality)))
+        picker_row.addWidget(self.quality_combo)
+        picker_row.addStretch()
+        layout.addLayout(picker_row)
+        self._sync_formats()
+
+        layout.addWidget(make_label("Naming template", "fieldLabel"))
+        self.output_template = QLineEdit(str(self.record.get("outputTemplate") or ""))
+        self.output_template.setPlaceholderText(tr("The usual naming template"))
+        self.output_template.setAccessibleName(tr("Subscription naming template"))
+        self.output_template.setToolTip(tr(
+            "A yt-dlp output template, relative to the folder above. Only the "
+            "allowed fields are accepted, and it must keep %(ext)s."
+        ))
+        layout.addWidget(self.output_template)
+
+        buttons = QHBoxLayout()
+        cancel = QPushButton(tr("Cancel"))
+        cancel.setProperty("class", "secondary")
+        cancel.clicked.connect(self.reject)
+        buttons.addWidget(cancel)
+        buttons.addStretch()
+        save = QPushButton(tr("Save"))
+        save.setProperty("class", "primary")
+        save.setDefault(True)
+        save.clicked.connect(self.accept)
+        buttons.addWidget(save)
+        layout.addLayout(buttons)
+
+    def _sync_formats(self):
+        """Offer only the formats the chosen kind can actually produce."""
+        choices = (self.AUDIO_FORMATS if self.audio_only.isChecked()
+                   else self.VIDEO_FORMATS)
+        current = self.format_combo.currentData() if self.format_combo.count() else \
+            str(self.record.get("format") or "")
+        self.format_combo.blockSignals(True)
+        self.format_combo.clear()
+        self.format_combo.addItem(tr("No preference"), "")
+        for label, value in choices:
+            self.format_combo.addItem(label, value)
+        found = self.format_combo.findData(current)
+        self.format_combo.setCurrentIndex(found if found >= 0 else 0)
+        self.format_combo.blockSignals(False)
+        self.quality_combo.setEnabled(not self.audio_only.isChecked())
+
+    def _choose_folder(self):
+        chosen = QFileDialog.getExistingDirectory(
+            self, tr("Choose where this subscription saves"),
+            self.output_dir.text().strip() or str(Path.home()),
+        )
+        if chosen:
+            self.output_dir.setText(chosen)
+
+    def delivery(self):
+        return {
+            "outputDir": self.output_dir.text().strip(),
+            "format": self.format_combo.currentData() or "",
+            "quality": ("" if self.audio_only.isChecked()
+                        else (self.quality_combo.currentData() or "")),
+            "outputTemplate": self.output_template.text().strip(),
+            "audioOnly": self.audio_only.isChecked(),
+            "upgradeIfBetter": self.upgrade_if_better.isChecked(),
+        }
+
+
+class SubscriptionArchiveDialog(QDialog):
+    """What a subscription has captured, and a way to change your mind.
+
+    The Subscriptions page used to show one number — "10 archived" — with no
+    way to see which ten. Allowing one through again removes the archive
+    claim; it never touches the file on disk.
+    """
+
+    def __init__(self, parent, record, page, on_forget):
+        super().__init__(parent)
+        self.record = record or {}
+        self.page = page or {}
+        self._on_forget = on_forget
+        self.rows = []
+        self.setWindowTitle(tr("Subscription archive"))
+        self.setModal(True)
+        self.setMinimumSize(640, 420)
+        self.resize(820, 560)
+        self.setAccessibleName(tr("Captured subscription items"))
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
+        title = self.record.get("title") or self.record.get("url") or tr("Subscription")
+        layout.addWidget(make_label(title, "panelTitle", word_wrap=True))
+        total = int(self.page.get("total") or 0)
+        layout.addWidget(make_label(
+            tr_format("{count} captured", count=total), "fieldHint",
+        ))
+        self.status = make_label("", "fieldHint", word_wrap=True, status=True)
+        self.status.setAccessibleName(tr("Archive action result"))
+        layout.addWidget(self.status)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        items_layout = QVBoxLayout(content)
+        items_layout.setContentsMargins(8, 8, 8, 8)
+        items_layout.setSpacing(6)
+        for item in self.page.get("items") or []:
+            items_layout.addWidget(self._build_row(item))
+        if not self.page.get("items"):
+            items_layout.addWidget(make_empty_state(
+                tr("Nothing captured yet"),
+                tr("Items appear here after this subscription's first scan "
+                   "queues something."),
+            ), 1)
+        items_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        close = QPushButton(tr("Close"))
+        close.setProperty("class", "secondary")
+        close.setDefault(True)
+        close.clicked.connect(self.accept)
+        buttons.addWidget(close)
+        layout.addLayout(buttons)
+
+    def _build_row(self, item):
+        row = QFrame()
+        row.setProperty("class", "playlistRow")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(12, 9, 12, 9)
+        row_layout.setSpacing(10)
+        copy_layout = QVBoxLayout()
+        copy_layout.setSpacing(2)
+        title = str(item.get("title") or item.get("url") or tr("(untitled)"))
+        copy_layout.addWidget(make_label(title, "fieldLabel", word_wrap=True))
+        status = str(item.get("status") or "")
+        detail = tr(status.title()) if status else ""
+        if item.get("lastError"):
+            detail = f"{detail} · {item['lastError']}".strip(" ·")
+        copy_layout.addWidget(make_label(detail, "toolbarMeta", word_wrap=True))
+        row_layout.addLayout(copy_layout, 1)
+        allow = self._make_tool_button("Allow again", "ghost", title)
+        allow.setToolTip(tr(
+            "Forget this item so the next scan can fetch it again. The file "
+            "already on disk is left alone."
+        ))
+        # An item still being downloaded has a claim the queue is using.
+        allow.setEnabled(status not in {"reserved", "queued"})
+        allow.clicked.connect(
+            lambda _checked=False, key=item.get("key"), button=allow:
+            self._allow_again(key, button)
+        )
+        row_layout.addWidget(allow, 0, Qt.AlignmentFlag.AlignTop)
+        self.rows.append({"key": item.get("key"), "button": allow,
+                          "status": status})
+        return row
+
+    def _allow_again(self, key, button):
+        forgotten, error = self._on_forget(key)
+        if forgotten:
+            button.setEnabled(False)
+            button.setText(tr("Allowed"))
+            self.status.setText(tr("The next scan can fetch that item again."))
+            set_status_tone(self.status, "success")
+        else:
+            self.status.setText(tr(str(error or "That item could not be forgotten.")))
+            set_status_tone(self.status, "danger")
+        repolish(self.status)
+
+    def _make_tool_button(self, text, class_name="secondary", target=""):
+        parent = self.parent()
+        factory = getattr(parent, "_make_tool_button", None)
+        if callable(factory):
+            return factory(text, class_name, target)
+        button = QPushButton(tr(text))
+        button.setProperty("class", class_name)
+        return button
+
+
 class MainWindowCore(
     DownloadPageMixin,
     ExtensionPageMixin,
@@ -3187,11 +3451,102 @@ class MainWindowCore(
             scan = self._make_tool_button("Scan now", "ghost", row_target)
             scan.clicked.connect(lambda checked=False, sub_id=record.get("id"): self._scan_subscription(sub_id))
             row_layout.addWidget(scan, 0, Qt.AlignmentFlag.AlignTop)
+            delivery = self._make_tool_button("Delivery", "ghost", row_target)
+            delivery.setToolTip(tr(
+                "Where this subscription saves, and in what format, quality "
+                "and naming."
+            ))
+            delivery.clicked.connect(
+                lambda checked=False, sub_id=record.get("id"):
+                self._edit_subscription_delivery(sub_id)
+            )
+            row_layout.addWidget(delivery, 0, Qt.AlignmentFlag.AlignTop)
+            archive = self._make_tool_button("Archive", "ghost", row_target)
+            archive.setToolTip(tr(
+                "What this subscription has captured, and which items to let "
+                "through again."
+            ))
+            archive.clicked.connect(
+                lambda checked=False, sub_id=record.get("id"):
+                self._open_subscription_archive(sub_id)
+            )
+            row_layout.addWidget(archive, 0, Qt.AlignmentFlag.AlignTop)
             remove = self._make_tool_button("Remove", "ghost", row_target)
             remove.clicked.connect(lambda checked=False, sub_id=record.get("id"): self._remove_subscription(sub_id))
             row_layout.addWidget(remove, 0, Qt.AlignmentFlag.AlignTop)
             self.subscription_container.addWidget(row)
         self.subscription_container.addStretch()
+
+    def _show_subscription_status(self, text, tone="neutral"):
+        """Write the Subscriptions page's status line."""
+        label = getattr(self, "subscription_status", None)
+        if label is None:
+            return
+        label.setText(str(text or ""))
+        set_status_tone(label, tone)
+        repolish(label)
+
+    def _subscription_record(self, sub_id):
+        manager = self._subscription_manager()
+        getter = getattr(manager, "get_subscription", None) if manager else None
+        if not callable(getter):
+            return None
+        try:
+            return getter(sub_id)
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not read that subscription: {error}")
+            return None
+
+    def _edit_subscription_delivery(self, sub_id):
+        record = self._subscription_record(sub_id)
+        if not record:
+            self._show_subscription_status(
+                tr("That subscription no longer exists."), "danger")
+            return False
+        dialog = SubscriptionDeliveryDialog(self, record)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        manager = self._subscription_manager()
+        try:
+            updated, error = manager.update_subscription(
+                sub_id, delivery=dialog.delivery())
+        except Exception as exc:  # noqa: BLE001
+            updated, error = None, str(exc)
+        if error or not updated:
+            self._show_subscription_status(
+                tr(str(error or "That change could not be saved.")), "danger")
+            return False
+        self._show_subscription_status(
+            tr("Delivery settings saved."), "success")
+        self._refresh_subscriptions(force=True)
+        return True
+
+    def _open_subscription_archive(self, sub_id):
+        record = self._subscription_record(sub_id)
+        manager = self._subscription_manager()
+        pager = getattr(manager, "archive_page", None) if manager else None
+        if not record or not callable(pager):
+            self._show_subscription_status(
+                tr("That subscription no longer exists."), "danger")
+            return False
+        try:
+            page = pager(sub_id)
+        except Exception as error:  # noqa: BLE001
+            self._append_log(f"Could not read the subscription archive: {error}")
+            self._show_subscription_status(
+                tr("The archive could not be read."), "danger")
+            return False
+
+        def forget(key):
+            try:
+                return manager.forget_archive_entry(key)
+            except Exception as exc:  # noqa: BLE001
+                return False, str(exc)
+
+        dialog = SubscriptionArchiveDialog(self, record, page, forget)
+        dialog.exec()
+        self._refresh_subscriptions(force=True)
+        return True
 
     def _subscription_filters_changed(self):
         if hasattr(self, "_subscription_filter_timer"):

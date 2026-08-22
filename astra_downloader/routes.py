@@ -1057,6 +1057,20 @@ def _register_subscriptions_routes(api, context, dependencies):
             return response
         return cors_response(manager.snapshot())
 
+    # A subscription's own delivery choices. Named on the wire the way the
+    # record stores them, and every one is optional: an absent field means
+    # "use the global setting", which is what every subscription did before
+    # schema 2.
+    SUBSCRIPTION_DELIVERY_FIELDS = (
+        "outputDir", "format", "quality", "outputTemplate", "audioOnly",
+    )
+
+    def _subscription_delivery(body):
+        present = {
+            key: body[key] for key in SUBSCRIPTION_DELIVERY_FIELDS if key in body
+        }
+        return present or None
+
     @api.route('/subscriptions', methods=['POST'])
     def subscriptions_create():
         if not check_auth():
@@ -1067,7 +1081,8 @@ def _register_subscriptions_routes(api, context, dependencies):
         body, body_error = request_json_object()
         if body_error:
             return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
-        allowed = {"url", "intervalMinutes", "enabled", "title"}
+        allowed = {"url", "intervalMinutes", "enabled", "title",
+                   *SUBSCRIPTION_DELIVERY_FIELDS}
         unknown = sorted(set(body) - allowed)
         if unknown:
             return cors_response({
@@ -1081,6 +1096,7 @@ def _register_subscriptions_routes(api, context, dependencies):
             interval_minutes=body.get("intervalMinutes", 60),
             enabled=body.get("enabled", True),
             title=body.get("title", ""),
+            delivery=_subscription_delivery(body),
         )
         if error:
             status = 409 if "already configured" in error.lower() else 400
@@ -1097,11 +1113,15 @@ def _register_subscriptions_routes(api, context, dependencies):
         body, body_error = request_json_object()
         if body_error:
             return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
-        allowed = {"url", "intervalMinutes", "enabled", "title"}
+        allowed = {"url", "intervalMinutes", "enabled", "title",
+                   *SUBSCRIPTION_DELIVERY_FIELDS}
         unknown = sorted(set(body) - allowed)
         if unknown or not body:
             return cors_response({
-                "error": "Provide only url, intervalMinutes, enabled, or title.",
+                "error": (
+                    "Provide only url, intervalMinutes, enabled, title, or a "
+                    "delivery field (" + ", ".join(SUBSCRIPTION_DELIVERY_FIELDS) + ")."
+                ),
                 "code": "invalid-subscription-field",
             }, 400)
         fields = {}
@@ -1113,11 +1133,52 @@ def _register_subscriptions_routes(api, context, dependencies):
             fields["enabled"] = body["enabled"]
         if "title" in body:
             fields["title"] = body["title"]
+        delivery = _subscription_delivery(body)
+        if delivery is not None:
+            fields["delivery"] = delivery
         record, error = manager.update_subscription(subscription_id, **fields)
         if error:
             status = 404 if "no longer exists" in error.lower() else 400
             return _subscription_error(error, "subscription-update-rejected", status)
         return cors_response(record)
+
+    @api.route('/subscriptions/<subscription_id>/archive', methods=['GET'])
+    def subscriptions_archive(subscription_id):
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        try:
+            limit = int(request.args.get('limit', 200))
+            offset = int(request.args.get('offset', 0))
+        except (TypeError, ValueError):
+            return cors_response({
+                "error": "limit and offset must be whole numbers.",
+                "code": "invalid-archive-page",
+            }, 400)
+        return cors_response(
+            manager.archive_page(subscription_id, limit=limit, offset=offset)
+        )
+
+    @api.route('/subscriptions/archive/<path:archive_key>', methods=['DELETE'])
+    def subscriptions_archive_forget(archive_key):
+        """Let one captured item through again on the next scan.
+
+        DELETE on the archive entry, not on the media: the archive records
+        what has been taken, and forgetting an entry is the whole of allowing
+        a re-download. Nothing on disk is touched.
+        """
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        forgotten, error = manager.forget_archive_entry(archive_key)
+        if not forgotten:
+            status = 404 if "no longer exists" in str(error).lower() else 409
+            return _subscription_error(error, "archive-forget-rejected", status)
+        return cors_response({"forgotten": True, "key": str(archive_key)})
 
     @api.route('/subscriptions/<subscription_id>', methods=['DELETE'])
     def subscriptions_delete(subscription_id):

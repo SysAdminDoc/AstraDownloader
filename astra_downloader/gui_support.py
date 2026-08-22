@@ -287,6 +287,8 @@ _ICON_MATCHERS = (
     ("options", lambda key: "option" in key or "advanced" in key),
     ("add", lambda key: key.startswith("add") or key.startswith("new ")),
     ("subscriptions", lambda key: "subscription" in key or "feed" in key),
+    ("archive", lambda key: "archive" in key or "allow" in key),
+    ("deliver", lambda key: "deliver" in key),
     ("settings", lambda key: "setting" in key or "preference" in key),
 )
 
@@ -334,6 +336,18 @@ def _paint_line_icon(painter, glyph):
         painter.drawLine(3, 8, 8, 8)
         painter.drawLine(9, 7, 9, 11)
         painter.drawLine(7, 9, 11, 9)
+    elif glyph == "archive":
+        # A box with a lid: the record of what has been put away.
+        painter.drawRect(3, 3, 12, 4)
+        painter.drawRect(4, 7, 10, 8)
+        painter.drawLine(7, 10, 11, 10)
+    elif glyph == "deliver":
+        # A package with a tie: where a download is sent and in what shape.
+        painter.drawRect(3, 6, 12, 9)
+        painter.drawLine(3, 9, 15, 9)
+        painter.drawLine(9, 6, 9, 15)
+        painter.drawLine(6, 3, 9, 6)
+        painter.drawLine(12, 3, 9, 6)
     elif glyph == "pin":
         # A pushpin seen from the side: head, shaft, point.
         painter.drawLine(5, 3, 13, 3)

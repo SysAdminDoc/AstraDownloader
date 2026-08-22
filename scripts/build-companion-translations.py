@@ -1727,6 +1727,58 @@ CATALOGS["de"].update({
     "{selected} of {total} selected": "{selected} von {total} ausgewählt",
     "Download selected ({count})": "Auswahl herunterladen ({count})",
     "Version pins": "Versions-Fixierungen",
+    "Subscription delivery": "Abonnement-Zustellung",
+    "Subscription delivery settings": "Einstellungen zur Abonnement-Zustellung",
+    "Subscription": "Abonnement",
+    "Anything left empty follows the settings every other download uses. Fill one in to give this subscription its own.":
+        "Alles, was leer bleibt, folgt den Einstellungen jedes anderen Downloads. "
+        "F\u00fcllen Sie ein Feld aus, um diesem Abonnement eigene zu geben.",
+    "Download audio only": "Nur Audio herunterladen",
+    "Fetch again when a better version appears":
+        "Erneut holen, wenn eine bessere Fassung erscheint",
+    "Re-download a captured video only when the site offers a taller one than the copy on disk. This checks every captured video on every scan, so it costs a lookup per item.":
+        "Ein erfasstes Video nur dann erneut laden, wenn die Website eine "
+        "höhere Auflösung anbietet als die Kopie auf der Festplatte. "
+        "Das prüft bei jedem Scan jedes erfasste Video und kostet daher "
+        "eine Abfrage pro Eintrag.",
+    "The usual download folder": "Der \u00fcbliche Download-Ordner",
+    "Subscription download folder": "Download-Ordner des Abonnements",
+    "Subscription format": "Format des Abonnements",
+    "Subscription quality": "Qualit\u00e4t des Abonnements",
+    "Naming template": "Namensvorlage",
+    "The usual naming template": "Die \u00fcbliche Namensvorlage",
+    "Subscription naming template": "Namensvorlage des Abonnements",
+    "A yt-dlp output template, relative to the folder above. Only the allowed fields are accepted, and it must keep %(ext)s.":
+        "Eine yt-dlp-Ausgabevorlage, relativ zum Ordner oben. Es werden nur die "
+        "erlaubten Felder akzeptiert, und %(ext)s muss erhalten bleiben.",
+    "Choose where this subscription saves":
+        "W\u00e4hlen, wohin dieses Abonnement speichert",
+    "Save": "Speichern",
+    "Delivery": "Zustellung",
+    "Where this subscription saves, and in what format, quality and naming.":
+        "Wohin dieses Abonnement speichert, und in welchem Format, welcher "
+        "Qualit\u00e4t und Benennung.",
+    "Delivery settings saved.": "Zustellungseinstellungen gespeichert.",
+    "That subscription no longer exists.": "Dieses Abonnement gibt es nicht mehr.",
+    "Archive": "Archiv",
+    "What this subscription has captured, and which items to let through again.":
+        "Was dieses Abonnement erfasst hat und welche Eintr\u00e4ge erneut "
+        "durchgelassen werden.",
+    "Captured subscription items": "Erfasste Abonnement-Eintr\u00e4ge",
+    "Archive action result": "Ergebnis der Archivaktion",
+    "{count} captured": "{count} erfasst",
+    "Nothing captured yet": "Noch nichts erfasst",
+    "Items appear here after this subscription's first scan queues something.":
+        "Eintr\u00e4ge erscheinen hier, sobald der erste Scan dieses Abonnements "
+        "etwas einreiht.",
+    "Allow again": "Erneut zulassen",
+    "Allowed": "Zugelassen",
+    "Forget this item so the next scan can fetch it again. The file already on disk is left alone.":
+        "Diesen Eintrag vergessen, damit der n\u00e4chste Scan ihn erneut holen "
+        "kann. Die bereits gespeicherte Datei bleibt unber\u00fchrt.",
+    "The next scan can fetch that item again.":
+        "Der n\u00e4chste Scan kann diesen Eintrag erneut holen.",
+    "The archive could not be read.": "Das Archiv konnte nicht gelesen werden.",
     "More than one video is named {name}. Give each a different name, or leave the name empty.":
         "Mehrere Videos heißen {name}. Geben Sie jedem einen anderen Namen "
         "oder lassen Sie das Feld leer.",

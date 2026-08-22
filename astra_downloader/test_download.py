@@ -3156,7 +3156,14 @@ class EndToEndDownloadTests(unittest.TestCase):
                  mock.patch.object(download_module, "DOWNLOAD_WATCHDOG_POLL_SECONDS", 0.01):
                 manager._run_download(download)
 
-        self.assertEqual(terminated, [retry])
+        # The retry has to be terminated, and nothing outside these two
+        # processes may be. Not `== [retry]`: the live-wait maximum is patched
+        # to zero, so the first attempt's own watchdog can legitimately fire
+        # before that attempt finishes, and on a loaded machine it does. That
+        # is the patched constant working, not a wrong process being killed.
+        self.assertIn(retry, terminated)
+        self.assertEqual(terminated[-1], retry)
+        self.assertTrue(set(terminated) <= {first, retry}, terminated)
         self.assertEqual(download.status, "failed")
         self.assertIn("Live video did not start", download.error)
         self.assertEqual(download.error_code, "live-wait-timeout")
@@ -4362,7 +4369,8 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             return ('', '')
 
     def _argv_for(self, url, *, config_overrides=None, with_cookies=True,
-                  profile_name=None, output_name="", playlist_items=None):
+                  profile_name=None, output_name="", playlist_items=None,
+                  output_template=""):
         attempts = []
 
         def popen(args, **_kwargs):
@@ -4382,6 +4390,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             download = ad.Download(
                 "dl_argv", url, output_dir=tmpdir, profile_name=profile_name,
                 output_name=output_name, playlist_items=playlist_items,
+                output_template=output_template,
             )
             download.status = "queued"
             if with_cookies:
@@ -4394,6 +4403,44 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
                 manager._run_download(download)
         self.assertTrue(attempts, "no yt-dlp invocation was captured")
         return attempts[0]
+
+
+    def test_a_subscription_template_outranks_the_global_one(self):
+        # One feed can land in its own folder shape while every other
+        # download keeps the user's default.
+        default = self._argv_for(
+            "https://example.com/video", with_cookies=False,
+            config_overrides={"OutputTemplate": "global/%(title)s.%(ext)s"},
+        )
+        self.assertEqual(
+            default[default.index("-o") + 1], "global/%(title)s.%(ext)s")
+
+        overridden = self._argv_for(
+            "https://example.com/video", with_cookies=False,
+            config_overrides={"OutputTemplate": "global/%(title)s.%(ext)s"},
+            output_template="%(uploader)s/%(title)s.%(ext)s",
+        )
+        # Bounded on the way through, the same as any accepted template:
+        # normalize_output_template caps each field so a long uploader name
+        # cannot push the path past MAX_PATH.
+        self.assertEqual(
+            overridden[overridden.index("-o") + 1],
+            ad.normalize_output_template("%(uploader)s/%(title)s.%(ext)s"),
+        )
+        self.assertIn("%(uploader)", overridden[overridden.index("-o") + 1])
+
+    def test_a_template_that_escapes_the_download_folder_is_refused(self):
+        # It arrives from a subscription record on disk, so the queue
+        # boundary normalises it exactly as it does an API caller's.
+        argv = self._argv_for(
+            "https://example.com/video", with_cookies=False,
+            config_overrides={"OutputTemplate": "global/%(title)s.%(ext)s"},
+            output_template="../../%(title)s.%(ext)s",
+        )
+        self.assertEqual(
+            argv[argv.index("-o") + 1], "global/%(title)s.%(ext)s",
+            "a refused template falls back rather than being sent",
+        )
 
     def test_non_youtube_download_is_single_item_and_cookie_free(self):
         argv = self._argv_for("https://www.reddit.com/r/videos/comments/abc/clip/")

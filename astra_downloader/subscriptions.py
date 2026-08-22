@@ -27,6 +27,8 @@ except ImportError:  # Flat source-path compatibility.
 
 __all__ = (
     "SUBSCRIPTION_SCHEMA_VERSION",
+    "SUBSCRIPTION_VIDEO_FORMATS", "SUBSCRIPTION_AUDIO_FORMATS",
+    "SUBSCRIPTION_QUALITY_CHOICES", "sanitize_subscription_delivery",
     "SUBSCRIPTION_MIN_INTERVAL_MINUTES",
     "SUBSCRIPTION_MAX_INTERVAL_MINUTES",
     "SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS",
@@ -46,7 +48,21 @@ __all__ = (
 )
 
 
-SUBSCRIPTION_SCHEMA_VERSION = 1
+# 2 adds the per-subscription delivery fields below. A version-1 file loads
+# unchanged: every new field has a default that means "use the global
+# setting", which is exactly what a version-1 record did.
+SUBSCRIPTION_SCHEMA_VERSION = 2
+
+# What a subscription may override about how its videos are delivered. An
+# empty value always means "fall back to the global setting", so the absence
+# of an override and an override that matches the global are the same thing.
+# config.py owns the same vocabulary for site profiles; a test pins the two
+# together, because the modules never cross-import.
+SUBSCRIPTION_VIDEO_FORMATS = frozenset({"", "mp4", "mkv", "webm"})
+SUBSCRIPTION_AUDIO_FORMATS = frozenset({"", "mp3", "m4a", "opus", "flac", "wav"})
+SUBSCRIPTION_QUALITY_CHOICES = frozenset({
+    "", "best", "2160", "1440", "1080", "720", "480",
+})
 SUBSCRIPTION_MIN_INTERVAL_MINUTES = 5
 SUBSCRIPTION_MAX_INTERVAL_MINUTES = 7 * 24 * 60
 SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS = 3
@@ -230,6 +246,38 @@ def normalize_subscription_candidate(
         "title": title,
         "channel": channel,
         "uploadDate": upload_date,
+    }
+
+
+def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
+    """Reduce a delivery override to the fields a subscription may carry.
+
+    Every value is optional and an empty one means "use the global setting".
+    A format that does not match the chosen kind is dropped rather than
+    corrected: silently turning a requested `mp3` into `mp4` because the
+    subscription is a video one would deliver something nobody asked for.
+    """
+    clean = clean_text or _default_clean_text
+    boolean = coerce_bool or _default_coerce_bool
+    raw = raw if isinstance(raw, dict) else {}
+    audio_only = boolean(raw.get("audioOnly"), False)
+    fmt = clean(raw.get("format"), "", 16).lower()
+    allowed = SUBSCRIPTION_AUDIO_FORMATS if audio_only else SUBSCRIPTION_VIDEO_FORMATS
+    if fmt not in allowed:
+        fmt = ""
+    quality = clean(raw.get("quality"), "", 8).lower()
+    if quality not in SUBSCRIPTION_QUALITY_CHOICES:
+        quality = ""
+    return {
+        "outputDir": clean(raw.get("outputDir"), "", 4096),
+        "format": fmt,
+        "quality": quality,
+        "outputTemplate": clean(raw.get("outputTemplate"), "", 300),
+        "audioOnly": audio_only,
+        # Off by default, and it costs a metadata fetch per already-captured
+        # video on every scan. That is the whole reason it is a choice: a
+        # channel with 500 archived uploads would pay 500 probes an hour.
+        "upgradeIfBetter": boolean(raw.get("upgradeIfBetter"), False),
     }
 
 
@@ -459,6 +507,9 @@ class SubscriptionStore:
             "lastError": self._clean(raw.get("lastError"), "", 500),
             "lastQueued": _safe_nonnegative_int(raw.get("lastQueued")),
             "lastSkipped": _safe_nonnegative_int(raw.get("lastSkipped")),
+            **sanitize_subscription_delivery(
+                raw, clean_text=self._clean, coerce_bool=self._coerce_bool,
+            ),
         }
 
     def _sanitize_archive(self, raw):
@@ -699,7 +750,8 @@ class SubscriptionStore:
                 return False, self._save_failure_message()
             return _copy(record), None
 
-    def add_subscription(self, url, *, interval_minutes=60, enabled=True, title="", now=None):
+    def add_subscription(self, url, *, interval_minutes=60, enabled=True,
+                         title="", delivery=None, now=None):
         url, error = self._normalize_url(url)
         if error or not url or not self._is_youtube_url(url):
             return None, "Subscriptions must use a YouTube channel or playlist URL."
@@ -730,6 +782,10 @@ class SubscriptionStore:
                 "lastError": "",
                 "lastQueued": 0,
                 "lastSkipped": 0,
+                **sanitize_subscription_delivery(
+                    delivery, clean_text=self._clean,
+                    coerce_bool=self._coerce_bool,
+                ),
             }
             self._data["subscriptions"].append(record)
             if not self._save_locked():
@@ -738,7 +794,7 @@ class SubscriptionStore:
             return _copy(record), None
 
     def update_subscription(self, sub_id, *, url=None, interval_minutes=None,
-                            enabled=None, title=None, now=None):
+                            enabled=None, title=None, delivery=None, now=None):
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             if not self._compatible:
@@ -769,6 +825,24 @@ class SubscriptionStore:
                 record["enabled"] = self._coerce_bool(enabled, was_enabled)
             if title is not None:
                 record["title"] = self._clean(title, "", 300)
+            if delivery is not None:
+                # Sanitised as a whole rather than field by field: the format
+                # a subscription may carry depends on whether it is an audio
+                # one, so a partial update has to be resolved against the
+                # kind it is being given, not the kind it had.
+                merged = {
+                    key: record.get(key) for key in
+                    ("outputDir", "format", "quality", "outputTemplate",
+                     "audioOnly", "upgradeIfBetter")
+                }
+                merged.update(
+                    {key: value for key, value in dict(delivery).items()
+                     if value is not None}
+                )
+                record.update(sanitize_subscription_delivery(
+                    merged, clean_text=self._clean,
+                    coerce_bool=self._coerce_bool,
+                ))
             record["updatedAt"] = now
             if record["enabled"] and not was_enabled:
                 record["nextScanAt"] = now
@@ -856,13 +930,20 @@ class SubscriptionStore:
                 return False
             return True
 
-    def reserve_archive(self, key, candidate, subscription_id, now=None):
+    def reserve_archive(self, key, candidate, subscription_id, now=None,
+                        upgrade_height=0):
         """Claim an archive key.
 
         Failed claims are retried with a bounded, increasing delay. Once the
         attempt budget is spent, the scheduler gets a distinct outcome so it
         can name the candidate and its last failure instead of silently
         re-enqueueing it forever.
+
+        ``upgrade_height`` re-opens a completed claim, and only when it is
+        STRICTLY greater than the height already delivered. "The same again"
+        is not an upgrade, and neither is "we no longer know what we got":
+        an entry with no recorded height is left alone rather than re-fetched
+        on the strength of a comparison nobody can make.
         """
         key = self._clean(key, "", 430)
         if not key or not isinstance(candidate, dict):
@@ -874,14 +955,28 @@ class SubscriptionStore:
             existing = self._data["archive"].get(key)
             attempts = 0
             if existing:
-                if existing.get("status") in {"reserved", "queued", "complete"}:
+                delivered = _safe_nonnegative_int(existing.get("deliveredHeight"))
+                upgrade = (
+                    existing.get("status") == "complete"
+                    and delivered > 0
+                    and _safe_nonnegative_int(upgrade_height) > delivered
+                )
+                if existing.get("status") in {"reserved", "queued", "complete"} \
+                        and not upgrade:
                     return RESERVE_ALREADY_PRESENT
-                attempts = _safe_nonnegative_int(existing.get("attempts"))
-                if attempts >= SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS:
-                    return RESERVE_RETRY_EXHAUSTED
-                retry_at = _finite_timestamp(existing.get("nextRetryAt"), None)
-                if retry_at is not None and now < retry_at:
-                    return RESERVE_RETRY_BACKOFF
+                if upgrade:
+                    # An upgrade is a fresh attempt at a video that already
+                    # succeeded, not a retry of a failure, so the attempt
+                    # budget starts over rather than counting toward
+                    # "stopped retrying".
+                    attempts = 0
+                else:
+                    attempts = _safe_nonnegative_int(existing.get("attempts"))
+                    if attempts >= SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS:
+                        return RESERVE_RETRY_EXHAUSTED
+                    retry_at = _finite_timestamp(existing.get("nextRetryAt"), None)
+                    if retry_at is not None and now < retry_at:
+                        return RESERVE_RETRY_BACKOFF
             attempts += 1
             before = {}
             self._snapshot_archive_entry_locked(before, key)
@@ -897,6 +992,12 @@ class SubscriptionStore:
                 "lastError": "",
                 "attempts": attempts,
                 "nextRetryAt": None,
+                # Carried across a re-reservation: an upgrade compares the
+                # newly available height against what is already on disk, and
+                # a fresh entry would compare it against nothing.
+                "deliveredHeight": _safe_nonnegative_int(
+                    (existing or {}).get("deliveredHeight")
+                ),
             }
             removed = self._trim_archive_locked()
             if not self._save_locked():
@@ -922,7 +1023,8 @@ class SubscriptionStore:
             now=now,
         )
 
-    def mark_download(self, download_id, status, error="", now=None):
+    def mark_download(self, download_id, status, error="", now=None,
+                      delivered_height=0):
         download_id = self._clean(download_id, "", 120)
         if not download_id:
             return 0
@@ -944,6 +1046,9 @@ class SubscriptionStore:
                 if status == "complete":
                     entry["completedAt"] = now
                     entry["nextRetryAt"] = None
+                    height = _safe_nonnegative_int(delivered_height)
+                    if height:
+                        entry["deliveredHeight"] = height
                 else:
                     entry["attempts"] = max(
                         1, _safe_nonnegative_int(entry.get("attempts"))
@@ -1018,6 +1123,75 @@ class SubscriptionStore:
         "url", "title", "status", "lastError", "subscriptionId",
         "completedAt", "updatedAt", "createdAt",
     )
+    # What the archive view shows. The same scalars plus the attempt count and
+    # the download it produced, which is what "why is this one failed?" needs.
+    _ARCHIVE_PAGE_FIELDS = _ARCHIVE_HISTORY_FIELDS + (
+        "attempts", "downloadId", "nextRetryAt",
+    )
+
+    def archive_page(self, subscription_id="", *, limit=200, offset=0):
+        """One subscription's captured items, newest first.
+
+        The page exists because the archive is what a subscription actually
+        produced, and until now the only view of it was the aggregate count
+        on the Subscriptions page: "10 archived" with no way to see which ten
+        or to change your mind about one. Bounded because the archive holds
+        up to 20,000 records and the Qt thread renders this.
+        """
+        subscription_id = self._clean(subscription_id, "", 120)
+        limit = max(1, min(1000, int(limit or 200)))
+        offset = max(0, int(offset or 0))
+        with self._lock:
+            rows = [
+                {"key": key, **{
+                    field: entry.get(field)
+                    for field in self._ARCHIVE_PAGE_FIELDS if field in entry
+                }}
+                for key, entry in self._data["archive"].items()
+                if isinstance(entry, dict)
+                and (not subscription_id
+                     or entry.get("subscriptionId") == subscription_id)
+            ]
+        rows.sort(
+            key=lambda row: (
+                _finite_timestamp(row.get("completedAt"), 0.0) or 0.0,
+                _finite_timestamp(row.get("updatedAt"), 0.0) or 0.0,
+            ),
+            reverse=True,
+        )
+        return {
+            "total": len(rows),
+            "offset": offset,
+            "items": rows[offset:offset + limit],
+        }
+
+    def forget_archive_entry(self, key):
+        """Drop one archive claim so the next scan may fetch it again.
+
+        Deliberately not a re-download: the archive is the record of what has
+        been taken, and removing the record is the whole of "let this one
+        through again". The file on disk is not touched — deleting media is
+        the user's business, not a side effect of changing their mind about
+        an archive entry.
+        """
+        key = self._clean(key, "", 430)
+        if not key:
+            return False, "That archive entry no longer exists."
+        with self._lock:
+            if not self._compatible:
+                return False, self._save_failure_message()
+            entry = self._data["archive"].pop(key, None)
+            if entry is None:
+                return False, "That archive entry no longer exists."
+            if entry.get("status") in {"reserved", "queued"}:
+                self._data["archive"][key] = entry
+                return False, (
+                    "That item is being downloaded now; wait for it to finish."
+                )
+            if not self._save_locked():
+                self._data["archive"][key] = entry
+                return False, self._save_failure_message()
+            return True, ""
 
     def archive_history_view(self):
         """Project the archive into the scalar fields History displays.
@@ -1139,6 +1313,8 @@ class SubscriptionManager:
         probe,
         enqueue,
         status_reader=None,
+        height_probe=None,
+        delivered_height_reader=None,
         logger=None,
         activity_registry=None,
         clock=time.time,
@@ -1148,6 +1324,13 @@ class SubscriptionManager:
         self._probe = probe
         self._enqueue = enqueue
         self._status_reader = status_reader or (lambda _download_id: "failed")
+        # Both are optional. Without them a subscription that asked for
+        # upgrades simply never sees one, which is the same behaviour it had
+        # before upgrades existed.
+        self._height_probe = height_probe
+        self._delivered_height_reader = (
+            delivered_height_reader or (lambda _download_id: 0)
+        )
         self._logger = logger or (lambda _message: None)
         self._activity_registry = activity_registry
         self._clock = clock
@@ -1172,6 +1355,16 @@ class SubscriptionManager:
         """Return one archive record without copying the whole archive."""
         return self.store.archive_entry(key)
 
+    def archive_page(self, subscription_id="", *, limit=200, offset=0):
+        """One subscription's captured items, newest first."""
+        return self.store.archive_page(
+            subscription_id, limit=limit, offset=offset,
+        )
+
+    def forget_archive_entry(self, key):
+        """Let a captured item through again on the next scan."""
+        return self.store.forget_archive_entry(key)
+
     def archive_history_view(self):
         """Return the cheap scalar projection History merges into its rows."""
         return self.store.archive_history_view()
@@ -1187,12 +1380,14 @@ class SubscriptionManager:
             "scanning": scanning,
         }
 
-    def add_subscription(self, url, interval_minutes=60, enabled=True, title=""):
+    def add_subscription(self, url, interval_minutes=60, enabled=True,
+                         title="", delivery=None):
         return self.store.add_subscription(
             url,
             interval_minutes=interval_minutes,
             enabled=enabled,
             title=title,
+            delivery=delivery,
         )
 
     def get_subscription(self, sub_id):
@@ -1211,7 +1406,7 @@ class SubscriptionManager:
         return self.store.remove_subscription_with_undo(str(sub_id))
 
     def update_subscription(self, sub_id, **fields):
-        allowed = {"url", "interval_minutes", "enabled", "title"}
+        allowed = {"url", "interval_minutes", "enabled", "title", "delivery"}
         values = {key: value for key, value in fields.items() if key in allowed}
         return self.store.update_subscription(str(sub_id), **values)
 
@@ -1302,8 +1497,33 @@ class SubscriptionManager:
         return self.scan_subscription(sub_id, manual=True)
 
 
-    def _reserve_candidates(self, sub_id, candidates, now):
+    def _upgrade_height(self, subscription, key, candidate):
+        """The best height available for a video already in the archive.
+
+        Returns 0 — meaning "do not re-fetch" — unless the subscription asked
+        for upgrades, the entry is a completed one with a recorded height, and
+        a probe is wired up. The probe costs a metadata fetch per captured
+        video per scan, which is why nothing here happens by default.
+        """
+        if not subscription.get("upgradeIfBetter") or self._height_probe is None:
+            return 0
+        entry = self.store.archive_entry(key)
+        if entry.get("status") != "complete":
+            return 0
+        if not _safe_nonnegative_int(entry.get("deliveredHeight")):
+            return 0
+        try:
+            return max(0, int(self._height_probe(candidate.get("url")) or 0))
+        except Exception as error:  # noqa: BLE001
+            self._logger(
+                f"Could not check {candidate.get('title') or 'an upload'} for a "
+                f"better version: {error}"
+            )
+            return 0
+
+    def _reserve_candidates(self, sub_id, candidates, now, subscription=None):
         """Claim every candidate. Returns the claimed keys and the tallies."""
+        subscription = subscription or {}
         claimed = []
         skipped = 0
         errors = []
@@ -1311,7 +1531,11 @@ class SubscriptionManager:
             if self._stop.is_set():
                 break
             key = subscription_archive_key(candidate)
-            reserved = self.store.reserve_archive(key, candidate, sub_id, now=now)
+            reserved = self.store.reserve_archive(
+                key, candidate, sub_id, now=now,
+                upgrade_height=self._upgrade_height(
+                    subscription, key, candidate),
+            )
             if reserved in (RESERVE_ALREADY_PRESENT, RESERVE_RETRY_BACKOFF):
                 skipped += 1
                 continue
@@ -1386,7 +1610,7 @@ class SubscriptionManager:
         """
         with self.store.batched_saves() as reservation_batch:
             claimed, skipped, errors = self._reserve_candidates(
-                sub_id, candidates, now,
+                sub_id, candidates, now, subscription=started,
             )
         if reservation_batch.failed:
             errors.append(self._persistence_message())
@@ -1492,10 +1716,16 @@ class SubscriptionManager:
 
     def handle_download_completed(self, download_id):
         status = self._status_reader(download_id)
+        try:
+            delivered_height = self._delivered_height_reader(download_id)
+        except Exception as error:  # noqa: BLE001
+            self._logger(f"Could not read the delivered height: {error}")
+            delivered_height = 0
         return self.store.mark_download(
             download_id,
             status,
             error="Scheduled download failed." if status != "complete" else "",
+            delivered_height=delivered_height,
         )
 
     def reconcile_downloads(self, downloads):

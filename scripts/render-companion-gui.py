@@ -92,6 +92,8 @@ CAPTURE_NAMES = (
     "diagnostics-review-light-theme",
     "playlist-review",
     "playlist-review-light-theme",
+    "subscription-delivery",
+    "subscription-archive",
     "command-review",
     "command-review-light-theme",
 )
@@ -1627,6 +1629,87 @@ def main():
                 scenario, "Review Playlist", trigger, validate
             )
 
+        def capture_subscription_delivery(window):
+            record = {
+                "id": "sub_render",
+                "title": "Design Systems Field Notes",
+                "url": "https://www.youtube.com/@astra-studio",
+                "outputDir": r"D:\\Feeds\\Design Systems",
+                "format": "mkv",
+                "quality": "1080",
+                "outputTemplate": "%(upload_date)s %(title)s.%(ext)s",
+                "audioOnly": False,
+                "upgradeIfBetter": True,
+            }
+
+            def trigger():
+                dialog = app_module.SubscriptionDeliveryDialog(window, record)
+                dialog.exec()
+
+            def validate(dialog):
+                delivery = dialog.delivery()
+                if delivery["format"] != "mkv" or delivery["quality"] != "1080":
+                    raise RuntimeError(
+                        f"The delivery form lost its stored choices: {delivery}"
+                    )
+                if not delivery["upgradeIfBetter"]:
+                    raise RuntimeError("The upgrade choice did not render")
+                if not delivery["outputTemplate"]:
+                    raise RuntimeError("The naming template did not render")
+
+            capture_modal_dialog(
+                scenario, "Subscription delivery", trigger, validate
+            )
+
+        def capture_subscription_archive(window):
+            record = {
+                "id": "sub_render",
+                "title": "Design Systems Field Notes",
+                "url": "https://www.youtube.com/@astra-studio",
+            }
+            page = {
+                "total": 4,
+                "offset": 0,
+                "items": [
+                    {"key": "id:a1", "title": "Build a dependable spacing scale",
+                     "status": "complete", "completedAt": 1_760_000_400},
+                    {"key": "id:a2", "title": "Keyboard focus that survives every theme",
+                     "status": "complete", "completedAt": 1_760_000_300},
+                    {"key": "id:a3", "title": "Writing recovery states people can use",
+                     "status": "failed", "lastError": "Sign in to confirm your age",
+                     "completedAt": None},
+                    {"key": "id:a4", "title": "Testing desktop layouts at minimum size",
+                     "status": "queued", "completedAt": None},
+                ],
+            }
+            forgotten = []
+
+            def trigger():
+                dialog = app_module.SubscriptionArchiveDialog(
+                    window, record, page,
+                    lambda key: (forgotten.append(key), (True, ""))[1],
+                )
+                dialog.exec()
+
+            def validate(dialog):
+                if len(dialog.rows) != 4:
+                    raise RuntimeError("The archive view lost a captured item")
+                by_status = {row["status"]: row for row in dialog.rows}
+                if by_status["queued"]["button"].isEnabled():
+                    raise RuntimeError(
+                        "An item being downloaded now must not be forgettable"
+                    )
+                if not by_status["complete"]["button"].isEnabled():
+                    raise RuntimeError("A captured item must be forgettable")
+                # Drive the action, so the capture shows its result state.
+                by_status["complete"]["button"].click()
+                if not forgotten:
+                    raise RuntimeError("Allow again did not reach the store")
+
+            capture_modal_dialog(
+                scenario, "Subscription archive", trigger, validate
+            )
+
         def capture_command_review(window, manager):
             download = fixture_download(
                 manager,
@@ -1695,6 +1778,10 @@ def main():
                     capture_diagnostics(window)
                 elif scenario.startswith("playlist-review"):
                     capture_playlist_review(window)
+                elif scenario == "subscription-delivery":
+                    capture_subscription_delivery(window)
+                elif scenario == "subscription-archive":
+                    capture_subscription_archive(window)
                 elif scenario.startswith("command-review"):
                     capture_command_review(window, manager)
                 else:

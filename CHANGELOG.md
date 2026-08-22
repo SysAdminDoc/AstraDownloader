@@ -33,6 +33,16 @@ repository's git log.
 
 ### Added
 
+- **Subscriptions became an archive manager.** Each one now carries its own
+  destination, format, quality and naming template, so one feed can land in
+  its own folder shape while everything else keeps your defaults. An Archive
+  view lists what a subscription has captured and lets you allow any item
+  through again — that forgets the archive claim and never touches the file
+  on disk. A subscription can also be told to re-fetch a video only when the
+  site offers a taller one than the copy you already have; it is off by
+  default because it costs a lookup per captured video on every scan.
+  Existing subscriptions keep behaving exactly as they did.
+
 - **Windows shell integrations.** The taskbar button now carries a jump list
   with "Paste and download" and "Open downloads folder", and both work from a
   cold start because Windows offers them whether or not the app is running.

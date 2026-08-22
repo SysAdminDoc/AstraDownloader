@@ -7,6 +7,14 @@
       <translation>{count} videos</translation>
     </message>
     <message>
+      <source>Browse</source>
+      <translation>Browse</translation>
+    </message>
+    <message>
+      <source>Allow again</source>
+      <translation>Allow again</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Extension server</translation>
     </message>
@@ -275,6 +283,106 @@
       <translation>Download selected ({count})</translation>
     </message>
     <message>
+      <source>Subscription delivery</source>
+      <translation>Subscription delivery</translation>
+    </message>
+    <message>
+      <source>Subscription delivery settings</source>
+      <translation>Subscription delivery settings</translation>
+    </message>
+    <message>
+      <source>Subscription</source>
+      <translation>Subscription</translation>
+    </message>
+    <message>
+      <source>Anything left empty follows the settings every other download uses. Fill one in to give this subscription its own.</source>
+      <translation>Anything left empty follows the settings every other download uses. Fill one in to give this subscription its own.</translation>
+    </message>
+    <message>
+      <source>Download audio only</source>
+      <translation>Download audio only</translation>
+    </message>
+    <message>
+      <source>Fetch again when a better version appears</source>
+      <translation>Fetch again when a better version appears</translation>
+    </message>
+    <message>
+      <source>Re-download a captured video only when the site offers a taller one than the copy on disk. This checks every captured video on every scan, so it costs a lookup per item.</source>
+      <translation>Re-download a captured video only when the site offers a taller one than the copy on disk. This checks every captured video on every scan, so it costs a lookup per item.</translation>
+    </message>
+    <message>
+      <source>Save to</source>
+      <translation>Save to</translation>
+    </message>
+    <message>
+      <source>The usual download folder</source>
+      <translation>The usual download folder</translation>
+    </message>
+    <message>
+      <source>Subscription download folder</source>
+      <translation>Subscription download folder</translation>
+    </message>
+    <message>
+      <source>Format</source>
+      <translation>Format</translation>
+    </message>
+    <message>
+      <source>Subscription format</source>
+      <translation>Subscription format</translation>
+    </message>
+    <message>
+      <source>Quality</source>
+      <translation>Quality</translation>
+    </message>
+    <message>
+      <source>Subscription quality</source>
+      <translation>Subscription quality</translation>
+    </message>
+    <message>
+      <source>No preference</source>
+      <translation>No preference</translation>
+    </message>
+    <message>
+      <source>Naming template</source>
+      <translation>Naming template</translation>
+    </message>
+    <message>
+      <source>The usual naming template</source>
+      <translation>The usual naming template</translation>
+    </message>
+    <message>
+      <source>Subscription naming template</source>
+      <translation>Subscription naming template</translation>
+    </message>
+    <message>
+      <source>A yt-dlp output template, relative to the folder above. Only the allowed fields are accepted, and it must keep %(ext)s.</source>
+      <translation>A yt-dlp output template, relative to the folder above. Only the allowed fields are accepted, and it must keep %(ext)s.</translation>
+    </message>
+    <message>
+      <source>Save</source>
+      <translation>Save</translation>
+    </message>
+    <message>
+      <source>Choose where this subscription saves</source>
+      <translation>Choose where this subscription saves</translation>
+    </message>
+    <message>
+      <source>Subscription archive</source>
+      <translation>Subscription archive</translation>
+    </message>
+    <message>
+      <source>Captured subscription items</source>
+      <translation>Captured subscription items</translation>
+    </message>
+    <message>
+      <source>Archive action result</source>
+      <translation>Archive action result</translation>
+    </message>
+    <message>
+      <source>Forget this item so the next scan can fetch it again. The file already on disk is left alone.</source>
+      <translation>Forget this item so the next scan can fetch it again. The file already on disk is left alone.</translation>
+    </message>
+    <message>
       <source>Server status indicator: Stopped</source>
       <translation>Server status indicator: Stopped</translation>
     </message>
@@ -431,8 +539,20 @@
       <translation>Scan now</translation>
     </message>
     <message>
+      <source>Delivery</source>
+      <translation>Delivery</translation>
+    </message>
+    <message>
+      <source>Archive</source>
+      <translation>Archive</translation>
+    </message>
+    <message>
       <source>Remove</source>
       <translation>Remove</translation>
+    </message>
+    <message>
+      <source>Delivery settings saved.</source>
+      <translation>Delivery settings saved.</translation>
     </message>
     <message>
       <source>Import this site's cookies or store its username/password to unblock the download waiting on it.</source>
@@ -791,6 +911,18 @@
       <translation>A subscription scan already captured this video. Tick it to download it again.</translation>
     </message>
     <message>
+      <source>{count} captured</source>
+      <translation>{count} captured</translation>
+    </message>
+    <message>
+      <source>Allowed</source>
+      <translation>Allowed</translation>
+    </message>
+    <message>
+      <source>The next scan can fetch that item again.</source>
+      <translation>The next scan can fetch that item again.</translation>
+    </message>
+    <message>
       <source>{name} {page}</source>
       <translation>{name} {page}</translation>
     </message>
@@ -923,10 +1055,6 @@
       <translation>{label}: {path}</translation>
     </message>
     <message>
-      <source>Save to</source>
-      <translation>Save to</translation>
-    </message>
-    <message>
       <source>Send this download somewhere other than the default folder.</source>
       <translation>Send this download somewhere other than the default folder.</translation>
     </message>
@@ -965,6 +1093,18 @@
     <message>
       <source>Every {minutes} min · next scan {next_scan}</source>
       <translation>Every {minutes} min · next scan {next_scan}</translation>
+    </message>
+    <message>
+      <source>Where this subscription saves, and in what format, quality and naming.</source>
+      <translation>Where this subscription saves, and in what format, quality and naming.</translation>
+    </message>
+    <message>
+      <source>What this subscription has captured, and which items to let through again.</source>
+      <translation>What this subscription has captured, and which items to let through again.</translation>
+    </message>
+    <message>
+      <source>That subscription no longer exists.</source>
+      <translation>That subscription no longer exists.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -1379,6 +1519,14 @@
       <translation>This playlist did not return any videos. Close this review and try the link again.</translation>
     </message>
     <message>
+      <source>Nothing captured yet</source>
+      <translation>Nothing captured yet</translation>
+    </message>
+    <message>
+      <source>Items appear here after this subscription's first scan queues something.</source>
+      <translation>Items appear here after this subscription's first scan queues something.</translation>
+    </message>
+    <message>
       <source>{label} status indicator: {value}</source>
       <translation>{label} status indicator: {value}</translation>
     </message>
@@ -1493,6 +1641,10 @@
     <message>
       <source>Try a different search or choose All subscriptions.</source>
       <translation>Try a different search or choose All subscriptions.</translation>
+    </message>
+    <message>
+      <source>The archive could not be read.</source>
+      <translation>The archive could not be read.</translation>
     </message>
     <message>
       <source>Could not read stored sign-ins: {error}</source>
@@ -1795,10 +1947,6 @@
       <translation>Could not read download history: {error}</translation>
     </message>
     <message>
-      <source>Subscription archive</source>
-      <translation>Subscription archive</translation>
-    </message>
-    <message>
       <source>No current message</source>
       <translation>No current message</translation>
     </message>
@@ -1929,10 +2077,6 @@
     <message>
       <source>Status</source>
       <translation>Status</translation>
-    </message>
-    <message>
-      <source>Browse</source>
-      <translation>Browse</translation>
     </message>
     <message>
       <source>Confirm folder</source>
@@ -2341,14 +2485,6 @@
     <message>
       <source>File</source>
       <translation>File</translation>
-    </message>
-    <message>
-      <source>Format</source>
-      <translation>Format</translation>
-    </message>
-    <message>
-      <source>Quality</source>
-      <translation>Quality</translation>
     </message>
     <message>
       <source>Duration</source>
@@ -3493,10 +3629,6 @@
     <message>
       <source>Pinned version for {tool}</source>
       <translation>Pinned version for {tool}</translation>
-    </message>
-    <message>
-      <source>No preference</source>
-      <translation>No preference</translation>
     </message>
     <message>
       <source>Subtitle language</source>
