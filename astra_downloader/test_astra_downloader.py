@@ -24281,5 +24281,217 @@ class ManagedBinaryPinTests(unittest.TestCase):
             _retire_test_window(window)
 
 
+class WindowsShellIntegrationTests(unittest.TestCase):
+    """Jump list, restart registration, and a recoverable delete."""
+
+    def test_a_deleted_file_goes_to_the_recycle_bin(self):
+        # Not mocked: SHFileOperationW either moves the file into the Recycle
+        # Bin or it does not, and a double would only prove the arguments.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "astra recycle probe.mp4"
+            target.write_bytes(b"delete me")
+            ok, reason = ad.send_to_recycle_bin(target)
+            self.assertTrue(ok, reason)
+            self.assertFalse(target.exists())
+
+    def test_the_delete_refuses_what_it_cannot_recycle(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertEqual(
+                ad.send_to_recycle_bin(Path(tmpdir) / "not-there.mp4"),
+                (False, "not-a-file"),
+            )
+            # Path('') is Path('.'), a directory that exists, so an empty
+            # value has to be refused before it becomes a path.
+            self.assertEqual(ad.send_to_recycle_bin(""), (False, "no-path"))
+            self.assertEqual(ad.send_to_recycle_bin(None), (False, "no-path"))
+            self.assertEqual(
+                ad.send_to_recycle_bin(tmpdir), (False, "not-a-file"),
+                "a folder is not a queue item and must not be recycled",
+            )
+
+    def test_the_restart_command_line_is_bounded_by_whole_arguments(self):
+        self.assertEqual(
+            ad.build_restart_command_line(["--start-server"]), "--start-server")
+        self.assertEqual(
+            ad.build_restart_command_line(["--start-server", "--portable"]),
+            "--start-server --portable",
+        )
+        self.assertEqual(ad.build_restart_command_line([]), "")
+        self.assertEqual(ad.build_restart_command_line(["", "  "]), "")
+        # RegisterApplicationRestart rejects 1024 characters or more. Half an
+        # argument is a different request from the registered one, so the
+        # overflowing argument is dropped rather than cut.
+        long_argument = "--x" * 400
+        bounded = ad.build_restart_command_line(
+            ["--start-server", long_argument, "--portable"])
+        self.assertEqual(bounded, "--start-server")
+        self.assertLess(len(bounded), ad.RESTART_MAX_COMMAND_LINE)
+
+    def test_windows_accepts_the_restart_registration(self):
+        self.assertTrue(ad.register_application_restart(["--start-server"]))
+
+    def test_the_registered_restart_argument_starts_the_server_again(self):
+        # The reboot itself cannot be driven from a test. What can be driven
+        # is the whole path either side of it: the arguments Windows is given,
+        # and what this app does when it is launched with them.
+        _get_qapp_or_skip(self)
+        registered = ad.build_restart_command_line(["--start-server"])
+        self.assertEqual(
+            ad.startup_command_from_argv(registered.split()), "start")
+
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        started = []
+        try:
+            window._start_server = lambda: started.append(True)
+            window._handle_instance_command("start")
+            self.assertEqual(started, [True])
+        finally:
+            _retire_test_window(window)
+
+    def test_a_portable_copy_registers_its_own_mode(self):
+        # A portable copy relaunched without --portable would come back
+        # reading the installed AppData state instead of its own.
+        self.assertEqual(
+            ad.build_restart_command_line(["--start-server", "--portable"]),
+            "--start-server --portable",
+        )
+        source = inspect.getsource(ad.main)
+        self.assertIn("register_application_restart(", source)
+        self.assertIn("['--portable'] if is_portable_mode() else []", source)
+
+    def test_a_jump_list_task_survives_a_cold_start(self):
+        # Windows offers these whether or not the app is running, so argv has
+        # to name them and a second launch has to delegate rather than die in
+        # the single-instance guard.
+        self.assertEqual(
+            ad.jump_list_command_from_argv(["--paste-download"]), "paste")
+        self.assertEqual(
+            ad.jump_list_command_from_argv(["--open-downloads"]), "downloads")
+        self.assertEqual(ad.jump_list_command_from_argv(["--start-server"]), "")
+        self.assertEqual(
+            ad.startup_command_from_argv(["--paste-download"]), "jump paste")
+        self.assertEqual(
+            ad.startup_command_from_argv(["--open-downloads"]), "jump downloads")
+        self.assertEqual(
+            ad.startup_command_from_argv(["--start-server"]), "start")
+
+    def test_every_task_names_an_argument_the_app_understands(self):
+        tasks = ad.jump_list_tasks()
+        self.assertTrue(tasks)
+        for task in tasks:
+            with self.subTest(task=task["title"]):
+                self.assertTrue(task["title"])
+                self.assertTrue(task["description"])
+                self.assertTrue(
+                    ad.jump_list_command_from_argv([task["arguments"]]),
+                    f"{task['arguments']} is offered but never handled",
+                )
+
+    def test_windows_accepts_and_stores_the_jump_list(self):
+        published = ad.JumpList().publish(
+            ad.current_executable_path(),
+            app_id="SysAdminDoc.AstraDownloader.Test",
+        )
+        self.assertTrue(published, "Windows refused the jump list")
+
+    def test_a_shortcut_carries_the_taskbar_identity(self):
+        # Without this the jump list is published and never shown: Windows
+        # keys it to the shortcut's AppUserModelID, and WScript.Shell — which
+        # writes every .lnk here — cannot set a property-store value.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lnk = Path(tmpdir) / "Astra Downloader.lnk"
+            subprocess.run(
+                [ad.system32_command("powershell"), "-NoProfile", "-Command",
+                 ad.build_shortcut_command(lnk, sys.executable, ["--start-server"])],
+                capture_output=True, timeout=60,
+            )
+            if not lnk.is_file():
+                self.skipTest("PowerShell did not write a shortcut here")
+            self.assertTrue(ad.stamp_shortcut_app_user_model_id(lnk))
+            read_back = subprocess.run(
+                [ad.system32_command("powershell"), "-NoProfile", "-Command",
+                 "$s=New-Object -ComObject Shell.Application;"
+                 f"$f=$s.Namespace('{tmpdir}');"
+                 "$i=$f.ParseName('Astra Downloader.lnk');"
+                 "$i.ExtendedProperty('System.AppUserModel.ID')"],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertEqual(
+                (read_back.stdout or "").strip(), ad.APP_USER_MODEL_ID,
+                "the shell does not see the identity we wrote",
+            )
+            self.assertFalse(
+                ad.stamp_shortcut_app_user_model_id(Path(tmpdir) / "gone.lnk"))
+
+    def test_the_paste_task_refuses_a_clipboard_that_is_not_a_link(self):
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        started = []
+        try:
+            window._start_quick_download = lambda: started.append(True)
+            QApplication.clipboard().setText("just some prose, not a link")
+            self.assertFalse(window.run_jump_list_task("paste"))
+            self.assertEqual(started, [])
+            self.assertIn("Copy a video link", window.quick_download_status.text())
+
+            QApplication.clipboard().setText(
+                "https://www.youtube.com/watch?v=abc12345678")
+            self.assertTrue(window.run_jump_list_task("paste"))
+            self.assertEqual(started, [True])
+            self.assertIn("youtube.com", window.quick_download_url.text())
+
+            opened = []
+            window._open_folder = lambda: opened.append(True)
+            self.assertTrue(window.run_jump_list_task("downloads"))
+            self.assertEqual(opened, [True])
+            self.assertFalse(window.run_jump_list_task("nonsense"))
+        finally:
+            QApplication.clipboard().clear()
+            _retire_test_window(window)
+
+    def test_the_queue_menu_deletes_through_the_recycle_bin(self):
+        _get_qapp_or_skip(self)
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                target = Path(tmpdir) / "clip.mp4"
+                target.write_bytes(b"finished download")
+                download = ad.Download("dl_bin", "https://example.com/clip")
+                download.status = "complete"
+                download.filename = str(target)
+
+                menu = window._download_card_menu(download, window)
+                actions = {action.text(): action for action in menu.actions()}
+                self.assertIn("Delete file", actions)
+                self.assertTrue(actions["Delete file"].isEnabled())
+
+                self.assertTrue(window._delete_download_file(download))
+                self.assertFalse(target.exists())
+                self.assertIn("Recycle Bin", window.quick_download_status.text())
+
+                # A file that is already gone reports the failure rather than
+                # claiming a delete that did not happen.
+                self.assertFalse(window._delete_download_file(download))
+        finally:
+            _retire_test_window(window)
+
+
 if __name__ == "__main__":
     unittest.main()

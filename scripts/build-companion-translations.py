@@ -670,6 +670,14 @@ CATALOGS = {
             "Abspielen",
         "Show in folder":
             "Im Ordner anzeigen",
+        "Delete file":
+            "Datei löschen",
+        "Moved to the Recycle Bin.":
+            "In den Papierkorb verschoben.",
+        "That file could not be moved to the Recycle Bin.":
+            "Diese Datei konnte nicht in den Papierkorb verschoben werden.",
+        "Copy a video link, then choose Paste and download.":
+            "Kopieren Sie einen Videolink und wählen Sie dann Einfügen und herunterladen.",
         "Copy link":
             "Link kopieren",
         "Download again":

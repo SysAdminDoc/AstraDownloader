@@ -4130,6 +4130,12 @@ def download_url_from_protocol_argv(argv=None):
 
 def startup_command_from_argv(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
+    jump_task = jump_list_command_from_argv(args)
+    if jump_task:
+        # Delegating means the running window acts on it; without this a
+        # jump-list click on a running app starts a second process that the
+        # single-instance guard then throws away, doing nothing at all.
+        return f'jump {jump_task}'
     for arg in args:
         value = str(arg).strip().lower()
         if value in ('--start-server', '-start-server', 'start'):
@@ -4228,6 +4234,9 @@ def _write_shortcut(lnk_path, target, base_args, label):
     if not lnk_path.exists():
         write_persistent_log(f"{label} shortcut was not created at {lnk_path}")
         return False
+    # Windows keys a jump list to the shortcut's AppUserModelID, so a .lnk
+    # without one gets no jump list however the process identifies itself.
+    stamp_shortcut_app_user_model_id(lnk_path)
     return True
 
 
@@ -5222,6 +5231,7 @@ class DownloadManager(DownloadManagerCore):
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
+                'send_to_recycle_bin': lambda *args, **kwargs: send_to_recycle_bin(*args, **kwargs),
                 'subscription_archive_key': lambda *args, **kwargs: subscription_archive_key(*args, **kwargs),
                 'MANAGED_BINARY_NAMES': lambda: MANAGED_BINARY_NAMES,
                 'managed_binary_inventory': lambda *args, **kwargs: managed_binary_inventory(*args, **kwargs),
@@ -5808,6 +5818,7 @@ class MainWindow(MainWindowCore):
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
+                'send_to_recycle_bin': lambda *args, **kwargs: send_to_recycle_bin(*args, **kwargs),
                 'subscription_archive_key': lambda *args, **kwargs: subscription_archive_key(*args, **kwargs),
                 'MANAGED_BINARY_NAMES': lambda: MANAGED_BINARY_NAMES,
                 'managed_binary_inventory': lambda *args, **kwargs: managed_binary_inventory(*args, **kwargs),
@@ -6020,21 +6031,453 @@ class TaskbarProgress:
         return True
 
 
+_GUID_TYPE = None
+
+
+def _guid_type():
+    """The one GUID structure this process uses.
+
+    It used to be declared inside `_guid_from_string`, so every call returned
+    an instance of a *different* class. That is invisible until one GUID is
+    embedded in another structure — ctypes then refuses the assignment with
+    "incompatible types, GUID instance instead of GUID instance", which reads
+    like a ctypes bug and is not one. Built lazily because `ctypes.wintypes`
+    does not import off Windows and this module has to.
+    """
+    global _GUID_TYPE
+    if _GUID_TYPE is None:
+        import ctypes
+        from ctypes import wintypes
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", wintypes.DWORD),
+                ("Data2", wintypes.WORD),
+                ("Data3", wintypes.WORD),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        _GUID_TYPE = GUID
+    return _GUID_TYPE
+
+
 def _guid_from_string(text):
+    import ctypes
+
+    guid = _guid_type()()
+    ctypes.oledll.ole32.CLSIDFromString(str(text), ctypes.byref(guid))
+    return guid
+
+
+# ── Windows shell integrations ────────────────────────────────────────────
+# All three below are courtesies. Every one of them is guarded, because a
+# downloader that will not start because a shell interface was unavailable
+# would be a worse bug than a missing jump list.
+
+# SHFileOperationW, which is the only delete Windows will put in the Recycle
+# Bin. IFileOperation is its modern replacement and needs a COM apartment and
+# five interfaces to do the same job; this one is a struct and a call.
+FO_DELETE = 0x0003
+FOF_SILENT = 0x0004
+FOF_NOCONFIRMATION = 0x0010
+FOF_ALLOWUNDO = 0x0040
+FOF_NOERRORUI = 0x0400
+
+
+def send_to_recycle_bin(path):
+    """Delete one file recoverably. Returns (ok, reason).
+
+    A queue entry the user deletes is a file they may want back — a mistyped
+    quality, the wrong item of a playlist — and `os.remove` gives them no
+    route to it. The flags suppress every dialog: the confirmation belongs to
+    the app, not to a shell popup behind its window.
+    """
+    text = str(path or '').strip()
+    if not text:
+        # Path('') is Path('.'), which is a directory that exists, so the
+        # emptiness has to be caught before it becomes a path at all.
+        return False, 'no-path'
+    target = Path(text)
+    try:
+        if not target.is_file():
+            return False, 'not-a-file'
+    except OSError as error:
+        # reason: an unreachable drive cannot be recycled and is not an app failure
+        return False, f'unreadable: {error}'
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [
+                ("hwnd", wintypes.HWND),
+                ("wFunc", wintypes.UINT),
+                ("pFrom", wintypes.LPCWSTR),
+                ("pTo", wintypes.LPCWSTR),
+                ("fFlags", ctypes.c_ushort),
+                ("fAnyOperationsAborted", wintypes.BOOL),
+                ("hNameMappings", ctypes.c_void_p),
+                ("lpszProgressTitle", wintypes.LPCWSTR),
+            ]
+
+        # pFrom is a double-null-terminated list, not a string. One trailing
+        # NUL ends the name and the second ends the list; without it the API
+        # reads past the buffer for a name nobody supplied.
+        operation = SHFILEOPSTRUCTW(
+            None, FO_DELETE, str(target.resolve()) + '\0\0', None,
+            FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+            False, None, None,
+        )
+        result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(operation))
+    except Exception as error:  # noqa: BLE001
+        write_persistent_log(f'Recycle Bin delete failed for a queue item: {error}')
+        return False, str(error)
+    if result != 0:
+        write_persistent_log(
+            f'Windows refused a Recycle Bin delete (code {result})'
+        )
+        return False, f'shell-error-{result}'
+    if operation.fAnyOperationsAborted:
+        return False, 'aborted'
+    return True, ''
+
+
+# RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_PATCH: Windows should
+# relaunch this process after an update reboot, and not after a crash or a
+# hang — a downloader that revives itself after crashing hides the crash.
+RESTART_NO_CRASH = 1
+RESTART_NO_HANG = 2
+RESTART_NO_PATCH = 4
+RESTART_MAX_COMMAND_LINE = 1024
+
+
+def build_restart_command_line(args, *, max_length=RESTART_MAX_COMMAND_LINE):
+    """Return the argument string Windows should relaunch this app with.
+
+    RegisterApplicationRestart takes arguments only — Windows supplies the
+    executable — and rejects anything at or over 1024 characters. Arguments
+    that would not fit are dropped rather than truncated, because half an
+    argument is a different request from the one that was registered.
+    """
+    parts = []
+    for arg in args or ():
+        text = str(arg).strip()
+        if not text:
+            continue
+        candidate = parts + [text]
+        if len(command_line(candidate)) >= max_length:
+            break
+        parts = candidate
+    return command_line(parts)
+
+
+def register_application_restart(args=('--start-server',)):
+    """Ask Windows to relaunch this app after it reboots for an update.
+
+    Without this, a Windows Update reboot ends a running queue silently: the
+    process is gone and nothing brings it back until the user notices.
+    """
+    command = build_restart_command_line(args)
+    try:
+        import ctypes
+
+        result = ctypes.windll.kernel32.RegisterApplicationRestart(
+            ctypes.c_wchar_p(command or None),
+            RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_PATCH,
+        )
+    except Exception as error:  # noqa: BLE001
+        # reason: a host without the export simply does not restart the app
+        write_persistent_log(f'Could not register for restart: {error}')
+        return False
+    if result != 0:
+        write_persistent_log(
+            f'Windows refused the restart registration (HRESULT {result:#010x})'
+        )
+        return False
+    return True
+
+
+# Jump-list tasks. Context-free by definition: Windows shows them whether or
+# not the app is running, so each one has to make sense as a cold start.
+JUMP_LIST_TASK_PASTE = '--paste-download'
+JUMP_LIST_TASK_DOWNLOADS = '--open-downloads'
+
+
+def jump_list_tasks():
+    """The Tasks a right-click on the taskbar button offers."""
+    return (
+        {
+            'title': 'Paste and download',
+            'arguments': JUMP_LIST_TASK_PASTE,
+            'description': 'Open Astra Downloader with the clipboard link ready.',
+        },
+        {
+            'title': 'Open downloads folder',
+            'arguments': JUMP_LIST_TASK_DOWNLOADS,
+            'description': 'Show the folder downloads are saved to.',
+        },
+    )
+
+
+def jump_list_command_from_argv(argv=None):
+    """Which jump-list task this launch was started by, if any."""
+    args = sys.argv[1:] if argv is None else list(argv)
+    for arg in args:
+        value = str(arg).strip().lower()
+        if value == JUMP_LIST_TASK_PASTE:
+            return 'paste'
+        if value == JUMP_LIST_TASK_DOWNLOADS:
+            return 'downloads'
+    return ''
+
+
+class JumpList:
+    """ICustomDestinationList Tasks for the taskbar button.
+
+    Windows matches a jump list to a shortcut by AppUserModelID, which is why
+    `set_app_user_model_id` and the Start-menu shortcut both have to name the
+    same string. Publishing without that match is not an error — the list is
+    simply never shown — so this fails quiet and logs.
+    """
+
+    CLSID_DESTINATION_LIST = "{77F10CF0-3DB5-4966-B520-B7C54FD35ED6}"
+    IID_CUSTOM_DESTINATION_LIST = "{6332DEBF-87B5-4670-90C0-5E57B408A49E}"
+    CLSID_OBJECT_COLLECTION = "{2D3468C1-36A7-43B6-AC24-D3F02FD9607A}"
+    IID_OBJECT_ARRAY = "{92CA9DCD-5622-4BBA-A805-5E9F541BD8C9}"
+    IID_OBJECT_COLLECTION = "{5632B1A4-E38A-400A-928A-D4CD63230295}"
+    CLSID_SHELL_LINK = "{00021401-0000-0000-C000-000000000046}"
+    IID_SHELL_LINK_W = "{000214F9-0000-0000-C000-000000000046}"
+    IID_PROPERTY_STORE = "{886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99}"
+    # System.Title. A task with no title renders as a blank row.
+    PKEY_TITLE_FMTID = "{F29F85E0-4FF9-1068-AB91-08002B27B3D9}"
+    PKEY_TITLE_PID = 2
+
+    # ICustomDestinationList: IUnknown 0-2, then SetAppID 3, BeginList 4,
+    # AppendCategory 5, AppendKnownCategory 6, AddUserTasks 7, CommitList 8,
+    # ... AbortList 11.
+    VTBL_SET_APP_ID = 3
+    VTBL_BEGIN_LIST = 4
+    VTBL_ADD_USER_TASKS = 7
+    VTBL_COMMIT_LIST = 8
+    VTBL_ABORT_LIST = 11
+    # IObjectCollection: IObjectArray takes 3-4, then AddObject 5.
+    VTBL_ADD_OBJECT = 5
+    # IShellLinkW: SetPath 20, SetArguments 11, SetDescription 7,
+    # SetIconLocation 17.
+    VTBL_SET_DESCRIPTION = 7
+    VTBL_SET_ARGUMENTS = 11
+    VTBL_SET_ICON_LOCATION = 17
+    VTBL_SET_PATH = 20
+    # IPropertyStore: IUnknown 0-2, GetCount 3, GetAt 4, GetValue 5,
+    # SetValue 6, Commit 7.
+    VTBL_SET_VALUE = 6
+    VTBL_COMMIT = 7
+    VTBL_RELEASE = 2
+
+    def __init__(self, logger=None):
+        self._logger = logger or write_persistent_log
+
+    @staticmethod
+    def _call(pointer, slot, argtypes, *args):
+        import ctypes
+
+        vtable = ctypes.cast(
+            pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        )[0]
+        prototype = ctypes.WINFUNCTYPE(
+            ctypes.HRESULT, ctypes.c_void_p, *argtypes
+        )
+        return prototype(vtable[slot])(pointer, *args)
+
+    def _create(self, clsid, iid):
+        import ctypes
+
+        pointer = ctypes.c_void_p()
+        ctypes.oledll.ole32.CoCreateInstance(
+            ctypes.byref(_guid_from_string(clsid)), None, 1,
+            ctypes.byref(_guid_from_string(iid)), ctypes.byref(pointer),
+        )
+        return pointer
+
+    def _release(self, pointer):
+        if pointer:
+            try:
+                self._call(pointer, self.VTBL_RELEASE, [])
+            except Exception:
+                # reason: a failed release leaks one interface for the process lifetime
+                pass
+
+    def _task_link(self, executable, task, icon_path=''):
+        import ctypes
+        from ctypes import wintypes
+
+        link = self._create(self.CLSID_SHELL_LINK, self.IID_SHELL_LINK_W)
+        self._call(link, self.VTBL_SET_PATH, [wintypes.LPCWSTR], str(executable))
+        self._call(link, self.VTBL_SET_ARGUMENTS, [wintypes.LPCWSTR],
+                   str(task.get('arguments', '')))
+        self._call(link, self.VTBL_SET_DESCRIPTION, [wintypes.LPCWSTR],
+                   str(task.get('description', '')))
+        if icon_path:
+            self._call(link, self.VTBL_SET_ICON_LOCATION,
+                       [wintypes.LPCWSTR, ctypes.c_int], str(icon_path), 0)
+        # The visible row text is System.Title on the link's property store,
+        # not SetDescription — that is the hover tooltip.
+        store = ctypes.c_void_p()
+        self._call(link, 0, [ctypes.c_void_p, ctypes.c_void_p],
+                   ctypes.byref(_guid_from_string(self.IID_PROPERTY_STORE)),
+                   ctypes.byref(store))
+        try:
+            self._call(store, self.VTBL_SET_VALUE,
+                       [ctypes.c_void_p, ctypes.c_void_p],
+                       ctypes.byref(_property_key(self.PKEY_TITLE_FMTID,
+                                                  self.PKEY_TITLE_PID)),
+                       ctypes.byref(_propvariant_from_string(
+                           str(task.get('title', '')))))
+            self._call(store, self.VTBL_COMMIT, [])
+        finally:
+            self._release(store)
+        return link
+
+    def publish(self, executable, tasks=None, app_id=APP_USER_MODEL_ID,
+                icon_path=''):
+        """Replace the Tasks category. Returns whether Windows accepted it."""
+        import ctypes
+        from ctypes import wintypes
+
+        tasks = list(tasks if tasks is not None else jump_list_tasks())
+        if not executable or not tasks:
+            return False
+        destinations = None
+        collection = None
+        links = []
+        try:
+            ctypes.oledll.ole32.CoInitializeEx(None, 0x2)
+            destinations = self._create(self.CLSID_DESTINATION_LIST,
+                                        self.IID_CUSTOM_DESTINATION_LIST)
+            self._call(destinations, self.VTBL_SET_APP_ID,
+                       [wintypes.LPCWSTR], str(app_id))
+            slots = ctypes.c_uint()
+            removed = ctypes.c_void_p()
+            self._call(destinations, self.VTBL_BEGIN_LIST,
+                       [ctypes.POINTER(ctypes.c_uint), ctypes.c_void_p,
+                        ctypes.c_void_p],
+                       ctypes.byref(slots),
+                       ctypes.byref(_guid_from_string(self.IID_OBJECT_ARRAY)),
+                       ctypes.byref(removed))
+            self._release(removed)
+            collection = self._create(self.CLSID_OBJECT_COLLECTION,
+                                      self.IID_OBJECT_COLLECTION)
+            for task in tasks:
+                link = self._task_link(executable, task, icon_path)
+                links.append(link)
+                self._call(collection, self.VTBL_ADD_OBJECT,
+                           [ctypes.c_void_p], link)
+            self._call(destinations, self.VTBL_ADD_USER_TASKS,
+                       [ctypes.c_void_p], collection)
+            self._call(destinations, self.VTBL_COMMIT_LIST, [])
+        except Exception as error:  # noqa: BLE001
+            self._logger(f'Jump list is unavailable: {error}')
+            if destinations is not None:
+                try:
+                    self._call(destinations, self.VTBL_ABORT_LIST, [])
+                except Exception:
+                    # reason: an aborted list Windows never began needs no cleanup
+                    pass
+            return False
+        finally:
+            for link in links:
+                self._release(link)
+            self._release(collection)
+            self._release(destinations)
+        return True
+
+
+def _property_key(fmtid, pid):
     import ctypes
     from ctypes import wintypes
 
-    class GUID(ctypes.Structure):
+    class PROPERTYKEY(ctypes.Structure):
+        _fields_ = [("fmtid", _guid_type()), ("pid", wintypes.DWORD)]
+
+    return PROPERTYKEY(_guid_from_string(fmtid), pid)
+
+
+def _propvariant_from_string(text):
+    import ctypes
+
+    class PROPVARIANT(ctypes.Structure):
         _fields_ = [
-            ("Data1", wintypes.DWORD),
-            ("Data2", wintypes.WORD),
-            ("Data3", wintypes.WORD),
-            ("Data4", ctypes.c_ubyte * 8),
+            ("vt", ctypes.c_ushort),
+            ("wReserved1", ctypes.c_ushort),
+            ("wReserved2", ctypes.c_ushort),
+            ("wReserved3", ctypes.c_ushort),
+            ("pwszVal", ctypes.c_wchar_p),
+            ("padding", ctypes.c_void_p * 2),
         ]
 
-    guid = GUID()
-    ctypes.oledll.ole32.CLSIDFromString(str(text), ctypes.byref(guid))
-    return guid
+    variant = PROPVARIANT()
+    variant.vt = 31  # VT_LPWSTR
+    variant.pwszVal = str(text)
+    return variant
+
+
+# System.AppUserModel.ID. Windows will not show a jump list unless the
+# shortcut the user launched from carries the same identity the process
+# claims, and WScript.Shell — which writes every .lnk here — cannot set a
+# property-store value at all.
+PKEY_APP_USER_MODEL_ID_FMTID = "{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}"
+PKEY_APP_USER_MODEL_ID_PID = 5
+# IPersistFile: IUnknown 0-2, GetClassID 3, IsDirty 4, Load 5, Save 6.
+IID_PERSIST_FILE = "{0000010B-0000-0000-C000-000000000046}"
+VTBL_PERSIST_LOAD = 5
+VTBL_PERSIST_SAVE = 6
+# STGM_READWRITE. Loading with the default STGM_READ makes the later Save
+# fail with a bare Access Denied that names neither the file nor the mode.
+STGM_READWRITE = 0x00000002
+
+
+def stamp_shortcut_app_user_model_id(lnk_path, app_id=APP_USER_MODEL_ID):
+    """Write the AppUserModelID onto an existing .lnk. Returns whether it took."""
+    import ctypes
+    from ctypes import wintypes
+
+    path = Path(lnk_path)
+    if not path.is_file():
+        return False
+    jump = JumpList()
+    link = None
+    persist = ctypes.c_void_p()
+    store = ctypes.c_void_p()
+    try:
+        ctypes.oledll.ole32.CoInitializeEx(None, 0x2)
+        link = jump._create(JumpList.CLSID_SHELL_LINK, JumpList.IID_SHELL_LINK_W)
+        jump._call(link, 0, [ctypes.c_void_p, ctypes.c_void_p],
+                   ctypes.byref(_guid_from_string(IID_PERSIST_FILE)),
+                   ctypes.byref(persist))
+        jump._call(persist, VTBL_PERSIST_LOAD,
+                   [wintypes.LPCWSTR, wintypes.DWORD], str(path),
+                   STGM_READWRITE)
+        jump._call(link, 0, [ctypes.c_void_p, ctypes.c_void_p],
+                   ctypes.byref(_guid_from_string(JumpList.IID_PROPERTY_STORE)),
+                   ctypes.byref(store))
+        jump._call(store, JumpList.VTBL_SET_VALUE,
+                   [ctypes.c_void_p, ctypes.c_void_p],
+                   ctypes.byref(_property_key(PKEY_APP_USER_MODEL_ID_FMTID,
+                                              PKEY_APP_USER_MODEL_ID_PID)),
+                   ctypes.byref(_propvariant_from_string(str(app_id))))
+        jump._call(store, JumpList.VTBL_COMMIT, [])
+        jump._call(persist, VTBL_PERSIST_SAVE,
+                   [wintypes.LPCWSTR, wintypes.BOOL], str(path), True)
+    except Exception as error:  # noqa: BLE001
+        write_persistent_log(
+            f'Could not stamp the taskbar identity onto {path.name}: {error}'
+        )
+        return False
+    finally:
+        jump._release(store)
+        jump._release(persist)
+        jump._release(link)
+    return True
 
 
 def spawn_detached(command):
@@ -6390,6 +6833,18 @@ def main():
     # second, unpinned button, and it is also the identity toasts are
     # attributed to.
     set_app_user_model_id()
+    if not visual_smoke:
+        # A Windows Update reboot otherwise ends a running queue silently:
+        # the process is gone and nothing brings it back.
+        register_application_restart(
+            ['--start-server'] + (['--portable'] if is_portable_mode() else [])
+        )
+        # Published every launch rather than at install time, because the
+        # list is keyed to the executable path and a portable copy moves.
+        JumpList().publish(
+            current_executable_path(),
+            icon_path=str(ICON_PATH) if ICON_PATH.exists() else '',
+        )
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -6463,6 +6918,13 @@ def main():
     protocol_url = download_url_from_protocol_argv()
     if protocol_url and not visual_smoke:
         QTimer.singleShot(0, lambda: window.enqueue_protocol_download(protocol_url))
+
+    # A jump-list task is a cold start by definition — Windows offers it
+    # whether or not the app is running — so it has to work from argv here as
+    # well as over the instance socket.
+    jump_task = jump_list_command_from_argv()
+    if jump_task and not visual_smoke:
+        QTimer.singleShot(0, lambda: window.run_jump_list_task(jump_task))
 
     # The visual-smoke path exercises the frozen UI without installing system
     # integrations, starting the local server, or bootstrapping helper tools.
