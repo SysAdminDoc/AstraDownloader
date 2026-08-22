@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: a subscription carries its own destination, format, quality and template; an archive view lists captured items with an "allow re-download" action; a re-scan fetches only when the available format is a strict upgrade over what is on disk; schema migration covers existing records.
   Complexity: XL
 
-- [ ] P2 — AD-30 — Mint PO tokens from a sidecar the app owns
-  Why: `po-token-required` is a named failure cause with advice but no remedy, because `--no-plugin-dirs` is a stated security property and bgutil's provider is plugin-only. The non-plugin route is `--extractor-args "youtube:po_token=CLIENT.CONTEXT+TOKEN"`, so the app can run the provider as a managed binary it controls, mint per-video, and pass the token on argv — keeping third-party code out of yt-dlp's process.
-  Evidence: `astra_downloader/download.py:627, 3002-3008`; `SECURITY.md` §"yt-dlp is spawned with its plugin directories disabled"; yt-dlp PO Token Guide; yt-dlp#14404 (380 reactions), #15012 (226).
-  Touches: `astra_downloader/health.py`, `astra_downloader.py`, `download.py`, `license-policy.json`
-  Acceptance: with the sidecar running, a video that previously failed `po-token-required` succeeds; with it absent, behaviour and the named cause are unchanged; no yt-dlp plugin directory is enabled. *Needs live validation that a self-minted token is accepted on the pinned 2026.7.4.*
-  Complexity: L
-
 - [ ] P2 — AD-40 — Detect archived items the source has since deleted
   Why: an archive whose upstream entry disappears silently rots. Tartube's "Missing Videos" folder is the only implementation in the field, and pinchflat#805 (11 reactions) asks for the inverse guarantee — do not re-download what the user deleted locally. Both need the same reconciliation between the archive and the last scan.
   Evidence: Tartube README §6.25; pinchflat#805; `astra_downloader/subscriptions.py` archive keys.

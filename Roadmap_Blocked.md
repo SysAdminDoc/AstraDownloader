@@ -54,6 +54,45 @@ their behalf.
 project is distributed through GitHub Releases only and the manifest directory
 is retired.
 
+## AD-30 — Mint PO tokens from a sidecar the app owns — needs a licence review
+
+**State:** the argv route is confirmed and the candidate is identified, so the
+research half of this item is done. `--extractor-args
+"youtube:po_token=CLIENT.CONTEXT+TOKEN"` takes a token on the command line, so
+the plugin-free posture (`--no-plugin-dirs`) survives a provider running
+beside yt-dlp rather than inside it.
+
+**What the survey found (2026-08-22):**
+
+- `Brainicism/bgutil-ytdlp-pot-provider` 1.3.2 publishes exactly one asset, an
+  8 KB source zip. Running it means an `npm install` tree at setup time, which
+  this project does not do and could not checksum-verify.
+- `jim60105/bgutil-ytdlp-pot-provider-rs` v0.8.1 does publish a standalone
+  `bgutil-pot-windows-x86_64.exe` (45.7 MB), which is a managed binary this
+  app could own. It ships no checksum sidecar file, but the GitHub release
+  API carries a per-asset `digest`, and `fetch_expected_sha256` could be
+  taught to read it — the app already talks to that API and already meters
+  its anonymous budget.
+
+**What is blocked:** adding a runtime helper to `license-policy.json` requires
+`"licenseReviewed": true`, and `scripts/resolve-runtime-helpers.js` refuses to
+approve an entry without it — on purpose, so that adding a helper cannot
+approve it by simply running staging. Reading a third party's terms and
+accepting them on the maintainer's behalf is the human judgement that gate
+exists to demand. A 45.7 MB binary that talks to YouTube on the user's behalf
+is also exactly the kind of dependency that deserves it.
+
+**Also unvalidated:** the acceptance says "a video that previously failed
+`po-token-required` succeeds". That precondition cannot be manufactured — it
+needs YouTube to be gating this machine at the time of the test. Whoever picks
+this up needs a reproducible failing video, not a green suite.
+
+**To unblock:** the maintainer reads the provider's licence and its supply
+chain, decides whether a 45.7 MB third-party binary belongs in this install,
+and sets `licenseReviewed` on the policy entry. The implementation after that
+is: manage the exe like Deno, run it in HTTP-server mode on loopback, mint per
+video, and pass the token on argv. No plugin directory is enabled at any point.
+
 ## AD-53 — Set `SABR_NATIVE_MIN_VERSION` — waits on an upstream merge
 
 **State:** the wiring is already there. `evaluate_sabr_support` returns
