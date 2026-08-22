@@ -155,8 +155,8 @@
       <translation>Review playlist videos</translation>
     </message>
     <message>
-      <source>Choose which videos should be added to the download queue.</source>
-      <translation>Choose which videos should be added to the download queue.</translation>
+      <source>Choose which videos should be added to the download queue, and change the format, quality or name of any of them.</source>
+      <translation>Choose which videos should be added to the download queue, and change the format, quality or name of any of them.</translation>
     </message>
     <message>
       <source>(untitled playlist)</source>
@@ -187,6 +187,26 @@
       <translation>Select unselected videos and clear selected videos.</translation>
     </message>
     <message>
+      <source>Apply to selected</source>
+      <translation>Apply to selected</translation>
+    </message>
+    <message>
+      <source>Format to apply to the selected videos</source>
+      <translation>Format to apply to the selected videos</translation>
+    </message>
+    <message>
+      <source>Quality to apply to the selected videos</source>
+      <translation>Quality to apply to the selected videos</translation>
+    </message>
+    <message>
+      <source>Apply</source>
+      <translation>Apply</translation>
+    </message>
+    <message>
+      <source>Give every selected video the format and quality chosen here.</source>
+      <translation>Give every selected video the format and quality chosen here.</translation>
+    </message>
+    <message>
       <source>Cancel</source>
       <translation>Cancel</translation>
     </message>
@@ -201,6 +221,50 @@
     <message>
       <source>Add the selected playlist videos to the download queue.</source>
       <translation>Add the selected playlist videos to the download queue.</translation>
+    </message>
+    <message>
+      <source>(untitled)</source>
+      <translation>(untitled)</translation>
+    </message>
+    <message>
+      <source>Select playlist item {index}: {title}</source>
+      <translation>Select playlist item {index}: {title}</translation>
+    </message>
+    <message>
+      <source>Duration {duration}</source>
+      <translation>Duration {duration}</translation>
+    </message>
+    <message>
+      <source>Already in the subscription archive.</source>
+      <translation>Already in the subscription archive.</translation>
+    </message>
+    <message>
+      <source>In archive</source>
+      <translation>In archive</translation>
+    </message>
+    <message>
+      <source>Use the naming template</source>
+      <translation>Use the naming template</translation>
+    </message>
+    <message>
+      <source>File name for playlist item {index}</source>
+      <translation>File name for playlist item {index}</translation>
+    </message>
+    <message>
+      <source>Leave empty to name this file the way every other download is named. A name here applies to this video only.</source>
+      <translation>Leave empty to name this file the way every other download is named. A name here applies to this video only.</translation>
+    </message>
+    <message>
+      <source>Format for playlist item {index}</source>
+      <translation>Format for playlist item {index}</translation>
+    </message>
+    <message>
+      <source>Quality for playlist item {index}</source>
+      <translation>Quality for playlist item {index}</translation>
+    </message>
+    <message>
+      <source>Applied to {count} videos</source>
+      <translation>Applied to {count} videos</translation>
     </message>
     <message>
       <source>{selected} of {total} selected</source>
@@ -715,12 +779,8 @@
       <translation>Setting Up</translation>
     </message>
     <message>
-      <source>(untitled)</source>
-      <translation>(untitled)</translation>
-    </message>
-    <message>
-      <source>Select playlist item {index}: {title}</source>
-      <translation>Select playlist item {index}: {title}</translation>
+      <source>A subscription scan already captured this video. Tick it to download it again.</source>
+      <translation>A subscription scan already captured this video. Tick it to download it again.</translation>
     </message>
     <message>
       <source>{name} {page}</source>
@@ -1139,6 +1199,18 @@
       <translation>Enter a playlist URL to review.</translation>
     </message>
     <message>
+      <source>No playlist items selected.</source>
+      <translation>No playlist items selected.</translation>
+    </message>
+    <message>
+      <source>Queued {count} items; the rest were refused: {reason}</source>
+      <translation>Queued {count} items; the rest were refused: {reason}</translation>
+    </message>
+    <message>
+      <source>Queued {count} items from playlist.</source>
+      <translation>Queued {count} items from playlist.</translation>
+    </message>
+    <message>
       <source>yt-dlp {version} is ready.</source>
       <translation>yt-dlp {version} is ready.</translation>
     </message>
@@ -1245,10 +1317,6 @@
     <message>
       <source>Setup failed. Check the log for details.</source>
       <translation>Setup failed. Check the log for details.</translation>
-    </message>
-    <message>
-      <source>Duration {duration}</source>
-      <translation>Duration {duration}</translation>
     </message>
     <message>
       <source>No videos found</source>
@@ -1513,14 +1581,6 @@
     <message>
       <source>Could not preview playlist.</source>
       <translation>Could not preview playlist.</translation>
-    </message>
-    <message>
-      <source>No playlist items selected.</source>
-      <translation>No playlist items selected.</translation>
-    </message>
-    <message>
-      <source>Queued {count} items from playlist.</source>
-      <translation>Queued {count} items from playlist.</translation>
     </message>
     <message>
       <source>Settings status: {message}</source>

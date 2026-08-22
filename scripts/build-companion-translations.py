@@ -1709,6 +1709,31 @@ CATALOGS["de"].update({
     "Download selected": "Auswahl herunterladen",
     "{selected} of {total} selected": "{selected} von {total} ausgewählt",
     "Download selected ({count})": "Auswahl herunterladen ({count})",
+    "Choose which videos should be added to the download queue, and change the format, quality or name of any of them.":
+        "Wählen Sie, welche Videos in die Warteschlange kommen, und ändern Sie "
+        "Format, Qualität oder Namen einzelner Videos.",
+    "Apply to selected": "Auf Auswahl anwenden",
+    "Apply": "Anwenden",
+    "Applied to {count} videos": "Auf {count} Videos angewendet",
+    "Format to apply to the selected videos":
+        "Format, das auf die ausgewählten Videos angewendet wird",
+    "Quality to apply to the selected videos":
+        "Qualität, die auf die ausgewählten Videos angewendet wird",
+    "Give every selected video the format and quality chosen here.":
+        "Allen ausgewählten Videos das hier gewählte Format und die gewählte Qualität geben.",
+    "In archive": "Im Archiv",
+    "Already in the subscription archive.": "Bereits im Abonnement-Archiv.",
+    "A subscription scan already captured this video. Tick it to download it again.":
+        "Ein Abonnement-Scan hat dieses Video bereits erfasst. Ankreuzen, um es erneut zu laden.",
+    "Use the naming template": "Namensvorlage verwenden",
+    "Leave empty to name this file the way every other download is named. A name here applies to this video only.":
+        "Leer lassen, damit diese Datei wie jeder andere Download benannt wird. "
+        "Ein Name hier gilt nur für dieses Video.",
+    "File name for playlist item {index}": "Dateiname für Playlist-Eintrag {index}",
+    "Format for playlist item {index}": "Format für Playlist-Eintrag {index}",
+    "Quality for playlist item {index}": "Qualität für Playlist-Eintrag {index}",
+    "Queued {count} items; the rest were refused: {reason}":
+        "{count} Einträge eingereiht; der Rest wurde abgelehnt: {reason}",
     "Close the playlist review without adding anything to the queue.":
         "Playlist-Prüfung schließen, ohne etwas zur Warteschlange hinzuzufügen.",
     "Add the selected playlist videos to the download queue.":

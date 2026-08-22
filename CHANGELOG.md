@@ -14,6 +14,13 @@ repository's git log.
 
 ### Added
 
+- **The playlist review edits items, not just prunes them.** Every row in
+  Review playlist now carries its own format, quality and file name, with an
+  Apply to selected bar for changing them in bulk. Videos a subscription scan
+  already captured are marked "In archive" and start unticked, so a re-scan of
+  a channel you follow no longer re-fetches what you already have. Rows that
+  keep the defaults still queue as one download; only edited rows split off.
+
 - **Four more pre-flight checks, taken from Radarr's list.** Download health
   now also reports whether the download folder exists and accepts a write,
   whether settings and the queue live somewhere an update would erase, how

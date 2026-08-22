@@ -1492,7 +1492,16 @@ def main():
             }
 
             def trigger():
-                dialog = app_module.PlaylistStagingDialog(window, preview)
+                dialog = app_module.PlaylistStagingDialog(
+                    window,
+                    preview,
+                    format_choices=[("MP4", "mp4"), ("MKV", "mkv"), ("WebM", "webm")],
+                    quality_choices=[("Best", "best"), ("1080p", "1080"),
+                                     ("720p", "720")],
+                    default_format="mp4",
+                    default_quality="best",
+                    archived_indices={3},
+                )
                 dialog.exec()
 
             def validate(dialog):
@@ -1500,10 +1509,22 @@ def main():
                     raise RuntimeError("Playlist review did not render all videos")
                 if not all(cb.accessibleName() for cb, _item in dialog.checkboxes):
                     raise RuntimeError("Playlist review checkboxes lack accessible names")
-                if dialog.btn_download.text() != "Download selected (4)":
+                if dialog.btn_download.text() != "Download selected (3)":
                     raise RuntimeError(
                         "Playlist review count is not reflected in its action"
                     )
+                archived = [row for row in dialog.rows if row["archived"]]
+                if len(archived) != 1 or archived[0]["checkbox"].isChecked():
+                    raise RuntimeError(
+                        "An archived playlist item must render unselected"
+                    )
+                for row in dialog.rows:
+                    if row["format"].currentData() != "mp4":
+                        raise RuntimeError("Per-item format picker lost its default")
+                    if not row["name"].placeholderText():
+                        raise RuntimeError("Per-item name field has no placeholder")
+                if not dialog.btn_batch_apply.isVisible():
+                    raise RuntimeError("Batch apply is not on the dialog")
 
             capture_modal_dialog(
                 scenario, "Review Playlist", trigger, validate

@@ -42,6 +42,7 @@ except ImportError:  # Flat source-path compatibility.
 
 __all__ = (
     "Download", "DownloadManager", "DownloadManagerCore", "build_video_format_args",
+    "group_playlist_selection",
     "YTDLPActivityRegistry",
     "terminate_process_tree", "is_playlist_url", "write_cookies_netscape",
     "cleanup_stale_cookie_jars", "DOWNLOAD_ACTIVE_STATES",
@@ -2595,6 +2596,44 @@ def build_playlist_bound_args(config):
 # none-inclusive negation: a format carrying no note at all — which is every
 # format on every other site — stays inside the branch.
 NATIVE_SOURCE_FILTER = '[format_note!*=?AI-upscaled]'
+
+
+def group_playlist_selection(selection):
+    """Collapse per-item playlist choices into the fewest downloads that honour them.
+
+    A staged playlist where nobody edited a row is still one download carrying
+    `--playlist-items`, which is what the queue and the site both prefer. Rows
+    that were edited split off by the choices they now carry, and a row with
+    its own output name is always a group of one, because `--output` names a
+    single file.
+    """
+    groups = []
+    by_choice = {}
+    for entry in selection or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            index = int(entry.get('index') or 0)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if index < 1:
+            continue
+        choice = {
+            'format': str(entry.get('format') or '').strip(),
+            'quality': str(entry.get('quality') or 'best').strip() or 'best',
+            'output_name': str(entry.get('output_name') or '').strip(),
+        }
+        key = (choice['format'], choice['quality'])
+        if not choice['output_name'] and key in by_choice:
+            existing = by_choice[key]['items']
+            if index not in existing:
+                existing.append(index)
+            continue
+        group = dict(choice, items=[index])
+        groups.append(group)
+        if not choice['output_name']:
+            by_choice[key] = group
+    return groups
 
 
 def build_video_format_args(container, quality, *, avoid_upscaled=False):
@@ -7269,7 +7308,8 @@ DownloadManager = DownloadManagerCore
 
 
 _OWNED_EXPORTS = {
-    "Download", "build_video_format_args", "is_playlist_url",
+    "Download", "build_video_format_args", "group_playlist_selection",
+    "is_playlist_url",
     "build_network_workaround_args",
     "download_error_payload", "classify_download_failure",
     "apply_download_failure_classification", "DOWNLOAD_FAILURE_RECOVERY",

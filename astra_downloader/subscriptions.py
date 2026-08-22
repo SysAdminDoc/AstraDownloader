@@ -1168,6 +1168,10 @@ class SubscriptionManager:
         """Return the durable archive for unified history lookup."""
         return self.store.archive_entries()
 
+    def archive_entry(self, key):
+        """Return one archive record without copying the whole archive."""
+        return self.store.archive_entry(key)
+
     def archive_history_view(self):
         """Return the cheap scalar projection History merges into its rows."""
         return self.store.archive_history_view()

@@ -23621,5 +23621,196 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         self.assertEqual(focused, [True])
 
 
+class PlaylistStagingSelectionTests(unittest.TestCase):
+    """Per-item playlist edits collapse into the fewest downloads that honour them."""
+
+    def test_untouched_rows_stay_one_download(self):
+        selection = [
+            {"index": 1, "format": "mp4", "quality": "best", "output_name": ""},
+            {"index": 2, "format": "mp4", "quality": "best", "output_name": ""},
+            {"index": 5, "format": "mp4", "quality": "best", "output_name": ""},
+        ]
+        self.assertEqual(
+            ad.group_playlist_selection(selection),
+            [{"format": "mp4", "quality": "best", "output_name": "",
+              "items": [1, 2, 5]}],
+        )
+
+    def test_an_edited_row_splits_off_and_the_rest_stay_together(self):
+        selection = [
+            {"index": 1, "format": "mp4", "quality": "best", "output_name": ""},
+            {"index": 2, "format": "mkv", "quality": "1080", "output_name": ""},
+            {"index": 3, "format": "mp4", "quality": "best", "output_name": ""},
+            {"index": 4, "format": "mkv", "quality": "1080", "output_name": ""},
+        ]
+        self.assertEqual(
+            ad.group_playlist_selection(selection),
+            [
+                {"format": "mp4", "quality": "best", "output_name": "",
+                 "items": [1, 3]},
+                {"format": "mkv", "quality": "1080", "output_name": "",
+                 "items": [2, 4]},
+            ],
+        )
+
+    def test_a_named_row_is_always_its_own_download(self):
+        # --output names a single file, so two items cannot share one.
+        selection = [
+            {"index": 1, "format": "mp4", "quality": "best", "output_name": "Intro"},
+            {"index": 2, "format": "mp4", "quality": "best", "output_name": "Outro"},
+            {"index": 3, "format": "mp4", "quality": "best", "output_name": ""},
+        ]
+        self.assertEqual(
+            [group["items"] for group in ad.group_playlist_selection(selection)],
+            [[1], [2], [3]],
+        )
+
+    def test_junk_entries_are_dropped_rather_than_queued(self):
+        selection = [
+            "not a row",
+            {"index": 0},
+            {"index": "seven"},
+            {"index": 2, "format": "mp4"},
+        ]
+        self.assertEqual(
+            ad.group_playlist_selection(selection),
+            [{"format": "mp4", "quality": "best", "output_name": "",
+              "items": [2]}],
+        )
+        self.assertEqual(ad.group_playlist_selection(None), [])
+
+
+class PlaylistStagingDialogTests(unittest.TestCase):
+    """The staging dialog edits items; it no longer only prunes them."""
+
+    _PREVIEW = {
+        "title": "Field notes",
+        "channel": "Astra Studio",
+        "items": [
+            {"index": 1, "id": "aaa", "title": "First", "duration": 60},
+            {"index": 2, "id": "bbb", "title": "Second", "duration": 90},
+            {"index": 3, "id": "ccc", "title": "Third", "duration": 30},
+        ],
+    }
+
+    def _dialog(self, **kwargs):
+        options = {
+            "format_choices": [("MP4", "mp4"), ("MKV", "mkv")],
+            "quality_choices": [("Best", "best"), ("1080p", "1080")],
+            "default_format": "mp4",
+            "default_quality": "best",
+        }
+        options.update(kwargs)
+        return ad.PlaylistStagingDialog(None, self._PREVIEW, **options)
+
+    def test_an_archived_item_is_flagged_and_starts_unselected(self):
+        _get_qapp_or_skip(self)
+        dialog = self._dialog(archived_indices={2})
+        try:
+            archived = [row for row in dialog.rows if row["archived"]]
+            self.assertEqual([row["index"] for row in archived], [2])
+            self.assertFalse(archived[0]["checkbox"].isChecked())
+            self.assertEqual(dialog.get_selected_indices(), [1, 3])
+            self.assertIn(
+                "subscription archive",
+                archived[0]["checkbox"].accessibleDescription(),
+            )
+            # Flagged, not forbidden: ticking it queues the item again.
+            archived[0]["checkbox"].setChecked(True)
+            self.assertEqual(dialog.get_selected_indices(), [1, 2, 3])
+        finally:
+            dialog.deleteLater()
+
+    def test_a_per_item_edit_only_changes_that_item(self):
+        _get_qapp_or_skip(self)
+        dialog = self._dialog()
+        try:
+            second = dialog.rows[1]
+            second["format"].setCurrentIndex(second["format"].findData("mkv"))
+            second["quality"].setCurrentIndex(second["quality"].findData("1080"))
+            second["name"].setText("  Chapter two  ")
+            selection = dialog.get_selection()
+            self.assertEqual(selection[0], {
+                "index": 1, "format": "mp4", "quality": "best", "output_name": "",
+            })
+            self.assertEqual(selection[1], {
+                "index": 2, "format": "mkv", "quality": "1080",
+                "output_name": "Chapter two",
+            })
+            self.assertEqual(selection[2]["format"], "mp4")
+        finally:
+            dialog.deleteLater()
+
+    def test_batch_apply_writes_onto_selected_rows_only(self):
+        _get_qapp_or_skip(self)
+        dialog = self._dialog()
+        try:
+            dialog.rows[2]["checkbox"].setChecked(False)
+            dialog.batch_format.setCurrentIndex(
+                dialog.batch_format.findData("mkv"))
+            dialog.batch_quality.setCurrentIndex(
+                dialog.batch_quality.findData("1080"))
+            dialog._apply_batch()
+            self.assertEqual(
+                [row["format"].currentData() for row in dialog.rows],
+                ["mkv", "mkv", "mp4"],
+            )
+            self.assertEqual(
+                [row["quality"].currentData() for row in dialog.rows],
+                ["1080", "1080", "best"],
+            )
+            self.assertEqual(dialog.lbl_selected_count.text(),
+                             "Applied to 2 videos")
+        finally:
+            dialog.deleteLater()
+
+    def test_staging_queues_one_download_per_distinct_choice(self):
+        from PySide6.QtWidgets import QDialog
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "FirstRunComplete": True})
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"):
+                window = ad.MainWindow(config, manager, FakeHistory())
+            calls = []
+
+            def fake_start(**kwargs):
+                calls.append(kwargs)
+                return f"dl{len(calls)}", None
+
+            def fake_exec(dialog_self):
+                dialog_self.rows[1]["format"].setCurrentIndex(
+                    dialog_self.rows[1]["format"].findData("mkv"))
+                dialog_self.rows[2]["name"].setText("Finale")
+                return QDialog.DialogCode.Accepted
+
+            try:
+                window.quick_download_url.setText(
+                    "https://www.youtube.com/playlist?list=PLtest")
+                with mock.patch.object(
+                    manager, "preview_playlist",
+                    return_value=(self._PREVIEW, None),
+                ), mock.patch.object(
+                    manager, "start_download", side_effect=fake_start,
+                ), mock.patch.object(
+                    ad.PlaylistStagingDialog, "exec", fake_exec,
+                ), mock.patch.object(
+                    ad.MainWindow, "_combo_choices",
+                    staticmethod(lambda _combo: [("MP4", "mp4"), ("MKV", "mkv")]),
+                ):
+                    window._open_playlist_staging()
+                self.assertEqual(
+                    [(call["playlist_items"], call["fmt"], call["output_name"])
+                     for call in calls],
+                    [([1], "mp4", None), ([2], "mkv", None), ([3], "mp4", "Finale")],
+                )
+                self.assertIn("Queued 3 items", window.quick_download_status.text())
+            finally:
+                _retire_test_window(window)
+
+
 if __name__ == "__main__":
     unittest.main()
