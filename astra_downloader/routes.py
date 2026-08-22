@@ -206,6 +206,7 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'provision_deno',
     'lookup_history_url',
     'normalize_history_date',
+    'normalize_output_dir',
     'query_history_entries',
     'read_update_recovery_status',
     'validate_download_request_body',
@@ -273,6 +274,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     provision_deno = dependencies['provision_deno']
     lookup_history_url = dependencies['lookup_history_url']
     normalize_history_date = dependencies['normalize_history_date']
+    normalize_output_dir = dependencies['normalize_output_dir']
     query_history_entries = dependencies['query_history_entries']
     read_update_recovery_status = dependencies['read_update_recovery_status']
     validate_download_request_body = dependencies['validate_download_request_body']
@@ -1016,6 +1018,9 @@ def _register_queue_routes(api, context, dependencies):
 
 def _register_subscriptions_routes(api, context, dependencies):
     """Register subscription collection routes."""
+    config = context.config
+    allowed_output_roots = dependencies['allowed_output_roots']
+    normalize_output_dir = dependencies['normalize_output_dir']
     subscription_manager = context.subscription_manager
     subscription_scan_rate_limiter = context.subscription_scan_rate_limiter
     check_auth = context.check_auth
@@ -1070,10 +1075,26 @@ def _register_subscriptions_routes(api, context, dependencies):
     )
 
     def _subscription_delivery(body):
+        """The delivery fields present in a body, with the folder checked.
+
+        Returns (delivery, error). An unusable folder stored here does not
+        fail until the next scan, and then once per video, so the subscription
+        reads as configured while delivering nothing.
+        """
         present = {
             key: body[key] for key in SUBSCRIPTION_DELIVERY_FIELDS if key in body
         }
-        return present or None
+        folder = str(present.get("outputDir") or "").strip()
+        if folder:
+            resolved, error = normalize_output_dir(
+                folder,
+                config.get("DownloadPath", ""),
+                allowed_roots=allowed_output_roots(config),
+            )
+            if error:
+                return None, error
+            present["outputDir"] = resolved
+        return (present or None), None
 
     @api.route('/subscriptions', methods=['POST'])
     def subscriptions_create():
@@ -1095,12 +1116,18 @@ def _register_subscriptions_routes(api, context, dependencies):
             }, 400)
         if not isinstance(body.get("url"), str) or not body.get("url", "").strip():
             return cors_response({"error": "A YouTube channel or playlist URL is required.", "code": "invalid-subscription-url"}, 400)
+        delivery, delivery_error = _subscription_delivery(body)
+        if delivery_error:
+            return cors_response({
+                "error": delivery_error,
+                "code": "invalid-subscription-output-dir",
+            }, 400)
         record, error = manager.add_subscription(
             body["url"],
             interval_minutes=body.get("intervalMinutes", 60),
             enabled=body.get("enabled", True),
             title=body.get("title", ""),
-            delivery=_subscription_delivery(body),
+            delivery=delivery,
         )
         if error:
             status = 409 if "already configured" in error.lower() else 400
@@ -1137,7 +1164,12 @@ def _register_subscriptions_routes(api, context, dependencies):
             fields["enabled"] = body["enabled"]
         if "title" in body:
             fields["title"] = body["title"]
-        delivery = _subscription_delivery(body)
+        delivery, delivery_error = _subscription_delivery(body)
+        if delivery_error:
+            return cors_response({
+                "error": delivery_error,
+                "code": "invalid-subscription-output-dir",
+            }, 400)
         if delivery is not None:
             fields["delivery"] = delivery
         record, error = manager.update_subscription(subscription_id, **fields)

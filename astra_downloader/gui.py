@@ -3517,10 +3517,24 @@ class MainWindowCore(
         dialog = SubscriptionDeliveryDialog(self, record)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
+        delivery = dialog.delivery()
+        # The folder is checked here rather than at download time. Stored
+        # unchecked, an unusable path did not fail until the next scan, and
+        # then once per video: the subscription looked configured and simply
+        # never delivered anything.
+        folder = str(delivery.get("outputDir") or "").strip()
+        if folder:
+            resolved, folder_error = self._dependencies['normalize_output_dir'](
+                folder, self.config.get("DownloadPath", ""),
+            )
+            if folder_error:
+                self._show_subscription_status(tr(str(folder_error)), "danger")
+                return False
+            delivery["outputDir"] = resolved
         manager = self._subscription_manager()
         try:
             updated, error = manager.update_subscription(
-                sub_id, delivery=dialog.delivery())
+                sub_id, delivery=delivery)
         except Exception as exc:  # noqa: BLE001
             updated, error = None, str(exc)
         if error or not updated:
