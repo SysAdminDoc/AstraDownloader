@@ -1768,6 +1768,10 @@ CATALOGS["de"].update({
     "Archive action result": "Ergebnis der Archivaktion",
     "{count} captured": "{count} erfasst",
     "Nothing captured yet": "Noch nichts erfasst",
+    "The source no longer lists this video.":
+        "Die Quelle führt dieses Video nicht mehr.",
+    "The file is no longer on this machine.":
+        "Die Datei ist auf diesem Rechner nicht mehr vorhanden.",
     "Items appear here after this subscription's first scan queues something.":
         "Eintr\u00e4ge erscheinen hier, sobald der erste Scan dieses Abonnements "
         "etwas einreiht.",

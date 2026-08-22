@@ -1668,7 +1668,7 @@ def main():
                 "url": "https://www.youtube.com/@astra-studio",
             }
             page = {
-                "total": 4,
+                "total": 5,
                 "offset": 0,
                 "items": [
                     {"key": "id:a1", "title": "Build a dependable spacing scale",
@@ -1676,8 +1676,12 @@ def main():
                     {"key": "id:a2", "title": "Keyboard focus that survives every theme",
                      "status": "complete", "completedAt": 1_760_000_300},
                     {"key": "id:a3", "title": "Writing recovery states people can use",
-                     "status": "failed", "lastError": "Sign in to confirm your age",
-                     "completedAt": None},
+                     "status": "complete", "missingUpstream": True,
+                     "completedAt": 1_760_000_200},
+                    {"key": "id:a5", "title": "Naming things nobody has to look up",
+                     "status": "complete", "fileMissing": True,
+                     "filePath": r"D:\Feeds\gone.mp4",
+                     "completedAt": 1_760_000_100},
                     {"key": "id:a4", "title": "Testing desktop layouts at minimum size",
                      "status": "queued", "completedAt": None},
                 ],
@@ -1692,7 +1696,7 @@ def main():
                 dialog.exec()
 
             def validate(dialog):
-                if len(dialog.rows) != 4:
+                if len(dialog.rows) != 5:
                     raise RuntimeError("The archive view lost a captured item")
                 by_status = {row["status"]: row for row in dialog.rows}
                 if by_status["queued"]["button"].isEnabled():

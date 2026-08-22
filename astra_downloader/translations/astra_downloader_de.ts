@@ -7,10 +7,6 @@
       <translation>{count} Videos</translation>
     </message>
     <message>
-      <source>Browse</source>
-      <translation>Durchsuchen</translation>
-    </message>
-    <message>
       <source>Allow again</source>
       <translation>Erneut zulassen</translation>
     </message>
@@ -323,6 +319,14 @@
       <translation>Download-Ordner des Abonnements</translation>
     </message>
     <message>
+      <source>Browse</source>
+      <translation>Durchsuchen</translation>
+    </message>
+    <message>
+      <source>Choose where this subscription saves</source>
+      <translation>Wählen, wohin dieses Abonnement speichert</translation>
+    </message>
+    <message>
       <source>Format</source>
       <translation>Format</translation>
     </message>
@@ -361,10 +365,6 @@
     <message>
       <source>Save</source>
       <translation>Speichern</translation>
-    </message>
-    <message>
-      <source>Choose where this subscription saves</source>
-      <translation>Wählen, wohin dieses Abonnement speichert</translation>
     </message>
     <message>
       <source>Subscription archive</source>
@@ -913,6 +913,14 @@
     <message>
       <source>{count} captured</source>
       <translation>{count} erfasst</translation>
+    </message>
+    <message>
+      <source>The source no longer lists this video.</source>
+      <translation>Die Quelle führt dieses Video nicht mehr.</translation>
+    </message>
+    <message>
+      <source>The file is no longer on this machine.</source>
+      <translation>Die Datei ist auf diesem Rechner nicht mehr vorhanden.</translation>
     </message>
     <message>
       <source>Allowed</source>

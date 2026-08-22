@@ -33,6 +33,14 @@ repository's git log.
 
 ### Added
 
+- **An archive notices when a video disappears.** A scan that saw the whole
+  source and no longer lists a captured video marks it, without deleting
+  anything — the record, the file and the claim all survive. A scan that only
+  covered its usual window never judges, because an old upload falling out of
+  that window is not a deletion. The archive also remembers where each file
+  landed, so it can tell you when the copy on disk is gone, and neither state
+  causes a silent re-download: Allow again is what reverses either one.
+
 - **Subscriptions became an archive manager.** Each one now carries its own
   destination, format, quality and naming template, so one feed can land in
   its own folder shape while everything else keeps your defaults. An Archive

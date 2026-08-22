@@ -1512,6 +1512,15 @@ class SubscriptionArchiveDialog(QDialog):
         if item.get("lastError"):
             detail = f"{detail} · {item['lastError']}".strip(" ·")
         copy_layout.addWidget(make_label(detail, "toolbarMeta", word_wrap=True))
+        notes = []
+        if item.get("missingUpstream"):
+            notes.append(tr("The source no longer lists this video."))
+        if item.get("fileMissing"):
+            notes.append(tr("The file is no longer on this machine."))
+        if notes:
+            note = make_label(" ".join(notes), "toolbarMeta", word_wrap=True)
+            set_status_tone(note, "warning")
+            copy_layout.addWidget(note)
         row_layout.addLayout(copy_layout, 1)
         allow = self._make_tool_button("Allow again", "ghost", title)
         allow.setToolTip(tr(
@@ -3536,6 +3545,19 @@ class MainWindowCore(
             self._show_subscription_status(
                 tr("The archive could not be read."), "danger")
             return False
+        # Whether the media is still on disk is a filesystem question, and the
+        # store deliberately never asks it: an archive record must not change
+        # because a drive was unplugged. It is answered here, once, for the
+        # rows about to be shown.
+        for item in page.get("items") or []:
+            path = str(item.get("filePath") or "")
+            if not path:
+                continue
+            try:
+                item["fileMissing"] = not Path(path).is_file()
+            except OSError:
+                # reason: an unreachable drive is not proof the file was deleted
+                item["fileMissing"] = False
 
         def forget(key):
             try:

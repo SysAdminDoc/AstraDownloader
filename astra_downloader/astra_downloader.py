@@ -5336,6 +5336,8 @@ def build_subscription_manager(config, dl_manager):
         enqueue=enqueue,
         status_reader=lambda download_id: dl_manager.status_of(download_id, default='failed'),
         delivered_height_reader=lambda download_id: dl_manager.delivered_height_of(download_id),
+        delivered_file_reader=lambda download_id: dl_manager.delivered_file_of(download_id),
+        probe_limit=SUBSCRIPTION_PROBE_LIMIT,
         height_probe=lambda url: best_available_height(dl_manager, url),
         logger=lambda message: write_persistent_log(message),
         activity_registry=_YTDLP_ACTIVITY,

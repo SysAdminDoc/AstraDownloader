@@ -7,10 +7,6 @@
       <translation>{count} videos</translation>
     </message>
     <message>
-      <source>Browse</source>
-      <translation>Browse</translation>
-    </message>
-    <message>
       <source>Allow again</source>
       <translation>Allow again</translation>
     </message>
@@ -323,6 +319,14 @@
       <translation>Subscription download folder</translation>
     </message>
     <message>
+      <source>Browse</source>
+      <translation>Browse</translation>
+    </message>
+    <message>
+      <source>Choose where this subscription saves</source>
+      <translation>Choose where this subscription saves</translation>
+    </message>
+    <message>
       <source>Format</source>
       <translation>Format</translation>
     </message>
@@ -361,10 +365,6 @@
     <message>
       <source>Save</source>
       <translation>Save</translation>
-    </message>
-    <message>
-      <source>Choose where this subscription saves</source>
-      <translation>Choose where this subscription saves</translation>
     </message>
     <message>
       <source>Subscription archive</source>
@@ -913,6 +913,14 @@
     <message>
       <source>{count} captured</source>
       <translation>{count} captured</translation>
+    </message>
+    <message>
+      <source>The source no longer lists this video.</source>
+      <translation>The source no longer lists this video.</translation>
+    </message>
+    <message>
+      <source>The file is no longer on this machine.</source>
+      <translation>The file is no longer on this machine.</translation>
     </message>
     <message>
       <source>Allowed</source>
