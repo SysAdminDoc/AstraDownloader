@@ -14,6 +14,15 @@ repository's git log.
 
 ### Added
 
+- **Pin a managed tool, or roll one back.** Settings now lists yt-dlp, ffmpeg,
+  Deno, QuickJS and whisper with the version installed, a pin field and a Roll
+  back button. Pinning holds a tool where it is, which is the way out of an
+  update that removed something you were using. A pin below a tool's stated
+  security floor is refused and says which floor and why. Setup keeps the copy
+  it replaces, so rolling back has something to go back to, and rolling back
+  pins there rather than letting the next update undo it. The pinned version
+  and the digest of the bytes on disk both reach the licence inventory.
+
 - **The playlist review edits items, not just prunes them.** Every row in
   Review playlist now carries its own format, quality and file name, with an
   Apply to selected bar for changing them in bulk. Videos a subscription scan

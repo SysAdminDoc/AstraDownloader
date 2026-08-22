@@ -2511,15 +2511,31 @@ def rollback_managed_binary(config, name):
 
 
 def managed_binary_inventory(config):
-    """Report every managed binary's installed version, pin and rollback."""
+    """Report every managed binary's installed version, pin and rollback.
+
+    A pinned entry also carries the digest of the bytes on disk. A pin is a
+    claim about which release is running, and the licence inventory records
+    version *and* digest for exactly that reason — a version string on its own
+    names a release, not the file. Only pinned binaries are hashed: the
+    unpinned ones move on their own, so a digest for them expires immediately
+    and costs 40 MB of reading to produce.
+    """
     pins = active_managed_binary_pins(config)
+    paths = managed_binary_paths()
     inventory = []
     for name in MANAGED_BINARY_NAMES:
         backup = managed_binary_rollback_path(name)
+        pinned = pins.get(name, '')
+        path = paths.get(name)
         inventory.append({
             'name': name,
             'installed': probe_managed_binary_version(name),
-            'pinned': pins.get(name, ''),
+            'pinned': pinned,
+            'sha256': (
+                _compute_sha256(path) or ''
+                if pinned and path is not None and managed_binary_usable(path)
+                else ''
+            ),
             'floor': MANAGED_BINARY_FLOORS.get(name, ''),
             'rollback': (
                 probe_managed_binary_version(name, backup)

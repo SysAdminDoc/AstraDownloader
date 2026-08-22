@@ -9,6 +9,7 @@ const path = require('path');
 const {
     assetName,
     digestForAsset,
+    pinnedSources,
     resolveRuntimeHelpers
 } = require('../scripts/resolve-runtime-helpers');
 const { inspectCompanionInventory, PROPERTY } = require('../scripts/companion-license-inventory');
@@ -247,4 +248,74 @@ test('a resolved digest does not excuse a moving corresponding-source link', () 
         })]
     }, DIGEST);
     assert.deepEqual(pinnedSource.issues.filter((issue) => /yt-dlp/.test(issue)), []);
+});
+
+test('a pinned helper resolves the pinned release, not the rolling alias', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-pinned-helper-'));
+    const policyPath = path.join(dir, 'license-policy.json');
+    fs.writeFileSync(policyPath, JSON.stringify({
+        runtimeHelpers: [
+            {
+                key: 'yt-dlp',
+                name: 'yt-dlp.exe',
+                version: 'unresolved',
+                licenseReviewed: true,
+                decision: 'unresolved',
+                pinnedVersion: '2026.07.04',
+                pinnedDistributionUrl:
+                    'https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp.exe',
+                pinnedChecksumUrl:
+                    'https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/SHA2-256SUMS',
+                distributionUrl: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
+                checksumUrl: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS',
+                sourceUrl: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.tar.gz',
+                noticeUrl: 'https://github.com/yt-dlp/yt-dlp#license',
+                obligations: ['Retain the notice.']
+            }
+        ]
+    }, null, 2) + '\n');
+
+    const requested = [];
+    const originalFetch = global.fetch;
+    global.fetch = async (url) => {
+        requested.push(String(url));
+        return new Response(`${DIGEST}  yt-dlp.exe\n`, { status: 200 });
+    };
+    try {
+        assert.deepEqual(await resolveRuntimeHelpers(policyPath), ['yt-dlp=2026.07.04']);
+    } finally {
+        global.fetch = originalFetch;
+    }
+
+    assert.deepEqual(requested, [
+        'https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/SHA2-256SUMS'
+    ], 'a pinned helper must not ask GitHub what latest points at');
+
+    const helper = JSON.parse(fs.readFileSync(policyPath, 'utf8')).runtimeHelpers[0];
+    assert.equal(helper.version, '2026.07.04');
+    assert.equal(helper.sha256, DIGEST);
+    assert.equal(helper.decision, 'approved');
+    assert.match(helper.approvalEvidence, /Pinned rather than resolved from a rolling alias/);
+    assert.match(helper.approvalEvidence, /2026\.07\.04 is SHA-256 a{64}/);
+    assert.equal(
+        helper.sourceUrl,
+        'https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp.tar.gz',
+        'the corresponding-source link has to name the pinned release too'
+    );
+});
+
+test('a pin without its own URLs is refused rather than resolved from latest', () => {
+    assert.equal(pinnedSources({ key: 'yt-dlp' }), null);
+    assert.throws(
+        () => pinnedSources({ key: 'yt-dlp', pinnedVersion: '2026.07.04' }),
+        /pinnedVersion 2026\.07\.04 needs pinnedDistributionUrl/
+    );
+    assert.throws(
+        () => pinnedSources({
+            key: 'yt-dlp',
+            pinnedVersion: '2026.07.04',
+            pinnedDistributionUrl: 'https://example.test/yt-dlp.exe'
+        }),
+        /pinnedChecksumUrl/
+    );
 });

@@ -1375,6 +1375,14 @@
       <translation>Pin</translation>
     </message>
     <message>
+      <source>Pinned bytes are SHA-256 {digest}</source>
+      <translation>Pinned bytes are SHA-256 {digest}</translation>
+    </message>
+    <message>
+      <source>Type the version to hold this tool at, then choose Pin.</source>
+      <translation>Type the version to hold this tool at, then choose Pin.</translation>
+    </message>
+    <message>
       <source>Put {version} back and pin there.</source>
       <translation>Put {version} back and pin there.</translation>
     </message>

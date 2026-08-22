@@ -3734,6 +3734,10 @@ class DiagnosticsBundleTests(unittest.TestCase):
                 ad.write_persistent_log(f"entry {index}", log_path)
 
             entries = ad.get_recent_log_entries()
+            # write_persistent_log hands the file write to a writer thread, so
+            # leaving this block can race the flush and fail the directory
+            # cleanup with WinError 145 instead of failing an assertion.
+            ad.flush_persistent_log()
 
         self.assertEqual(len(entries), ad.DIAGNOSTIC_LOG_ENTRY_LIMIT)
         bundle = ad.build_diagnostics_bundle(recent_logs=entries)
@@ -24168,6 +24172,31 @@ class ManagedBinaryPinTests(unittest.TestCase):
             with mock.patch.object(ad, "managed_binary_paths",
                                    return_value={"ffmpeg": missing}):
                 self.assertEqual(ad.retain_managed_binary_rollback("ffmpeg"), "")
+
+    def test_the_inventory_carries_the_digest_of_a_pinned_binary_only(self):
+        # A pin is a claim about which release is running, and a version
+        # string names a release rather than the file. Unpinned binaries move
+        # on their own, so a digest for one expires the moment it is read.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pinned = Path(tmpdir) / "yt-dlp.exe"
+            loose = Path(tmpdir) / "ffmpeg.exe"
+            pinned.write_bytes(b"pinned" + b"\0" * (2 * 1024 * 1024))
+            loose.write_bytes(b"loose" + b"\0" * (2 * 1024 * 1024))
+            config = FakeConfig({"ManagedBinaryPins": {"yt-dlp": "2026.07.04"}})
+            with mock.patch.object(ad, "managed_binary_paths",
+                                   return_value={"yt-dlp": pinned, "ffmpeg": loose}), \
+                    mock.patch.object(ad, "probe_managed_binary_version",
+                                      side_effect=lambda name, path=None: (
+                                          "2026.07.04" if name == "yt-dlp" else "8.1.2")), \
+                    mock.patch.object(ad, "managed_binary_rollback_path",
+                                      return_value=None):
+                rows = {row["name"]: row
+                        for row in ad.managed_binary_inventory(config)}
+            self.assertEqual(
+                rows["yt-dlp"]["sha256"], ad._compute_sha256(pinned))
+            self.assertEqual(rows["yt-dlp"]["pinned"], "2026.07.04")
+            self.assertEqual(rows["ffmpeg"]["sha256"], "")
+            self.assertEqual(set(rows), set(ad.MANAGED_BINARY_NAMES))
 
     def test_the_settings_rows_render_the_inventory_and_pin_from_the_form(self):
         _get_qapp_or_skip(self)

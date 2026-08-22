@@ -1375,6 +1375,14 @@
       <translation>Fixieren</translation>
     </message>
     <message>
+      <source>Pinned bytes are SHA-256 {digest}</source>
+      <translation>Fixierte Bytes haben SHA-256 {digest}</translation>
+    </message>
+    <message>
+      <source>Type the version to hold this tool at, then choose Pin.</source>
+      <translation>Geben Sie die Version ein, auf der dieses Werkzeug bleiben soll, und wählen Sie dann Fixieren.</translation>
+    </message>
+    <message>
       <source>Put {version} back and pin there.</source>
       <translation>{version} wiederherstellen und dort fixieren.</translation>
     </message>

@@ -139,24 +139,63 @@ async function resolveRelease(distributionUrl) {
     return { version: `master-${published.replace(/[:]/g, '').replace(/\.\d+Z$/, 'Z')}`, tag: 'latest' };
 }
 
-async function resolveHelper(helper) {
-    const target = assetName(helper.distributionUrl);
-    const [release, sidecar] = await Promise.all([
-        resolveRelease(helper.distributionUrl),
-        fetchText(helper.checksumUrl)
-    ]);
-    const sha256 = digestForAsset(sidecar, target, helper.checksumUrl);
-    if (!sha256) {
-        throw new Error(`${helper.key}: ${helper.checksumUrl} names no digest for ${target}`);
+/**
+ * Read the URLs a pinned helper is resolved from.
+ *
+ * The application can pin a managed binary at runtime, and a release can pin
+ * one too. The URLs are named explicitly rather than derived: each publisher
+ * arranges a per-release asset path differently, and guessing one produces a
+ * 404 at staging or, worse, a digest for the wrong bytes. A `pinnedVersion`
+ * without them is refused, so a pin can never quietly fall back to the
+ * rolling alias and record a version nobody chose.
+ */
+function pinnedSources(helper) {
+    const version = String(helper.pinnedVersion || '').trim();
+    if (!version) return null;
+    const distributionUrl = String(helper.pinnedDistributionUrl || '').trim();
+    const checksumUrl = String(helper.pinnedChecksumUrl || '').trim();
+    if (!distributionUrl || !checksumUrl) {
+        throw new Error(
+            `${helper.key}: pinnedVersion ${version} needs pinnedDistributionUrl `
+            + 'and pinnedChecksumUrl; a pin must not fall back to the rolling alias'
+        );
     }
-    return { ...release, sha256, target };
+    return { version, distributionUrl, checksumUrl };
+}
+
+async function resolveHelper(helper) {
+    const pinned = pinnedSources(helper);
+    const distributionUrl = pinned ? pinned.distributionUrl : helper.distributionUrl;
+    const checksumUrl = pinned ? pinned.checksumUrl : helper.checksumUrl;
+    const target = assetName(distributionUrl);
+    const [release, sidecar] = await Promise.all([
+        pinned
+            ? Promise.resolve({ version: pinned.version, tag: pinned.version })
+            : resolveRelease(distributionUrl),
+        fetchText(checksumUrl)
+    ]);
+    const sha256 = digestForAsset(sidecar, target, checksumUrl);
+    if (!sha256) {
+        throw new Error(`${helper.key}: ${checksumUrl} names no digest for ${target}`);
+    }
+    return { ...release, sha256, target, pinned: Boolean(pinned), checksumUrl };
 }
 
 function approvalEvidence(helper, resolved) {
+    if (resolved.pinned) {
+        return (
+            `Pinned rather than resolved from a rolling alias: ${resolved.target} at `
+            + `${resolved.version} is SHA-256 ${resolved.sha256}, read from `
+            + `${resolved.checksumUrl}. The application is pinned to the same version, so the `
+            + `reviewed bytes and the shipped bytes are the same check. The pin has to be `
+            + `carried forward by hand, which is the cost of naming an exact release: `
+            + `FFmpeg-Builds prunes its dated tags, so a pin there ages out of existence.`
+        );
+    }
     return (
         `Resolved at staging from the publisher's own checksum sidecar: `
         + `${resolved.target} at ${resolved.version} is SHA-256 ${resolved.sha256}, read from `
-        + `${helper.checksumUrl}. The application downloads the same rolling alias and verifies it `
+        + `${resolved.checksumUrl}. The application downloads the same rolling alias and verifies it `
         + `against the same sidecar before use, so the reviewed bytes and the shipped bytes are the `
         + `same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, `
         + `which would break first-run setup once the pin aged out.`
@@ -221,5 +260,7 @@ module.exports = {
     POLICY_PATH,
     assetName,
     digestForAsset,
+    pinnedSources,
+    approvalEvidence,
     resolveRuntimeHelpers
 };

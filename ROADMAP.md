@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: a subscription carries its own destination, format, quality and template; an archive view lists captured items with an "allow re-download" action; a re-scan fetches only when the available format is a strict upgrade over what is on disk; schema migration covers existing records.
   Complexity: XL
 
-- [ ] P2 — AD-29 — Let the user pin and roll back a managed binary
-  Why: auto-updating yt-dlp/ffmpeg/Deno is survival, but it also silently breaks things (GDownloader#54: an auto-update killed nvenc). Pinning is also the clean way out of the ffmpeg security-floor-vs-capability deadlock, and YTDLnis ships exactly this.
-  Evidence: RESEARCH.md "Competitive Landscape" (YTDLnis component management); `Roadmap_Blocked.md` §"Make `npm run check` pass" item 2; `astra_downloader/health.py` `managed_binary_state()`.
-  Touches: `astra_downloader/health.py`, `astra_downloader.py`, `gui_settings_page.py`, `config.py`
-  Acceptance: each managed binary can be pinned to a chosen version and rolled back; a pin below the security floor is refused with a named reason; the pinned version and digest flow into the licence inventory (AD-09).
-  Complexity: L
-
 - [ ] P2 — AD-30 — Mint PO tokens from a sidecar the app owns
   Why: `po-token-required` is a named failure cause with advice but no remedy, because `--no-plugin-dirs` is a stated security property and bgutil's provider is plugin-only. The non-plugin route is `--extractor-args "youtube:po_token=CLIENT.CONTEXT+TOKEN"`, so the app can run the provider as a managed binary it controls, mint per-video, and pass the token on argv — keeping third-party code out of yt-dlp's process.
   Evidence: `astra_downloader/download.py:627, 3002-3008`; `SECURITY.md` §"yt-dlp is spawned with its plugin directories disabled"; yt-dlp PO Token Guide; yt-dlp#14404 (380 reactions), #15012 (226).
