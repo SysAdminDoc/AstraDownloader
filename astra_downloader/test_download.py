@@ -8017,6 +8017,38 @@ class SiteLoginDurabilityTests(unittest.TestCase):
             self.assertIn("x.com", json.loads(index.read_text(encoding="utf-8"))["sites"])
             self.assertEqual(store.entries()[0]["site"], "x.com")
 
+    def test_a_jar_that_cannot_be_deleted_keeps_its_index_row(self):
+        # The other half of the test above. The row is dropped first so an
+        # index failure cannot have already deleted the jar, but an unlink
+        # that fails after that left the jar on disk with nothing listing
+        # it: entries() cannot see it, so the UI has no Remove to offer.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ad.SiteLoginStore(
+                tmpdir, reader=ad.load_json_file, writer=ad.atomic_write_json,
+            )
+            result, error = store.import_netscape_text("x.com", self.EXPORT)
+            self.assertIsNone(error)
+            self.assertEqual(result["site"], "x.com")
+            jar = Path(tmpdir) / ad.SITE_LOGIN_DIRNAME / "x.com.txt"
+            self.assertTrue(jar.exists())
+
+            real_unlink = Path.unlink
+
+            def unlink(self, *args, **kwargs):
+                if self.name == "x.com.txt":
+                    raise OSError(13, "Permission denied")
+                return real_unlink(self, *args, **kwargs)
+
+            with mock.patch.object(Path, "unlink", unlink):
+                self.assertFalse(store.remove("x.com"))
+
+            self.assertTrue(jar.exists())
+            self.assertEqual(
+                [entry["site"] for entry in store.entries()], ["x.com"],
+                "the jar is still on disk, so the row that offers Remove has "
+                "to still be there too",
+            )
+
     def test_export_reports_its_site_without_a_second_index_read(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ad.SiteLoginStore(tmpdir)
@@ -8345,6 +8377,95 @@ class FailureStateBelongsToOneRunTests(unittest.TestCase):
                       "delivered_height"):
             with self.subTest(field=field):
                 self.assertIn(field, ad.RETRY_ROLLBACK_FIELDS)
+
+
+class IntermediateSweepStaysInsideItsOwnFilesTests(unittest.TestCase):
+    """The sweep runs in the user's download folder after every download."""
+
+    def _sweep(self, folder, final_name):
+        download = ad.Download(
+            "dl_sweep", "https://example.com/video", output_dir=str(folder),
+        )
+        download.filename = str(folder / final_name)
+        manager = ad.DownloadManager(
+            config=FakeConfig({"KeepIntermediateFiles": False}),
+            history=FakeHistory(),
+        )
+        manager._sweep_download_intermediates(download)
+
+    def test_a_file_that_only_starts_the_same_way_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "Movie.mp4").write_bytes(b"final")
+            # yt-dlp never writes these. A person does, and the old glob
+            # `Movie.f[0-9]*.*` matched every one: [0-9] takes the 1, then *
+            # swallows the rest of the name.
+            keep = [
+                "Movie.f1080p.WEB-DL.mp4",
+                "Movie.f4k.remux.mkv",
+                "Movie.f2160p.HDR.DV.mkv",
+            ]
+            for name in keep:
+                (folder / name).write_bytes(b"someone else's file")
+
+            self._sweep(folder, "Movie.mp4")
+
+            for name in keep:
+                self.assertTrue(
+                    (folder / name).is_file(),
+                    f"the sweep deleted {name}, which it did not create",
+                )
+            self.assertTrue((folder / "Movie.mp4").is_file())
+
+    def test_the_intermediates_it_did_write_are_still_removed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "Movie.mp4").write_bytes(b"final")
+            gone = [
+                "Movie.f137.mp4",
+                "Movie.f140-drc.m4a",
+                "Movie.mp4.part",
+                "Movie.mp4.ytdl",
+            ]
+            for name in gone:
+                (folder / name).write_bytes(b"intermediate")
+
+            self._sweep(folder, "Movie.mp4")
+
+            for name in gone:
+                self.assertFalse(
+                    (folder / name).exists(),
+                    f"{name} is one of ours and should have been swept",
+                )
+            self.assertTrue((folder / "Movie.mp4").is_file())
+
+
+class SettingsBundleExportsWhatIsSavedTests(unittest.TestCase):
+    """A session override is a fact about this run, not a setting."""
+
+    def test_a_fallback_port_is_not_exported_as_the_configured_one(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.json"
+            store = ad.ConfigStore(
+                install_dir=lambda: Path(tmpdir),
+                path=lambda: path,
+                sanitizer=ad.sanitize_config,
+                loader=ad.load_json_file,
+                writer=ad.atomic_write_json,
+                logger=lambda _message: None,
+            )
+            store.set("ServerPort", 9751)
+            # What the GUI does when the configured port is busy at startup.
+            store.set_session("ServerPort", 9760)
+            self.assertEqual(store.get("ServerPort"), 9760)
+            self.assertEqual(store.get_persisted("ServerPort"), 9751)
+
+            bundle = ad.build_settings_bundle(store)
+            self.assertEqual(
+                bundle["settings"]["ServerPort"], 9751,
+                "the bundle records the transient fallback port, and importing "
+                "it makes that permanent",
+            )
 
 
 if __name__ == "__main__":

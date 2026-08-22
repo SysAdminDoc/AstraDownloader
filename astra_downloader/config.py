@@ -1613,7 +1613,13 @@ def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
     is also why there is no opt-in to include them: an option to break that
     rule is still a way to break it.
     """
-    read = getattr(config, "get", None)
+    # get_persisted, not get: a session override is a fact about this run of
+    # this machine, and the one that exists is the fallback ServerPort chosen
+    # when the configured port was busy at startup. Exported through `get`,
+    # that transient port is written into the bundle as the user's setting,
+    # and importing it makes it permanent. Every other settings read in the
+    # GUI already uses get_persisted; this one did not.
+    read = getattr(config, "get_persisted", None) or getattr(config, "get", None)
     settings = {}
     if callable(read):
         for key in sorted(DEFAULT_CONFIG):
