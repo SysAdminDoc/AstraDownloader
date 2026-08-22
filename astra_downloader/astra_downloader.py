@@ -200,6 +200,7 @@ try:
         FolderPickerService as _OwnedFolderPickerService,
         MainWindowCore,
         PlaylistStagingDialog,
+        SubscriptionDeliveryDialog, SubscriptionArchiveDialog,
         ReadinessProbe as _OwnedReadinessProbe,
         SetupWorkerCore,
         download_status_tone, format_duration, human_status, make_card,
@@ -348,6 +349,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         FolderPickerService as _OwnedFolderPickerService,
         MainWindowCore,
         PlaylistStagingDialog,
+        SubscriptionDeliveryDialog, SubscriptionArchiveDialog,
         ReadinessProbe as _OwnedReadinessProbe,
         SetupWorkerCore,
         download_status_tone, format_duration, human_status, make_card,
@@ -5242,6 +5244,7 @@ class DownloadManager(DownloadManagerCore):
                 'detect_system_proxy': lambda: detect_system_proxy(),
                 'resolve_effective_proxy': lambda *args, **kwargs: resolve_effective_proxy(*args, **kwargs),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
+                'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'normalize_playlist_items': lambda *args, **kwargs: normalize_playlist_items(*args, **kwargs),
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -5270,6 +5273,28 @@ class DownloadManager(DownloadManagerCore):
         )
 
 
+def best_available_height(dl_manager, url):
+    """The tallest video height a link currently offers, or 0.
+
+    One metadata fetch. Only a subscription with upgrades turned on reaches
+    this, and only for videos it has already captured — the flat playlist
+    scan carries no format information at all, so there is no cheaper way to
+    know whether a better version exists.
+    """
+    summary, error = dl_manager.list_formats(url)
+    if error or not isinstance(summary, dict):
+        return 0
+    heights = []
+    for entry in summary.get('formats') or []:
+        if not isinstance(entry, dict) or not entry.get('has_video'):
+            continue
+        try:
+            heights.append(int(entry.get('height') or 0))
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return max(heights, default=0)
+
+
 def build_subscription_manager(config, dl_manager):
     """Compose the durable subscription scheduler from application services."""
     store = SubscriptionStore(
@@ -5285,11 +5310,20 @@ def build_subscription_manager(config, dl_manager):
     )
 
     def enqueue(subscription, candidate, archive_key):
+        # A subscription's own delivery choices, where it has any. An empty
+        # value means "use the global setting", so passing None keeps the
+        # historical behaviour for every record written before schema 2.
+        audio_only = bool(subscription.get('audioOnly'))
         return dl_manager.start_download(
             url=candidate['url'],
             title=candidate.get('title'),
             subscription_id=subscription['id'],
             archive_key=archive_key,
+            audio_only=audio_only,
+            fmt=subscription.get('format') or None,
+            quality=subscription.get('quality') or None,
+            output_dir=subscription.get('outputDir') or None,
+            output_template=subscription.get('outputTemplate') or None,
         )
 
     return SubscriptionManager(
@@ -5301,6 +5335,8 @@ def build_subscription_manager(config, dl_manager):
         ),
         enqueue=enqueue,
         status_reader=lambda download_id: dl_manager.status_of(download_id, default='failed'),
+        delivered_height_reader=lambda download_id: dl_manager.delivered_height_of(download_id),
+        height_probe=lambda url: best_available_height(dl_manager, url),
         logger=lambda message: write_persistent_log(message),
         activity_registry=_YTDLP_ACTIVITY,
     )
@@ -5828,6 +5864,7 @@ class MainWindow(MainWindowCore):
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
+                'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'output_template_preview': lambda *args, **kwargs: output_template_preview(*args, **kwargs),
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),

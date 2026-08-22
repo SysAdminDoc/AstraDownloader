@@ -3324,7 +3324,7 @@ class Download:
                  requires_auth=False, created_at=None, queue_order=0, section=None,
                  playlist_items=None, subscription_id=None, archive_key=None,
                  subtitles_only=False, clock=None, profile_name=None,
-                 output_name=None):
+                 output_name=None, output_template=None):
         self._clock = clock or time.time
         self.id = dl_id
         self.url = url
@@ -3337,6 +3337,12 @@ class Download:
         # configured template", which is the behaviour every existing queue
         # record and every existing caller already expresses.
         self.output_name = str(output_name or "")
+        # A subscription can name its own yt-dlp output template. Empty means
+        # the global OutputTemplate setting, which is what every other
+        # download uses.
+        self.output_template = str(output_template or "")
+        # What yt-dlp actually wrote, in pixels. 0 until a run reports it.
+        self.delivered_height = 0
         self.referer = referer
         self.section = dict(section) if isinstance(section, dict) else None
         self.playlist_items = list(playlist_items) if playlist_items else None
@@ -3429,6 +3435,8 @@ class Download:
             payload["profileName"] = self.profile_name
         if self.output_name:
             payload["outputName"] = self.output_name
+        if self.output_template:
+            payload["outputTemplate"] = self.output_template
         return payload
 
 
@@ -3457,6 +3465,7 @@ AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'audio_only', 'format', 'quality', 'output_dir',
     'title', 'referer', 'section', 'playlist_items', 'subtitles_only',
     'output_name',
+    'output_template',
     'subscription_id', 'archive_key', 'requires_auth', 'status',
     'error', 'error_code', 'error_advice', 'error_action',
     '_credentials', '_video_password', 'profile_name',
@@ -3538,6 +3547,8 @@ class DownloadQueueStore:
                if download.archive_key else {}),
             **({'outputName': download.output_name}
                if getattr(download, 'output_name', '') else {}),
+            **({'outputTemplate': download.output_template}
+               if getattr(download, 'output_template', '') else {}),
             **({'subtitlesOnly': True} if download.subtitles_only else {}),
             **({'subtitleRetry': True} if getattr(download, 'subtitle_retry', False) else {}),
             **({'profileName': getattr(download, 'profile_name', None)}
@@ -3590,6 +3601,7 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'normalize_download_section',
     'detect_system_proxy',
     'normalize_output_name',
+    'normalize_output_template',
     'normalize_playlist_items',
     'resolve_effective_proxy',
     'normalize_url',
@@ -4486,7 +4498,8 @@ class DownloadManagerCore:
                        output_dir=None, title=None, referer=None, cookies=None,
                        section=None, playlist_items=None, subscription_id=None,
                        archive_key=None, subtitles_only=False, video_password=None,
-                       profile_name=None, output_name=None):
+                       profile_name=None, output_name=None,
+                       output_template=None):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
@@ -4503,6 +4516,12 @@ class DownloadManagerCore:
         # every entry point (HTTP, GUI, clipboard, scheduler) gets the same
         # rejection instead of each caller remembering to ask.
         output_name = self._dependencies['normalize_output_name'](output_name)
+        # Normalised here rather than where it was stored: a subscription's
+        # template is state on disk, and a hand-edited one must not be able
+        # to drive the output path any more than an API caller's can.
+        output_template = self._dependencies['normalize_output_template'](
+            output_template
+        ) if output_template else ''
         if profile_name is not None:
             profile_name = self._dependencies['clean_text'](profile_name, '', 80)
             if profile_name and not select_site_profile(
@@ -4629,6 +4648,7 @@ class DownloadManagerCore:
                 dl.archive_key = archive_key
                 dl.profile_name = profile_name
                 dl.output_name = output_name
+                dl.output_template = str(output_template or "")
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
                 dl._credentials = None
@@ -4660,6 +4680,7 @@ class DownloadManagerCore:
                     subtitles_only=subtitles_only,
                     profile_name=profile_name,
                     output_name=output_name,
+                    output_template=output_template,
                 )
                 dl._cookies = list(cookies) if cookies else None
                 dl._video_password = video_password
@@ -4868,6 +4889,14 @@ class DownloadManagerCore:
                     # reason: yt-dlp occasionally emits a malformed JSON line on
                     # extractor exit. Fall through to MDLP.
                     pass
+            if line.startswith('MDLP_HEIGHT '):
+                try:
+                    height = json.loads(line[len('MDLP_HEIGHT '):])
+                    dl.delivered_height = max(0, int(height or 0))
+                except Exception:
+                    # reason: an audio-only or malformed height is simply not recorded
+                    pass
+                continue
             if line.startswith('MDLP_FILEPATH '):
                 _mark_live_transfer_started()
                 try:
@@ -5514,7 +5543,26 @@ class DownloadManagerCore:
         elif requested_name:
             requested_name = ''
 
-        custom_tpl = str(effective_config.get("OutputTemplate", "") or "")
+        # A subscription's own template outranks the global one; it is how
+        # one feed lands in its own folder shape while every other download
+        # keeps the user's default.
+        #
+        # Normalised HERE, not only where it was accepted: a template travels
+        # in the durable queue and comes back from a subscription record on
+        # disk, so the point of use is the only place that sees every value
+        # that can reach an argv.
+        per_download_tpl = self._dependencies['normalize_output_template'](
+            getattr(dl, 'output_template', '')
+        )
+        if getattr(dl, 'output_template', '') and not per_download_tpl:
+            self._dependencies['write_persistent_log'](
+                f'Download {dl.id}: refusing an output template that is not '
+                'allowed here; using the configured template instead.'
+            )
+        custom_tpl = (
+            per_download_tpl
+            or str(effective_config.get("OutputTemplate", "") or "")
+        )
         if requested_name:
             # yt-dlp treats a literal % in -o as a template token, and the
             # normalizer has already rejected any name containing one.
@@ -5558,7 +5606,12 @@ class DownloadManagerCore:
                 'download:MDLP %(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s',
                 '--progress-template',
                 'download:MDLP_JSON %(progress)j',
-                '--print', 'after_move:MDLP_FILEPATH %(filepath)j']
+                '--print', 'after_move:MDLP_FILEPATH %(filepath)j',
+                # The height that was actually written, not the one that was
+                # asked for. A subscription that only re-fetches on a strict
+                # upgrade has to compare against what is on disk, and
+                # "requested 1080p" says nothing about what YouTube served.
+                '--print', 'after_move:MDLP_HEIGHT %(height)j']
         if effective_config.get("WindowsFilenames", True):
             args.append('--windows-filenames')
 
@@ -6982,6 +7035,12 @@ class DownloadManagerCore:
         with self._lock:
             dl = self.downloads.get(dl_id)
             return dl.status if dl else default
+
+    def delivered_height_of(self, dl_id):
+        """Return the height yt-dlp wrote for a download, or 0."""
+        with self._lock:
+            dl = self.downloads.get(dl_id)
+            return max(0, int(getattr(dl, 'delivered_height', 0) or 0)) if dl else 0
 
     def snapshot_of(self, dl_id):
         """Return a ``to_dict()`` snapshot taken under the manager lock, or None."""

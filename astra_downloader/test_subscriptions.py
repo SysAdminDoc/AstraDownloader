@@ -1506,5 +1506,303 @@ class SubscriptionScanReportingTests(unittest.TestCase):
         )
 
 
+class SubscriptionArchiveManagerTests(unittest.TestCase):
+    """A subscription carries its own delivery, and its archive is editable."""
+
+    def _store(self, tmpdir, existing=None):
+        path = Path(tmpdir) / "subscriptions.json"
+        if existing is not None:
+            path.write_text(json.dumps(existing), encoding="utf-8")
+        return subscriptions_module().SubscriptionStore(
+            path=path,
+            reader=lambda p, fallback: (
+                json.loads(Path(p).read_text(encoding="utf-8"))
+                if Path(p).exists() else fallback
+            ),
+            writer=lambda p, data: Path(p).write_text(
+                json.dumps(data), encoding="utf-8"),
+            logger=lambda _message: None,
+            normalize_url=lambda value: ad.normalize_url(value),
+            is_youtube_url=lambda value: ad.is_youtube_url(value),
+            clean_text=ad.clean_text,
+            clamp_int=ad.clamp_int,
+            coerce_bool=ad.coerce_bool,
+        )
+
+    def test_a_subscription_carries_its_own_delivery(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, error = store.add_subscription(
+                "https://www.youtube.com/@channel",
+                delivery={
+                    "outputDir": str(Path(tmpdir) / "Channel"),
+                    "format": "mkv",
+                    "quality": "1080",
+                    "outputTemplate": "%(title)s.%(ext)s",
+                    "audioOnly": False,
+                },
+            )
+            self.assertIsNone(error)
+            self.assertEqual(record["format"], "mkv")
+            self.assertEqual(record["quality"], "1080")
+            self.assertEqual(record["outputTemplate"], "%(title)s.%(ext)s")
+            self.assertTrue(record["outputDir"].endswith("Channel"))
+            self.assertFalse(record["audioOnly"])
+            self.assertFalse(record["upgradeIfBetter"])
+
+            # It survives a reload, which is what makes it a setting.
+            reloaded = self._store(tmpdir).get_subscription(record["id"])
+            self.assertEqual(reloaded["format"], "mkv")
+
+    def test_a_format_the_chosen_kind_cannot_produce_is_dropped(self):
+        # Silently turning a requested mp3 into mp4 would deliver something
+        # nobody asked for.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel",
+                delivery={"format": "mp3", "audioOnly": False},
+            )
+            self.assertEqual(record["format"], "")
+            updated, error = store.update_subscription(
+                record["id"], delivery={"audioOnly": True, "format": "mp3"})
+            self.assertIsNone(error)
+            self.assertEqual(updated["format"], "mp3")
+            self.assertTrue(updated["audioOnly"])
+
+    def test_a_version_one_record_loads_with_the_global_settings(self):
+        # The migration: every new field defaults to "use the global
+        # setting", which is exactly what a schema-1 record meant.
+        legacy = {
+            "schemaVersion": 1,
+            "subscriptions": [{
+                "id": "sub_legacy00000001",
+                "url": "https://www.youtube.com/@legacy",
+                "title": "Legacy",
+                "intervalMinutes": 60,
+                "enabled": True,
+                "createdAt": 1.0,
+                "updatedAt": 1.0,
+                "lastScanAt": None,
+                "nextScanAt": None,
+                "lastError": "",
+                "lastQueued": 0,
+                "lastSkipped": 0,
+            }],
+            "archive": {},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir, legacy)
+            record = store.get_subscription("sub_legacy00000001")
+            self.assertIsNotNone(record)
+            self.assertEqual(record["title"], "Legacy")
+            for field in ("outputDir", "format", "quality", "outputTemplate"):
+                self.assertEqual(record[field], "", field)
+            self.assertFalse(record["audioOnly"])
+            self.assertFalse(record["upgradeIfBetter"])
+            self.assertEqual(
+                subscriptions_module().SUBSCRIPTION_SCHEMA_VERSION, 2)
+
+    def test_the_archive_view_lists_what_was_captured(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            for index in range(3):
+                candidate = {
+                    "id": f"vid{index}",
+                    "url": f"https://www.youtube.com/watch?v=vid{index}00000",
+                    "title": f"Upload {index}",
+                }
+                key = subscriptions_module().subscription_archive_key(candidate)
+                store.reserve_archive(key, candidate, sub_id, now=100 + index)
+                store.mark_archive_queued(key, f"dl{index}", now=100 + index)
+                store.mark_download(
+                    f"dl{index}", "complete", now=200 + index,
+                    delivered_height=720,
+                )
+            page = store.archive_page(sub_id)
+            self.assertEqual(page["total"], 3)
+            self.assertEqual(len(page["items"]), 3)
+            # Newest first.
+            self.assertEqual(page["items"][0]["title"], "Upload 2")
+            self.assertEqual(page["items"][0]["status"], "complete")
+            self.assertIn("key", page["items"][0])
+            self.assertEqual(store.archive_page("sub_other")["total"], 0)
+
+    def test_forgetting_an_entry_lets_the_next_scan_fetch_it_again(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            candidate = {
+                "id": "vid1",
+                "url": "https://www.youtube.com/watch?v=vid100000000",
+                "title": "Upload",
+            }
+            key = subscriptions_module().subscription_archive_key(candidate)
+            store.reserve_archive(key, candidate, record["id"], now=100)
+            store.mark_archive_queued(key, "dl1", now=100)
+            store.mark_download("dl1", "complete", now=200)
+
+            # While it is captured, a re-scan skips it.
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=300),
+                subscriptions_module().RESERVE_ALREADY_PRESENT,
+            )
+            forgotten, error = store.forget_archive_entry(key)
+            self.assertTrue(forgotten, error)
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=400),
+                subscriptions_module().RESERVE_OK,
+            )
+
+    def test_an_item_being_downloaded_now_cannot_be_forgotten(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            candidate = {
+                "id": "vid2",
+                "url": "https://www.youtube.com/watch?v=vid200000000",
+                "title": "Upload",
+            }
+            key = subscriptions_module().subscription_archive_key(candidate)
+            store.reserve_archive(key, candidate, record["id"], now=100)
+            store.mark_archive_queued(key, "dl2", now=100)
+            forgotten, error = store.forget_archive_entry(key)
+            self.assertFalse(forgotten)
+            self.assertIn("downloaded now", error)
+            self.assertEqual(
+                store.reserve_archive(key, candidate, record["id"], now=200),
+                subscriptions_module().RESERVE_ALREADY_PRESENT,
+                "the claim has to survive a refused forget",
+            )
+            self.assertEqual(
+                store.forget_archive_entry("no-such-key"),
+                (False, "That archive entry no longer exists."),
+            )
+
+    def test_a_rescan_refetches_only_on_a_strict_upgrade(self):
+        module = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            candidate = {
+                "id": "vid3",
+                "url": "https://www.youtube.com/watch?v=vid300000000",
+                "title": "Upload",
+            }
+            key = module.subscription_archive_key(candidate)
+            store.reserve_archive(key, candidate, record["id"], now=100)
+            store.mark_archive_queued(key, "dl3", now=100)
+            store.mark_download("dl3", "complete", now=200, delivered_height=720)
+
+            for height, reason in (
+                (0, "an unknown height is not an upgrade"),
+                (480, "a smaller height is not an upgrade"),
+                (720, "the same height is not an upgrade"),
+            ):
+                with self.subTest(height=height):
+                    self.assertEqual(
+                        store.reserve_archive(
+                            key, candidate, record["id"], now=300,
+                            upgrade_height=height),
+                        module.RESERVE_ALREADY_PRESENT, reason,
+                    )
+            self.assertEqual(
+                store.reserve_archive(
+                    key, candidate, record["id"], now=400, upgrade_height=1080),
+                module.RESERVE_OK,
+                "a strictly taller rendition is the whole point",
+            )
+            # The height already delivered survives the re-reservation, or the
+            # next comparison would have nothing to measure against.
+            self.assertEqual(
+                store.archive_entry(key)["deliveredHeight"], 720)
+
+    def test_an_entry_with_no_recorded_height_is_left_alone(self):
+        module = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            candidate = {
+                "id": "vid4",
+                "url": "https://www.youtube.com/watch?v=vid400000000",
+                "title": "Audio upload",
+            }
+            key = module.subscription_archive_key(candidate)
+            store.reserve_archive(key, candidate, record["id"], now=100)
+            store.mark_archive_queued(key, "dl4", now=100)
+            # No height: an audio-only capture, or one from before this field
+            # existed. Re-fetching on a comparison nobody can make would mean
+            # re-downloading every legacy entry once.
+            store.mark_download("dl4", "complete", now=200)
+            self.assertEqual(
+                store.reserve_archive(
+                    key, candidate, record["id"], now=300, upgrade_height=2160),
+                module.RESERVE_ALREADY_PRESENT,
+            )
+
+    def test_the_upgrade_probe_runs_only_for_a_subscription_that_asked(self):
+        module = subscriptions_module()
+        probed = []
+        manager = module.SubscriptionManager(
+            store=types.SimpleNamespace(
+                archive_entry=lambda _key: {
+                    "status": "complete", "deliveredHeight": 720,
+                },
+            ),
+            probe=lambda _url: ([], None),
+            enqueue=lambda *_args: ("dl", None),
+            height_probe=lambda url: probed.append(url) or 1080,
+        )
+        candidate = {"url": "https://www.youtube.com/watch?v=vid500000000"}
+        self.assertEqual(
+            manager._upgrade_height({"upgradeIfBetter": False}, "k", candidate), 0)
+        self.assertEqual(probed, [], "an opted-out subscription must not probe")
+        self.assertEqual(
+            manager._upgrade_height({"upgradeIfBetter": True}, "k", candidate),
+            1080,
+        )
+        self.assertEqual(probed, [candidate["url"]])
+
+    def test_the_delivery_reaches_the_download_manager(self):
+        queued = []
+
+        class Manager:
+            def start_download(self, **kwargs):
+                queued.append(kwargs)
+                return "dl_sub", None
+
+        subscription = {
+            "id": "sub_1", "outputDir": "D:/Feeds/Channel", "format": "mkv",
+            "quality": "1080", "outputTemplate": "%(title)s.%(ext)s",
+            "audioOnly": False,
+        }
+        # Drive the real closure the composition root builds.
+        manager = Manager()
+        with mock.patch.object(ad, "SubscriptionStore"), \
+                mock.patch.object(ad, "SubscriptionManager") as built:
+            ad.build_subscription_manager(FakeConfig(), manager)
+        enqueue_fn = built.call_args.kwargs["enqueue"]
+        enqueue_fn(subscription, {"url": "https://x.test/v", "title": "T"}, "k")
+        self.assertEqual(queued[0]["fmt"], "mkv")
+        self.assertEqual(queued[0]["quality"], "1080")
+        self.assertEqual(queued[0]["output_dir"], "D:/Feeds/Channel")
+        self.assertEqual(queued[0]["output_template"], "%(title)s.%(ext)s")
+        self.assertFalse(queued[0]["audio_only"])
+
+        # An unconfigured subscription passes None everywhere, which is what
+        # keeps a schema-1 record behaving exactly as it did.
+        queued.clear()
+        enqueue_fn({"id": "sub_2"}, {"url": "https://x.test/v"}, "k")
+        for field in ("fmt", "quality", "output_dir", "output_template"):
+            self.assertIsNone(queued[0][field], field)
+
+
 if __name__ == "__main__":
     unittest.main()

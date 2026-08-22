@@ -7,6 +7,14 @@
       <translation>{count} Videos</translation>
     </message>
     <message>
+      <source>Browse</source>
+      <translation>Durchsuchen</translation>
+    </message>
+    <message>
+      <source>Allow again</source>
+      <translation>Erneut zulassen</translation>
+    </message>
+    <message>
       <source>Extension server</source>
       <translation>Erweiterungsserver</translation>
     </message>
@@ -275,6 +283,106 @@
       <translation>Auswahl herunterladen ({count})</translation>
     </message>
     <message>
+      <source>Subscription delivery</source>
+      <translation>Abonnement-Zustellung</translation>
+    </message>
+    <message>
+      <source>Subscription delivery settings</source>
+      <translation>Einstellungen zur Abonnement-Zustellung</translation>
+    </message>
+    <message>
+      <source>Subscription</source>
+      <translation>Abonnement</translation>
+    </message>
+    <message>
+      <source>Anything left empty follows the settings every other download uses. Fill one in to give this subscription its own.</source>
+      <translation>Alles, was leer bleibt, folgt den Einstellungen jedes anderen Downloads. Füllen Sie ein Feld aus, um diesem Abonnement eigene zu geben.</translation>
+    </message>
+    <message>
+      <source>Download audio only</source>
+      <translation>Nur Audio herunterladen</translation>
+    </message>
+    <message>
+      <source>Fetch again when a better version appears</source>
+      <translation>Erneut holen, wenn eine bessere Fassung erscheint</translation>
+    </message>
+    <message>
+      <source>Re-download a captured video only when the site offers a taller one than the copy on disk. This checks every captured video on every scan, so it costs a lookup per item.</source>
+      <translation>Ein erfasstes Video nur dann erneut laden, wenn die Website eine höhere Auflösung anbietet als die Kopie auf der Festplatte. Das prüft bei jedem Scan jedes erfasste Video und kostet daher eine Abfrage pro Eintrag.</translation>
+    </message>
+    <message>
+      <source>Save to</source>
+      <translation>Speichern unter</translation>
+    </message>
+    <message>
+      <source>The usual download folder</source>
+      <translation>Der übliche Download-Ordner</translation>
+    </message>
+    <message>
+      <source>Subscription download folder</source>
+      <translation>Download-Ordner des Abonnements</translation>
+    </message>
+    <message>
+      <source>Format</source>
+      <translation>Format</translation>
+    </message>
+    <message>
+      <source>Subscription format</source>
+      <translation>Format des Abonnements</translation>
+    </message>
+    <message>
+      <source>Quality</source>
+      <translation>Qualität</translation>
+    </message>
+    <message>
+      <source>Subscription quality</source>
+      <translation>Qualität des Abonnements</translation>
+    </message>
+    <message>
+      <source>No preference</source>
+      <translation>Keine Bevorzugung</translation>
+    </message>
+    <message>
+      <source>Naming template</source>
+      <translation>Namensvorlage</translation>
+    </message>
+    <message>
+      <source>The usual naming template</source>
+      <translation>Die übliche Namensvorlage</translation>
+    </message>
+    <message>
+      <source>Subscription naming template</source>
+      <translation>Namensvorlage des Abonnements</translation>
+    </message>
+    <message>
+      <source>A yt-dlp output template, relative to the folder above. Only the allowed fields are accepted, and it must keep %(ext)s.</source>
+      <translation>Eine yt-dlp-Ausgabevorlage, relativ zum Ordner oben. Es werden nur die erlaubten Felder akzeptiert, und %(ext)s muss erhalten bleiben.</translation>
+    </message>
+    <message>
+      <source>Save</source>
+      <translation>Speichern</translation>
+    </message>
+    <message>
+      <source>Choose where this subscription saves</source>
+      <translation>Wählen, wohin dieses Abonnement speichert</translation>
+    </message>
+    <message>
+      <source>Subscription archive</source>
+      <translation>Abonnementarchiv</translation>
+    </message>
+    <message>
+      <source>Captured subscription items</source>
+      <translation>Erfasste Abonnement-Einträge</translation>
+    </message>
+    <message>
+      <source>Archive action result</source>
+      <translation>Ergebnis der Archivaktion</translation>
+    </message>
+    <message>
+      <source>Forget this item so the next scan can fetch it again. The file already on disk is left alone.</source>
+      <translation>Diesen Eintrag vergessen, damit der nächste Scan ihn erneut holen kann. Die bereits gespeicherte Datei bleibt unberührt.</translation>
+    </message>
+    <message>
       <source>Server status indicator: Stopped</source>
       <translation>Indikator für Serverstatus: Gestoppt</translation>
     </message>
@@ -431,8 +539,20 @@
       <translation>Jetzt prüfen</translation>
     </message>
     <message>
+      <source>Delivery</source>
+      <translation>Zustellung</translation>
+    </message>
+    <message>
+      <source>Archive</source>
+      <translation>Archiv</translation>
+    </message>
+    <message>
       <source>Remove</source>
       <translation>Entfernen</translation>
+    </message>
+    <message>
+      <source>Delivery settings saved.</source>
+      <translation>Zustellungseinstellungen gespeichert.</translation>
     </message>
     <message>
       <source>Import this site's cookies or store its username/password to unblock the download waiting on it.</source>
@@ -791,6 +911,18 @@
       <translation>Ein Abonnement-Scan hat dieses Video bereits erfasst. Ankreuzen, um es erneut zu laden.</translation>
     </message>
     <message>
+      <source>{count} captured</source>
+      <translation>{count} erfasst</translation>
+    </message>
+    <message>
+      <source>Allowed</source>
+      <translation>Zugelassen</translation>
+    </message>
+    <message>
+      <source>The next scan can fetch that item again.</source>
+      <translation>Der nächste Scan kann diesen Eintrag erneut holen.</translation>
+    </message>
+    <message>
       <source>{name} {page}</source>
       <translation>{name} {page}</translation>
     </message>
@@ -923,10 +1055,6 @@
       <translation>{label}: {path}</translation>
     </message>
     <message>
-      <source>Save to</source>
-      <translation>Speichern unter</translation>
-    </message>
-    <message>
       <source>Send this download somewhere other than the default folder.</source>
       <translation>Diesen Download in einem anderen Ordner als dem Standardordner speichern.</translation>
     </message>
@@ -965,6 +1093,18 @@
     <message>
       <source>Every {minutes} min · next scan {next_scan}</source>
       <translation>Alle {minutes} Min. · nächster Scan {next_scan}</translation>
+    </message>
+    <message>
+      <source>Where this subscription saves, and in what format, quality and naming.</source>
+      <translation>Wohin dieses Abonnement speichert, und in welchem Format, welcher Qualität und Benennung.</translation>
+    </message>
+    <message>
+      <source>What this subscription has captured, and which items to let through again.</source>
+      <translation>Was dieses Abonnement erfasst hat und welche Einträge erneut durchgelassen werden.</translation>
+    </message>
+    <message>
+      <source>That subscription no longer exists.</source>
+      <translation>Dieses Abonnement gibt es nicht mehr.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -1379,6 +1519,14 @@
       <translation>Diese Playlist hat keine Videos zurückgegeben. Schließen Sie die Prüfung und versuchen Sie den Link erneut.</translation>
     </message>
     <message>
+      <source>Nothing captured yet</source>
+      <translation>Noch nichts erfasst</translation>
+    </message>
+    <message>
+      <source>Items appear here after this subscription's first scan queues something.</source>
+      <translation>Einträge erscheinen hier, sobald der erste Scan dieses Abonnements etwas einreiht.</translation>
+    </message>
+    <message>
       <source>{label} status indicator: {value}</source>
       <translation>{label} Statusindikator: {value}</translation>
     </message>
@@ -1493,6 +1641,10 @@
     <message>
       <source>Try a different search or choose All subscriptions.</source>
       <translation>Versuchen Sie es mit einer anderen Suche oder wählen Sie „Alle Abonnements“.</translation>
+    </message>
+    <message>
+      <source>The archive could not be read.</source>
+      <translation>Das Archiv konnte nicht gelesen werden.</translation>
     </message>
     <message>
       <source>Could not read stored sign-ins: {error}</source>
@@ -1795,10 +1947,6 @@
       <translation>Downloadverlauf konnte nicht gelesen werden: {error}</translation>
     </message>
     <message>
-      <source>Subscription archive</source>
-      <translation>Abonnementarchiv</translation>
-    </message>
-    <message>
       <source>No current message</source>
       <translation>Keine aktuelle Meldung</translation>
     </message>
@@ -1929,10 +2077,6 @@
     <message>
       <source>Status</source>
       <translation>Status</translation>
-    </message>
-    <message>
-      <source>Browse</source>
-      <translation>Durchsuchen</translation>
     </message>
     <message>
       <source>Confirm folder</source>
@@ -2341,14 +2485,6 @@
     <message>
       <source>File</source>
       <translation>Datei</translation>
-    </message>
-    <message>
-      <source>Format</source>
-      <translation>Format</translation>
-    </message>
-    <message>
-      <source>Quality</source>
-      <translation>Qualität</translation>
     </message>
     <message>
       <source>Duration</source>
@@ -3493,10 +3629,6 @@
     <message>
       <source>Pinned version for {tool}</source>
       <translation>Fixierte Version für {tool}</translation>
-    </message>
-    <message>
-      <source>No preference</source>
-      <translation>Keine Bevorzugung</translation>
     </message>
     <message>
       <source>Subtitle language</source>
