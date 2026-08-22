@@ -218,11 +218,17 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1100 tests; scratch state stays under build/pytest
+py -3.13 -m pytest          # 1100 tests across every core; scratch stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
 ```
+
+The suite runs in parallel by default, which needs `pytest-xdist`
+alongside `pytest-qt` and `pytest-asyncio`. Add `-p no:xdist` for a serial
+run when you are debugging how one test affects another. The tests are split
+by domain — download, GUI, routes, subscriptions, health, config and build —
+and `astra_downloader/testing_support.py` holds what they share.
 
 `npm run check` runs the unit tests, the companion port catalogue, the
 Python catch-reason gate, the licence inventory, the translation catalogues,

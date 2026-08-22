@@ -12,6 +12,16 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **The test suite runs in parallel and is split by domain.** 1,100 tests in
+  about 45 seconds instead of 140, across seven modules — download, GUI,
+  routes, subscriptions, health, config and build — with the shared fixtures
+  in one place. Getting there meant fixing what made the suite depend on the
+  order it ran in: process-wide probe caches, the yt-dlp activity registry,
+  and several two-second waits on background threads that a busy machine
+  could miss.
+
 ### Fixed
 
 - **The download-health panel is translated all the way through.** Its row

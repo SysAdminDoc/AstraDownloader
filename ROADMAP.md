@@ -26,13 +26,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: with the sidecar running, a video that previously failed `po-token-required` succeeds; with it absent, behaviour and the named cause are unchanged; no yt-dlp plugin directory is enabled. *Needs live validation that a self-minted token is accepted on the pinned 2026.7.4.*
   Complexity: L
 
-- [ ] P2 — AD-33 — Split the test monolith and run it in parallel
-  Why: `test_astra_downloader.py` is 21,137 lines holding 951 of 964 tests, and the suite runs 964 tests + 610 subtests in 545 s serially with no `pytest-xdist`. Every change pays that.
-  Evidence: measured 2026-08-14; `pytest.ini` has no parallel configuration.
-  Touches: `astra_downloader/test_*.py`, `pytest.ini`, `astra_downloader/conftest.py`, `requirements.txt`
-  Acceptance: tests are split by domain (download / gui / routes / subscriptions / health / config / build); `-n auto` is the default and the suite is green under it; wall-clock is recorded in CLAUDE.md.
-  Complexity: L
-
 - [ ] P2 — AD-40 — Detect archived items the source has since deleted
   Why: an archive whose upstream entry disappears silently rots. Tartube's "Missing Videos" folder is the only implementation in the field, and pinchflat#805 (11 reactions) asks for the inverse guarantee — do not re-download what the user deleted locally. Both need the same reconciliation between the archive and the last scan.
   Evidence: Tartube README §6.25; pinchflat#805; `astra_downloader/subscriptions.py` archive keys.
