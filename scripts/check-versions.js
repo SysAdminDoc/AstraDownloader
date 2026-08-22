@@ -203,7 +203,15 @@ for (const source of sources) {
 // to catch.
 if (appVersion) {
     const pinName = `test_app_version_bumped_to_${appVersion.value.replace(/\./g, '_')}`;
-    if (!read('astra_downloader/test_astra_downloader.py').includes(pinName)) {
+    // Across every test module rather than one named file: the suite is split
+    // by domain now, and naming a single file made this gate depend on which
+    // module the pin happens to live in.
+    const testModules = fs.readdirSync(path.join(ROOT, 'astra_downloader'))
+        .filter((name) => /^test_.*\.py$/.test(name));
+    const pinned = testModules.some(
+        (name) => read(path.posix.join('astra_downloader', name)).includes(pinName)
+    );
+    if (!pinned) {
         failures.push(`the APP_VERSION pin test must be named ${pinName}`);
     }
 }

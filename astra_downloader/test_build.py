@@ -5,6 +5,21 @@ import unittest
 import zipfile
 from pathlib import Path
 from unittest import mock
+import io
+import json
+import re
+import shutil
+import subprocess
+import sys
+import time
+import types
+import astra_downloader as ad
+
+try:
+    from .testing_support import *  # noqa: F401,F403
+except ImportError:  # Flat source-path compatibility.
+    from testing_support import *  # noqa: F401,F403
+
 
 
 MODULE_PATH = Path(__file__).with_name('build.py')
@@ -325,3 +340,405 @@ class ReleaseConstraintsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class UninstallCleanupTests(unittest.TestCase):
+    def test_uninstall_removes_app_owned_artifacts_but_keeps_downloads(self):
+        deleted = []
+
+        def delete_key(_root, path):
+            deleted.append(path)
+
+        fake_winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER="HKCU",
+            DeleteKey=delete_key,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            install = root / "AstraDownloader"
+            native = root / "native-host"
+            desktop = root / "Desktop"
+            start_menu = root / "Start Menu"
+            downloads = root / "Videos"
+            install.mkdir()
+            native.mkdir()
+            desktop.mkdir()
+            start_menu.mkdir()
+            downloads.mkdir()
+            (install / "config.json").write_text("state", encoding="utf-8")
+            (native / "host.json").write_text("manifest", encoding="utf-8")
+            (desktop / ad.SHORTCUT_NAME).write_text("shortcut", encoding="utf-8")
+            (start_menu / ad.SHORTCUT_NAME).write_text("shortcut", encoding="utf-8")
+            downloaded = downloads / "keep-me.mp4"
+            downloaded.write_bytes(b"downloaded")
+
+            with mock.patch.dict(sys.modules, {"winreg": fake_winreg}), \
+                 mock.patch.object(ad, "write_persistent_log"), \
+                 mock.patch.object(ad, "stop_running_companion_for_uninstall"), \
+                 mock.patch.object(ad.subprocess, "run"), \
+                 mock.patch.object(ad, "NATIVE_HOST_DIR", native), \
+                 mock.patch.object(ad, "INSTALL_DIR", install), \
+                 mock.patch.object(ad, "start_menu_programs_dir", return_value=start_menu), \
+                 mock.patch.object(ad.Path, "home", return_value=root):
+                with self.assertRaises(SystemExit) as ctx:
+                    ad.run_uninstall()
+
+            self.assertEqual(ctx.exception.code, 0)
+            self.assertFalse(install.exists())
+            self.assertFalse(native.exists())
+            self.assertFalse((desktop / ad.SHORTCUT_NAME).exists())
+            self.assertFalse((start_menu / ad.SHORTCUT_NAME).exists())
+            self.assertTrue(downloaded.exists(), "uninstall must not remove downloads")
+            self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
+
+    def test_portable_state_sweep_covers_rotations_quarantine_and_orphans(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            install = Path(tmp) / "AstraDownloader"
+            install.mkdir()
+            executable = install / "AstraDownloader.exe"
+            executable.write_bytes(b"portable")
+            media = install / "keep-me.mp4"
+            media.write_bytes(b"media")
+            (install / ad.PORTABLE_MARKER_NAME).write_text("portable\n", encoding="utf-8")
+
+            (install / "config.json").write_text("state", encoding="utf-8")
+            (install / "site-logins").mkdir()
+            (install / "site-logins" / "index.json").write_text("{}", encoding="utf-8")
+            (install / "download-temp" / "dl_1").mkdir(parents=True)
+            (install / "download-temp" / "dl_1" / "audio.wav").write_bytes(b"scratch")
+            for name in (
+                ".cookies.probe.deadbeef.txt",
+                ".cookies.dl_1.txt",
+                "server.log.1",
+                "crash.log.1",
+                "config.json.corrupt-20260811120000",
+                ".history.json.deadbeef.tmp",
+                ".AstraDownloader.update.deadbeef.exe",
+                ".yt-dlp.update.deadbeef.exe",
+                ".whisper.deadbeef.zip",
+                "archive.txt",
+            ):
+                (install / name).write_text("orphan", encoding="utf-8")
+            bystander = install / "notes.txt"
+            bystander.write_text("keep", encoding="utf-8")
+
+            with mock.patch.object(ad, "INSTALL_DIR", install), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "write_persistent_log"):
+                ad.remove_portable_state()
+
+            self.assertTrue(executable.exists())
+            self.assertTrue(media.exists())
+            self.assertTrue((install / ad.PORTABLE_MARKER_NAME).exists())
+            self.assertTrue(bystander.exists())
+            self.assertFalse((install / "config.json").exists())
+            self.assertFalse((install / "site-logins").exists())
+            self.assertFalse((install / "download-temp").exists())
+            for name in (
+                ".cookies.probe.deadbeef.txt",
+                ".cookies.dl_1.txt",
+                "server.log.1",
+                "crash.log.1",
+                "config.json.corrupt-20260811120000",
+                ".history.json.deadbeef.tmp",
+                ".AstraDownloader.update.deadbeef.exe",
+                ".yt-dlp.update.deadbeef.exe",
+                ".whisper.deadbeef.zip",
+                "archive.txt",
+            ):
+                self.assertFalse((install / name).exists(), name)
+
+    def test_uninstall_removes_the_integration_stamp(self):
+        deleted = []
+
+        def delete_key(_root, path):
+            deleted.append(path)
+
+        fake_winreg = types.SimpleNamespace(
+            HKEY_CURRENT_USER="HKCU",
+            DeleteKey=delete_key,
+        )
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.dict(sys.modules, {"winreg": fake_winreg}), \
+             mock.patch.object(ad, "write_persistent_log"), \
+             mock.patch.object(ad, "stop_running_companion_for_uninstall"), \
+             mock.patch.object(ad.subprocess, "run"), \
+             mock.patch.object(ad, "NATIVE_HOST_DIR", Path(tmp) / "native"), \
+             mock.patch.object(ad, "INSTALL_DIR", Path(tmp) / "AstraDownloader"):
+            with self.assertRaises(SystemExit) as ctx:
+                ad.run_uninstall()
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
+
+    def test_uninstall_shutdown_does_not_kill_other_data_roots(self):
+        with mock.patch.object(ad, "send_instance_command", return_value=True) as send, \
+             mock.patch.object(ad.time, "sleep") as sleep, \
+             mock.patch.object(ad.sys, "platform", "win32"), \
+             mock.patch.object(ad.subprocess, "run") as run:
+            self.assertTrue(ad.stop_running_companion_for_uninstall())
+
+        send.assert_called_once_with("shutdown", attempts=3, delay=0.2)
+        sleep.assert_called_once_with(0.75)
+        run.assert_not_called()
+
+    def test_shutdown_instance_command_closes_owned_window(self):
+        class Window:
+            pass
+
+        window = Window()
+        events = []
+        window._append_log = events.append
+        window._force_close = lambda: events.append("closed")
+
+        ad.MainWindow._handle_instance_command(window, "shutdown")
+
+        self.assertEqual(events[-1], "closed")
+
+    def test_delayed_install_dir_removal_only_accepts_app_owned_dir_shape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(ad.is_safe_install_dir_for_removal(Path(tmp) / "AstraDownloader"))
+            self.assertFalse(ad.is_safe_install_dir_for_removal(Path(tmp) / "NotAstraDownloader"))
+            self.assertFalse(ad.is_safe_install_dir_for_removal(Path(tmp)))
+
+    @unittest.skipUnless(sys.platform == "win32", "the delayed removal is a Windows path")
+    def test_delayed_install_dir_removal_actually_deletes_the_directory(self):
+        # The outcome is the contract. An argv-shape assertion let a version
+        # ship that spawned a well-formed command which removed nothing:
+        # `powershell -Command <script> <path>` never populates $args.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "AstraDownloader"
+            (target / "site-logins").mkdir(parents=True)
+            (target / "site-logins" / "youtube.com.txt").write_text("canary", encoding="utf-8")
+
+            spawned = []
+            real_popen = ad.subprocess.Popen
+
+            def capture(*args, **kwargs):
+                process = real_popen(*args, **kwargs)
+                spawned.append(process)
+                return process
+
+            with mock.patch.object(ad.subprocess, "Popen", capture):
+                self.assertTrue(ad.spawn_delayed_install_dir_removal(target))
+
+            self.assertEqual(len(spawned), 1)
+            spawned[0].wait(timeout=30)
+            self.assertFalse(
+                target.exists(),
+                "the delayed removal reported success and left the install directory behind",
+            )
+
+    def test_delayed_install_dir_removal_quotes_a_path_containing_a_quote(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            awkward = Path(tmp) / "o'brien's data" / "AstraDownloader"
+            awkward.mkdir(parents=True)
+            with mock.patch.object(ad.sys, "platform", "win32"), \
+                    mock.patch.object(ad.subprocess, "Popen") as popen:
+                self.assertTrue(ad.spawn_delayed_install_dir_removal(awkward))
+                args = popen.call_args.args[0]
+
+        script = args[-1]
+        self.assertEqual(args[0], ad.system32_command("powershell"))
+        self.assertNotIn("$args", script)
+        self.assertIn(str(awkward.resolve()).replace("'", "''"), script)
+        self.assertNotIn("cmd", args)
+        self.assertNotIn("rmdir", args)
+
+
+class PortableModeTests(unittest.TestCase):
+    def test_portable_mode_requested_by_flag_or_environment(self):
+        self.assertTrue(ad.portable_mode_requested(["--portable"]))
+        self.assertFalse(ad.portable_mode_requested(["--background"]))
+        with mock.patch.dict(os.environ, {"ASTRA_PORTABLE": "yes"}, clear=False):
+            self.assertTrue(ad.portable_mode_requested([]))
+
+    def test_portable_marker_selects_a_frozen_copy_outside_managed_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            portable = root / "Portable"
+            managed = root / "AppData" / "AstraDownloader"
+            executable = portable / "AstraDownloader.exe"
+            portable.mkdir(parents=True)
+            executable.write_bytes(b"portable")
+            ad.portable_marker_path(executable).write_text("portable\n", encoding="utf-8")
+
+            self.assertTrue(ad.portable_mode_requested(
+                [], executable=executable, install_dir=managed, frozen=True,
+            ))
+            self.assertFalse(ad.portable_mode_requested(
+                [], executable=managed / "AstraDownloader.exe",
+                install_dir=managed, frozen=True,
+            ))
+            self.assertFalse(ad.portable_mode_requested(
+                ["--install"], executable=executable,
+                install_dir=managed, frozen=True,
+            ))
+
+    def test_one_file_copy_needs_the_explicit_portable_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "Downloads" / "AstraDownloader.exe"
+            executable.parent.mkdir()
+            executable.write_bytes(b"one-file")
+            self.assertFalse(ad.portable_mode_requested(
+                [], executable=executable,
+                install_dir=root / "AppData" / "AstraDownloader",
+                frozen=True,
+            ))
+            self.assertTrue(ad.portable_mode_requested(
+                ["--portable"], executable=executable,
+                install_dir=root / "AppData" / "AstraDownloader",
+                frozen=True,
+            ))
+
+    def test_instance_ports_and_mutex_namespace_follow_the_state_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installed = root / "AppData" / "AstraDownloader"
+            portable_a = root / "PortableA"
+            portable_b = root / "PortableB"
+            self.assertEqual(
+                ad.instance_ports_for_root(installed, installed),
+                (ad.INSTANCE_CONTROL_PORT_DEFAULT, ad.INSTANCE_LOCK_PORT_DEFAULT),
+            )
+            self.assertNotEqual(
+                ad.instance_ports_for_root(portable_a, installed),
+                ad.instance_ports_for_root(portable_b, installed),
+            )
+            self.assertNotEqual(
+                ad.instance_namespace_for_root(portable_a),
+                ad.instance_namespace_for_root(portable_b),
+            )
+
+    def test_onedir_build_is_never_relocated_or_silently_installed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "AstraDownloader.exe"
+            (root / "_internal").mkdir()
+            executable.write_bytes(b"onedir")
+            with mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "PORTABLE_MODE", False), \
+                 mock.patch.object(ad, "write_persistent_log") as log:
+                self.assertTrue(ad.is_onedir_build())
+                self.assertEqual(ad.ensure_installed_executable(), executable)
+                self.assertEqual(ad.companion_install_exit_code(["--install"]), 2)
+            log.assert_called_once()
+
+    def test_portable_one_file_self_update_restarts_with_the_portable_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            payload = b"MZ" + (b"portable-update" * 256)
+            expected_hash = "a" * 64
+
+            def fake_download(_url, path, **_kwargs):
+                Path(path).write_bytes(payload)
+
+            with mock.patch.object(ad, "INSTALL_DIR", root), \
+                 mock.patch.object(ad, "PORTABLE_MODE", True), \
+                 mock.patch.object(ad, "is_onedir_build", return_value=False), \
+                 mock.patch.object(ad, "fetch_latest_companion_version", return_value="9.9.9"), \
+                 mock.patch.object(ad, "download_file_atomic", side_effect=fake_download), \
+                 mock.patch.object(ad, "validate_companion_update_binary"), \
+                 mock.patch.object(ad, "fetch_expected_sha256", return_value=expected_hash), \
+                 mock.patch.object(ad, "verify_file_sha256"), \
+                 mock.patch.object(ad, "probe_companion_update_binary", return_value=True), \
+                 mock.patch.object(ad, "schedule_companion_update_restart", return_value={"scheduled": True}) as schedule, \
+                 mock.patch.object(ad, "write_persistent_log"), \
+                 mock.patch.object(ad, "schedule_companion_process_exit"):
+                result = ad._run_companion_self_update_unlocked(restart=False)
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(schedule.call_args.args[2], ["--start-server", "--portable"])
+
+    def test_portable_one_folder_self_update_fails_before_downloading(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", True), \
+             mock.patch.object(ad, "is_onedir_build", return_value=True), \
+             mock.patch.object(ad, "fetch_latest_companion_version") as fetch:
+            result = ad._run_companion_self_update_unlocked(restart=False)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_code"], "portable-onedir-update-unsupported")
+        fetch.assert_not_called()
+
+    def test_onedir_archive_carries_the_portable_marker(self):
+        import importlib.util
+
+        build_path = Path(ad.__file__).with_name("build.py")
+        spec = importlib.util.spec_from_file_location("astra_test_build", build_path)
+        build_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "AstraDownloader"
+            source.mkdir()
+            (source / "AstraDownloader.exe").write_bytes(b"MZ")
+            archive_path = root / "AstraDownloader-onedir.zip"
+            build_module.write_onedir_archive(source, archive_path)
+
+            with zipfile.ZipFile(archive_path) as archive:
+                self.assertIn(
+                    "AstraDownloader/" + build_module.PORTABLE_MARKER_NAME,
+                    archive.namelist(),
+                )
+
+    def test_portable_state_root_is_the_executable_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "AstraDownloader.exe"
+            with mock.patch.object(ad.sys, "frozen", True, create=True), \
+                 mock.patch.object(ad.sys, "executable", str(executable)):
+                self.assertEqual(ad.runtime_state_dir(True), executable.parent.resolve())
+
+    def test_portable_install_target_and_copy_stay_with_the_running_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "AstraDownloader.exe"
+            executable.write_bytes(b"portable")
+            with mock.patch.object(ad, "PORTABLE_MODE", True), \
+                 mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "atomic_copy_verified") as copy:
+                self.assertEqual(ad.install_target_exe(), executable)
+                self.assertEqual(ad.ensure_installed_executable(), executable)
+            copy.assert_not_called()
+
+    def test_portable_integrations_are_a_noop(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", True), \
+             mock.patch.object(ad, "launch_command_parts", return_value=("portable", [])) as launch, \
+             mock.patch.object(ad, "register_desktop_shortcut") as desktop, \
+             mock.patch.object(ad, "register_start_menu_shortcut") as start_menu, \
+             mock.patch.object(ad, "register_startup_task") as startup, \
+             mock.patch.object(ad, "register_protocol_handlers") as protocol:
+            self.assertEqual(ad.ensure_system_integrations(), ("portable", []))
+        launch.assert_called_once_with(prefer_installed=False)
+        desktop.assert_not_called()
+        start_menu.assert_not_called()
+        startup.assert_not_called()
+        protocol.assert_not_called()
+
+    def test_silent_install_requires_a_packaged_nonportable_copy(self):
+        with mock.patch.object(ad, "write_persistent_log") as log:
+            self.assertEqual(ad.companion_install_exit_code(["--install"]), 2)
+        log.assert_called_once()
+
+    def test_silent_install_rejects_portable_combination(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", True), \
+             mock.patch.object(ad, "write_persistent_log") as log:
+            self.assertEqual(
+                ad.companion_install_exit_code(["--install", "--portable"]),
+                2,
+            )
+        log.assert_called_once()
+
+    def test_silent_install_registers_integrations_after_copying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "AstraDownloader.exe"
+            target.write_bytes(b"installed")
+            with mock.patch.object(ad, "PORTABLE_MODE", False), \
+                 mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                 mock.patch.object(ad, "install_target_exe", return_value=target), \
+                 mock.patch.object(ad, "ensure_installed_executable", return_value=target), \
+                 mock.patch.object(ad, "ensure_system_integrations") as integrations, \
+                 mock.patch.object(ad.sys, "stdout", io.StringIO()):
+                self.assertEqual(ad.companion_install_exit_code(["--install"]), 0)
+        integrations.assert_called_once_with(prefer_installed=True, force=True)
