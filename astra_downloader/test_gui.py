@@ -866,6 +866,63 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
             finally:
                 _retire_test_window(window)
 
+    def test_a_saved_date_the_filter_cannot_read_is_marked_and_explained(self):
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+
+        class OneRowHistory(FakeHistory):
+            def load(self):
+                return [{
+                    "id": "row", "url": "https://example.com/a", "title": "A",
+                    "filename": "a.mp4", "format": "mp4", "quality": "1080",
+                    "status": "complete", "date": "2026-08-22 10:00:00",
+                    "duration": 4,
+                }]
+
+        history = OneRowHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                # An American-format date used to hide every row with the
+                # ordinary empty state as the only thing on screen.
+                window.history_date_to.setText("08/22/2026")
+                window._refresh_history()
+                QApplication.processEvents()
+                self.assertEqual(
+                    window.history_date_to.property("state"), "error",
+                    "the field the filter could not read is not marked",
+                )
+                self.assertTrue(window.history_page_status.isVisible()
+                                or window.history_page_status.text())
+                self.assertIn("YYYY-MM-DD", window.history_page_status.text())
+                self.assertEqual(
+                    len(window._history_query(entries=history.load())["history"]), 1,
+                    "an unreadable bound must not filter the row out",
+                )
+
+                # An inverted range matches nothing, and says so instead of
+                # leaving the user to guess at an empty list.
+                window.history_date_to.setText("2026-01-01")
+                window.history_date_from.setText("2026-08-01")
+                window._refresh_history()
+                QApplication.processEvents()
+                self.assertFalse(window.history_date_to.property("state"))
+                self.assertIn("after", window.history_page_status.text())
+
+                # And a note about the filter bar clears itself once the
+                # filter bar is valid again.
+                window.history_date_from.clear()
+                window.history_date_to.clear()
+                window._refresh_history()
+                QApplication.processEvents()
+                self.assertEqual(window.history_page_status.text(), "")
+            finally:
+                _retire_test_window(window)
+
     def test_failed_history_row_shows_status_error_and_terminal_filters(self):
         from PySide6.QtWidgets import QApplication, QLabel
 
@@ -4586,19 +4643,127 @@ class StylesheetContrastTests(unittest.TestCase):
             theme="light",
         )
 
-    def test_the_light_theme_is_a_complete_substitution(self):
-        # A dark colour surviving into the light sheet is what would let the
-        # test above measure a boundary that is really still dark.
+    def test_every_authored_colour_has_a_light_counterpart(self):
+        # The direction the old gate did not check. It asserted that the
+        # colours IN the map were substituted, which says nothing about a
+        # colour added to the sheet and never added to the map — that one is
+        # simply carried into the light theme unchanged, and every existing
+        # assertion still passes.
+        authored = {
+            match.group(0).lower()
+            for match in re.finditer(r"#[0-9a-fA-F]{3,8}\b", ad.STYLESHEET)
+        }
+        mapped = {colour.lower() for colour in ad._LIGHT_THEME_COLOR_REPLACEMENTS}
+        self.assertEqual(
+            sorted(authored - mapped), [],
+            "colours in the dark sheet with no light counterpart; they reach "
+            "the light theme unchanged",
+        )
+        self.assertEqual(
+            sorted(mapped - authored), [],
+            "light-map rows for colours the dark sheet no longer contains",
+        )
+
+    def test_the_light_substitution_is_one_pass(self):
+        # It was a str.replace per colour, so an earlier row's output could
+        # match a later row's key: #394350 -> #718092 -> #526272 left the
+        # light scrollbar handle wearing its own hover colour, and hover
+        # feedback gone. A colour may legitimately appear on both sides of
+        # the map; what must not happen is the second rewrite.
         replacements = ad._LIGHT_THEME_COLOR_REPLACEMENTS
         self.assertTrue(replacements)
-        survivors = [
-            dark for dark in replacements
-            if dark.lower() in ad.LIGHT_STYLESHEET.lower()
-        ]
-        self.assertEqual(
-            survivors, [],
-            f"dark palette entries left in the light sheet: {survivors}",
+        chained = sorted(
+            {value.lower() for value in replacements.values()}
+            & {key.lower() for key in replacements}
         )
+        expected = ad._LIGHT_THEME_COLOR_PATTERN.sub(
+            lambda match: replacements[match.group(0)], ad.STYLESHEET
+        )
+        self.assertEqual(ad.LIGHT_STYLESHEET, expected)
+        for aliased in chained:
+            dark_source = sorted(
+                key for key, value in replacements.items()
+                if value.lower() == aliased
+            )
+            self.assertTrue(
+                dark_source,
+                f"{aliased} is a map key and a map value with no source row",
+            )
+
+    def test_the_light_scrollbar_still_answers_a_hover(self):
+        # The concrete casualty of the chained substitution, pinned so the
+        # single-pass derivation cannot quietly go back.
+        for theme, sheet in (("dark", ad.STYLESHEET), ("light", ad.LIGHT_STYLESHEET)):
+            rules = self._stylesheet_rules(sheet)
+            resting = self._declared_colour(
+                rules["QScrollBar::handle:vertical"], ("background", "background-color")
+            )
+            hovered = self._declared_colour(
+                rules["QScrollBar::handle:vertical:hover"],
+                ("background", "background-color"),
+            )
+            self.assertNotEqual(
+                resting, hovered,
+                f"[{theme}] the scrollbar handle does not change on hover",
+            )
+
+    def test_a_row_hover_is_visible_in_both_themes(self):
+        # #11161d was the card surface as well as the row hover, and the light
+        # map sent both to #ffffff, so hovering a history row in the light
+        # theme changed nothing at all.
+        for theme, sheet in (("dark", ad.STYLESHEET), ("light", ad.LIGHT_STYLESHEET)):
+            rules = self._stylesheet_rules(sheet)
+            surface = ("background", "background-color")
+            page = self._declared_colour(rules["QWidget"], surface)
+            card = self._declared_colour(rules['QFrame[class="card"]'], surface)
+            for selector, resting in (
+                ('QFrame[class="historyRow"]:hover', page),
+                ('QFrame[class="download"]:hover', page),
+                ('QFrame[class="playlistRow"]:hover', card),
+            ):
+                hovered = self._declared_colour(rules[selector], surface)
+                ratio = self._contrast(hovered, resting)
+                self.assertGreaterEqual(
+                    ratio, 1.10,
+                    f"[{theme}] {selector} is {ratio:.3f}:1 against the "
+                    f"surface underneath it, which reads as no hover at all",
+                )
+
+    def test_every_download_card_state_is_styled(self):
+        # _update_download_card writes the property for four statuses. Two of
+        # them matched no rule, so a cancelled or skipped card paid a repolish
+        # and rendered exactly like a pending one.
+        rules = self._stylesheet_rules()
+        for state in ("failed", "complete", "cancelled", "skipped"):
+            selector = next(
+                (key for key in rules if f'[state="{state}"]' in key
+                 and 'class="download"' in key),
+                None,
+            )
+            self.assertIsNotNone(
+                selector, f"no download-card rule for state {state!r}"
+            )
+
+    def test_a_focusable_download_card_shows_its_focus(self):
+        # A rebuilt terminal card with no buttons left takes StrongFocus so
+        # focus stays on the row the user was reading. It drew nothing.
+        rules = self._stylesheet_rules()
+        self.assertIn('QFrame[class="download"]:focus', rules)
+
+    def test_the_multi_line_settings_field_can_show_an_error(self):
+        # cfg_site_profiles is a QTextEdit and goes through the same
+        # mark_error path as every QLineEdit, which styled two widget types.
+        for sheet_name, sheet in (("dark", ad.STYLESHEET), ("light", ad.LIGHT_STYLESHEET)):
+            rules = self._stylesheet_rules(sheet)
+            selector = next(
+                (key for key in rules
+                 if 'QTextEdit[state="error"]' in key and ':focus' not in key),
+                None,
+            )
+            self.assertIsNotNone(
+                selector,
+                f"[{sheet_name}] a rejected QTextEdit is marked but not drawn",
+            )
 
     def test_the_page_background_is_what_this_measures_against(self):
         # The ratios below are meaningless if this drifts, and an earlier

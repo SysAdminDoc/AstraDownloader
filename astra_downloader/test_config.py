@@ -1527,5 +1527,61 @@ class SiteLoginBrowserImportTests(unittest.TestCase):
         self.assertIn("supported browsers", error)
 
 
+class HistoryDateFilterTests(unittest.TestCase):
+    """A saved-date bound has to mean what the person typing it meant.
+
+    The filter compares dates as text against the ISO date on each row, and
+    nothing normalised the bound, so an unpadded or non-ISO date became a
+    filter that quietly excluded everything. The GUI had no validation at
+    all; the API had strptime, which accepts 2026-8-1 and then hands the
+    text comparison a string that sorts after every real date.
+    """
+
+    ROWS = [
+        {"title": "Cat", "filename": "cat.mp4", "status": "complete",
+         "format": "mp4", "date": "2026-08-22T10:00:00"},
+        {"title": "Dog", "filename": "dog.mp4", "status": "complete",
+         "format": "mp4", "date": "2026-01-05T10:00:00"},
+    ]
+
+    def test_an_unpadded_date_filters_the_way_it_reads(self):
+        result = ad.query_history_entries(self.ROWS, date_from="2026-8-1")
+        self.assertEqual(result["unreadableDates"], [])
+        self.assertEqual(result["dateFrom"], "2026-08-01")
+        self.assertEqual(result["filteredTotal"], 1)
+        self.assertEqual(
+            result["filteredTotal"],
+            ad.query_history_entries(self.ROWS, date_from="2026-08-01")["filteredTotal"],
+        )
+
+    def test_a_date_that_is_not_a_date_is_named_rather_than_applied(self):
+        for value in ("08/22/2026", "3", "tomorrow", "2026-13-45", "2026-02-30"):
+            with self.subTest(value=value):
+                result = ad.query_history_entries(self.ROWS, date_to=value)
+                self.assertEqual(result["unreadableDates"], ["to"])
+                self.assertEqual(result["dateTo"], "")
+                self.assertEqual(
+                    result["filteredTotal"], len(self.ROWS),
+                    "an unreadable bound must not filter anything out",
+                )
+
+    def test_both_bounds_are_reported_independently(self):
+        result = ad.query_history_entries(
+            self.ROWS, date_from="nonsense", date_to="also nonsense",
+        )
+        self.assertEqual(result["unreadableDates"], ["from", "to"])
+        result = ad.query_history_entries(
+            self.ROWS, date_from="2026-01-01", date_to="nonsense",
+        )
+        self.assertEqual(result["unreadableDates"], ["to"])
+
+    def test_normalize_history_date_separates_empty_from_unreadable(self):
+        self.assertEqual(ad.normalize_history_date(""), "")
+        self.assertEqual(ad.normalize_history_date(None), "")
+        self.assertEqual(ad.normalize_history_date("  2026-8-1 "), "2026-08-01")
+        self.assertIsNone(ad.normalize_history_date("2026/08/01"))
+        self.assertIsNone(ad.normalize_history_date("2026-08-01T00:00:00"))
+
+
 if __name__ == "__main__":
     unittest.main()

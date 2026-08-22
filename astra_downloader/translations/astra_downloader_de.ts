@@ -615,6 +615,10 @@
       <translation>Annahme pausieren</translation>
     </message>
     <message>
+      <source>Both dates need to be YYYY-MM-DD, so neither is being used.</source>
+      <translation>Beide Datumsangaben müssen das Format JJJJ-MM-TT haben; keine von beiden wird verwendet.</translation>
+    </message>
+    <message>
       <source>Export Settings</source>
       <translation>Einstellungen exportieren</translation>
     </message>
@@ -1255,6 +1259,10 @@
       <translation>Starten ausstehender Downloads pausieren. Bereits laufende Downloads werden fortgesetzt.</translation>
     </message>
     <message>
+      <source>The saved-from date needs to be YYYY-MM-DD, so it is not being used.</source>
+      <translation>Das Datum „gespeichert ab“ muss das Format JJJJ-MM-TT haben und wird nicht verwendet.</translation>
+    </message>
+    <message>
       <source>Settings already use their defaults.</source>
       <translation>Die Einstellungen verwenden bereits ihre Standards.</translation>
     </message>
@@ -1791,6 +1799,10 @@
       <translation>Download abgeschlossen</translation>
     </message>
     <message>
+      <source>The through date needs to be YYYY-MM-DD, so it is not being used.</source>
+      <translation>Das Datum „bis“ muss das Format JJJJ-MM-TT haben und wird nicht verwendet.</translation>
+    </message>
+    <message>
       <source>SponsorBlock categories</source>
       <translation>SponsorBlock-Kategorien</translation>
     </message>
@@ -1945,6 +1957,10 @@
     <message>
       <source>Retry subtitles</source>
       <translation>Untertitel erneut erzeugen</translation>
+    </message>
+    <message>
+      <source>The saved-from date is after the through date, so nothing can match.</source>
+      <translation>Das Datum „gespeichert ab“ liegt nach dem Datum „bis“; damit kann nichts übereinstimmen.</translation>
     </message>
     <message>
       <source>Settings restored. Restart Astra Downloader to apply the language.</source>

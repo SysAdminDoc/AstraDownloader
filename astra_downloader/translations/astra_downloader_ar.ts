@@ -615,6 +615,10 @@
       <translation>Pause intake</translation>
     </message>
     <message>
+      <source>Both dates need to be YYYY-MM-DD, so neither is being used.</source>
+      <translation>Both dates need to be YYYY-MM-DD, so neither is being used.</translation>
+    </message>
+    <message>
       <source>Export Settings</source>
       <translation>Export Settings</translation>
     </message>
@@ -1255,6 +1259,10 @@
       <translation>Pause starting pending downloads. Downloads already running will continue.</translation>
     </message>
     <message>
+      <source>The saved-from date needs to be YYYY-MM-DD, so it is not being used.</source>
+      <translation>The saved-from date needs to be YYYY-MM-DD, so it is not being used.</translation>
+    </message>
+    <message>
       <source>Settings already use their defaults.</source>
       <translation>Settings already use their defaults.</translation>
     </message>
@@ -1791,6 +1799,10 @@
       <translation>Download complete</translation>
     </message>
     <message>
+      <source>The through date needs to be YYYY-MM-DD, so it is not being used.</source>
+      <translation>The through date needs to be YYYY-MM-DD, so it is not being used.</translation>
+    </message>
+    <message>
       <source>SponsorBlock categories</source>
       <translation>SponsorBlock categories</translation>
     </message>
@@ -1945,6 +1957,10 @@
     <message>
       <source>Retry subtitles</source>
       <translation>Retry subtitles</translation>
+    </message>
+    <message>
+      <source>The saved-from date is after the through date, so nothing can match.</source>
+      <translation>The saved-from date is after the through date, so nothing can match.</translation>
     </message>
     <message>
       <source>Settings restored. Restart Astra Downloader to apply the language.</source>

@@ -1571,6 +1571,14 @@ CATALOGS["de"].update({
     "No filtered history rows are available to export.":
         "Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.",
     "Export Download History": "Downloadverlauf exportieren",
+    "Both dates need to be YYYY-MM-DD, so neither is being used.":
+        "Beide Datumsangaben müssen das Format JJJJ-MM-TT haben; keine von beiden wird verwendet.",
+    "The saved-from date needs to be YYYY-MM-DD, so it is not being used.":
+        "Das Datum „gespeichert ab“ muss das Format JJJJ-MM-TT haben und wird nicht verwendet.",
+    "The through date needs to be YYYY-MM-DD, so it is not being used.":
+        "Das Datum „bis“ muss das Format JJJJ-MM-TT haben und wird nicht verwendet.",
+    "The saved-from date is after the through date, so nothing can match.":
+        "Das Datum „gespeichert ab“ liegt nach dem Datum „bis“; damit kann nichts übereinstimmen.",
     "Exported {count} filtered history row(s) to {path}":
         "{count} gefilterte Verlaufseinträge nach {path} exportiert",
     "Download history is already clear.": "Der Downloadverlauf ist bereits leer.",
