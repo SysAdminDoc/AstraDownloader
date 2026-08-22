@@ -2646,7 +2646,7 @@ def build_video_format_args(container, quality, *, avoid_upscaled=False):
     else:
         v_pref = a_pref = ''
 
-    def tiers(native):
+    def capped_tiers(native):
         # The filter goes on the video half only; an audio stream has no
         # upscaled variant to reject.
         if v_pref or a_pref:
@@ -2657,19 +2657,26 @@ def build_video_format_args(container, quality, *, avoid_upscaled=False):
                 f'bestvideo{height_filter}{native}+bestaudio',
                 f'best{height_filter}{v_pref}{native}',
                 f'best{height_filter}{native}',
-                f'best{native}',
             ]
         return [
             f'bestvideo{height_filter}{native}+bestaudio',
             f'best{height_filter}{native}',
-            f'best{native}',
         ]
 
-    # Deprioritise, not exclude: the whole chain is tried against native
-    # formats first, and the unfiltered chain behind it still downloads an
-    # upscale when that is all the site offers.
-    selector = tiers(NATIVE_SOURCE_FILTER) if avoid_upscaled else []
-    selector += tiers('')
+    # Deprioritise, not exclude: native formats are preferred, and the
+    # unfiltered chain behind them still downloads an upscale when that is
+    # all the site offers.
+    #
+    # The height cap outranks the upscale preference, and the ordering is the
+    # whole of that rule. Every capped tier — native first, then unfiltered —
+    # comes before the uncapped last-resort tiers, or asking for 1080p on a
+    # site whose only 1080p rendition is upscaled would fetch the 2160p
+    # native one instead and silently exceed the cap.
+    selector = capped_tiers(NATIVE_SOURCE_FILTER) if avoid_upscaled else []
+    selector += capped_tiers('')
+    if avoid_upscaled:
+        selector.append(f'best{NATIVE_SOURCE_FILTER}')
+    selector.append('best')
     return ['-f', '/'.join(selector), '--merge-output-format', container]
 
 
@@ -5478,7 +5485,13 @@ class DownloadManagerCore:
         requested_name = self._dependencies['normalize_output_name'](
             getattr(dl, 'output_name', '')
         )
-        if requested_name and not is_playlist:
+        # A playlist run that names exactly one item is a single-file
+        # download expressed through --playlist-items, which is how the
+        # staging dialog queues a row the user renamed. Anything wider keeps
+        # the template, because one stem across many entries has every
+        # download overwrite the last.
+        names_one_file = not is_playlist or len(dl.playlist_items or ()) == 1
+        if requested_name and names_one_file:
             resolved = (Path(dl.output_dir) / f'{requested_name}.mp4').resolve()
             root = Path(dl.output_dir).resolve()
             if resolved.parent != root:
