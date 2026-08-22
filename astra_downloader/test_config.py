@@ -1527,6 +1527,43 @@ class SiteLoginBrowserImportTests(unittest.TestCase):
         self.assertIn("supported browsers", error)
 
 
+class OutputTemplatePreviewHonoursPaddingTests(unittest.TestCase):
+    """A preview that under-reports the length is worse than none."""
+
+    def test_a_pad_width_reaches_the_reported_length(self):
+        # yt-dlp treats the pad as a minimum width, verified against its own
+        # prepare_filename: `%(title)60.5B` writes 55 spaces and five
+        # characters. The preview parsed the pad and discarded it, so it
+        # reported five and told the caller the path fit.
+        normalized = ad.normalize_output_template("%(title)200.5s.%(ext)s")
+        report = ad.output_template_preview(normalized, "C:/downloads")
+        self.assertGreaterEqual(
+            report["length"], 200,
+            "the preview reports a path shorter than yt-dlp will write",
+        )
+        self.assertTrue(report["relative"].endswith("Examp.mp4"))
+
+    def test_a_zero_pad_previews_the_way_it_renders(self):
+        normalized = ad.normalize_output_template("%(playlist_index)03d.%(ext)s")
+        report = ad.output_template_preview(normalized, "C:/downloads")
+        self.assertEqual(report["relative"], "001.mp4")
+
+    def test_an_unpadded_template_is_unchanged(self):
+        normalized = ad.normalize_output_template("%(title)s.%(ext)s")
+        report = ad.output_template_preview(normalized, "C:/downloads")
+        self.assertEqual(report["relative"], "Example video.mp4")
+
+    def test_a_padded_template_can_now_be_seen_to_be_too_long(self):
+        deep = "C:/downloads/" + "/".join(["folder"] * 12)
+        report = ad.output_template_preview(
+            ad.normalize_output_template("%(title)200.5s.%(ext)s"), deep,
+        )
+        self.assertTrue(
+            report["too_long"],
+            "the length that decides this used to be the unpadded one",
+        )
+
+
 class HistoryDateFilterTests(unittest.TestCase):
     """A saved-date bound has to mean what the person typing it meant.
 

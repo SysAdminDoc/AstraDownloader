@@ -2034,5 +2034,84 @@ class ManagedBinaryPinTests(unittest.TestCase):
             _retire_test_window(window)
 
 
+class ProbeInFlightAcrossASwapTests(unittest.TestCase):
+    """A probe reads a binary that a rollback then replaces underneath it.
+
+    All three probes run their subprocess with the lock released, which is
+    deliberate. What was missing is that the answer coming back was published
+    unconditionally, so a rollback's prime() or reset() could be undone by a
+    probe that had already started, for a full hour of TTL.
+    """
+
+    def _blocking_probe(self, released, resumed, answer):
+        def runner(_args):
+            released.set()
+            self.assertTrue(resumed.wait(15))
+            return answer
+        return runner
+
+    def test_prime_survives_a_probe_that_started_before_it(self):
+        released = threading.Event()
+        resumed = threading.Event()
+        probe = ad.ExecutableVersionProbe(
+            path=lambda: Path(__file__),
+            args=("--version",),
+            runner=self._blocking_probe(released, resumed, "2026.01.01"),
+            parser=lambda text: text.strip(),
+        )
+        result = {}
+        worker = threading.Thread(target=lambda: result.update(got=probe.get()))
+        worker.start()
+        try:
+            self.assertTrue(released.wait(15))
+            # The rollback lands while the old binary is still being read.
+            probe.prime("2026.08.19")
+        finally:
+            resumed.set()
+            worker.join(15)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(
+            probe.get(), "2026.08.19",
+            "the probe republished the version of a binary that is gone",
+        )
+        self.assertEqual(
+            result["got"], "2026.08.19",
+            "the in-flight caller answers with what is installed now",
+        )
+
+    def test_reset_is_not_undone_by_an_older_probe(self):
+        released = threading.Event()
+        resumed = threading.Event()
+        answers = iter(["2026.01.01", "2026.08.19"])
+        started = []
+
+        def runner(_args):
+            started.append(1)
+            if len(started) == 1:
+                released.set()
+                self.assertTrue(resumed.wait(15))
+            return next(answers)
+
+        probe = ad.ExecutableVersionProbe(
+            path=lambda: Path(__file__),
+            args=("--version",),
+            runner=runner,
+            parser=lambda text: text.strip(),
+        )
+        worker = threading.Thread(target=probe.get)
+        worker.start()
+        try:
+            self.assertTrue(released.wait(15))
+            probe.reset()
+        finally:
+            resumed.set()
+            worker.join(15)
+        self.assertFalse(worker.is_alive())
+        # The discarded answer left no cached value, so the next caller runs
+        # its own probe rather than reading a stale one for the whole TTL.
+        self.assertEqual(probe.get(), "2026.08.19")
+        self.assertEqual(len(started), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
