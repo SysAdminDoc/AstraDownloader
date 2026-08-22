@@ -227,8 +227,8 @@ npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
 The suite runs in parallel by default, which needs `pytest-xdist`
 alongside `pytest-qt` and `pytest-asyncio`. Add `-p no:xdist` for a serial
 run when you are debugging how one test affects another. The tests are split
-by domain — download, GUI, routes, subscriptions, health, config and build —
-and `astra_downloader/testing_support.py` holds what they share.
+by domain: download, GUI, routes, subscriptions, health, config and build.
+`astra_downloader/testing_support.py` holds what they share.
 
 `npm run check` runs the unit tests, the companion port catalogue, the
 Python catch-reason gate, the licence inventory, the translation catalogues,
