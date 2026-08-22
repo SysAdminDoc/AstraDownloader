@@ -1375,9 +1375,12 @@ class ExecutableVersionProbe:
                     # prime() ran while this was out: it carries a version an
                     # update transaction already verified, so it wins.
                     value = self._value
+                # Read under the condition; deciding to re-probe on a value
+                # someone can be changing is how this class got here.
+                reprobe = stale and not self._has_value
                 self._in_flight = False
                 self._condition.notify_all()
-        if stale and not self._has_value:
+        if reprobe:
             # reset() ran while this was out, and left nothing behind.
             # Answering None would report the executable as unreadable, so
             # read the one that is installed now.
