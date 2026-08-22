@@ -63,6 +63,20 @@ class FakeConfig:
         pass
 
 
+def ytdlp_invocations(captured):
+    """Only the yt-dlp download calls out of everything Popen was handed.
+
+    A version or capability probe reaching the same fake is not a defect: it
+    means the module-wide probe cache was cold, which depends on what ran
+    before this test and, under `-n auto`, on which worker drew it. Select the
+    download by the flag only a download carries.
+    """
+    return [
+        list(args) for args in captured
+        if any(str(argument) == '--ignore-config' for argument in args)
+    ]
+
+
 class FakeHistory:
     def __init__(self):
         self.entries = []
@@ -11208,7 +11222,13 @@ class EndToEndDownloadTests(unittest.TestCase):
             return FakeProc(lines, returncode)
         return factory
 
-    def _wait_for_terminal(self, dl, timeout=2.0):
+    # 15 s, not 2: these wait on a worker thread, and the number has to be
+    # large enough for a machine running the suite across every core. A tight
+    # deadline turns "the box was busy" into a behaviour failure, and it
+    # costs nothing when the thread finishes in milliseconds.
+    WORKER_WAIT_SECONDS = 15.0
+
+    def _wait_for_terminal(self, dl, timeout=WORKER_WAIT_SECONDS):
         deadline = time.time() + timeout
         while time.time() < deadline:
             if dl.status in ad.DOWNLOAD_TERMINAL_STATES:
@@ -11216,7 +11236,7 @@ class EndToEndDownloadTests(unittest.TestCase):
             time.sleep(0.01)
         return False
 
-    def _wait_for_history(self, history, count=1, timeout=2.0):
+    def _wait_for_history(self, history, count=1, timeout=WORKER_WAIT_SECONDS):
         """Wait for the history write that follows a terminal status.
 
         `_run_download` sets the terminal status inside its `finally` and
@@ -11910,20 +11930,20 @@ class EndToEndDownloadTests(unittest.TestCase):
                 manager._run_download(download)
 
         self.assertEqual(download.status, "complete")
-        self.assertEqual(len(captured_args), 1)
+        downloads = ytdlp_invocations(captured_args)
+        self.assertEqual(len(downloads), 1)
+        argv = downloads[0]
         options = {
             arg.split('=', 1)[0].casefold()
-            for arg in captured_args[0][1:]
+            for arg in argv[1:]
             if isinstance(arg, str) and arg.startswith('--')
         }
         self.assertTrue(options.isdisjoint(ad.YTDLP_FORBIDDEN_LINK_FLAGS))
         self.assertFalse(any(
-            "aria2" in str(argument).casefold()
-            for argument in captured_args[0]
+            "aria2" in str(argument).casefold() for argument in argv
         ))
-        self.assertIn('--ignore-config', captured_args[0])
-        self.assertIn('--no-js-runtimes', captured_args[0])
-        self.assertIn('deno:C:/Tools/deno.exe', captured_args[0])
+        self.assertIn('--no-js-runtimes', argv)
+        self.assertIn('deno:C:/Tools/deno.exe', argv)
 
     def test_playlist_subset_is_the_only_playlist_selection_passed_to_ytdlp(self):
         captured_args = []
@@ -11955,7 +11975,7 @@ class EndToEndDownloadTests(unittest.TestCase):
                 manager._run_download(download)
 
         self.assertEqual(download.status, "complete")
-        args = captured_args[0]
+        args = ytdlp_invocations(captured_args)[0]
         self.assertIn("--yes-playlist", args)
         self.assertEqual(args[args.index("--playlist-items") + 1], "1,3,5")
         self.assertNotIn("--playlist-start", args)
@@ -12177,8 +12197,9 @@ class EndToEndDownloadTests(unittest.TestCase):
                 "sign-in failures must expose a stable recovery code")
             self.assertEqual(dl.to_dict().get("next_action"), "sign-in-and-retry",
                 "status payload must expose the matching recovery action")
-            self.assertEqual(len(history.entries), 1,
+            self.assertTrue(self._wait_for_history(history),
                 "failed downloads must remain visible in History")
+            self.assertEqual(len(history.entries), 1)
             self.assertEqual(history.entries[0]["status"], "failed")
             self.assertEqual(history.entries[0]["errorCode"], "sign-in-required")
             self.assertIn("Sign in to confirm", history.entries[0]["error"])
@@ -12207,6 +12228,7 @@ class EndToEndDownloadTests(unittest.TestCase):
                 self.assertIsNone(err)
                 dl = manager.downloads[dl_id]
                 self.assertTrue(self._wait_for_terminal(dl))
+                self.assertTrue(self._wait_for_history(history))
 
         self.assertEqual(dl.status, "failed",
             f"non-zero exit after full progress must fail; got {dl.status}")
@@ -12283,11 +12305,14 @@ class EndToEndDownloadTests(unittest.TestCase):
                     # Wait for the finally to finish (status flips to failed in
                     # the except, BEFORE the finally runs — so poll on the
                     # jar/process fields, not just the terminal status).
-                    deadline = time.time() + 2.0
+                    deadline = time.time() + self.WORKER_WAIT_SECONDS
                     while time.time() < deadline:
                         if dl.cookies_file is None and dl.process is None:
                             break
                         time.sleep(0.01)
+                    # History is written after the finally clears those two,
+                    # so waiting on them alone still reads an empty history.
+                    self.assertTrue(self._wait_for_history(history))
 
                     self.assertEqual(dl.status, "failed")
                     terminate.assert_called_once_with(fake_proc)
@@ -16324,6 +16349,26 @@ class TranslationCoverageTests(unittest.TestCase):
             missing_labels, [],
             "a repair action with no tr() label falls back to a bare Fix button",
         )
+        # Every advertised locale ships a .ts entry for every source string;
+        # the nine incomplete ones carry English as the translation, which is
+        # what Qt needs for a clean fallback and what the blocked
+        # localisation item is about. What this asserts is the part that is
+        # this project's to get right: the label reaches the extractor, it
+        # lands in all eleven catalogue files, and the one locale with a
+        # translator has a real translation for it.
+        import xml.etree.ElementTree as ElementTree
+
+        translations_dir = Path(ad.__file__).resolve().parent / "translations"
+        declared = {}
+        for catalogue in sorted(translations_dir.glob("astra_downloader_*.ts")):
+            locale = catalogue.stem.split("astra_downloader_", 1)[1]
+            declared[locale] = {
+                (message.findtext("source") or ""): (
+                    message.findtext("translation") or "")
+                for message in ElementTree.parse(catalogue).iter("message")
+            }
+        self.assertEqual(len(declared), 11, sorted(declared))
+
         for action in sorted(actions):
             with self.subTest(action=action):
                 label = labels[action]
@@ -16332,10 +16377,23 @@ class TranslationCoverageTests(unittest.TestCase):
                     f"{label!r} never reaches the extractor, so no locale can "
                     "translate it",
                 )
-                for locale, catalogue in builder.CATALOGS.items():
-                    if locale in self.KNOWN_INCOMPLETE or locale == "en":
-                        continue
-                    self.assertIn(label, catalogue, f"{locale} lacks {label!r}")
+                for locale, catalogue in declared.items():
+                    self.assertIn(
+                        label, catalogue, f"{locale}.ts lacks {label!r}")
+                self.assertNotEqual(
+                    declared["de"][label], "",
+                    f"German declares {label!r} with no translation",
+                )
+        # German is the complete locale; a label left in English there is the
+        # regression this test exists for, not a translator backlog.
+        untranslated = sorted(
+            labels[action] for action in actions
+            if declared["de"][labels[action]] == labels[action]
+        )
+        self.assertEqual(
+            untranslated, [],
+            "these repair buttons still render English in the German window",
+        )
 
     def test_the_incomplete_locales_are_exactly_the_declared_ones(self):
         # A new locale added with only its nav strings joins this list
@@ -24146,6 +24204,62 @@ class ManagedBinaryPinTests(unittest.TestCase):
             self.assertTrue(cleared["ok"])
             self.assertEqual(stored["ManagedBinaryPins"], {})
 
+    def test_an_unprobeable_binary_is_never_mistaken_for_a_pinned_one(self):
+        # An antivirus quarantine leaves a stub that reports no version. With
+        # no pin stored, `managed_binary_pin_for` also returns '', and the
+        # equality that decides "leave it alone" used to be '' == ''.
+        config = FakeConfig({"ManagedBinaryPins": {}})
+        self.assertEqual(ad.managed_binary_pin_for(config, "deno"), "")
+        source = inspect.getsource(ad.provision_deno)
+        self.assertIn(
+            "if version and managed_binary_pin_for(config, 'deno') == version:",
+            source,
+            "an empty version must not satisfy an empty pin",
+        )
+
+    def test_the_digest_is_withheld_until_the_pinned_version_is_installed(self):
+        # A pin is stored the moment it is chosen; the binary moves on the
+        # next update, or never if that update fails. Publishing the digest
+        # of whatever is on disk names a release the row does not.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "yt-dlp.exe"
+            path.write_bytes(b"installed" + b"\0" * (2 * 1024 * 1024))
+            config = FakeConfig({"ManagedBinaryPins": {"yt-dlp": "2026.07.04"}})
+
+            def rows(installed):
+                with mock.patch.object(ad, "managed_binary_paths",
+                                       return_value={"yt-dlp": path}), \
+                        mock.patch.object(ad, "probe_managed_binary_version",
+                                          return_value=installed), \
+                        mock.patch.object(ad, "managed_binary_rollback_path",
+                                          return_value=None):
+                    return {row["name"]: row
+                            for row in ad.managed_binary_inventory(config)}
+
+            not_yet = rows("2026.08.19")
+            self.assertEqual(not_yet["yt-dlp"]["pinned"], "2026.07.04")
+            self.assertEqual(not_yet["yt-dlp"]["sha256"], "")
+            arrived = rows("2026.07.04")
+            self.assertEqual(arrived["yt-dlp"]["sha256"], ad._compute_sha256(path))
+
+    def test_every_rollbackable_binary_has_a_path_that_retains_a_copy(self):
+        # The panel offers Roll back for all five. A binary whose replacement
+        # path never retains a copy leaves that button disabled forever.
+        sources = (inspect.getsource(ad)
+                   + inspect.getsource(gui_module_for_tests())).splitlines()
+        retaining = {
+            name for name in ad.MANAGED_BINARY_NAMES
+            if any("retain_managed_binary_rollback" in line and f"'{name}'" in line
+                   for line in sources)
+        }
+        # yt-dlp keeps its own last-known-good inside the updater rather than
+        # through the shared helper.
+        retaining.add("yt-dlp")
+        self.assertEqual(
+            retaining, set(ad.MANAGED_BINARY_NAMES),
+            "a tool the pin UI can roll back must retain the copy it replaces",
+        )
+
     def test_the_ytdlp_updater_targets_the_pin_instead_of_the_alias(self):
         source = inspect.getsource(ad._run_ytdlp_self_update)
         self.assertIn("managed_binary_pin_for(config, 'yt-dlp')", source)
@@ -24308,6 +24422,66 @@ class WindowsShellIntegrationTests(unittest.TestCase):
                 ad.send_to_recycle_bin(tmpdir), (False, "not-a-file"),
                 "a folder is not a queue item and must not be recycled",
             )
+
+    def test_a_symlink_is_refused_rather_than_recycled_as_its_target(self):
+        # resolve() would hand the shell the target and leave the link
+        # dangling, and is_file() follows the link, so the check has to come
+        # first.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real = Path(tmpdir) / "real.mp4"
+            real.write_bytes(b"the actual download")
+            link = Path(tmpdir) / "link.mp4"
+            try:
+                link.symlink_to(real)
+            except (OSError, NotImplementedError):
+                self.skipTest("this account cannot create a symlink")
+            self.assertEqual(ad.send_to_recycle_bin(link), (False, "symlink"))
+            self.assertTrue(real.is_file(), "the target must be untouched")
+
+    def test_the_delete_asks_before_destroying_what_it_cannot_recycle(self):
+        # FOF_ALLOWUNDO is a request: a file over the drive's Recycle Bin
+        # quota, or one on a network volume, is deleted outright and the call
+        # still returns 0. WANTNUKEWARNING is the only signal Windows gives,
+        # and reporting "moved to the Recycle Bin" for a destroyed file is
+        # the failure it prevents.
+        source = inspect.getsource(ad.send_to_recycle_bin)
+        self.assertIn("FOF_WANTNUKEWARNING", source)
+        self.assertNotIn(
+            "target.resolve()", source,
+            "resolving the path defeats the symlink refusal above",
+        )
+
+    def test_a_jump_task_reaches_a_running_instance(self):
+        # Both allowlists have to admit it. Either one dropping it means a
+        # jump-list click on a running app starts a process the guard throws
+        # away and nothing happens at all.
+        sent = []
+        with mock.patch.object(ad.socket, "create_connection") as connect, \
+                mock.patch.object(ad, "instance_control_token", return_value="t" * 32):
+            connect.return_value.__enter__.return_value.sendall = sent.append
+            self.assertTrue(ad.send_instance_command("jump paste"))
+        self.assertEqual(len(sent), 1)
+        self.assertIn(b"jump paste", sent[0])
+
+        listener = inspect.getsource(
+            gui_module_for_tests().MainWindowCore._start_instance_command_listener)
+        self.assertIn("startswith('jump ')", listener)
+
+    def test_a_background_start_outranks_a_jump_argument(self):
+        # A launch carrying both used to read as a jump, so a start-server
+        # launch stopped counting as one and popped a window.
+        self.assertEqual(
+            ad.startup_command_from_argv(["--start-server", "--paste-download"]),
+            "start",
+        )
+        self.assertEqual(
+            ad.startup_command_from_argv(["--paste-download", "--start-server"]),
+            "start",
+        )
+        self.assertEqual(
+            ad.startup_command_from_argv(["ytdl://start", "--paste-download"]),
+            "start",
+        )
 
     def test_the_restart_command_line_is_bounded_by_whole_arguments(self):
         self.assertEqual(

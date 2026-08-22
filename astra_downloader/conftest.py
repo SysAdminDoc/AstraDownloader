@@ -33,7 +33,7 @@ import pytest
 # A full run is the product's regression contract. This floor catches a
 # missing optional dependency, a Qt bootstrap failure, or an accidentally
 # deleted test group even when pytest would otherwise report a green run.
-MIN_FULL_SUITE_EXECUTED_TESTS = 1093
+MIN_FULL_SUITE_EXECUTED_TESTS = 1099
 
 _executed_nodeids = set()
 _skipped_nodeids = {}
@@ -175,3 +175,55 @@ def _redirect_persistent_state(tmp_path_factory):
     ad.INSTALL_DIR = original_install
     for name, value in originals.items():
         setattr(ad, name, value)
+
+
+# Probe caches are module-wide, and they are what makes this suite
+# order-dependent. A test that replaces `subprocess.Popen` wholesale also
+# replaces the JS-runtime, ffmpeg and PO-token probes behind it, so a test
+# that runs while one of those caches is COLD captures a version probe it did
+# not expect — and whether a cache is cold depends on what ran before it and,
+# under `-n auto`, on which worker drew the test.
+#
+# Warming them is the fix rather than clearing them: a cleared cache makes
+# every download test spawn real probes through its own fake, which is both
+# slower and less deterministic. Warm once at session start, and warm again
+# after any test that cleared one, so every test begins from the same place.
+def _warm_probe_caches():
+    import astra_downloader as ad
+
+    for name in ("get_ytdlp_version", "get_ffmpeg_version",
+                 "probe_javascript_runtime", "check_ffmpeg_capabilities",
+                 "probe_po_token_provider"):
+        probe = getattr(ad, name, None)
+        if not callable(probe):
+            continue
+        try:
+            probe()
+        except Exception:
+            # reason: a probe that cannot run on this machine is a cache entry too
+            pass
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _prime_probe_caches():
+    _warm_probe_caches()
+
+
+@pytest.fixture(autouse=True)
+def _keep_probe_caches_warm():
+    yield
+    _warm_probe_caches()
+    # The yt-dlp activity registry is process-wide too. A test whose fake
+    # process never reports an exit leaves a reservation behind, and every
+    # later test then reads the queue as busy — which is how the queue-idle
+    # update hook stopped firing depending on what ran first.
+    _release_ytdlp_activity()
+
+
+def _release_ytdlp_activity():
+    import astra_downloader as ad
+
+    registry = getattr(ad, "_YTDLP_ACTIVITY", None)
+    clear = getattr(registry, "clear", None)
+    if callable(clear):
+        clear()

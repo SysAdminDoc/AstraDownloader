@@ -7467,6 +7467,8 @@ class MainWindowCore(
                         # because `download https://…` matched nothing here.
                         if command.lower().startswith('download '):
                             self.instance_command.emit(command)
+                        elif command.lower().startswith('jump '):
+                            self.instance_command.emit(command.lower())
                         elif command.lower() in {'show', 'start', 'shutdown'}:
                             self.instance_command.emit(command.lower())
             except OSError as e:

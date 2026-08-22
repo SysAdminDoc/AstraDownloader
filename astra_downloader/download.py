@@ -2030,6 +2030,17 @@ class YTDLPActivityRegistry:
                 if registered is process:
                     self._activities.pop(token, None)
 
+    def clear(self):
+        """Drop every registration. Test isolation, not a runtime path.
+
+        The registry is process-wide, and a reservation whose fake process
+        never reports an exit keeps `active_count()` above zero for the whole
+        run — which silently changes what every later test believes about
+        whether the queue is idle.
+        """
+        with self._lock:
+            self._activities.clear()
+
     def begin_activity(self):
         return self.reserve()
 

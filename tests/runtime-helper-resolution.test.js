@@ -296,6 +296,17 @@ test('a pinned helper resolves the pinned release, not the rolling alias', async
     assert.equal(helper.sha256, DIGEST);
     assert.equal(helper.decision, 'approved');
     assert.match(helper.approvalEvidence, /Pinned rather than resolved from a rolling alias/);
+    assert.match(helper.approvalEvidence, /this inventory neither reads nor constrains/,
+        'the evidence must not claim a link between a policy pin and the running app');
+    assert.equal(
+        helper.distributionUrl,
+        'https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp.exe',
+        'a pinned digest beside a rolling alias reads as a resolved alias'
+    );
+    assert.equal(
+        helper.checksumUrl,
+        'https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/SHA2-256SUMS'
+    );
     assert.match(helper.approvalEvidence, /2026\.07\.04 is SHA-256 a{64}/);
     assert.equal(
         helper.sourceUrl,
