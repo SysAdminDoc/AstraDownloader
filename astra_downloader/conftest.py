@@ -33,7 +33,7 @@ import pytest
 # A full run is the product's regression contract. This floor catches a
 # missing optional dependency, a Qt bootstrap failure, or an accidentally
 # deleted test group even when pytest would otherwise report a green run.
-MIN_FULL_SUITE_EXECUTED_TESTS = 1118
+MIN_FULL_SUITE_EXECUTED_TESTS = 1122
 
 _executed_nodeids = set()
 _skipped_nodeids = {}
@@ -218,6 +218,19 @@ def _keep_probe_caches_warm():
     # later test then reads the queue as busy — which is how the queue-idle
     # update hook stopped firing depending on what ran first.
     _release_ytdlp_activity()
+    # Queue writes are deferred to a writer thread, so a test that built a
+    # manager inside a TemporaryDirectory can race its own cleanup: the
+    # writer creates its atomic temp file while rmtree is walking the
+    # directory, and Windows reports WinError 145.
+    _drain_queue_writers()
+
+
+def _drain_queue_writers():
+    import astra_downloader as ad
+
+    drain = getattr(ad, "flush_all_persistence", None)
+    if callable(drain):
+        drain()
 
 
 def _release_ytdlp_activity():

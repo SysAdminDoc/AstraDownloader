@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import uuid
+import weakref
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -42,6 +43,7 @@ except ImportError:  # Flat source-path compatibility.
 
 __all__ = (
     "Download", "DownloadManager", "DownloadManagerCore", "build_video_format_args",
+    "flush_all_persistence",
     "group_playlist_selection",
     "YTDLPActivityRegistry",
     "terminate_process_tree", "is_playlist_url", "write_cookies_netscape",
@@ -3483,6 +3485,21 @@ def restore_download_fields(download, snapshot):
         setattr(download, name, value)
 
 
+_LIVE_MANAGERS = weakref.WeakSet()
+
+
+def flush_all_persistence(timeout=5.0):
+    """Drain every live manager's deferred queue write."""
+    drained = True
+    for manager in list(_LIVE_MANAGERS):
+        try:
+            drained = manager.flush_persistence(timeout) and drained
+        except Exception:
+            # reason: a manager torn down mid-flush has nothing left to drain
+            drained = False
+    return drained
+
+
 class DownloadQueueStore:
     """Schema-checked durable queue storage with injected JSON collaborators."""
 
@@ -3565,6 +3582,20 @@ class DownloadQueueStore:
     def save(self, downloads, intake_paused=False):
         try:
             self._writer(self.path, self.serialize(downloads, intake_paused))
+            return True
+        except Exception as error:
+            self._logger(f"Download queue save failed: {error}")
+            return False
+
+    def write(self, payload):
+        """Write a document `serialize` already produced.
+
+        Split out so a caller can snapshot under a lock and write outside it:
+        `serialize` walks the queue and needs the lock, `_writer` fsyncs and
+        must not hold it.
+        """
+        try:
+            self._writer(self.path, payload)
             return True
         except Exception as error:
             self._logger(f"Download queue save failed: {error}")
@@ -3715,6 +3746,23 @@ class DownloadManagerCore:
         self._persistence_compatible = True
         self.intake_paused = False
         self._closing = False
+        # Deferred queue writes. `atomic_write_json` + fsync under the manager
+        # lock is a stall the Qt thread pays: `_update_ui` takes the same lock
+        # every 500 ms. The snapshot is cheap and stays under the lock; the
+        # write happens on this thread. One slot, because the document is a
+        # full snapshot — a newer one makes an older one irrelevant.
+        self._persist_pending = None
+        self._persist_lock = threading.Lock()
+        self._persist_ready = threading.Event()
+        self._persist_idle = threading.Event()
+        self._persist_idle.set()
+        self._persist_stop = threading.Event()
+        self._persist_thread = None
+        # Every live manager, weakly. A deferred write outlives the statement
+        # that queued it, so anything tearing a manager down — the app's own
+        # shutdown, or a test leaving the directory it wrote into — needs a
+        # way to wait for the writer first.
+        _LIVE_MANAGERS.add(self)
         self.total_completed = 0
         # v1.2.0: sweep any cookie jars left by a previous crash before any
         # new download starts. Session cookies shouldn't outlive the process
@@ -3934,6 +3982,10 @@ class DownloadManagerCore:
             # Normalize any legacy/running statuses on disk immediately. The
             # persisted form contains metadata only; cookie values and jar
             # paths are deliberately absent from _serialize_queue_locked().
+            #
+            # Synchronous on purpose, unlike the worker-teardown paths: this
+            # runs once at construction, before any window exists to stall,
+            # and normalising the file on disk is the whole point of it.
             self._persist_locked()
 
     def _serialize_queue_locked(self):
@@ -3955,6 +4007,93 @@ class DownloadManagerCore:
             return True
         self._persistence_error = 'Could not save the pending download queue.'
         return False
+
+    def _persist_async_locked(self):
+        """Snapshot the queue under the lock; write it on the writer thread.
+
+        For the call sites that do not check the result. The ones that roll a
+        mutation back on a failed write still use `_persist_locked`, because
+        an answer that arrives after the lock is released is no use to them.
+        A write that fails here sets the sticky persistence error instead,
+        which `persistence_notice()` already surfaces.
+        """
+        if self._queue_store is None or self._closing:
+            return
+        if not self._persistence_compatible:
+            return
+        try:
+            payload = self._queue_store.serialize(
+                self.downloads.values(), self.intake_paused,
+            )
+        except Exception as error:  # noqa: BLE001
+            self._persistence_error = 'Could not save the pending download queue.'
+            self._dependencies['write_persistent_log'](
+                f'Download queue snapshot failed: {error}'
+            )
+            return
+        with self._persist_lock:
+            self._persist_pending = payload
+        self._persist_idle.clear()
+        self._persist_ready.set()
+        self._start_persist_writer()
+
+    def _start_persist_writer(self):
+        if self._persist_thread is not None and self._persist_thread.is_alive():
+            return
+        self._persist_thread = threading.Thread(
+            target=self._persist_writer_loop,
+            name='AstraDownloaderQueueWriter',
+            daemon=True,
+        )
+        self._persist_thread.start()
+
+    # How long the writer waits for more work before retiring. A manager per
+    # test would otherwise leave a thread behind for the life of the process,
+    # and the thread's bound method keeps the manager alive with it.
+    PERSIST_WRITER_IDLE_SECONDS = 2.0
+
+    def _persist_writer_loop(self):
+        while not self._persist_stop.is_set():
+            if not self._persist_ready.wait(self.PERSIST_WRITER_IDLE_SECONDS):
+                with self._persist_lock:
+                    if self._persist_pending is None:
+                        self._persist_thread = None
+                        self._persist_idle.set()
+                        return
+            self._persist_ready.clear()
+            while True:
+                with self._persist_lock:
+                    payload = self._persist_pending
+                    self._persist_pending = None
+                if payload is None:
+                    break
+                store = self._queue_store
+                if store is None:
+                    break
+                if not store.write(payload):
+                    # The mutation already happened in memory and the next
+                    # successful write carries the whole state, so this is
+                    # reported rather than rolled back.
+                    with self._lock:
+                        self._persistence_error = (
+                            'Could not save the pending download queue.'
+                        )
+                else:
+                    with self._lock:
+                        if self._persistence_error == (
+                            'Could not save the pending download queue.'
+                        ):
+                            self._persistence_error = ''
+            with self._persist_lock:
+                if self._persist_pending is None:
+                    self._persist_idle.set()
+
+    def flush_persistence(self, timeout=5.0):
+        """Wait for any deferred queue write to reach disk."""
+        if self._persist_thread is None:
+            return True
+        self._persist_ready.set()
+        return self._persist_idle.wait(max(0.0, float(timeout)))
 
     def _capacity_locked(self):
         running = len(self._running_ids)
@@ -4076,7 +4215,7 @@ class DownloadManagerCore:
                         dl.status = 'failed'
                         apply_download_failure_classification(dl, 'cookie-jar-failed')
                         dl.mark_terminal()
-                        self._persist_locked()
+                        self._persist_async_locked()
                     self._sweep_download_intermediates(dl)
                     self.progress_updated.emit()
                     self.download_completed.emit(dl.id)
@@ -4104,7 +4243,7 @@ class DownloadManagerCore:
                         dl.cookies_file = None
                     dl._credentials = None
                     dl._video_password = ""
-                    self._persist_locked()
+                    self._persist_async_locked()
                 self._dependencies['write_persistent_log'](f"Download worker {dl.id} failed to start: {exc}")
                 self._sweep_download_intermediates(dl)
                 self.progress_updated.emit()
@@ -4141,7 +4280,7 @@ class DownloadManagerCore:
                     dl.error = 'Download worker stopped before reporting a result.'
                     dl.mark_terminal()
                 terminal_cleanup = escaped and dl.status in DOWNLOAD_TERMINAL_STATES
-                self._persist_locked()
+                self._persist_async_locked()
             if terminal_cleanup:
                 self._sweep_download_intermediates(dl)
             if not self._closing:
@@ -6555,7 +6694,7 @@ class DownloadManagerCore:
             dl.mark_terminal()
             proc = dl.process
             was_running = dl_id in self._running_ids
-            self._persist_locked()
+            self._persist_async_locked()
         if proc and proc.poll() is None:
             def terminate():
                 try:
@@ -6609,6 +6748,9 @@ class DownloadManagerCore:
                     )
         for dl in to_sweep:
             self._sweep_download_intermediates(dl)
+        # Drain before the process goes: a deferred snapshot that never
+        # reaches disk restores the previous one on the next launch.
+        self.flush_persistence()
 
     def active_count(self):
         with self._lock:
@@ -7417,6 +7559,7 @@ _OWNED_EXPORTS = {
     "write_cookies_netscape", "cleanup_stale_cookie_jars",
     "terminate_process_tree", "build_subprocess_env", "ALLOWED_COOKIE_DOMAINS",
     "DownloadQueueStore", "DownloadManager", "DownloadManagerCore",
+    "flush_all_persistence",
     "DOWNLOAD_QUEUE_SCHEMA_VERSION", "PLAYLIST_PREVIEW_LIMIT",
 }
 _resolve_legacy = make_legacy_resolver(

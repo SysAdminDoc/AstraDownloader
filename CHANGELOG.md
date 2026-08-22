@@ -14,6 +14,14 @@ repository's git log.
 
 ### Changed
 
+- **Queue writes no longer stall the window.** Saving the pending queue used
+  to serialise and fsync while holding the lock the UI takes twice a second,
+  so a slow or encrypted disk showed up as a stuttering window. The snapshot
+  still happens under the lock; the write happens on its own thread, and a
+  burst of them collapses to the newest since the file is a full snapshot.
+  The paths that undo a change when a write fails still write synchronously,
+  because an answer that arrives after the lock is released is no use to them.
+
 - **The test suite runs in parallel and is split by domain.** 1,100 tests in
   about 45 seconds instead of 140, across seven modules — download, GUI,
   routes, subscriptions, health, config and build — with the shared fixtures

@@ -1190,6 +1190,11 @@ class DownloadManagerTests(unittest.TestCase):
             self.assertEqual(recovered_id, auth_id)
             self.assertEqual(len(restored.downloads), before_count)
             self.assertNotIn('fresh-cookie', queue_path.read_text(encoding='utf-8'))
+            # A worker teardown queues a deferred write. Leaving this block
+            # while one is in flight races the directory removal against the
+            # writer's own atomic temp file.
+            self.assertTrue(restored.flush_persistence())
+            self.assertTrue(manager.flush_persistence())
 
     def test_restore_queue_defaults_non_string_format_and_quality(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -8043,6 +8048,119 @@ class SiteLoginDurabilityTests(unittest.TestCase):
             self.assertIn("x.com", sites)
             self.assertEqual(reopened.site_logins.site_key_for_url("https://x.com/a"),
                              "x.com")
+
+
+class DeferredQueuePersistTests(unittest.TestCase):
+    """The queue write no longer happens under the manager lock."""
+
+    def _manager(self, tmpdir, writer):
+        """A real manager whose store writes through `writer`.
+
+        The manager builds its own store, so the writer is swapped rather
+        than injected: everything else about the persist path stays the
+        production one, which is the point of the assertions below.
+        """
+        manager = ad.DownloadManager(
+            FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir}),
+            FakeHistory(),
+            queue_path=Path(tmpdir) / "download-queue.json",
+        )
+        manager._queue_store._writer = writer
+        return manager
+
+    def test_the_writer_thread_does_not_hold_the_manager_lock(self):
+        # The Qt main thread takes this same lock every 500 ms via
+        # _update_ui. If the write happened under it, a slow or
+        # BitLocker-throttled disk would be a visible stall.
+        observed = []
+        written = threading.Event()
+
+        def writer(_path, payload):
+            observed.append({
+                "thread": threading.current_thread().name,
+                "records": len(payload.get("downloads", [])),
+            })
+            written.set()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir, writer)
+            download = ad.Download("dl_defer", "https://example.com/video")
+            download.status = "queued"
+            with manager._lock:
+                manager.downloads[download.id] = download
+                manager._persist_async_locked()
+                # The strongest statement available: the write COMPLETES
+                # while this thread is still holding the lock. It therefore
+                # neither runs under the lock nor waits for it, which is the
+                # whole of what this change is for.
+                self.assertTrue(
+                    written.wait(5),
+                    "the write did not finish while the lock was held, so it "
+                    "is still waiting on it",
+                )
+            self.assertTrue(manager.flush_persistence())
+
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0]["thread"], "AstraDownloaderQueueWriter")
+        self.assertNotEqual(
+            observed[0]["thread"], threading.current_thread().name,
+            "the write has to leave the caller's thread as well as its lock",
+        )
+        self.assertEqual(observed[0]["records"], 1)
+
+    def test_a_burst_of_snapshots_collapses_to_the_newest(self):
+        # The document is a full snapshot, so an older one is not just
+        # redundant, it is wrong to write after a newer one.
+        release = threading.Event()
+        payloads = []
+
+        def writer(_path, payload):
+            payloads.append(payload)
+            release.wait(5)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir, writer)
+            for index in range(5):
+                download = ad.Download(
+                    f"dl_burst_{index}", "https://example.com/video")
+                download.status = "queued"
+                with manager._lock:
+                    manager.downloads[download.id] = download
+                    manager._persist_async_locked()
+            release.set()
+            self.assertTrue(manager.flush_persistence())
+
+        self.assertLess(len(payloads), 5, payloads)
+        self.assertEqual(
+            len(payloads[-1]["downloads"]), 5,
+            "the last write has to carry every record",
+        )
+
+    def test_a_failed_deferred_write_is_reported_rather_than_lost(self):
+        # There is no return path to check, so the sticky persistence notice
+        # is the whole of how the user learns about it.
+        def writer(_path, _payload):
+            raise OSError("disk full")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir, writer)
+            download = ad.Download("dl_fail", "https://example.com/video")
+            download.status = "queued"
+            with manager._lock:
+                manager.downloads[download.id] = download
+                manager._persist_async_locked()
+            self.assertTrue(manager.flush_persistence())
+            self.assertIn("queue", manager.persistence_notice().lower())
+            # The mutation stands: a disk that could not be written is not a
+            # reason to pretend the user's cancel did not happen.
+            self.assertIn("dl_fail", manager.downloads)
+
+    def test_the_rollback_sites_still_write_synchronously(self):
+        # Anything that undoes a mutation on a failed write needs the answer
+        # before it releases the lock, so those sites keep _persist_locked.
+        source = inspect.getsource(ad.DownloadManagerCore)
+        self.assertIn("if not self._persist_locked():", source)
+        self.assertIn("self._persist_async_locked()", source)
 
 
 if __name__ == "__main__":
