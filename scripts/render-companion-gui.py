@@ -74,6 +74,7 @@ CAPTURE_NAMES = (
     "settings-dirty",
     "settings-light-theme",
     "settings-pacing-guidance",
+    "settings-version-pins",
     "settings-subtitles",
     "settings-bundle-imported",
     "settings-fallback-port",
@@ -1231,6 +1232,32 @@ def main():
                 expected = window.pacing_guidance.text()
                 if "480 per hour" not in expected:
                     raise RuntimeError("Pacing fixture lost its live hourly estimate")
+            elif scenario == "settings-version-pins":
+                # Managed-tool versions come off the readiness worker, which
+                # this fixture does not run. Feed the same shape it publishes.
+                window._apply_managed_binaries([
+                    {"name": "yt-dlp", "installed": "2026.08.19",
+                     "pinned": "2026.07.04", "sha256": "a" * 64,
+                     "rollback": "2026.07.04"},
+                    {"name": "ffmpeg",
+                     "installed": "N-126229-gf101fce22d-20260820",
+                     "pinned": "", "sha256": "", "rollback": ""},
+                    {"name": "deno", "installed": "2.9.5", "pinned": "",
+                     "sha256": "", "rollback": ""},
+                    {"name": "quickjs", "installed": "0.16.1", "pinned": "",
+                     "sha256": "", "rollback": ""},
+                    {"name": "whisper", "installed": "", "pinned": "",
+                     "sha256": "", "rollback": ""},
+                ])
+                app.processEvents()
+                rows = window.managed_pin_rows
+                if set(rows) != set(app_module.MANAGED_BINARY_NAMES):
+                    raise RuntimeError("A managed binary has no version-pin row")
+                if not rows["yt-dlp"]["rollback"].isEnabled():
+                    raise RuntimeError("A retained copy did not enable Roll back")
+                if rows["ffmpeg"]["rollback"].isEnabled():
+                    raise RuntimeError("Roll back offered with nothing retained")
+                expected = "Version pins"
             elif scenario == "settings-bundle-imported":
                 # Drive the real round trip: export the live settings, change
                 # them, import the bundle back, and check the FORM shows the
@@ -1426,6 +1453,22 @@ def main():
                     scroll.ensureWidgetVisible(window.cfg_site_profiles, 0, 160)
                     app.processEvents()
                     QTest.qWait(40)
+            elif scenario == "settings-version-pins":
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(
+                        window.managed_pin_rows["deno"]["field"], 0, 200)
+                    app.processEvents()
+                    QTest.qWait(40)
+                    # A settings row that forces the page to scroll sideways
+                    # is a layout defect, and a capture alone will not say so.
+                    if scroll.horizontalScrollBar().maximum() > 0:
+                        raise RuntimeError(
+                            "The version-pin rows make the Settings page "
+                            "scroll horizontally"
+                        )
             elif scenario in PAGE_LOCALE_SCENARIOS:
                 pass
             elif scenario not in ("settings-subtitles", "settings-bundle-imported"):

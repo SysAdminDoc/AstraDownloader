@@ -2302,6 +2302,9 @@ class MainWindowCore(
                 tr_format("Installed {version}", version=installed)
                 if installed else tr("Not installed")
             )
+            # An ffmpeg master snapshot is longer than the column, so the
+            # full string has to be readable somewhere.
+            row["installed"].setToolTip(installed)
             if not row["field"].hasFocus():
                 row["field"].setText(pinned)
             row["field"].setPlaceholderText(
@@ -2309,6 +2312,12 @@ class MainWindowCore(
                 if installed else tr("Not pinned")
             )
             row["pin"].setText(tr("Unpin") if pinned else tr("Pin"))
+            digest = str(entry.get("sha256") or "")
+            row["field"].setToolTip(
+                tr_format("Pinned bytes are SHA-256 {digest}", digest=digest)
+                if digest else
+                tr("Type the version to hold this tool at, then choose Pin.")
+            )
             row["rollback"].setEnabled(bool(rollback))
             row["rollback"].setToolTip(
                 tr_format("Put {version} back and pin there.", version=rollback)

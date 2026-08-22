@@ -1730,6 +1730,10 @@ CATALOGS["de"].update({
     "Nothing has been replaced yet, so there is nothing to go back to.":
         "Es wurde noch nichts ersetzt, also gibt es nichts, wohin zurückgerollt werden könnte.",
     "Version pin result": "Ergebnis der Versions-Fixierung",
+    "Pinned bytes are SHA-256 {digest}": "Fixierte Bytes haben SHA-256 {digest}",
+    "Type the version to hold this tool at, then choose Pin.":
+        "Geben Sie die Version ein, auf der dieses Werkzeug bleiben soll, und "
+        "wählen Sie dann Fixieren.",
     "Choose which videos should be added to the download queue, and change the format, quality or name of any of them.":
         "Wählen Sie, welche Videos in die Warteschlange kommen, und ändern Sie "
         "Format, Qualität oder Namen einzelner Videos.",
