@@ -1526,7 +1526,7 @@ def _register_system_routes(api, context, dependencies):
         legacy_ok = bool(token and legacy and hmac.compare_digest(str(legacy), str(token)))
         if not (check_auth() or legacy_ok):
             return cors_response({"error": "Unauthorized"}, 403)
-        result = provision_deno()
+        result = provision_deno(config)
         if result:
             runtime = probe_javascript_runtime(
                 force=True,

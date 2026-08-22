@@ -52,6 +52,9 @@ __all__ = (
     "parse_http_date_epoch", "measure_system_clock_offset",
     "SYSTEM_CLOCK_WARN_SECONDS", "SYSTEM_CLOCK_ERROR_SECONDS",
     "SITE_LONG_TERM_REFUSAL_SECONDS",
+    "MANAGED_BINARY_NAMES", "MANAGED_BINARY_SECURITY_FLOORS",
+    "evaluate_managed_binary_pin", "filter_managed_binary_pins",
+    "managed_binary_pin",
 )
 
 YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
@@ -208,6 +211,132 @@ def _compare_semver(a, b):
     left += [0] * (length - len(left))
     right += [0] * (length - len(right))
     return -1 if left < right else 1 if left > right else 0
+
+
+# Auto-updating the managed binaries is survival — a yt-dlp more than a few
+# weeks old stops working on YouTube — but it also silently breaks things that
+# were working, and the user has no way to stop it. GDownloader#54 is the
+# canonical case: an auto-update removed the nvenc encoder the user relied on.
+# A pin freezes one binary; a rollback puts the retained previous copy back
+# and pins to it.
+MANAGED_BINARY_NAMES = ("yt-dlp", "ffmpeg", "deno", "quickjs", "whisper")
+
+# Only the binaries with a *declared* security floor can refuse a pin, and
+# these are the declarations that already exist. yt-dlp and whisper have no
+# version floor in this project, so a pin there is accepted — inventing one
+# to make the refusal path uniform would be a number nobody measured.
+MANAGED_BINARY_SECURITY_FLOORS = {
+    "deno": DENO_SECURITY_MIN_VERSION,
+    "quickjs": QUICKJS_MIN_VERSION,
+}
+
+# yt-dlp ships `2026.08.19`, FFmpeg `8.1.2` and snapshot builds
+# `N-125875-g0a1b2c3`, Deno `2.8.1`. One shape covers all of them without
+# admitting a path, a flag, or an argument.
+MANAGED_BINARY_VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$")
+
+
+def evaluate_managed_binary_pin(name, version, floors=None,
+                                snapshot_floors=None):
+    """Decide whether one managed binary may be pinned to one version.
+
+    Returns the decision rather than raising, because both callers — the
+    Settings form and the local API — have to name the reason back to the
+    user. An empty version is always allowed: it is how a pin is cleared.
+
+    A master snapshot such as `N-126229-gf101fce22d-20260820` carries no
+    semver at all, so where a snapshot floor is declared the embedded build
+    date is what the pin is measured against. Without that, pinning the
+    ffmpeg the app just installed would be refused as "below 8.1.2".
+    """
+    name = str(name or "").strip().lower()
+    version = str(version or "").strip()
+    floors = MANAGED_BINARY_SECURITY_FLOORS if floors is None else floors
+    snapshot_floors = snapshot_floors or {}
+    if name not in MANAGED_BINARY_NAMES:
+        return {
+            "ok": False, "name": name, "version": version, "floor": "",
+            "reason": "unknown-managed-binary",
+            "message": f"{name or 'That tool'} is not a managed binary.",
+        }
+    if not version:
+        return {
+            "ok": True, "name": name, "version": "", "floor": "",
+            "reason": "", "message": f"{name} follows the published release again.",
+        }
+    if not MANAGED_BINARY_VERSION_RE.fullmatch(version):
+        return {
+            "ok": False, "name": name, "version": version, "floor": "",
+            "reason": "pin-version-unreadable",
+            "message": f"{version!r} is not a version {name} publishes.",
+        }
+    floor = str(floors.get(name, "") or "")
+    if floor:
+        snapshot_floor = str(snapshot_floors.get(name, "") or "")
+        snapshot_date = (
+            parse_ffmpeg_snapshot_date(version) if snapshot_floor else None
+        )
+        if snapshot_date is not None:
+            below = snapshot_date < snapshot_floor
+            named_floor = snapshot_floor
+        elif not _numeric_release_parts(version):
+            return {
+                "ok": False, "name": name, "version": version, "floor": floor,
+                "reason": "pin-version-unreadable",
+                "message": f"{version!r} is not a version {name} publishes.",
+            }
+        else:
+            below = _compare_semver(version, floor) < 0
+            named_floor = floor
+        if below:
+            return {
+                "ok": False, "name": name, "version": version,
+                "floor": named_floor,
+                "reason": "pin-below-security-floor",
+                "message": (
+                    f"{name} {version} is below the {named_floor} security "
+                    f"floor and cannot be pinned. Pin {named_floor} or later."
+                ),
+            }
+    return {
+        "ok": True, "name": name, "version": version, "floor": floor,
+        "reason": "", "message": f"{name} is pinned to {version}.",
+    }
+
+
+def _numeric_release_parts(value):
+    """True when `_compare_semver` can read a release number out of `value`."""
+    for chunk in str(value or "").strip().lstrip("nvV").split("."):
+        if chunk[:1].isdigit():
+            return True
+        break
+    return False
+
+
+def filter_managed_binary_pins(raw, floors=None, snapshot_floors=None):
+    """Keep only the pins that would be accepted if they were set today.
+
+    A floor can rise between releases, which would otherwise leave a stored
+    pin quietly holding a binary below it. Dropping the pin on load is the
+    behaviour that fails safe: the binary goes back to the published release.
+    """
+    pins = {}
+    if not isinstance(raw, dict):
+        return pins
+    for name in MANAGED_BINARY_NAMES:
+        decision = evaluate_managed_binary_pin(
+            name, raw.get(name), floors=floors, snapshot_floors=snapshot_floors,
+        )
+        if decision["ok"] and decision["version"]:
+            pins[name] = decision["version"]
+    return pins
+
+
+def managed_binary_pin(pins, name):
+    """Return the version one binary is pinned to, or ''."""
+    if not isinstance(pins, dict):
+        return ""
+    return str(pins.get(str(name or "").strip().lower(), "") or "").strip()
 
 
 # The yt-dlp release that first ships the native SABR downloader (PR #13515).

@@ -16754,6 +16754,7 @@ class QuarantinedBinaryTests(unittest.TestCase):
         persisted = []
         worker = types.SimpleNamespace(
             force_ffmpeg=False,
+            config={},
             log=types.SimpleNamespace(emit=logged.append),
             _dependencies={
                 'check_ffmpeg_capabilities': lambda **_kwargs: {
@@ -16761,6 +16762,8 @@ class QuarantinedBinaryTests(unittest.TestCase):
                     'comparison': 'snapshot-date',
                     'message': 'old snapshot',
                 },
+                'managed_binary_pin_for': lambda _config, _name: '',
+                'get_ffmpeg_version': lambda: 'N-1-g0-20260101',
                 'write_persistent_log': persisted.append,
             },
         )
@@ -16771,6 +16774,18 @@ class QuarantinedBinaryTests(unittest.TestCase):
         self.assertTrue(worker._ffmpeg_needs_refresh('ok'))
         self.assertTrue(any('security floor' in message for message in logged))
         self.assertEqual(len(persisted), 1)
+
+        # A pinned ffmpeg that is the installed one stays, and says why.
+        worker._dependencies['managed_binary_pin_for'] = (
+            lambda _config, _name: 'N-1-g0-20260101'
+        )
+        logged.clear()
+        persisted.clear()
+        self.assertFalse(worker._ffmpeg_needs_refresh('ok'))
+        self.assertTrue(any('pinned to' in message for message in logged))
+
+        # A pin never keeps a binary that cannot run.
+        self.assertTrue(worker._ffmpeg_needs_refresh('damaged'))
 
     # ── What the readiness row says ──────────────────────────────────────
 
@@ -20281,8 +20296,8 @@ class QuickJsSetupFallbackTests(unittest.TestCase):
                 "ejsReady": runtime_ready, "canProvisionDeno": True,
                 "runtime": "deno", "path": "C:/deno.exe",
             },
-            "provision_deno": lambda: (calls.append("deno"),
-                                       "C:/deno.exe" if deno_ok else None)[1],
+            "provision_deno": lambda _config=None: (calls.append("deno"),
+                                                    "C:/deno.exe" if deno_ok else None)[1],
             "provision_quickjs": lambda: (calls.append("quickjs"),
                                           "C:/qjs.exe")[1],
         }
