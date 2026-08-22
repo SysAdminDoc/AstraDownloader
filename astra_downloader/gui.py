@@ -4933,6 +4933,10 @@ class MainWindowCore(
                     item, widget
                 ).exec(widget.mapToGlobal(point))
             )
+            card.setToolTip(
+                tr("Right-click, or use More, for play, delete, copy and "
+                   "download again.")
+            )
         card_l = QVBoxLayout(card)
         card_l.setContentsMargins(16, 13, 16, 13)
         card_l.setSpacing(9)
@@ -5010,6 +5014,18 @@ class MainWindowCore(
             btn_show = self._make_tool_button("Show", "ghost", card_target)
             btn_show.clicked.connect(lambda checked=False, path=dl.filename: self._show_download_location(path))
             top.addWidget(btn_show)
+        if recent:
+            btn_more = self._make_tool_button("More", "ghost", card_target)
+            btn_more.setToolTip(
+                tr("Play, reveal, delete, copy the link or error, or download "
+                   "this again.")
+            )
+            btn_more.clicked.connect(
+                lambda checked=False, item=dl, widget=card: self._open_download_card_menu(
+                    item, widget
+                )
+            )
+            top.addWidget(btn_more)
         card_l.addLayout(top)
 
         bar = None
@@ -6469,12 +6485,24 @@ class MainWindowCore(
         self._set_quick_download_status("Error copied.", "success")
         return True
 
-    def _download_card_menu(self, download, position_widget):
-        """Right-click actions for one terminal download.
+    def _open_download_card_menu(self, download, card, position_widget=None):
+        """Show one terminal card's menu under the widget that asked for it.
 
-        Everything here is already reachable some other way; the point is
-        that it is reachable *from the thing it acts on* rather than from a
-        button strip that cannot afford four more buttons.
+        The right-click path and the More button both come here, so the menu
+        is built once and the two entry points cannot drift.
+        """
+        anchor = position_widget or card
+        menu = self._download_card_menu(download, card)
+        return menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+    def _download_card_menu(self, download, position_widget):
+        """Actions for one terminal download.
+
+        Six of these are here and nowhere else: play, delete the file, copy
+        the link, copy the error, download again, and view the command. Only
+        "Show in folder" and "Retry" have a twin elsewhere, so the More
+        button beside the card is not a convenience, it is the keyboard and
+        discovery route to most of what a finished download can do.
         """
         menu = QMenu(self)
         filename = getattr(download, 'filename', '') or ''
@@ -7049,13 +7077,26 @@ class MainWindowCore(
         has_error = False
         first_error = None
 
+        first_reason = None
+
         def mark_error(field, message):
-            nonlocal has_error, first_error
+            nonlocal has_error, first_error, first_reason
             self._set_input_error(field, True)
-            field.setAccessibleDescription(tr(message))
+            reason = tr(message)
+            field.setAccessibleDescription(reason)
+            # Guarded the way _set_control_label guards its accessible-name
+            # write: the settings harness fields implement the setters this
+            # validation loop needs and nothing else.
+            tooltip = getattr(field, "setToolTip", None)
+            if callable(tooltip):
+                tooltip(reason)
             has_error = True
             if first_error is None:
                 first_error = field
+                # The source string, not `reason`: the status setter
+                # translates what it is given, and the literals are already
+                # extracted from the mark_error call sites.
+                first_reason = message
 
         dl_path, dl_path_err = self._dependencies['normalize_output_dir'](dl_path, self._value('DEFAULT_CONFIG')["DownloadPath"])
         audio_path, audio_path_err = self._dependencies['normalize_output_dir'](audio_path, dl_path) if audio_path else ("", None)
@@ -7120,7 +7161,11 @@ class MainWindowCore(
                 )
 
         if has_error:
-            self._show_settings_status("Check the highlighted fields before saving.", "danger")
+            if first_reason:
+                self._show_settings_status(first_reason, "danger")
+            else:
+                self._show_settings_status(
+                    "Check the highlighted fields before saving.", "danger")
             if first_error is not None:
                 first_error.setFocus(Qt.FocusReason.OtherFocusReason)
             return

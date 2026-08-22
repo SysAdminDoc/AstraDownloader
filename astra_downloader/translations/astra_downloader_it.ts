@@ -611,6 +611,10 @@
       <translation>●  {status}</translation>
     </message>
     <message>
+      <source>More</source>
+      <translation>More</translation>
+    </message>
+    <message>
       <source>{total} / {limit} jobs</source>
       <translation>{total} / {limit} jobs</translation>
     </message>
@@ -817,10 +821,6 @@
     <message>
       <source>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.</source>
       <translation>Keep %(ext)s and use only safe yt-dlp fields such as %(title)s, %(id)s, or %(uploader)s. Absolute paths and '..' are not allowed.</translation>
-    </message>
-    <message>
-      <source>Check the highlighted fields before saving.</source>
-      <translation>Check the highlighted fields before saving.</translation>
     </message>
     <message>
       <source>Could not save settings. Nothing changed; check disk permissions and retry.</source>
@@ -1231,6 +1231,10 @@
       <translation>Preparing download</translation>
     </message>
     <message>
+      <source>Right-click, or use More, for play, delete, copy and download again.</source>
+      <translation>Right-click, or use More, for play, delete, copy and download again.</translation>
+    </message>
+    <message>
       <source>Up</source>
       <translation>Up</translation>
     </message>
@@ -1245,6 +1249,10 @@
     <message>
       <source>Add sign-in</source>
       <translation>Add sign-in</translation>
+    </message>
+    <message>
+      <source>Play, reveal, delete, copy the link or error, or download this again.</source>
+      <translation>Play, reveal, delete, copy the link or error, or download this again.</translation>
     </message>
     <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
@@ -1437,6 +1445,10 @@
     <message>
       <source>The rendered template path is too long for Windows.</source>
       <translation>The rendered template path is too long for Windows.</translation>
+    </message>
+    <message>
+      <source>Check the highlighted fields before saving.</source>
+      <translation>Check the highlighted fields before saving.</translation>
     </message>
     <message>
       <source>Settings saved. Restart Astra Downloader to apply the language.</source>

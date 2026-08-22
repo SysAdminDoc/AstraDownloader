@@ -284,7 +284,7 @@ _ICON_MATCHERS = (
     ("register", lambda key: "register" in key or "pair" in key),
     ("link", lambda key: "link" in key or "url" in key),
     ("clip", lambda key: "clip" in key or "30 s" in key or "seconds" in key),
-    ("options", lambda key: "option" in key or "advanced" in key),
+    ("options", lambda key: "option" in key or "advanced" in key or key == "more"),
     ("add", lambda key: key.startswith("add") or key.startswith("new ")),
     ("subscriptions", lambda key: "subscription" in key or "feed" in key),
     ("archive", lambda key: "archive" in key or "allow" in key),
