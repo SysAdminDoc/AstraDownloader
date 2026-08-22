@@ -8256,5 +8256,96 @@ class DeferredQueuePersistTests(unittest.TestCase):
         self.assertIn("self._persist_async_locked()", source)
 
 
+class FailureStateBelongsToOneRunTests(unittest.TestCase):
+    """A run's own output must not decide the next run's outcome.
+
+    Two defects with the same shape. The classification chain re-derived the
+    error code from the joined last-thirty-lines after the two-pass
+    classifier had already chosen one, so a routine warning outranked the
+    real ERROR. And three flags written from one yt-dlp process were never
+    cleared when a retry started another one.
+    """
+
+    SABR_WARNING = (
+        "WARNING: [youtube] Some tv client https formats have been skipped as "
+        "they are missing a url. YouTube is forcing SABR streaming for this "
+        "client."
+    )
+
+    def test_a_routine_sabr_warning_does_not_outrank_the_real_error(self):
+        lines = [
+            self.SABR_WARNING,
+            "ERROR: [youtube] abc: Sign in to confirm you are not a bot.",
+        ]
+        self.assertEqual(
+            ad.classify_download_failure(lines[-1], lines), "sign-in-required"
+        )
+        # The branch that used to override it tested these three substrings.
+        # Each is already in the classifier, so it could only ever replace a
+        # better answer with sabr-limited, which is not retryable.
+        for text in ("no video formats found",
+                     "requested format is not available",
+                     "SABR streaming"):
+            with self.subTest(text=text):
+                self.assertEqual(
+                    ad.classify_download_failure(f"ERROR: {text}", [text]),
+                    "sabr-limited",
+                )
+        source = inspect.getsource(ad.DownloadManager._run_download)
+        self.assertNotIn(
+            "'sabr' in combined", source,
+            "the failure chain re-decides the code from the joined output",
+        )
+        self.assertIn("elif not _failure_code:", source)
+
+    def test_sabr_limited_is_still_not_retryable(self):
+        # The reason the override mattered: it moved a download into a state
+        # with no way out.
+        self.assertNotIn("sabr-limited", ad.DOWNLOAD_RETRYABLE_ERROR_CODES)
+
+    def test_a_retry_forgets_what_the_previous_run_reported(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            download = ad.Download(
+                "dl_run_flags", "https://example.com/video",
+                output_dir=tmpdir,
+            )
+            # Declared rather than sprung into existence by the output reader.
+            self.assertFalse(download.sabr_capped_warning)
+
+            download.status = "failed"
+            download.error_code = "po-token-required"
+            download.error = "ERROR: PO token required."
+            download.finished_time = time.time()
+            download.sabr_capped_warning = True
+            download.subtitle_written = True
+            download.delivered_height = 360
+
+            manager = ad.DownloadManager(config=FakeConfig(), history=FakeHistory())
+            manager.downloads[download.id] = download
+            manager._schedule = lambda: None
+
+            ok, retry_error = manager.retry(download.id)
+            self.assertTrue(ok, retry_error)
+            self.assertFalse(
+                download.sabr_capped_warning,
+                "a stale SABR warning fails the retried run at exit 0, into a "
+                "state that is not retryable",
+            )
+            self.assertFalse(download.subtitle_written)
+            self.assertEqual(download.delivered_height, 0)
+
+            # And the retried run's own exit 0 is a completion again.
+            download.filename = str(Path(tmpdir) / "clip.mp4")
+            Path(download.filename).write_bytes(b"media")
+            manager._apply_zero_exit_outcome(download)
+            self.assertEqual(download.status, "complete")
+
+    def test_the_run_flags_roll_back_with_everything_else(self):
+        for field in ("sabr_capped_warning", "subtitle_written",
+                      "delivered_height"):
+            with self.subTest(field=field):
+                self.assertIn(field, ad.RETRY_ROLLBACK_FIELDS)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -444,8 +444,6 @@ CATALOGS = {
             "Website-Anmeldung hinzufügen",
         "Site address you signed in to, such as x.com, instagram.com, or vimeo.com":
             "Adresse der Website, bei der Sie angemeldet sind, zum Beispiel x.com, instagram.com oder vimeo.com",
-        "Profile (optional)":
-            "Profil (optional)",
         "Reading cookies from the browser…":
             "Cookies werden aus dem Browser gelesen…",
         "Settings":
@@ -702,8 +700,6 @@ CATALOGS = {
             "unter Windows 127+ wahrscheinlich nicht lesbar",
         "Site sign-in username":
             "Benutzername der Website-Anmeldung",
-        "Username or email":
-            "Benutzername oder E-Mail",
         "Site sign-in password":
             "Passwort der Website-Anmeldung",
         "Password":
@@ -1544,6 +1540,10 @@ CATALOGS["de"].update({
     "No filtered history rows are available to export.":
         "Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.",
     "Export download history": "Downloadverlauf exportieren",
+    "Username": "Benutzername",
+    "name@example.com": "name@beispiel.de",
+    "Site password": "Passwort der Website",
+    "Default, or a profile name": "Standard oder ein Profilname",
     "More": "Mehr",
     "Play, reveal, delete, copy the link or error, or download this again.":
         "Abspielen, im Ordner zeigen, löschen, Link oder Fehler kopieren oder erneut herunterladen.",
