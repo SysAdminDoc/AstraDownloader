@@ -692,6 +692,20 @@ class SettingsPageMixin:
             self._dependencies['clamp_int'](
                 self.config.get("PreferredFrameRate", 0), 0, 0, 120),
         )
+        fmt_l.addWidget(make_divider())
+        self.cfg_prefer_original = QCheckBox(
+            tr("Prefer the original upload over an AI upscale")
+        )
+        self.cfg_prefer_original.setToolTip(tr(
+            "YouTube serves AI-upscaled copies that look higher-resolution "
+            "than the creator's own file and sort above it. Try the genuine "
+            "source first, and fall back to an upscale only when nothing "
+            "else fits."
+        ))
+        self.cfg_prefer_original.setChecked(
+            self.config.get("PreferOriginalOverUpscaled", True)
+        )
+        fmt_l.addWidget(self.cfg_prefer_original)
         layout.addWidget(fmt_card)
 
         # Playlist bounds. A pasted playlist otherwise queues everything it

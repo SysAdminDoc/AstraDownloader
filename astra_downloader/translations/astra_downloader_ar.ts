@@ -2883,6 +2883,14 @@
       <translation>Preferences, not requirements: a link that has none of these still downloads. The MP4 container overrides them, because an editor-safe file is the point of choosing MP4.</translation>
     </message>
     <message>
+      <source>Prefer the original upload over an AI upscale</source>
+      <translation>Prefer the original upload over an AI upscale</translation>
+    </message>
+    <message>
+      <source>YouTube serves AI-upscaled copies that look higher-resolution than the creator's own file and sort above it. Try the genuine source first, and fall back to an upscale only when nothing else fits.</source>
+      <translation>YouTube serves AI-upscaled copies that look higher-resolution than the creator's own file and sort above it. Try the genuine source first, and fall back to an upscale only when nothing else fits.</translation>
+    </message>
+    <message>
       <source>These apply when you paste a playlist or channel. A single video is never filtered by them.</source>
       <translation>These apply when you paste a playlist or channel. A single video is never filtered by them.</translation>
     </message>

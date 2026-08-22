@@ -3108,6 +3108,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_video_codec = ComboField("auto")
         window.cfg_audio_codec = ComboField("auto")
         window.cfg_frame_rate = ComboField(0)
+        window.cfg_prefer_original = CheckField(True)
         window.cfg_playlist_max = NumberField(0)
         window.cfg_playlist_dateafter = TextField("")
         window.cfg_playlist_min_duration = NumberField(0)
@@ -16836,6 +16837,106 @@ class FormatSortTests(unittest.TestCase):
                 ad.build_format_sort_args({"VideoCodecPreference": "h264"})
             ),
             "av1-1080",
+        )
+
+    # A native 1080p upload alongside YouTube's AI upscale of it at 2160p.
+    # Resolution alone puts the upscale first, which is the behaviour the
+    # setting exists to reverse. `format_note` carries yt-dlp's marker
+    # (2026.08.19 onwards); the audio track carries none at all, which is
+    # what the none-inclusive negation has to keep.
+    _UPSCALE_FIXTURE = {
+        "id": "u", "title": "u", "_type": "video",
+        "extractor": "generic", "extractor_key": "Generic",
+        "webpage_url": "https://example.test/u",
+        "formats": [
+            {"format_id": "native-1080", "url": "https://example.test/a",
+             "ext": "mp4", "height": 1080, "width": 1920, "fps": 30,
+             "vcodec": "avc1.640028", "acodec": "none", "protocol": "https",
+             "format_note": "1080p"},
+            {"format_id": "sr-2160", "url": "https://example.test/b",
+             "ext": "mp4", "height": 2160, "width": 3840, "fps": 30,
+             "vcodec": "avc1.640028", "acodec": "none", "protocol": "https",
+             "format_note": "2160p, AI-upscaled"},
+            {"format_id": "audio", "url": "https://example.test/d",
+             "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2",
+             "protocol": "https"},
+        ],
+    }
+
+    def _selected_from(self, fixture, format_args):
+        ytdlp = ad.YTDLP_PATH
+        if not Path(ytdlp).exists():
+            self.skipTest("yt-dlp is not installed in this environment")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            info = Path(tmpdir) / "info.json"
+            info.write_text(json.dumps(fixture), encoding="utf-8")
+            proc = subprocess.run(
+                [str(ytdlp), "--ignore-config", "--no-plugin-dirs",
+                 "--no-warnings"] + list(format_args)
+                + ["--simulate", "--print", "%(format_id)s",
+                   "--load-info-json", str(info)],
+                capture_output=True, text=True, timeout=120,
+            )
+        lines = [line.strip() for line in (proc.stdout or "").splitlines()
+                 if line.strip()]
+        self.assertTrue(lines, (proc.stdout, proc.stderr))
+        return lines[-1]
+
+    def test_the_upscale_preference_is_off_by_default_in_the_selector(self):
+        # The chain has to be byte-identical to the historical one when the
+        # setting is off, or every download changes shape for a YouTube-only
+        # problem.
+        self.assertEqual(
+            ad.build_video_format_args("mp4", "1080"),
+            ad.build_video_format_args("mp4", "1080", avoid_upscaled=False),
+        )
+        self.assertNotIn("AI-upscaled",
+                         ad.build_video_format_args("mp4", "1080")[1])
+
+    def test_the_upscale_preference_falls_back_rather_than_excluding(self):
+        # Deprioritise, not exclude: the unfiltered chain still trails the
+        # filtered one, so a site that only offers an upscale still downloads.
+        selector = ad.build_video_format_args(
+            "mp4", "best", avoid_upscaled=True)[1]
+        tiers = selector.split("/")
+        self.assertTrue(all("AI-upscaled" in tier for tier in tiers[:7]))
+        self.assertTrue(all("AI-upscaled" not in tier for tier in tiers[7:]))
+        self.assertEqual(
+            tiers[7:], ad.build_video_format_args("mp4", "best")[1].split("/"))
+
+    def test_the_real_binary_takes_the_native_upload_over_the_upscale(self):
+        # yt-dlp's own ordering puts the 2160p upscale first...
+        self.assertEqual(
+            self._selected_from(
+                self._UPSCALE_FIXTURE,
+                ad.build_video_format_args("any", "best")[:2],
+            ),
+            "sr-2160+audio",
+        )
+        # ...and the setting reverses that without losing the audio track,
+        # which carries no format_note to match against.
+        self.assertEqual(
+            self._selected_from(
+                self._UPSCALE_FIXTURE,
+                ad.build_video_format_args(
+                    "any", "best", avoid_upscaled=True)[:2],
+            ),
+            "native-1080+audio",
+        )
+
+    def test_the_real_binary_still_takes_an_upscale_when_it_is_all_there_is(self):
+        only_upscaled = dict(self._UPSCALE_FIXTURE)
+        only_upscaled["formats"] = [
+            fmt for fmt in self._UPSCALE_FIXTURE["formats"]
+            if fmt["format_id"] != "native-1080"
+        ]
+        self.assertEqual(
+            self._selected_from(
+                only_upscaled,
+                ad.build_video_format_args(
+                    "any", "best", avoid_upscaled=True)[:2],
+            ),
+            "sr-2160+audio",
         )
 
     def test_the_real_binary_shows_why_res_has_to_lead(self):

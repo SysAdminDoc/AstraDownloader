@@ -2587,7 +2587,17 @@ def build_playlist_bound_args(config):
     return args
 
 
-def build_video_format_args(container, quality):
+# YouTube serves AI-upscaled renditions of the creator's own upload, and they
+# sort above the genuine source on resolution alone. yt-dlp 2026.08.19 marks
+# them "AI-upscaled" in `format_note` (and suffixes the format_id with `-sr`),
+# but there is no `--format-sort` field for it, so the preference has to be an
+# earlier branch of the selector chain instead of a sort key. `!*=?` is the
+# none-inclusive negation: a format carrying no note at all — which is every
+# format on every other site — stays inside the branch.
+NATIVE_SOURCE_FILTER = '[format_note!*=?AI-upscaled]'
+
+
+def build_video_format_args(container, quality, *, avoid_upscaled=False):
     """Return editor-compatible yt-dlp format selection arguments."""
     height_filter = '' if quality == 'best' else f'[height<={quality}]'
     if container == 'mp4':
@@ -2597,18 +2607,31 @@ def build_video_format_args(container, quality):
     else:
         v_pref = a_pref = ''
 
-    if v_pref or a_pref:
-        selector = (
-            f'bestvideo{height_filter}{v_pref}+bestaudio{a_pref}/'
-            f'bestvideo{height_filter}{v_pref}+bestaudio/'
-            f'bestvideo{height_filter}+bestaudio{a_pref}/'
-            f'bestvideo{height_filter}+bestaudio/'
-            f'best{height_filter}{v_pref}/'
-            f'best{height_filter}/best'
-        )
-    else:
-        selector = f'bestvideo{height_filter}+bestaudio/best{height_filter}/best'
-    return ['-f', selector, '--merge-output-format', container]
+    def tiers(native):
+        # The filter goes on the video half only; an audio stream has no
+        # upscaled variant to reject.
+        if v_pref or a_pref:
+            return [
+                f'bestvideo{height_filter}{v_pref}{native}+bestaudio{a_pref}',
+                f'bestvideo{height_filter}{v_pref}{native}+bestaudio',
+                f'bestvideo{height_filter}{native}+bestaudio{a_pref}',
+                f'bestvideo{height_filter}{native}+bestaudio',
+                f'best{height_filter}{v_pref}{native}',
+                f'best{height_filter}{native}',
+                f'best{native}',
+            ]
+        return [
+            f'bestvideo{height_filter}{native}+bestaudio',
+            f'best{height_filter}{native}',
+            f'best{native}',
+        ]
+
+    # Deprioritise, not exclude: the whole chain is tried against native
+    # formats first, and the unfiltered chain behind it still downloads an
+    # upscale when that is all the site offers.
+    selector = tiers(NATIVE_SOURCE_FILTER) if avoid_upscaled else []
+    selector += tiers('')
+    return ['-f', '/'.join(selector), '--merge-output-format', container]
 
 
 def download_error_payload(error_code, error=None, advice=None):
@@ -5589,7 +5612,12 @@ class DownloadManagerCore:
             args += ['-f', 'bestaudio', '--extract-audio',
                      '--audio-format', dl.format, '--audio-quality', '0']
         else:
-            args += build_video_format_args(dl.format, dl.quality)
+            args += build_video_format_args(
+                dl.format, dl.quality,
+                avoid_upscaled=bool(
+                    effective_config.get('PreferOriginalOverUpscaled', True)
+                ),
+            )
         args += build_format_sort_args(effective_config)
 
         # yt-dlp is spawned with --no-plugin-dirs. The extractor builder must

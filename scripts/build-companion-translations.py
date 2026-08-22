@@ -318,6 +318,16 @@ CATALOGS = {
             "Bevorzugter Audiocodec",
         "Preferred frame rate":
             "Bevorzugte Bildrate",
+        "Prefer the original upload over an AI upscale":
+            "Original-Upload einer KI-Hochskalierung vorziehen",
+        "YouTube serves AI-upscaled copies that look higher-resolution "
+        "than the creator's own file and sort above it. Try the genuine "
+        "source first, and fall back to an upscale only when nothing "
+        "else fits.":
+            "YouTube liefert KI-hochskalierte Kopien, die höher aufgelöst "
+            "wirken als die Datei des Urhebers und sich davor einsortieren. "
+            "Zuerst die echte Quelle versuchen und nur dann auf eine "
+            "Hochskalierung zurückfallen, wenn nichts anderes passt.",
         "Playlist limits":
             "Playlist-Grenzen",
         "Maximum items":

@@ -255,6 +255,12 @@ DEFAULT_CONFIG = {
     # Preferred frame rate, as a target rather than a cap: 60 puts 60fps
     # first and falls back rather than failing. 0 expresses no preference.
     "PreferredFrameRate": 0,
+    # YouTube serves AI-upscaled renditions alongside the creator's own
+    # upload, and they sort above it on resolution alone. yt-dlp marks them
+    # "AI-upscaled" in format_note (2026.08.19 onwards). On, the selector
+    # tries the genuine source first and only falls back to an upscale when
+    # nothing else fits; off restores plain resolution ordering.
+    "PreferOriginalOverUpscaled": True,
     # Bounds for a playlist or channel download. A pasted playlist otherwise
     # queues every item it contains. These apply only to a run that walks a
     # playlist — a single video is never filtered by them. 0 and "" disable
@@ -1780,6 +1786,7 @@ def sanitize_config(raw):
         "SplitChapters", "LiveFromStart",
         "WindowsFilenames",
         "KeepIntermediateFiles", "VerifyFormats",
+        "PreferOriginalOverUpscaled",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "UseSystemProxy",
         "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",

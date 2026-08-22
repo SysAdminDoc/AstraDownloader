@@ -2883,6 +2883,14 @@
       <translation>Wünsche, keine Bedingungen: Ein Link ohne diese Eigenschaften wird trotzdem heruntergeladen. Der MP4-Container hat Vorrang, denn eine schnittsichere Datei ist der Sinn von MP4.</translation>
     </message>
     <message>
+      <source>Prefer the original upload over an AI upscale</source>
+      <translation>Original-Upload einer KI-Hochskalierung vorziehen</translation>
+    </message>
+    <message>
+      <source>YouTube serves AI-upscaled copies that look higher-resolution than the creator's own file and sort above it. Try the genuine source first, and fall back to an upscale only when nothing else fits.</source>
+      <translation>YouTube liefert KI-hochskalierte Kopien, die höher aufgelöst wirken als die Datei des Urhebers und sich davor einsortieren. Zuerst die echte Quelle versuchen und nur dann auf eine Hochskalierung zurückfallen, wenn nichts anderes passt.</translation>
+    </message>
+    <message>
       <source>These apply when you paste a playlist or channel. A single video is never filtered by them.</source>
       <translation>Gilt beim Einfügen einer Playlist oder eines Kanals. Ein einzelnes Video wird dadurch nie gefiltert.</translation>
     </message>
