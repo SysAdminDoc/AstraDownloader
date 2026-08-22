@@ -10,7 +10,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.12.0/AstraDownloader-onedir.zip",
-            "hash": "fa2871b6aebeaf5426661180ccb98b637d476d4a45e88918985ab78a64ddbee6",
+            "hash": "99bfe903a3c8517096b40a68e563b50bd1b9f7f7806b427667e03be21d0b58b2",
             "extract_dir": "AstraDownloader"
         }
     },
