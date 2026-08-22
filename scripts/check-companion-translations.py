@@ -49,9 +49,9 @@ def catalogue_source_keys():
     """The English strings the generator's own tables are keyed on.
 
     Imported rather than parsed so the answer is the table the generator
-    actually uses, and skipped rather than failed if the generator cannot be
-    imported here — this gate's job is the catalogues, and an import error
-    belongs to the generator's own run.
+    actually uses. Returns None when it cannot be imported, which the caller
+    reports as a gate failure: a generator that will not import cannot
+    regenerate the catalogues either, so "unchecked" is not a pass.
     """
     import importlib.util
 

@@ -8468,5 +8468,127 @@ class SettingsBundleExportsWhatIsSavedTests(unittest.TestCase):
             )
 
 
+class SweepStillRemovesEveryShapeItWritesTests(unittest.TestCase):
+    """Narrowing the filter must not stop it doing its job."""
+
+    def test_per_format_partials_are_still_swept(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "Movie.mp4").write_bytes(b"final")
+            gone = [
+                "Movie.f137.mp4",
+                "Movie.f140-drc.m4a",
+                "Movie.f137.mp4.part",
+                "Movie.f251.webm.part",
+                "Movie.f137.mp4.ytdl",
+                "Movie.f137.mp4.part-Frag0",
+            ]
+            keep = [
+                "Movie.f1080p.mkv",
+                "Movie.f1080p.WEB-DL.mp4",
+                "Movie.fhls-1080.mp4",
+            ]
+            for name in gone + keep:
+                (folder / name).write_bytes(b"x")
+
+            download = ad.Download(
+                "dl_sweep2", "https://example.com/v", output_dir=str(folder),
+            )
+            download.filename = str(folder / "Movie.mp4")
+            ad.DownloadManager(
+                config=FakeConfig({"KeepIntermediateFiles": False}),
+                history=FakeHistory(),
+            )._sweep_download_intermediates(download)
+
+            for name in gone:
+                self.assertFalse((folder / name).exists(), f"{name} survived")
+            for name in keep:
+                self.assertTrue((folder / name).is_file(), f"{name} was deleted")
+
+
+class EveryPathThatStartsARunClearsItsFlagsTests(unittest.TestCase):
+    """retry() was one of three entry points into another run of yt-dlp."""
+
+    def _stale(self, tmpdir, status):
+        download = ad.Download(
+            "dl_flags", "https://www.youtube.com/watch?v=abc",
+            output_dir=tmpdir,
+        )
+        download.status = status
+        download.sabr_capped_warning = True
+        download.subtitle_written = True
+        download.delivered_height = 360
+        return download
+
+    def test_resume_clears_them(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            download = self._stale(tmpdir, "needs-auth")
+            download.requires_auth = True
+            manager = ad.DownloadManager(config=FakeConfig(), history=FakeHistory())
+            manager.downloads[download.id] = download
+            manager._schedule = lambda: None
+            ok, error = manager.resume_download(
+                download.id, cookies=[{"name": "a", "value": "b",
+                                       "domain": ".youtube.com"}],
+            )
+            self.assertTrue(ok, error)
+            self.assertFalse(download.sabr_capped_warning)
+            self.assertFalse(download.subtitle_written)
+            self.assertEqual(download.delivered_height, 0)
+
+    def test_the_needs_auth_reuse_in_start_download_clears_them(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
+            manager = ad.DownloadManager(config, FakeHistory())
+            download = self._stale(tmpdir, "needs-auth")
+            download.requires_auth = True
+            manager.downloads[download.id] = download
+            manager._schedule = lambda: None
+            dl_id, error = manager.start_download(
+                url=download.url,
+                cookies=[{"name": "a", "value": "b", "domain": ".youtube.com"}],
+            )
+            self.assertIsNone(error)
+            self.assertEqual(dl_id, download.id, "the record was not reused")
+            self.assertFalse(download.sabr_capped_warning)
+            self.assertFalse(download.subtitle_written)
+            self.assertEqual(download.delivered_height, 0)
+
+
+class ARestoredIndexRowMustNotLieTests(unittest.TestCase):
+    EXPORT = SiteLoginDurabilityTests.EXPORT
+
+    def test_a_row_is_not_restored_once_the_jar_is_actually_gone(self):
+        # Restoring after the jar was deleted lists a sign-in with no session
+        # behind it: it reads as stored and fails every download needs-auth.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ad.SiteLoginStore(
+                tmpdir, reader=ad.load_json_file, writer=ad.atomic_write_json,
+            )
+            result, error = store.import_netscape_text("x.com", self.EXPORT)
+            self.assertIsNone(error)
+            self.assertEqual(result["site"], "x.com")
+            root = Path(tmpdir) / ad.SITE_LOGIN_DIRNAME
+            credential = store._credential_path(ad.site_login_key("x.com"))
+            credential.write_text("{}", encoding="utf-8")
+
+            real_unlink = Path.unlink
+
+            def unlink(self, *args, **kwargs):
+                if self.name == credential.name:
+                    raise OSError(13, "Permission denied")
+                return real_unlink(self, *args, **kwargs)
+
+            with mock.patch.object(Path, "unlink", unlink):
+                self.assertFalse(store.remove("x.com"))
+
+            self.assertFalse((root / "x.com.txt").exists())
+            self.assertEqual(
+                store.entries(), [],
+                "the jar is gone, so the row that claims a stored session "
+                "must be gone too",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

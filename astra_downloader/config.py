@@ -1737,7 +1737,11 @@ def describe_bundle_changes(current, bundle):
     An import that reports "done" tells the user nothing about whether it did
     what they wanted; this is what the confirmation says instead.
     """
-    read = getattr(current, "get", None)
+    # The same source build_settings_bundle exports from. Reading through
+    # `get` here while the bundle was built from `get_persisted` made a
+    # session-only value (the fallback ServerPort) look like a pending change
+    # when you re-imported your own export.
+    read = getattr(current, "get_persisted", None) or getattr(current, "get", None)
     changed = []
     if callable(read):
         for key in sorted(bundle.get("settings") or {}):

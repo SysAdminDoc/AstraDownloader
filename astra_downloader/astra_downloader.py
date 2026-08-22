@@ -4816,7 +4816,7 @@ QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #ff7664; backgr
 QLineEdit[state="error"], QSpinBox[state="error"], QTextEdit[state="error"] { border-color: #c9675f; background: #1a1214; }
 /* Same cascade trap as heroUrl: the error attribute outranks :focus, so a
    highlighted field would otherwise lose its keyboard ring. */
-QLineEdit[state="error"]:focus, QSpinBox[state="error"]:focus, QTextEdit[state="error"]:focus { border-color: #ff7664; }
+QLineEdit[state="error"]:focus, QSpinBox[state="error"]:focus, QTextEdit[state="error"]:focus { border-color: #ff7664; background: #1a1214; }
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: #687381; background: #0e1319; border-color: #607080; }
 /* The paste box is the product's front door, so it is sized like one.
    An attribute selector outranks a pseudo-class in Qt's CSS2 cascade, so
@@ -4907,12 +4907,18 @@ QFrame[class="historyRow"], QFrame[class="download"] {
     border-bottom: 1px solid #252d37;
     border-radius: 0;
 }
-QFrame[class="historyRow"]:hover, QFrame[class="download"]:hover { background: #19212c; }
+QFrame[class="historyRow"]:hover { background: #19212c; }
 QFrame[class="download"][state="failed"] { background: #151113; border-left: 2px solid #b65a53; }
 QFrame[class="download"][state="complete"] { background: transparent; border-left: 2px solid #3f8b70; }
 /* Cancelled and skipped are terminal too. _update_download_card sets the
    property for all four, and two of them used to style nothing. */
 QFrame[class="download"][state="cancelled"], QFrame[class="download"][state="skipped"] { background: transparent; border-left: 2px solid #607080; }
+/* After the state rules, not before them. A state selector and a
+   pseudo-class selector on the same class carry the same weight in Qt's
+   CSS2 cascade, so whichever is written last wins, and a card that had a
+   state stopped answering the mouse. These set only the surface, so the
+   left border a state paints survives being hovered or focused. */
+QFrame[class="download"]:hover { background: #19212c; }
 QFrame[class="download"]:focus { background: #19212c; border-bottom-color: #ff7664; }
 QFrame[class="divider"] { background: #29313b; border: none; min-height: 1px; max-height: 1px; }
 QFrame[class="verticalDivider"] { background: #2b333d; border: none; min-width: 1px; max-width: 1px; }
@@ -5884,6 +5890,7 @@ class MainWindow(MainWindowCore):
                 'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
                 'maybe_auto_update_ytdlp': lambda *args, **kwargs: maybe_auto_update_ytdlp(*args, **kwargs),
+                'allowed_output_roots': lambda *args, **kwargs: allowed_output_roots(*args, **kwargs),
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
                 'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
                 'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
