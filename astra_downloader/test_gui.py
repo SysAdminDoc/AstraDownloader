@@ -404,7 +404,10 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             )
             return (lighter + 0.05) / (darker + 0.05)
 
-        colors = gui_module.GUI_ACCESSIBILITY_COLORS
+        # Both palettes. This measured the dark one only, and the light one is
+        # produced by substituting it colour for colour with nothing checking
+        # the result: success on the sidebar came out at 4.27:1 and the label
+        # of every primary button at 4.32:1.
         surface_pairs = {
             "muted": "surface",
             "neutral": "surface",
@@ -414,16 +417,43 @@ class CompanionGuiPolicyTests(unittest.TestCase):
             "warning": "surface",
             "danger": "surface",
             "log_text": "log_surface",
+            # The sidebar is a second surface, and the running-server dot and
+            # its label are the two things that sit on it.
+            "success:sidebar": "sidebar",
+            "warning:sidebar": "sidebar",
+            "danger:sidebar": "sidebar",
+            "muted:sidebar": "sidebar",
+            "neutral:sidebar": "sidebar",
+            "readiness_text:sidebar": "sidebar",
+            # A primary button's own label, on the button.
+            "accent_text": "accent",
         }
-        for foreground, background in surface_pairs.items():
-            with self.subTest(foreground=foreground, background=background):
-                self.assertGreaterEqual(
-                    ratio(colors[foreground], colors[background]),
-                    4.5,
+        original_theme = gui_module._ICON_THEME
+        palettes = {}
+        try:
+            for theme in ("dark", "light"):
+                gui_module.set_gui_theme(theme)
+                palettes[theme] = dict(gui_module.GUI_ACCESSIBILITY_COLORS)
+        finally:
+            gui_module.set_gui_theme(original_theme)
+        sheets = {"dark": ad.STYLESHEET, "light": ad.LIGHT_STYLESHEET}
+        for theme, colors in palettes.items():
+            for foreground, background in surface_pairs.items():
+                token = foreground.split(":")[0]
+                with self.subTest(theme=theme, foreground=foreground,
+                                  background=background):
+                    measured = ratio(colors[token], colors[background])
+                    self.assertGreaterEqual(
+                        measured, 4.5,
+                        f"[{theme}] {token} {colors[token]} on {background} "
+                        f"{colors[background]} is {measured:.2f}:1",
+                    )
+            for color in colors.values():
+                self.assertIn(
+                    color, sheets[theme],
+                    f"[{theme}] {color} is declared as a semantic colour but "
+                    f"the sheet does not use it",
                 )
-
-        for color in colors.values():
-            self.assertIn(color, ad.STYLESHEET)
 
     def test_companion_theme_switch_resolves_palette_and_icon_scheme(self):
         from PySide6.QtCore import Qt

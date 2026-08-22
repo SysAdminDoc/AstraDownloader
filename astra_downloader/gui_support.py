@@ -55,12 +55,12 @@ _THEME_ACCESSIBILITY_COLORS = {
         "neutral_indicator": "#5c6c7b",
         "readiness_text": "#253343",
         "log_text": "#445466",
-        "success": "#087f55",
+        "success": "#07734d",
         "warning": "#8a5700",
         "danger": "#b52f25",
         "accent": "#d94c3b",
         "accent_hover": "#e05b49",
-        "accent_text": "#2c0d08",
+        "accent_text": "#1d0805",
     },
 }
 
