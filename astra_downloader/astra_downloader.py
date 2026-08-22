@@ -1862,7 +1862,7 @@ def provision_deno(config=None):
         floor_reason = _deno_version_floor_reason(version)
         if floor_reason is None:
             return str(DENO_PATH)
-        if managed_binary_pin_for(config, 'deno') == version:
+        if version and managed_binary_pin_for(config, 'deno') == version:
             # A pin cannot hold a runtime below the security floor — the pin
             # setter refuses that — so reaching here means the *floor* moved
             # after the pin was stored. Say so and keep the user's choice
@@ -1968,6 +1968,7 @@ def provision_quickjs():
             f"{QUICKJS_MIN_VERSION}; refreshing"
         )
     QUICKJS_DIR.mkdir(parents=True, exist_ok=True)
+    retain_managed_binary_rollback('quickjs')
     try:
         download_verified_file_atomic(
             QUICKJS_EXE_URL, QUICKJS_PATH, QUICKJS_SHA256,
@@ -2043,6 +2044,10 @@ def provision_whisper_runtime(progress_cb=None):
 
     tmp_zip = INSTALL_DIR / f'.whisper.{uuid.uuid4().hex}.zip'
     installed = False
+    # Every managed binary the pin UI offers a Roll back for has to keep the
+    # copy it is about to replace, or the button is permanently disabled for
+    # a tool the panel says is rollbackable.
+    retain_managed_binary_rollback('whisper')
     try:
         download_file_atomic(
             WHISPER_BIN_URL,
@@ -2527,13 +2532,20 @@ def managed_binary_inventory(config):
         backup = managed_binary_rollback_path(name)
         pinned = pins.get(name, '')
         path = paths.get(name)
+        installed = probe_managed_binary_version(name)
         inventory.append({
             'name': name,
-            'installed': probe_managed_binary_version(name),
+            'installed': installed,
             'pinned': pinned,
+            # Only when the installed binary IS the pinned one. A pin is
+            # stored the moment it is chosen and the binary moves later, or
+            # never if the update that would fetch it fails, so hashing
+            # whatever is on disk would publish a digest for a release the
+            # row does not name.
             'sha256': (
                 _compute_sha256(path) or ''
-                if pinned and path is not None and managed_binary_usable(path)
+                if pinned and installed == pinned and path is not None
+                and managed_binary_usable(path)
                 else ''
             ),
             'floor': MANAGED_BINARY_FLOORS.get(name, ''),
@@ -4130,15 +4142,12 @@ def download_url_from_protocol_argv(argv=None):
 
 def startup_command_from_argv(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
-    jump_task = jump_list_command_from_argv(args)
-    if jump_task:
-        # Delegating means the running window acts on it; without this a
-        # jump-list click on a running app starts a second process that the
-        # single-instance guard then throws away, doing nothing at all.
-        return f'jump {jump_task}'
     for arg in args:
         value = str(arg).strip().lower()
         if value in ('--start-server', '-start-server', 'start'):
+            # A launch asking for the server is a background start, and that
+            # outranks a jump task riding along on the same command line:
+            # reading the jump instead would pop a window nobody asked for.
             return 'start'
         if value.startswith(PROTOCOL_SCHEMES):
             url = download_url_from_protocol_argv([arg])
@@ -4146,6 +4155,12 @@ def startup_command_from_argv(argv=None):
             # handler used to map every one of them to 'start', so clicking a
             # ytdl:// link launched the app and queued nothing.
             return f'download {url}' if url else 'start'
+    jump_task = jump_list_command_from_argv(args)
+    if jump_task:
+        # Delegating means the running window acts on it; without this a
+        # jump-list click on a running app starts a second process that the
+        # single-instance guard then throws away, doing nothing at all.
+        return f'jump {jump_task}'
     return ''
 
 
@@ -4168,6 +4183,8 @@ def send_instance_command(command, host=INSTANCE_CONTROL_HOST, port=INSTANCE_CON
                           attempts=5, delay=0.2, token=None):
     command = str(command or '').strip()
     if command.lower() in {'show', 'start', 'shutdown'}:
+        command = command.lower()
+    elif command.lower().startswith('jump '):
         command = command.lower()
     elif not command.lower().startswith('download '):
         # A download command carries a URL, whose case must survive.
@@ -6082,6 +6099,12 @@ FOF_SILENT = 0x0004
 FOF_NOCONFIRMATION = 0x0010
 FOF_ALLOWUNDO = 0x0040
 FOF_NOERRORUI = 0x0400
+# FOF_ALLOWUNDO is a request, not a guarantee: a file larger than the drive's
+# Recycle Bin quota, or one on a network or removable volume, is deleted
+# outright and the call still returns 0. WANTNUKEWARNING is the only signal
+# Windows offers, and it is the one case where a prompt is right — the
+# alternative is destroying the file while reporting it recoverable.
+FOF_WANTNUKEWARNING = 0x4000
 
 
 def send_to_recycle_bin(path):
@@ -6099,8 +6122,14 @@ def send_to_recycle_bin(path):
         return False, 'no-path'
     target = Path(text)
     try:
+        if target.is_symlink():
+            # `resolve()` would hand the shell the target and leave the link
+            # dangling; `is_file()` follows it, so this has to be checked
+            # first or a link is silently recycled as its destination.
+            return False, 'symlink'
         if not target.is_file():
             return False, 'not-a-file'
+        target = target.absolute()
     except OSError as error:
         # reason: an unreachable drive cannot be recycled and is not an app failure
         return False, f'unreadable: {error}'
@@ -6124,8 +6153,9 @@ def send_to_recycle_bin(path):
         # NUL ends the name and the second ends the list; without it the API
         # reads past the buffer for a name nobody supplied.
         operation = SHFILEOPSTRUCTW(
-            None, FO_DELETE, str(target.resolve()) + '\0\0', None,
-            FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+            None, FO_DELETE, str(target) + '\0\0', None,
+            FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+            | FOF_WANTNUKEWARNING,
             False, None, None,
         )
         result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(operation))

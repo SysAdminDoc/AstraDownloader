@@ -186,9 +186,11 @@ function approvalEvidence(helper, resolved) {
         return (
             `Pinned rather than resolved from a rolling alias: ${resolved.target} at `
             + `${resolved.version} is SHA-256 ${resolved.sha256}, read from `
-            + `${resolved.checksumUrl}. The application is pinned to the same version, so the `
-            + `reviewed bytes and the shipped bytes are the same check. The pin has to be `
-            + `carried forward by hand, which is the cost of naming an exact release: `
+            + `${resolved.checksumUrl}, and this entry's distribution URL names that `
+            + `release rather than an alias. Note what this does NOT claim: a user can `
+            + `pin the same binary at runtime, and that pin is a separate setting this `
+            + `inventory neither reads nor constrains. The pin here has to be carried `
+            + `forward by hand, which is the cost of naming an exact release — `
             + `FFmpeg-Builds prunes its dated tags, so a pin there ages out of existence.`
         );
     }
@@ -222,6 +224,15 @@ async function resolveRuntimeHelpers(policyPath = POLICY_PATH) {
         helper.version = resolved.version;
         helper.sha256 = resolved.sha256;
         helper.decision = 'approved';
+        if (resolved.pinned) {
+            // The digest came from the pinned release, so the entry has to
+            // name that release too. A pinned digest sitting beside a
+            // `.../releases/latest/download/...` URL reads as a resolved
+            // alias, and the inspection waves it through because a digest
+            // is present.
+            helper.distributionUrl = helper.pinnedDistributionUrl;
+            helper.checksumUrl = helper.pinnedChecksumUrl;
+        }
         helper.approvalEvidence = approvalEvidence(helper, resolved);
         // The corresponding-source link has to name the version this entry
         // records; the digest does not cover it and the inspection says so.
