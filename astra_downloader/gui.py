@@ -17,7 +17,7 @@ from PySide6.QtCore import (
     QByteArray, QCoreApplication, QEasingCurve, QObject, QPropertyAnimation, QSize,
     QThread, QTimer, Qt, Signal,
 )
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QTextCursor
+from PySide6.QtGui import QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
     QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
