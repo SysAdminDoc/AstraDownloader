@@ -10295,6 +10295,191 @@ class PreflightHealthTests(unittest.TestCase):
             ['aformat'],
         )
 
+    def test_output_folder_names_a_disconnected_drive_and_a_read_only_folder(self):
+        gone = self._check(self._base(output_folder={
+            'configured': True, 'exists': False, 'writable': False,
+        }), 'output-folder')
+        self.assertEqual(gone['status'], 'error')
+        self.assertEqual(gone['action'], 'choose-output-folder')
+        self.assertIn('not connected', gone['message'])
+        read_only = self._check(self._base(output_folder={
+            'configured': True, 'exists': True, 'writable': False,
+        }), 'output-folder')
+        self.assertEqual(read_only['status'], 'error')
+        unset = self._check(self._base(output_folder={
+            'configured': False, 'exists': False, 'writable': False,
+        }), 'output-folder')
+        self.assertEqual(unset['status'], 'error')
+        self.assertIs(unset['details']['configured'], False)
+        healthy = self._check(self._base(output_folder={
+            'configured': True, 'exists': True, 'writable': True,
+        }), 'output-folder')
+        self.assertEqual(healthy['status'], 'ok')
+
+    def test_output_folder_probe_reports_what_the_filesystem_says(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.assertEqual(
+                ad.probe_output_folder(root),
+                {'configured': True, 'exists': True, 'writable': True},
+            )
+            self.assertEqual(
+                ad.probe_output_folder(root / 'not-there'),
+                {'configured': True, 'exists': False, 'writable': False},
+            )
+            self.assertEqual(
+                ad.probe_output_folder(''),
+                {'configured': False, 'exists': False, 'writable': False},
+            )
+            # The probe must leave nothing behind, or every readiness pass
+            # litters the user's download folder.
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_state_location_names_the_update_that_would_erase_it(self):
+        portable = self._check(self._base(state_location={
+            'portable': True, 'exists': True, 'writable': True, 'protected': False,
+        }), 'state-location')
+        self.assertEqual(portable['status'], 'warning')
+        self.assertEqual(portable['action'], 'review-state-location')
+        self.assertIn('erases them', portable['message'])
+        protected = self._check(self._base(state_location={
+            'portable': True, 'exists': True, 'writable': True, 'protected': True,
+        }), 'state-location')
+        self.assertEqual(protected['status'], 'warning')
+        self.assertIn('protected program folder', protected['message'])
+        unwritable = self._check(self._base(state_location={
+            'portable': False, 'exists': True, 'writable': False, 'protected': False,
+        }), 'state-location')
+        self.assertEqual(unwritable['status'], 'error')
+        installed = self._check(self._base(state_location={
+            'portable': False, 'exists': True, 'writable': True, 'protected': False,
+        }), 'state-location')
+        self.assertEqual(installed['status'], 'ok')
+
+    def test_state_location_probe_sees_a_protected_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = ad.probe_state_location(root, portable=True,
+                                            protected_roots=[str(root.parent)])
+            self.assertTrue(state['portable'])
+            self.assertTrue(state['writable'])
+            self.assertTrue(state['protected'])
+            self.assertEqual(list(root.iterdir()), [])
+            outside = ad.probe_state_location(root, protected_roots=[])
+            self.assertFalse(outside['protected'])
+            self.assertFalse(outside['portable'])
+
+    def test_site_availability_separates_a_long_streak_from_a_fresh_one(self):
+        fresh = self._check(self._base(site_refusals=[
+            {'failures': 3, 'openForSeconds': 120.0},
+        ]), 'site-availability')
+        self.assertEqual(fresh['status'], 'warning')
+        self.assertEqual(fresh['action'], 'review-site-refusals')
+        self.assertIs(fresh['details']['longTerm'], False)
+        long_term = self._check(self._base(site_refusals=[
+            {'failures': 9, 'openForSeconds': 4 * 60 * 60},
+            {'failures': 3, 'openForSeconds': 30.0},
+        ]), 'site-availability')
+        self.assertEqual(long_term['status'], 'warning')
+        self.assertIs(long_term['details']['longTerm'], True)
+        self.assertEqual(long_term['details']['refusingSites'], 2)
+        self.assertIn('4 hour(s)', long_term['message'])
+        quiet = self._check(self._base(site_refusals=[]), 'site-availability')
+        self.assertEqual(quiet['status'], 'not-applicable')
+
+    def test_system_clock_escalates_with_the_size_of_the_drift(self):
+        fine = self._check(self._base(system_clock={
+            'measured': True, 'offsetSeconds': 12,
+        }), 'system-clock')
+        self.assertEqual(fine['status'], 'ok')
+        drifting = self._check(self._base(system_clock={
+            'measured': True, 'offsetSeconds': -20 * 60,
+        }), 'system-clock')
+        self.assertEqual(drifting['status'], 'warning')
+        self.assertEqual(drifting['action'], 'sync-system-clock')
+        self.assertIn('20 minute(s)', drifting['message'])
+        broken = self._check(self._base(system_clock={
+            'measured': True, 'offsetSeconds': 3 * 24 * 60 * 60,
+        }), 'system-clock')
+        self.assertEqual(broken['status'], 'error')
+        self.assertIn('72 hour(s)', broken['message'])
+        unmeasured = self._check(self._base(), 'system-clock')
+        self.assertEqual(unmeasured['status'], 'not-applicable')
+
+    def test_system_clock_offset_is_read_off_a_response_date_header(self):
+        # RFC 7231 Date, against a local clock ten minutes ahead of it.
+        measured = ad.measure_system_clock_offset(
+            'Fri, 21 Aug 2026 10:00:00 GMT',
+            local_epoch=ad.parse_http_date_epoch(
+                'Fri, 21 Aug 2026 10:10:00 GMT'),
+        )
+        self.assertEqual(measured, {'measured': True, 'offsetSeconds': 600.0})
+        self.assertIsNone(ad.measure_system_clock_offset(''))
+        self.assertIsNone(ad.measure_system_clock_offset('not a date'))
+
+    def test_a_response_without_rate_limit_headers_still_sets_the_clock(self):
+        class _Response:
+            headers = {'Date': 'Fri, 21 Aug 2026 10:00:00 GMT'}
+
+        with mock.patch.object(ad, 'measure_system_clock_offset', return_value={
+            'measured': True, 'offsetSeconds': 42.0,
+        }):
+            ad.observe_github_api_budget(_Response())
+        self.assertEqual(
+            ad.get_system_clock_state(),
+            {'measured': True, 'offsetSeconds': 42.0},
+        )
+
+    def test_a_refusal_circuit_reports_how_long_it_has_been_open(self):
+        config = FakeConfig({'ServerToken': 'q' * 32})
+        manager = ad.DownloadManager(config, FakeHistory())
+        self.assertEqual(manager.refusing_sites(), [])
+        for _attempt in range(2):
+            manager._record_host_circuit_failure(
+                'https://refuser.invalid/watch', 'blocked-by-site')
+        # Below the threshold the circuit is not open, so nothing is reported.
+        self.assertEqual(manager.refusing_sites(), [])
+        manager._record_host_circuit_failure(
+            'https://refuser.invalid/watch', 'blocked-by-site')
+        open_circuits = manager.refusing_sites()
+        self.assertEqual(len(open_circuits), 1)
+        self.assertEqual(open_circuits[0]['failures'], 3)
+        self.assertGreaterEqual(open_circuits[0]['openForSeconds'], 0.0)
+        self.assertGreater(open_circuits[0]['remainingSeconds'], 0.0)
+        # A success clears it, which is what keeps the check from crying wolf.
+        completed = ad.Download('d', 'https://refuser.invalid/watch')
+        completed.status = 'complete'
+        manager._record_host_circuit_outcome(completed)
+        self.assertEqual(manager.refusing_sites(), [])
+
+    def test_every_check_has_a_panel_row_with_a_named_remedy(self):
+        # A check the panel has no row for is a check nobody sees, and a row
+        # whose action the handler does not know reads "Fix" and does nothing.
+        import gui_download_page
+
+        rows = {
+            key: action
+            for key, _label, action in gui_download_page._PREFLIGHT_ROW_SPECS
+        }
+        produced = {
+            item['id']: item['action']
+            for item in self._base(
+                output_folder={'configured': True, 'exists': True, 'writable': True},
+                state_location={'portable': False, 'exists': True,
+                                'writable': True, 'protected': False},
+                site_refusals=[],
+                system_clock={'measured': True, 'offsetSeconds': 0},
+            )['checks']
+        }
+        self.assertEqual(set(produced), set(rows))
+        self.assertEqual(produced, rows)
+        handler = inspect.getsource(ad.MainWindow._run_preflight_action)
+        labels = inspect.getsource(ad.MainWindow._set_preflight_row)
+        for action in sorted(set(rows.values())):
+            with self.subTest(action=action):
+                self.assertIn(f'"{action}"', handler)
+                self.assertIn(f'"{action}":', labels)
+
     def test_health_exposes_preflight_without_network_or_site_metadata(self):
         config = FakeConfig({'ServerToken': 'p' * 32})
         manager = ad.DownloadManager(config, FakeHistory())
@@ -10321,9 +10506,29 @@ class PreflightHealthTests(unittest.TestCase):
                 'ytdlp-freshness', 'javascript-runtime',
                 'ffmpeg-capabilities', 'sign-in-expiry',
                 'github-api-budget', 'po-token-provider',
+                'output-folder', 'state-location', 'site-availability',
+                'system-clock',
             },
         )
-        self.assertNotIn('site', json.dumps(body['preflight']))
+        # The site-availability check counts refusing domains, so a substring
+        # search for "site" no longer says anything. Drive a real refusal
+        # circuit open and assert the domain itself never reaches the wire.
+        for _attempt in range(3):
+            manager._record_host_circuit_failure(
+                'https://refuser.invalid/watch', 'blocked-by-site',
+            )
+        with mock.patch.object(ad, 'get_ytdlp_version', return_value='2026.08.01'),                 mock.patch.object(ad, 'get_ffmpeg_version', return_value='8.1.2'),                 mock.patch.object(ad, 'probe_javascript_runtime', return_value={
+                    'ytdlpNeedsRuntime': False,
+                }):
+            refused = api.test_client().get(
+                '/health', headers={'X-MDL-Client': 'MediaDL'},
+            ).get_json()['preflight']
+        availability = next(
+            item for item in refused['checks'] if item['id'] == 'site-availability'
+        )
+        self.assertEqual(availability['status'], 'warning')
+        self.assertEqual(availability['details']['refusingSites'], 1)
+        self.assertNotIn('refuser.invalid', json.dumps(refused))
 
 
 class HealthPoTokenSurfaceTests(unittest.TestCase):
@@ -12601,7 +12806,8 @@ class GuiSmokeTests(unittest.TestCase):
                 window._update_preflight_summary()
                 self.assertEqual(
                     window.preflight_summary.text(),
-                    "All six checks passed. Downloads are ready.",
+                    f"All {len(window.preflight_values)} checks passed. "
+                    "Downloads are ready.",
                 )
                 window._set_preflight_row("ffmpeg-capabilities", "error")
                 window._update_preflight_summary()

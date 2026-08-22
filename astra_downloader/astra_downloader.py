@@ -175,6 +175,8 @@ try:
         probe_javascript_execution as _owned_probe_javascript_execution,
         ytdlp_needs_external_runtime, missing_ffmpeg_filters,
         REQUIRED_FFMPEG_FILTERS, evaluate_preflight_checks,
+        probe_output_folder, probe_state_location,
+        measure_system_clock_offset, parse_http_date_epoch,
     )
     from .i18n import (
         SUPPORTED_LOCALES, install_companion_translator,
@@ -318,6 +320,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         probe_javascript_execution as _owned_probe_javascript_execution,
         ytdlp_needs_external_runtime, missing_ffmpeg_filters,
         REQUIRED_FFMPEG_FILTERS, evaluate_preflight_checks,
+        probe_output_folder, probe_state_location,
+        measure_system_clock_offset, parse_http_date_epoch,
     )
     from i18n import (
         SUPPORTED_LOCALES, install_companion_translator,
@@ -2819,6 +2823,7 @@ def observe_github_api_budget(response):
     remaining = _header_int(headers, 'X-RateLimit-Remaining')
     limit = _header_int(headers, 'X-RateLimit-Limit')
     reset_at = _header_int(headers, 'X-RateLimit-Reset')
+    observe_system_clock(response)
     if remaining is None and limit is None and reset_at is None:
         return get_github_api_budget()
     snapshot = {
@@ -2835,6 +2840,50 @@ def observe_github_api_budget(response):
 def get_github_api_budget():
     with _GITHUB_API_BUDGET_LOCK:
         return dict(_GITHUB_API_BUDGET)
+
+
+_SYSTEM_CLOCK_LOCK = threading.Lock()
+_SYSTEM_CLOCK_STATE = {'measured': False, 'offsetSeconds': 0}
+
+
+def observe_system_clock(response):
+    """Compare the local clock against a server's `Date` header, for free.
+
+    A machine whose clock is far out fails TLS validation and expires stored
+    cookies early, and both look like a broken site rather than a broken
+    clock. Every HTTP response the app already makes carries the reference,
+    so no extra request is needed to see it.
+    """
+    headers = getattr(response, 'headers', {}) or {}
+    try:
+        measured = measure_system_clock_offset(headers.get('Date'))
+    except (AttributeError, TypeError):
+        # reason: a response double without a mapping header set is not a clock reading
+        return get_system_clock_state()
+    if not measured:
+        return get_system_clock_state()
+    with _SYSTEM_CLOCK_LOCK:
+        _SYSTEM_CLOCK_STATE.update(measured)
+        return dict(_SYSTEM_CLOCK_STATE)
+
+
+def get_system_clock_state():
+    with _SYSTEM_CLOCK_LOCK:
+        return dict(_SYSTEM_CLOCK_STATE)
+
+
+def get_preflight_output_folder(config):
+    """Probe the folder the next download would be written into."""
+    try:
+        path = config.get('DownloadPath', '')
+    except AttributeError:
+        path = ''
+    return probe_output_folder(path)
+
+
+def get_preflight_state_location():
+    """Probe where this launch keeps settings, queue and history."""
+    return probe_state_location(INSTALL_DIR, portable=is_portable_mode())
 
 
 def fetch_latest_companion_release_tag(timeout=15):
@@ -4904,6 +4953,7 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'quarantined_state_files': lambda *args, **kwargs: quarantined_state_files(*args, **kwargs),
@@ -5000,6 +5050,9 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'evaluate_sabr_support': lambda *args, **kwargs: evaluate_sabr_support(*args, **kwargs),
         'evaluate_preflight_checks': lambda *args, **kwargs: evaluate_preflight_checks(*args, **kwargs),
         'get_preflight_ffmpeg_capabilities': lambda *args, **kwargs: get_preflight_ffmpeg_capabilities(*args, **kwargs),
+        'get_preflight_output_folder': lambda *args, **kwargs: get_preflight_output_folder(*args, **kwargs),
+        'get_preflight_state_location': lambda *args, **kwargs: get_preflight_state_location(*args, **kwargs),
+        'get_system_clock_state': lambda *args, **kwargs: get_system_clock_state(*args, **kwargs),
         'get_github_api_budget': lambda *args, **kwargs: get_github_api_budget(*args, **kwargs),
         'describe_media_url_block': lambda *args, **kwargs: describe_media_url_block(*args, **kwargs),
         'is_youtube_url': lambda *args, **kwargs: is_youtube_url(*args, **kwargs),
@@ -5328,7 +5381,8 @@ class ReadinessProbe(_OwnedReadinessProbe):
                  whisper_model_state=None, whisper_runtime_state=None,
                  readiness_sink=None, preflight_evaluator=None,
                  ffmpeg_capabilities=None, sign_in_entries=None,
-                 github_api_budget=None):
+                 github_api_budget=None, output_folder=None,
+                 state_location=None, site_refusals=None, system_clock=None):
         super().__init__(
             configured_runtime,
             runtime_probe=lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -5365,6 +5419,16 @@ class ReadinessProbe(_OwnedReadinessProbe):
             github_api_budget=(
                 github_api_budget
                 or (lambda: get_github_api_budget())
+            ),
+            output_folder=output_folder,
+            state_location=(
+                state_location
+                or (lambda: get_preflight_state_location())
+            ),
+            site_refusals=site_refusals,
+            system_clock=(
+                system_clock
+                or (lambda: get_system_clock_state())
             ),
         )
 
@@ -5464,6 +5528,7 @@ class MainWindow(MainWindowCore):
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'normalize_proxy': lambda *args, **kwargs: normalize_proxy(*args, **kwargs),
                 'normalize_force_ip_version': lambda *args, **kwargs: normalize_force_ip_version(*args, **kwargs),
                 'normalize_source_address': lambda *args, **kwargs: normalize_source_address(*args, **kwargs),

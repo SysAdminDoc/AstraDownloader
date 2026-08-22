@@ -88,8 +88,8 @@ CATALOGS = {
             "Prüfungen ausblenden",
         "Show each download readiness check and its repair action.":
             "Jede Download-Prüfung und ihre Reparaturaktion anzeigen.",
-        "Checking six common download blockers...":
-            "Sechs häufige Download-Probleme werden geprüft...",
+        "Checking the common causes of a failed download...":
+            "Die häufigen Ursachen für fehlgeschlagene Downloads werden geprüft...",
         "Download health summary":
             "Zusammenfassung der Download-Bereitschaft",
         "Checking download readiness...":
@@ -102,8 +102,8 @@ CATALOGS = {
             "Eine Prüfung braucht Aufmerksamkeit. Downloads können trotzdem verfügbar sein.",
         "{count} checks need attention. Downloads can still be available.":
             "{count} Prüfungen brauchen Aufmerksamkeit. Downloads können trotzdem verfügbar sein.",
-        "All six checks passed. Downloads are ready.":
-            "Alle sechs Prüfungen bestanden. Downloads sind bereit.",
+        "All {count} checks passed. Downloads are ready.":
+            "Alle {count} Prüfungen bestanden. Downloads sind bereit.",
         "Save to":
             "Speichern unter",
         "Restore":
@@ -1442,6 +1442,22 @@ CATALOGS["de"].update({
     "refresh-sign-in": "Anmeldung aktualisieren",
     "retry-github": "GitHub erneut versuchen",
     "use-sign-in": "Anmeldung verwenden",
+    "choose-output-folder": "Ordner wählen",
+    "review-state-location": "Einstellungen öffnen",
+    "review-site-refusals": "Anmeldungen öffnen",
+    "sync-system-clock": "Uhr prüfen",
+    "Download folder": "Download-Ordner",
+    "Settings and queue storage": "Speicherort für Einstellungen und Warteschlange",
+    "Site availability": "Verfügbarkeit der Website",
+    "System clock": "Systemuhr",
+    "Choose a download folder this machine can write to.":
+        "Wählen Sie einen Download-Ordner, in den dieser Rechner schreiben kann.",
+    "Settings, queue and history live at {path}. Copy that folder before replacing this build.":
+        "Einstellungen, Warteschlange und Verlauf liegen unter {path}. "
+        "Kopieren Sie diesen Ordner, bevor Sie diese Version ersetzen.",
+    "This machine's clock is out of step. Turn on automatic time in Windows Settings, then re-check.":
+        "Die Uhr dieses Rechners geht falsch. Aktivieren Sie in den "
+        "Windows-Einstellungen die automatische Zeit und prüfen Sie erneut.",
     "Checking": "Wird geprüft",
     "Pre-flight": "Vorabprüfung",
     "Checks known download failure causes before a job starts. Each row names the remedy.":

@@ -4132,6 +4132,32 @@ class DownloadManagerCore:
             return 0.0
         return max(0.0, remaining)
 
+    def refusing_sites(self):
+        """Summarise the domains whose refusal circuit is currently open.
+
+        Counts and streak lengths only. The pre-flight panel names how many
+        sites are refusing, never which — the check is a policy input, not a
+        browsing history.
+        """
+        now = time.monotonic()
+        summary = []
+        with self._lock:
+            for state in self._host_circuits.values():
+                try:
+                    failures = int(state.get('failures', 0) or 0)
+                    until = float(state.get('until', 0.0) or 0.0)
+                    started_at = float(state.get('started_at', now) or now)
+                except (AttributeError, TypeError, ValueError, OverflowError):
+                    continue
+                if failures < HOST_CIRCUIT_FAILURE_THRESHOLD or until <= now:
+                    continue
+                summary.append({
+                    'failures': failures,
+                    'openForSeconds': max(0.0, now - started_at),
+                    'remainingSeconds': max(0.0, until - now),
+                })
+        return summary
+
     def _host_pause_remaining_locked(self, url):
         """Return the longer of a 429 backoff and a refusal circuit pause."""
         return max(
@@ -4252,10 +4278,19 @@ class DownloadManagerCore:
                 if failures >= HOST_CIRCUIT_FAILURE_THRESHOLD else 0.0
             )
             opened = failures >= HOST_CIRCUIT_FAILURE_THRESHOLD and not was_open
+            # When the streak started, not when it was last extended: a site
+            # that has refused everything for hours is a different problem
+            # from one that refused three times a minute ago, and only the
+            # first is worth telling the user about.
+            try:
+                started_at = float(previous.get('started_at')) if same_class else now
+            except (AttributeError, TypeError, ValueError):
+                started_at = now
             self._host_circuits[key] = {
                 'error_code': error_code,
                 'failures': failures,
                 'until': until,
+                'started_at': started_at,
                 'updated_at': now,
             }
             if len(self._host_circuits) > HOST_BACKOFF_MAX_ENTRIES:

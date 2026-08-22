@@ -731,6 +731,14 @@
       <translation>{open_label} {name}</translation>
     </message>
     <message>
+      <source>Choose a download folder this machine can write to.</source>
+      <translation>Wählen Sie einen Download-Ordner, in den dieser Rechner schreiben kann.</translation>
+    </message>
+    <message>
+      <source>This machine's clock is out of step. Turn on automatic time in Windows Settings, then re-check.</source>
+      <translation>Die Uhr dieses Rechners geht falsch. Aktivieren Sie in den Windows-Einstellungen die automatische Zeit und prüfen Sie erneut.</translation>
+    </message>
+    <message>
       <source>GitHub's anonymous budget is exhausted; retry after its reset.</source>
       <translation>Das anonyme GitHub-Budget ist erschöpft; versuchen Sie es nach dem Zurücksetzen erneut.</translation>
     </message>
@@ -1267,10 +1275,6 @@
       <translation>Eine Prüfung muss repariert werden. Öffnen Sie die Prüfungen für die Lösung.</translation>
     </message>
     <message>
-      <source>All six checks passed. Downloads are ready.</source>
-      <translation>Alle sechs Prüfungen bestanden. Downloads sind bereit.</translation>
-    </message>
-    <message>
       <source>{target} (unavailable)</source>
       <translation>{target} (nicht verfügbar)</translation>
     </message>
@@ -1555,6 +1559,10 @@
       <translation>Eine Prüfung braucht Aufmerksamkeit. Downloads können trotzdem verfügbar sein.</translation>
     </message>
     <message>
+      <source>Settings, queue and history live at {path}. Copy that folder before replacing this build.</source>
+      <translation>Einstellungen, Warteschlange und Verlauf liegen unter {path}. Kopieren Sie diesen Ordner, bevor Sie diese Version ersetzen.</translation>
+    </message>
+    <message>
       <source>Runtime floor</source>
       <translation>Laufzeituntergrenze</translation>
     </message>
@@ -1665,6 +1673,10 @@
     <message>
       <source>{count} checks need repair. Open the checks to see the fixes.</source>
       <translation>{count} Prüfungen müssen repariert werden. Öffnen Sie die Prüfungen für die Lösungen.</translation>
+    </message>
+    <message>
+      <source>All {count} checks passed. Downloads are ready.</source>
+      <translation>Alle {count} Prüfungen bestanden. Downloads sind bereit.</translation>
     </message>
     <message>
       <source>{runtime} {version} is below the security floor {floor}; update it before downloading.</source>
@@ -1787,8 +1799,8 @@
       <translation>Letzte 30 s</translation>
     </message>
     <message>
-      <source>Checking six common download blockers...</source>
-      <translation>Sechs häufige Download-Probleme werden geprüft...</translation>
+      <source>Checking the common causes of a failed download...</source>
+      <translation>Die häufigen Ursachen für fehlgeschlagene Downloads werden geprüft...</translation>
     </message>
     <message>
       <source>Restore</source>
@@ -2015,6 +2027,22 @@
       <translation>Proof-of-Origin-Token-Anbieter</translation>
     </message>
     <message>
+      <source>Download folder</source>
+      <translation>Download-Ordner</translation>
+    </message>
+    <message>
+      <source>Settings and queue storage</source>
+      <translation>Speicherort für Einstellungen und Warteschlange</translation>
+    </message>
+    <message>
+      <source>Site availability</source>
+      <translation>Verfügbarkeit der Website</translation>
+    </message>
+    <message>
+      <source>System clock</source>
+      <translation>Systemuhr</translation>
+    </message>
+    <message>
       <source>refresh-ytdlp</source>
       <translation>yt-dlp aktualisieren</translation>
     </message>
@@ -2037,6 +2065,22 @@
     <message>
       <source>use-sign-in</source>
       <translation>Anmeldung verwenden</translation>
+    </message>
+    <message>
+      <source>choose-output-folder</source>
+      <translation>Ordner wählen</translation>
+    </message>
+    <message>
+      <source>review-state-location</source>
+      <translation>Einstellungen öffnen</translation>
+    </message>
+    <message>
+      <source>review-site-refusals</source>
+      <translation>Anmeldungen öffnen</translation>
+    </message>
+    <message>
+      <source>sync-system-clock</source>
+      <translation>Uhr prüfen</translation>
     </message>
     <message>
       <source>Clear history</source>
