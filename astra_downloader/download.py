@@ -1684,6 +1684,13 @@ class SiteLoginStore:
         with self._lock:
             index = self._load_index()
             existed = key in index
+            # The index goes first because an index write that fails must not
+            # already have deleted the jar; a test pins that. What was missing
+            # is the other half: an unlink that fails after the row is gone
+            # leaves a live jar on disk with nothing listing it, invisible to
+            # entries() and so with no Remove button to try again. Put the row
+            # back when that happens.
+            record = index.get(key) if existed else None
             if existed:
                 index.pop(key, None)
                 if not self._save_index(index):
@@ -1696,6 +1703,13 @@ class SiteLoginStore:
                     path.unlink(missing_ok=True)
                 except OSError as error:
                     self._log(f"WARNING: site-login {label} delete failed: {error}")
+                    if existed and record is not None:
+                        index[key] = record
+                        if not self._save_index(index):
+                            self._log(
+                                "WARNING: site-login index could not be restored; "
+                                f"the stored session for {key} is on disk but unlisted"
+                            )
                     return False
         if existed:
             self._log(f"Removed the stored site sign-in for {key}")
@@ -7354,17 +7368,31 @@ class DownloadManagerCore:
             if not folder.is_dir():
                 return
             stem = final_path.stem
+            # yt-dlp writes one format id and then one extension:
+            # `Title.f137.mp4`, `Title.f140-drc.m4a`. The glob below cannot
+            # say that. `Title.f[0-9]*.*` also matches `Title.f1080p.WEB-DL.mp4`
+            # — a name a person would give a file, sitting in the user's own
+            # download folder, deleted because a download called `Title.mp4`
+            # happened to finish. Anything the glob finds for that pattern has
+            # to pass this too.
+            format_intermediate = re.compile(
+                re.escape(stem) + r"\.f[0-9][0-9A-Za-z_-]*\.[^.]+"
+            )
             # `Title.mp4` -> `Title.mp4.part`, `Title.mp4.ytdl`, `Title.f137.mp4`
+            format_pattern = f"{glob.escape(stem)}.f[0-9]*.*"
             patterns = (
                 f"{glob.escape(final_path.name)}.part",
                 f"{glob.escape(final_path.name)}.part-Frag*",
                 f"{glob.escape(final_path.name)}.ytdl",
-                f"{glob.escape(stem)}.f[0-9]*.*",
+                format_pattern,
             )
             removed = 0
             for pattern in patterns:
                 for candidate in folder.glob(pattern):
                     if candidate == final_path or not candidate.is_file():
+                        continue
+                    if (pattern == format_pattern
+                            and not format_intermediate.fullmatch(candidate.name)):
                         continue
                     try:
                         candidate.unlink()
