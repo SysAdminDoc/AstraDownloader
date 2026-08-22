@@ -3390,6 +3390,10 @@ class Download:
         # separate from the sidecar check because --embed-subs can consume the
         # temporary subtitle file before the local-transcription stage runs.
         self.subtitle_written = False
+        # Per-run, like the two above: set from this run's yt-dlp output and
+        # cleared when another run starts. Declared here rather than sprung
+        # into existence by _consume_ytdlp_output.
+        self.sabr_capped_warning = False
         self.error = ""
         self.error_code = ""
         self.error_advice = ""
@@ -3459,6 +3463,7 @@ RETRY_ROLLBACK_FIELDS = (
     'error', 'error_code', 'error_advice', 'error_action',
     'finished_time', 'start_time', 'queue_order',
     'requires_auth', '_cookies', 'resume_partial', 'subtitle_retry',
+    'sabr_capped_warning', 'subtitle_written', 'delivered_height',
 )
 # start_download() reuses an existing needs-auth record rather than queueing a
 # duplicate, so it overwrites the whole request and must be able to put the
@@ -6281,12 +6286,12 @@ class DownloadManagerCore:
                             "The VOD archive may still be processing. "
                             "Try again in a few minutes."
                         )
-                    elif ('sabr' in combined or 'no video formats' in combined
-                            or 'requested format is not available' in combined):
-                        apply_download_failure_classification(
-                            dl, 'sabr-limited',
-                        )
-                    else:
+                    elif not _failure_code:
+                        # Only when the classifier above found nothing. It
+                        # reads the ERROR line first and the surrounding
+                        # output second precisely so a routine warning cannot
+                        # outrank the real cause, and re-deciding here from
+                        # the joined output put that back.
                         apply_download_failure_classification(
                             dl,
                             classify_download_failure(dl.error, last_lines),
@@ -6545,6 +6550,20 @@ class DownloadManagerCore:
                 self._schedule()
             return result
 
+    @staticmethod
+    def _clear_run_flags(dl):
+        """Forget what the previous run of yt-dlp reported about itself.
+
+        Each of these is written from one process's output. Carried into the
+        next run they describe a run that no longer exists: a stale SABR
+        warning fails a download that succeeded, a stale subtitle_written
+        skips the transcription the retry was for, and a stale height is what
+        a subscription compares its next upgrade against.
+        """
+        dl.sabr_capped_warning = False
+        dl.subtitle_written = False
+        dl.delivered_height = 0
+
     def _retry_locked(self, dl, cookies, subtitle_retry):
         """Apply a validated retry while ``self._lock`` is held."""
         if dl.status == 'failed' and dl.error_code == 'rate-limited':
@@ -6587,6 +6606,7 @@ class DownloadManagerCore:
             dl.start_time = time.time()
             dl.resume_partial = False
             dl.subtitle_retry = True
+            self._clear_run_flags(dl)
             self._next_order += 1
             dl.queue_order = self._next_order
             if not self._persist_locked():
@@ -6629,6 +6649,7 @@ class DownloadManagerCore:
             dl.start_time = time.time()
             # A retry continues whatever the failed attempt left on disk.
             dl.resume_partial = True
+            self._clear_run_flags(dl)
             self._next_order += 1
             dl.queue_order = self._next_order
             if not self._persist_locked():

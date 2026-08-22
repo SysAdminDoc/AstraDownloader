@@ -50,14 +50,19 @@ class SiteLoginsPageMixin:
 
         credentials_row = QHBoxLayout()
         credentials_row.setSpacing(8)
+        # Two fields side by side whose only identification was their own
+        # placeholder text, which is gone the moment either one is typed in.
+        # The row below this one already labels its controls this way.
+        credentials_row.addWidget(make_label(tr("Username"), "fieldHint"))
         self.site_login_username = QLineEdit()
         self.site_login_username.setAccessibleName(tr("Site sign-in username"))
-        self.site_login_username.setPlaceholderText(tr("Username or email"))
+        self.site_login_username.setPlaceholderText(tr("name@example.com"))
         credentials_row.addWidget(self.site_login_username, 1)
+        credentials_row.addWidget(make_label(tr("Password"), "fieldHint"))
         self.site_login_password = QLineEdit()
         self.site_login_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.site_login_password.setAccessibleName(tr("Site sign-in password"))
-        self.site_login_password.setPlaceholderText(tr("Password"))
+        self.site_login_password.setPlaceholderText(tr("Site password"))
         self.site_login_password.setClearButtonEnabled(True)
         credentials_row.addWidget(self.site_login_password, 1)
         self.btn_site_login_credentials = self._make_tool_button(
@@ -94,7 +99,9 @@ class SiteLoginsPageMixin:
         source_fields.addWidget(self.site_login_browser)
         self.site_login_profile = QLineEdit()
         self.site_login_profile.setAccessibleName(tr("Browser profile name or path"))
-        self.site_login_profile.setPlaceholderText(tr("Profile (optional)"))
+        # Was "Profile (optional)", which restated the label and showed no
+        # example of what a profile actually looks like.
+        self.site_login_profile.setPlaceholderText(tr("Default, or a profile name"))
         self.site_login_profile.setMinimumWidth(180)
         self.site_login_profile.setMaximumWidth(300)
         source_fields.addWidget(self.site_login_profile, 1)

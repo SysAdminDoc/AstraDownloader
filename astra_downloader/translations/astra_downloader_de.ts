@@ -2567,16 +2567,16 @@
       <translation>Benutzername der Website-Anmeldung</translation>
     </message>
     <message>
-      <source>Username or email</source>
-      <translation>Benutzername oder E-Mail</translation>
+      <source>name@example.com</source>
+      <translation>name@beispiel.de</translation>
     </message>
     <message>
       <source>Site sign-in password</source>
       <translation>Passwort der Website-Anmeldung</translation>
     </message>
     <message>
-      <source>Password</source>
-      <translation>Passwort</translation>
+      <source>Site password</source>
+      <translation>Passwort der Website</translation>
     </message>
     <message>
       <source>Browser to read cookies from</source>
@@ -2603,8 +2603,8 @@
       <translation>Name oder Pfad des Browserprofils</translation>
     </message>
     <message>
-      <source>Profile (optional)</source>
-      <translation>Profil (optional)</translation>
+      <source>Default, or a profile name</source>
+      <translation>Standard oder ein Profilname</translation>
     </message>
     <message>
       <source>Site sign-in status</source>
@@ -2633,6 +2633,14 @@
     <message>
       <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
       <translation>Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.</translation>
+    </message>
+    <message>
+      <source>Username</source>
+      <translation>Benutzername</translation>
+    </message>
+    <message>
+      <source>Password</source>
+      <translation>Passwort</translation>
     </message>
     <message>
       <source>Read from</source>
