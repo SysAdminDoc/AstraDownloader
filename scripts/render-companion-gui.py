@@ -1429,7 +1429,14 @@ def main():
                 if window.cfg_outtmpl.property("state") != "error":
                     raise RuntimeError("Invalid settings fixture did not highlight the field")
                 window._render_focus_target = window.cfg_outtmpl
-                expected = "Check the highlighted fields before saving."
+                # The status line names the first problem rather than saying
+                # that there is one. The reason used to be readable only
+                # through the accessible description.
+                expected = (
+                    "Keep %(ext)s and use only safe yt-dlp fields such as "
+                    "%(title)s, %(id)s, or %(uploader)s. Absolute paths and "
+                    "'..' are not allowed."
+                )
             elif scenario == "settings-search-active":
                 window.settings_filter.setText("proxy")
                 app.processEvents()

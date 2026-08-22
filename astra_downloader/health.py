@@ -1009,14 +1009,18 @@ class ImpersonateTargetsProbe:
                 return list(self._value)
             generation = self._generation
         # Spawning yt-dlp outside the lock, as the other probes here do.
-        targets = parse_impersonate_targets(
-            self._runner([str(path), "--list-impersonate-targets"])
-        )
-        with self._lock:
-            if generation != self._generation:
+        for _attempt in range(_PROBE_RESTART_LIMIT):
+            targets = parse_impersonate_targets(
+                self._runner([str(path), "--list-impersonate-targets"])
+            )
+            with self._lock:
+                if generation == self._generation:
+                    break
                 # reset() ran while this was out, which is what a binary swap
-                # does. The answer describes a yt-dlp that is gone.
-                return list(self._value or ())
+                # does. Answering [] would read as "this build can imitate
+                # nothing", so ask the binary that is actually installed.
+                generation = self._generation
+        with self._lock:
             self._value = targets
             self._checked_at = self._clock()
             return list(self._value)
@@ -1294,6 +1298,12 @@ def probe_whisper_runtime(path, minimum_bytes=MANAGED_BINARY_MIN_BYTES,
     return result
 
 
+# How many times a probe re-reads after a reset landed mid-flight. One
+# rollback is one bump, so a single restart is the real case; the bound is
+# here so a caller cannot be held by a stream of them.
+_PROBE_RESTART_LIMIT = 3
+
+
 class ExecutableVersionProbe:
     """Thread-safe TTL cache for an injected executable version command."""
 
@@ -1320,7 +1330,7 @@ class ExecutableVersionProbe:
     def _resolve(value):
         return value() if callable(value) else value
 
-    def get(self, force=False):
+    def get(self, force=False, attempt=0):
         path = Path(self._resolve(self._path))
         if not path.exists():
             return None
@@ -1356,17 +1366,23 @@ class ExecutableVersionProbe:
                 value = None
         finally:
             with self._condition:
-                if generation == self._generation:
+                stale = generation != self._generation
+                if not stale:
                     self._value = value
                     self._has_value = True
                     self._checked_at = self._clock()
-                else:
-                    # reset() or prime() ran while this was out. Answer with
-                    # what they left rather than with the binary that is no
-                    # longer installed.
+                elif self._has_value:
+                    # prime() ran while this was out: it carries a version an
+                    # update transaction already verified, so it wins.
                     value = self._value
                 self._in_flight = False
                 self._condition.notify_all()
+        if stale and not self._has_value:
+            # reset() ran while this was out, and left nothing behind.
+            # Answering None would report the executable as unreadable, so
+            # read the one that is installed now.
+            if attempt + 1 < _PROBE_RESTART_LIMIT:
+                return self.get(force=True, attempt=attempt + 1)
         return value
 
     def reset(self):
@@ -1422,12 +1438,17 @@ class FfmpegCapabilitiesProbe:
         # The version getter can invoke an executable probe. Keep that I/O
         # outside the capabilities-cache lock so concurrent health calls do
         # not wait for a cold ffmpeg subprocess.
-        raw = self._version_getter()
-        with self._lock:
-            if generation != self._generation and self._value is not None:
+        for _attempt in range(_PROBE_RESTART_LIMIT):
+            raw = self._version_getter()
+            with self._lock:
+                if generation == self._generation:
+                    break
                 # reset() ran while the version getter was out, which is what
-                # a rollback does. Keep what it left.
-                return dict(self._value)
+                # a rollback does. The answer in hand describes the ffmpeg
+                # that was just replaced, so read the new one instead of
+                # caching it for a whole TTL.
+                generation = self._generation
+        with self._lock:
             now = self._clock()
             major = parse_ffmpeg_major(raw)
             if major is None:

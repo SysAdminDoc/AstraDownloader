@@ -1695,15 +1695,22 @@ class SiteLoginStore:
                 index.pop(key, None)
                 if not self._save_index(index):
                     return False
+            deleted_any = False
             for path, label in (
                 (self._jar_path(key), 'jar'),
                 (self._credential_path(key), 'credential'),
             ):
+                was_there = path.exists()
                 try:
                     path.unlink(missing_ok=True)
+                    deleted_any = deleted_any or was_there
                 except OSError as error:
                     self._log(f"WARNING: site-login {label} delete failed: {error}")
-                    if existed and record is not None:
+                    # Only while nothing has actually gone. Putting the row
+                    # back after the jar was deleted would list a sign-in with
+                    # no session behind it, which reads as stored and then
+                    # fails every download with needs-auth.
+                    if existed and record is not None and not deleted_any:
                         index[key] = record
                         if not self._save_index(index):
                             self._log(
@@ -4824,6 +4831,11 @@ class DownloadManagerCore:
                 dl._cookies = list(cookies)
                 dl._credentials = None
                 dl._video_password = video_password
+                # Third entry point: start_download reuses the needs-auth
+                # record rather than queueing a duplicate, so this is another
+                # run of yt-dlp against a Download that already has one
+                # run's flags on it.
+                self._clear_run_flags(dl)
                 dl.status = 'pending'
                 dl.error = ''
                 dl.error_code = ''
@@ -6482,6 +6494,9 @@ class DownloadManagerCore:
             dl.error_advice = ''
             dl.error_action = ''
             dl.resume_partial = True
+            # Its own entry point into another run of yt-dlp. retry() parks a
+            # needs-auth download and returns; this is what starts it.
+            self._clear_run_flags(dl)
             if not self._persist_locked():
                 restore_download_fields(dl, previous)
                 return False, self._persistence_error
@@ -7375,8 +7390,16 @@ class DownloadManagerCore:
             # download folder, deleted because a download called `Title.mp4`
             # happened to finish. Anything the glob finds for that pattern has
             # to pass this too.
+            # A format id is digits, optionally with dash-separated parts
+            # (`137`, `140-drc`), then one extension, then optionally one of
+            # yt-dlp's own in-progress suffixes. Requiring digits all the way
+            # is what excludes `Movie.f1080p.mkv`; allowing the suffixes is
+            # what keeps `Movie.f137.mp4.part` swept, which the first version
+            # of this filter stopped deleting.
             format_intermediate = re.compile(
-                re.escape(stem) + r"\.f[0-9][0-9A-Za-z_-]*\.[^.]+"
+                re.escape(stem)
+                + r"\.f[0-9]+(?:-[0-9A-Za-z]+)*\.[^.]+"
+                + r"(?:\.part(?:-Frag[0-9]+)?|\.ytdl)?"
             )
             # `Title.mp4` -> `Title.mp4.part`, `Title.mp4.ytdl`, `Title.f137.mp4`
             format_pattern = f"{glob.escape(stem)}.f[0-9]*.*"

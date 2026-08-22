@@ -2113,5 +2113,79 @@ class ProbeInFlightAcrossASwapTests(unittest.TestCase):
         self.assertEqual(len(started), 2)
 
 
+class ProbeRestartsRatherThanAnsweringAboutAGoneBinaryTests(unittest.TestCase):
+    """A reset mid-flight has to produce an answer, not a shrug."""
+
+    def test_the_version_probe_rereads_after_a_reset(self):
+        released = threading.Event()
+        resumed = threading.Event()
+        answers = iter(["2026.01.01", "2026.08.19"])
+        calls = []
+
+        def runner(_args):
+            calls.append(1)
+            if len(calls) == 1:
+                released.set()
+                self.assertTrue(resumed.wait(15))
+            return next(answers)
+
+        probe = ad.ExecutableVersionProbe(
+            path=lambda: Path(__file__), args=("--version",),
+            runner=runner, parser=lambda text: text.strip(),
+        )
+        result = {}
+        worker = threading.Thread(target=lambda: result.update(got=probe.get()))
+        worker.start()
+        try:
+            self.assertTrue(released.wait(15))
+            probe.reset()
+        finally:
+            resumed.set()
+            worker.join(15)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(
+            result["got"], "2026.08.19",
+            "answering None would report the executable as unreadable",
+        )
+        self.assertEqual(len(calls), 2)
+
+    def test_the_ffmpeg_probe_rereads_after_a_reset(self):
+        # The first guard here read `generation changed AND _value is not
+        # None`, and reset() is the only thing that changes the generation --
+        # and it nulls _value. So it could never fire in the case it was for.
+        released = threading.Event()
+        resumed = threading.Event()
+        answers = iter(["7.0", "9.0.1"])
+        calls = []
+
+        def version_getter():
+            calls.append(1)
+            if len(calls) == 1:
+                released.set()
+                self.assertTrue(resumed.wait(15))
+            return next(answers)
+
+        probe = ad.FfmpegCapabilitiesProbe(
+            version_getter=version_getter, minimum_major=8,
+        )
+        result = {}
+        worker = threading.Thread(
+            target=lambda: result.update(got=probe.check()))
+        worker.start()
+        try:
+            self.assertTrue(released.wait(15))
+            probe.reset()
+        finally:
+            resumed.set()
+            worker.join(15)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["got"]["majorVersion"], 9)
+        self.assertTrue(
+            result["got"]["current"],
+            "the replaced ffmpeg was reported for a whole TTL",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

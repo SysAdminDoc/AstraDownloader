@@ -916,6 +916,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'managed_binary_state',
     'managed_binary_usable',
     'maybe_auto_update_ytdlp',
+    'allowed_output_roots',
     'normalize_output_dir',
     'parse_native_extension_ids',
     'refresh_native_messaging_registration',
@@ -3526,6 +3527,11 @@ class MainWindowCore(
         if folder:
             resolved, folder_error = self._dependencies['normalize_output_dir'](
                 folder, self.config.get("DownloadPath", ""),
+                # The same roots the download path applies to this folder when
+                # the scheduler enqueues against it. Without them the dialog
+                # accepts a folder every scheduled download then refuses,
+                # which is the failure this check exists to move forward.
+                allowed_roots=self._dependencies['allowed_output_roots'](self.config),
             )
             if folder_error:
                 self._show_subscription_status(tr(str(folder_error)), "danger")
@@ -5035,9 +5041,8 @@ class MainWindowCore(
                    "this again.")
             )
             btn_more.clicked.connect(
-                lambda checked=False, item=dl, widget=card: self._open_download_card_menu(
-                    item, widget
-                )
+                lambda checked=False, item=dl, widget=card, anchor=btn_more:
+                self._open_download_card_menu(item, widget, anchor)
             )
             top.addWidget(btn_more)
         card_l.addLayout(top)
@@ -7050,6 +7055,11 @@ class MainWindowCore(
         for field in validated_fields:
             self._set_input_error(field, False)
             field.setAccessibleDescription("")
+            # The reason is written to the tooltip too, and a field that has
+            # since been fixed must not keep the rejection text on hover.
+            clear_tooltip = getattr(field, "setToolTip", None)
+            if callable(clear_tooltip):
+                clear_tooltip("")
 
         # Compare against the PERSISTED port: during a session-only fallback
         # (bind conflict) the live port differs from the configured one, and
@@ -7093,7 +7103,14 @@ class MainWindowCore(
 
         first_reason = None
 
-        def mark_error(field, message):
+        def mark_error(field, message, translatable=True):
+            """Mark one field and say why, on the field and in the summary.
+
+            ``translatable`` is False for a reason built at runtime rather
+            than written here. Those cannot reach a catalogue, so they stay
+            out of the status line and the generic summary is used instead;
+            the field itself still carries them.
+            """
             nonlocal has_error, first_error, first_reason
             self._set_input_error(field, True)
             reason = tr(message)
@@ -7110,7 +7127,7 @@ class MainWindowCore(
                 # The source string, not `reason`: the status setter
                 # translates what it is given, and the literals are already
                 # extracted from the mark_error call sites.
-                first_reason = message
+                first_reason = message if translatable else None
 
         dl_path, dl_path_err = self._dependencies['normalize_output_dir'](dl_path, self._value('DEFAULT_CONFIG')["DownloadPath"])
         audio_path, audio_path_err = self._dependencies['normalize_output_dir'](audio_path, dl_path) if audio_path else ("", None)
@@ -7143,7 +7160,9 @@ class MainWindowCore(
                 "Enter an http, https, or socks proxy URL, or leave this blank.",
             )
         if site_profiles_error and site_profiles_field is not None:
-            mark_error(site_profiles_field, site_profiles_error)
+            # The validator builds this text at runtime, so it is in no
+            # catalogue and must not replace a translated summary.
+            mark_error(site_profiles_field, site_profiles_error, translatable=False)
         if not new_token:
             mark_error(self.cfg_token, "The private API token cannot be empty.")
         outtmpl_raw = self.cfg_outtmpl.text().strip()
