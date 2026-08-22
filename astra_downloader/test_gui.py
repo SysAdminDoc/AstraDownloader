@@ -148,7 +148,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         self.assertIn("'=HYPERLINK", body)
         self.assertIn("clip.mp4", body)
         self.assertEqual(events[-1][1], "success")
-        self.assertIn("Exported 1", events[-1][0])
+        self.assertIn("Exported one filtered history row", events[-1][0])
 
     def test_export_history_pages_past_the_query_page_size(self):
         calls = []
@@ -988,7 +988,7 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                 action_text = [action.text() for action in menu.actions()]
                 self.assertIn("Retry", action_text)
                 self.assertIn("Copy link", action_text)
-                self.assertIn("Copy error", action_text)
+                self.assertIn("Copy error text", action_text)
             finally:
                 _retire_test_window(window)
 
@@ -2210,7 +2210,7 @@ class TranslationCoverageTests(unittest.TestCase):
             "Duration",
             "Search title or filename",
             "Show Astra Downloader",
-            "Review Diagnostics",
+            "Review diagnostics",
             "{total} configured · {archived} archived · {queued} queued",
             "Added {title}. The first scan is scheduled now.",
         ):

@@ -151,7 +151,7 @@
       <translation>Neues Token bereit. Speichern Sie die Einstellungen, um es anzuwenden.</translation>
     </message>
     <message>
-      <source>Review Playlist</source>
+      <source>Review playlist</source>
       <translation>Playlist überprüfen</translation>
     </message>
     <message>
@@ -403,7 +403,7 @@
       <translation>Server stoppen</translation>
     </message>
     <message>
-      <source>Open Downloads Folder</source>
+      <source>Open downloads folder</source>
       <translation>Downloads-Ordner öffnen</translation>
     </message>
     <message>
@@ -411,8 +411,8 @@
       <translation>Astra Downloader beenden</translation>
     </message>
     <message>
-      <source>{app} - {status}</source>
-      <translation>{app} – {status}</translation>
+      <source>{app} · {status}</source>
+      <translation>{app} · {status}</translation>
     </message>
     <message>
       <source>mp3</source>
@@ -455,7 +455,7 @@
       <translation>Prüfungen anzeigen</translation>
     </message>
     <message>
-      <source>Checking download readiness...</source>
+      <source>Checking download readiness…</source>
       <translation>Download-Bereitschaft wird geprüft...</translation>
     </message>
     <message>
@@ -509,6 +509,14 @@
     <message>
       <source>More options</source>
       <translation>Weitere Optionen</translation>
+    </message>
+    <message>
+      <source>Hide password, clip range, and custom file name controls.</source>
+      <translation>Passwort, Ausschnitt und eigenen Dateinamen ausblenden.</translation>
+    </message>
+    <message>
+      <source>Show password, clip range, and custom file name controls.</source>
+      <translation>Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -619,11 +627,11 @@
       <translation>Beide Datumsangaben müssen das Format JJJJ-MM-TT haben; keine von beiden wird verwendet.</translation>
     </message>
     <message>
-      <source>Export Settings</source>
+      <source>Export settings</source>
       <translation>Einstellungen exportieren</translation>
     </message>
     <message>
-      <source>Import Settings</source>
+      <source>Import settings</source>
       <translation>Einstellungen importieren</translation>
     </message>
     <message>
@@ -643,12 +651,8 @@
       <translation>Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.</translation>
     </message>
     <message>
-      <source>Export Download History</source>
+      <source>Export download history</source>
       <translation>Downloadverlauf exportieren</translation>
-    </message>
-    <message>
-      <source>Exported {count} filtered history row(s) to {path}</source>
-      <translation>{count} gefilterte Verlaufseinträge nach {path} exportiert</translation>
     </message>
     <message>
       <source>Loading history…</source>
@@ -707,7 +711,7 @@
       <translation>Link kopieren</translation>
     </message>
     <message>
-      <source>Copy error</source>
+      <source>Copy error text</source>
       <translation>Fehler kopieren</translation>
     </message>
     <message>
@@ -715,7 +719,7 @@
       <translation>Erneut herunterladen</translation>
     </message>
     <message>
-      <source>yt-dlp Command</source>
+      <source>yt-dlp command</source>
       <translation>yt-dlp-Befehl</translation>
     </message>
     <message>
@@ -739,7 +743,7 @@
       <translation>Status beim Kopieren des Befehls</translation>
     </message>
     <message>
-      <source>Scanning playlist items...</source>
+      <source>Scanning playlist items…</source>
       <translation>Playlist-Einträge werden gelesen...</translation>
     </message>
     <message>
@@ -831,7 +835,7 @@
       <translation>Gespeichert</translation>
     </message>
     <message>
-      <source>Select Folder</source>
+      <source>Select folder</source>
       <translation>Ordner auswählen</translation>
     </message>
     <message>
@@ -867,7 +871,7 @@
       <translation>Kopiertes Token wurde aus der Zwischenablage entfernt.</translation>
     </message>
     <message>
-      <source>Review Diagnostics</source>
+      <source>Review diagnostics</source>
       <translation>Diagnose prüfen</translation>
     </message>
     <message>
@@ -903,11 +907,11 @@
       <translation>Geschwärzte Diagnose kopieren und diese Prüfung schließen.</translation>
     </message>
     <message>
-      <source>Installing required download tools...</source>
+      <source>Installing required download tools…</source>
       <translation>Erforderliche Download-Tools werden installiert…</translation>
     </message>
     <message>
-      <source>Setting Up</source>
+      <source>Setting up</source>
       <translation>Einrichtung</translation>
     </message>
     <message>
@@ -951,7 +955,7 @@
       <translation>Laufzeit bereitstellen</translation>
     </message>
     <message>
-      <source>Refresh FFmpeg</source>
+      <source>Refresh ffmpeg</source>
       <translation>FFmpeg aktualisieren</translation>
     </message>
     <message>
@@ -1013,14 +1017,6 @@
     <message>
       <source>Plugin-based proof-of-origin providers are disabled. Downloads use the verified token-exempt YouTube client chain.</source>
       <translation>Pluginbasierte Proof-of-Origin-Anbieter sind deaktiviert. Downloads verwenden die verifizierte tokenfreie YouTube-Clientkette.</translation>
-    </message>
-    <message>
-      <source>Hide password, clip range, and custom file name controls.</source>
-      <translation>Passwort, Ausschnitt und eigenen Dateinamen ausblenden.</translation>
-    </message>
-    <message>
-      <source>Show password, clip range, and custom file name controls.</source>
-      <translation>Passwort, Ausschnitt und eigenen Dateinamen anzeigen.</translation>
     </message>
     <message>
       <source>Automatic matching is on; no profile matches this link.</source>
@@ -1327,6 +1323,14 @@
       <translation>Die Einstellungen wurden wiederhergestellt, aber der Rückgängig-Eintrag konnte nicht auf der Festplatte aktualisiert werden.</translation>
     </message>
     <message>
+      <source>Exported one filtered history row to {path}.</source>
+      <translation>Ein gefilterter Verlaufseintrag nach {path} exportiert.</translation>
+    </message>
+    <message>
+      <source>Exported {count} filtered history rows to {path}.</source>
+      <translation>{count} gefilterte Verlaufseinträge nach {path} exportiert.</translation>
+    </message>
+    <message>
       <source>History unavailable</source>
       <translation>Verlauf nicht verfügbar</translation>
     </message>
@@ -1503,7 +1507,7 @@
       <translation>Serverstart fehlgeschlagen. Prüfen Sie das Protokoll auf Details.</translation>
     </message>
     <message>
-      <source>Installing yt-dlp...</source>
+      <source>Installing yt-dlp…</source>
       <translation>yt-dlp wird installiert…</translation>
     </message>
     <message>
@@ -1575,8 +1579,8 @@
       <translation>Nicht installiert</translation>
     </message>
     <message>
-      <source>Not pinned — {version} installed</source>
-      <translation>Nicht fixiert — {version} installiert</translation>
+      <source>Not pinned. {version} installed</source>
+      <translation>Nicht fixiert. {version} installiert</translation>
     </message>
     <message>
       <source>Not pinned</source>
@@ -1871,7 +1875,7 @@
       <translation>Läuft weiterhin im Infobereich, damit Astra Deck Downloads senden kann.</translation>
     </message>
     <message>
-      <source>Installing ffmpeg...</source>
+      <source>Installing ffmpeg…</source>
       <translation>ffmpeg wird installiert…</translation>
     </message>
     <message>
@@ -1883,7 +1887,7 @@
       <translation>Öffnen</translation>
     </message>
     <message>
-      <source>One check needs attention. Downloads can still be available.</source>
+      <source>One check needs attention. Downloads can still run.</source>
       <translation>Eine Prüfung braucht Aufmerksamkeit. Downloads können trotzdem verfügbar sein.</translation>
     </message>
     <message>
@@ -1995,7 +1999,7 @@
       <translation>Beim Schließen werden {count} aktive Downloads abgebrochen.</translation>
     </message>
     <message>
-      <source>Preparing transcription model...</source>
+      <source>Preparing transcription model…</source>
       <translation>Transkriptionsmodell wird vorbereitet…</translation>
     </message>
     <message>
@@ -2051,15 +2055,15 @@
       <translation>Der Import wurde nur teilweise angewendet, weil sein Rückgängig-Schnappschuss nicht gespeichert werden konnte.</translation>
     </message>
     <message>
-      <source>Registering shortcuts and protocols...</source>
+      <source>Registering shortcuts and protocols…</source>
       <translation>Verknüpfungen und Protokolle werden registriert…</translation>
     </message>
     <message>
-      <source>Finishing setup...</source>
+      <source>Finishing setup…</source>
       <translation>Einrichtung wird abgeschlossen…</translation>
     </message>
     <message>
-      <source>{count} checks need attention. Downloads can still be available.</source>
+      <source>{count} checks need attention. Downloads can still run.</source>
       <translation>{count} Prüfungen brauchen Aufmerksamkeit. Downloads können trotzdem verfügbar sein.</translation>
     </message>
     <message>
@@ -2109,10 +2113,6 @@
     <message>
       <source>Open extension pairing</source>
       <translation>Erweiterungskopplung öffnen</translation>
-    </message>
-    <message>
-      <source>Review playlist</source>
-      <translation>Playlist überprüfen</translation>
     </message>
     <message>
       <source>From link</source>
@@ -2229,10 +2229,6 @@
     <message>
       <source>Download quality</source>
       <translation>Downloadqualität</translation>
-    </message>
-    <message>
-      <source>Shows password, clip range, and custom file name controls.</source>
-      <translation>Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.</translation>
     </message>
     <message>
       <source>Clip from</source>
@@ -2639,7 +2635,7 @@
       <translation>Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt. Exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername und Passwort. Firefox lässt sich normalerweise direkt lesen.</translation>
     </message>
     <message>
-      <source>likely unreadable on Windows 127+</source>
+      <source>likely unreadable on Chromium 127+</source>
       <translation>unter Windows 127+ wahrscheinlich nicht lesbar</translation>
     </message>
     <message>
@@ -2745,10 +2741,6 @@
     <message>
       <source>Local API</source>
       <translation>Lokale API</translation>
-    </message>
-    <message>
-      <source>Review diagnostics</source>
-      <translation>Diagnose prüfen</translation>
     </message>
     <message>
       <source>Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.</source>
@@ -2880,7 +2872,7 @@
     </message>
     <message>
       <source>Skip items shorter than this, which is how a channel's shorts are left behind. 0 takes any length.</source>
-      <translation>Kürzere Einträge überspringen — so bleiben die Shorts eines Kanals außen vor. 0 nimmt jede Länge.</translation>
+      <translation>Kürzere Einträge überspringen, damit die Shorts eines Kanals außen vor bleiben. 0 nimmt jede Länge.</translation>
     </message>
     <message>
       <source>Shortest playlist item in seconds</source>
@@ -2892,7 +2884,7 @@
     </message>
     <message>
       <source>Skip items longer than this, which is how multi-hour streams are left behind. 0 takes any length.</source>
-      <translation>Längere Einträge überspringen — so bleiben mehrstündige Streams außen vor. 0 nimmt jede Länge.</translation>
+      <translation>Längere Einträge überspringen, damit mehrstündige Streams außen vor bleiben. 0 nimmt jede Länge.</translation>
     </message>
     <message>
       <source>Longest playlist item in seconds</source>
@@ -2929,14 +2921,6 @@
     <message>
       <source>Import and export</source>
       <translation>Import und Export</translation>
-    </message>
-    <message>
-      <source>Export settings</source>
-      <translation>Einstellungen exportieren</translation>
-    </message>
-    <message>
-      <source>Import settings</source>
-      <translation>Einstellungen importieren</translation>
     </message>
     <message>
       <source>Undo import</source>
@@ -3539,8 +3523,8 @@
       <translation>yt-dlp automatisch aktuell halten</translation>
     </message>
     <message>
-      <source>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</source>
-      <translation>Prüft höchstens alle 12 Stunden – beim Serverstart und wenn die Warteschlange leer läuft.</translation>
+      <source>Checks at most once every 12 hours, when the server starts and when the download queue goes idle.</source>
+      <translation>Prüft höchstens alle 12 Stunden, beim Serverstart und wenn die Warteschlange leer läuft.</translation>
     </message>
     <message>
       <source>Installed tools</source>

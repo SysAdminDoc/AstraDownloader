@@ -254,7 +254,7 @@ class DownloadPageMixin:
             tr("Show password, clip range, and custom file name controls.")
         )
         self.btn_quick_options.setAccessibleDescription(
-            tr("Shows password, clip range, and custom file name controls.")
+            tr("Show password, clip range, and custom file name controls.")
         )
         self.btn_quick_options.toggled.connect(
             self._set_quick_options_expanded

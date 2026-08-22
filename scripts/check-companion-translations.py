@@ -14,7 +14,13 @@ checks that:
   * no catalogue carries a key the GUI no longer has (a stale key is a
     translation nobody will ever see, and it hides real coverage);
   * the reference locale is complete, so at least one locale proves the
-    pipeline end to end;
+    pipeline end to end. This one was written down and never implemented:
+    REFERENCE_LOCALE was declared, documented here, and read by nothing,
+    so German was only ever held to the 80% floor below and a new English
+    string could reach the German window untranslated;
+  * no catalogue source carries a translation for a string the UI no longer
+    has. The generator only writes out strings the extractor found, so a
+    stale entry never reaches a .ts file and the check above cannot see it;
   * every locale exposed by the picker clears the non-English translation
     floor; partial catalogues may remain for legacy configurations.
 
@@ -37,6 +43,37 @@ TRANSLATIONS_DIR = ROOT / "astra_downloader" / "translations"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from extract_companion_strings import extract_all  # noqa: E402
+
+
+def catalogue_source_keys():
+    """The English strings the generator's own tables are keyed on.
+
+    Imported rather than parsed so the answer is the table the generator
+    actually uses, and skipped rather than failed if the generator cannot be
+    imported here — this gate's job is the catalogues, and an import error
+    belongs to the generator's own run.
+    """
+    import importlib.util
+
+    generator = ROOT / "scripts" / "build-companion-translations.py"
+    spec = importlib.util.spec_from_file_location("_bct", generator)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:  # noqa: BLE001
+        # reason: the generator's own run reports its own failures; this gate
+        # must not turn one into a translation-coverage verdict
+        return None
+    catalogs = getattr(module, "CATALOGS", None)
+    if not isinstance(catalogs, dict):
+        return None
+    return {
+        locale: set(table)
+        for locale, table in catalogs.items()
+        if isinstance(table, dict)
+    }
 
 # The locale that must be complete. German is the one the GUI render
 # scenarios drive, so it is the locale a regression would actually surface.
@@ -94,6 +131,34 @@ def main():
             problems.append(
                 f"{locale}: {len(stale)} catalogue key(s) no longer exist in "
                 f"the UI, first: {sorted(stale)[0]!r}"
+            )
+    source_keys = catalogue_source_keys()
+    if source_keys is None:
+        problems.append(
+            "could not read the generator's catalogue tables, so stale "
+            "entries in them are unchecked"
+        )
+    else:
+        for locale, keys in sorted(source_keys.items()):
+            stale = keys - expected_set
+            if stale:
+                problems.append(
+                    f"{locale}: {len(stale)} entry(ies) in "
+                    f"build-companion-translations.py translate a string the "
+                    f"UI no longer has, first: {sorted(stale)[0]!r}"
+                )
+    if source_keys is not None:
+        # Measured against the generator's own table rather than the .ts
+        # file: a translation that is deliberately identical to the English
+        # ("QuickJS", "MP4") is a written decision, and the coverage counter
+        # below cannot tell one of those from an untranslated echo. What must
+        # never happen is a UI string with no German entry at all.
+        untranslated = sorted(expected_set - source_keys.get(REFERENCE_LOCALE, set()))
+        if untranslated:
+            problems.append(
+                f"{REFERENCE_LOCALE}: the reference locale must be complete; "
+                f"{len(untranslated)} string(s) have no entry and would "
+                f"render in English, first: {untranslated[0]!r}"
             )
     for locale in ADVERTISED_LOCALES:
         path = TRANSLATIONS_DIR / f"astra_downloader_{locale}.ts"

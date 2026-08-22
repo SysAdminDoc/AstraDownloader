@@ -81,7 +81,7 @@ class SiteLoginsPageMixin:
                 label = tr_format(
                     "{browser}. {warning}",
                     browser=label,
-                    warning=tr("likely unreadable on Windows 127+"),
+                    warning=tr("likely unreadable on Chromium 127+"),
                 )
             self.site_login_browser.addItem(label, browser)
         # Firefox is the one browser whose cookie store can still be read from

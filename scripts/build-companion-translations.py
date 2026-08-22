@@ -76,7 +76,7 @@ CATALOGS = {
             "Weniger Optionen",
         "Show password, clip range, and custom file name controls.":
             "Passwort, Ausschnitt und eigenen Dateinamen anzeigen.",
-        "Shows password, clip range, and custom file name controls.":
+        "Show password, clip range, and custom file name controls.":
             "Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.",
         "Hide password, clip range, and custom file name controls.":
             "Passwort, Ausschnitt und eigenen Dateinamen ausblenden.",
@@ -92,15 +92,15 @@ CATALOGS = {
             "Die häufigen Ursachen für fehlgeschlagene Downloads werden geprüft...",
         "Download health summary":
             "Zusammenfassung der Download-Bereitschaft",
-        "Checking download readiness...":
+        "Checking download readiness…":
             "Download-Bereitschaft wird geprüft...",
         "One check needs repair. Open the checks to see the fix.":
             "Eine Prüfung muss repariert werden. Öffnen Sie die Prüfungen für die Lösung.",
         "{count} checks need repair. Open the checks to see the fixes.":
             "{count} Prüfungen müssen repariert werden. Öffnen Sie die Prüfungen für die Lösungen.",
-        "One check needs attention. Downloads can still be available.":
+        "One check needs attention. Downloads can still run.":
             "Eine Prüfung braucht Aufmerksamkeit. Downloads können trotzdem verfügbar sein.",
-        "{count} checks need attention. Downloads can still be available.":
+        "{count} checks need attention. Downloads can still run.":
             "{count} Prüfungen brauchen Aufmerksamkeit. Downloads können trotzdem verfügbar sein.",
         "All {count} checks passed. Downloads are ready.":
             "Alle {count} Prüfungen bestanden. Downloads sind bereit.",
@@ -124,10 +124,6 @@ CATALOGS = {
             "Entfernen rückgängig",
         "Undo import":
             "Import rückgängig",
-        "Restore the subscription removed in this session.":
-            "In dieser Sitzung entferntes Abonnement wiederherstellen.",
-        "Restore the sign-in removed in this session.":
-            "In dieser Sitzung entfernte Anmeldung wiederherstellen.",
         "The sign-in was restored.":
             "Die Anmeldung wurde wiederhergestellt.",
         "The subscription was restored.":
@@ -337,15 +333,13 @@ CATALOGS = {
         "Shortest item (seconds)":
             "Kürzester Eintrag (Sekunden)",
         "Skip items shorter than this, which is how a channel's shorts are left behind. 0 takes any length.":
-            "Kürzere Einträge überspringen — so bleiben die Shorts eines Kanals außen vor. 0 nimmt jede Länge.",
+            "Kürzere Einträge überspringen, damit die Shorts eines Kanals außen vor bleiben. 0 nimmt jede Länge.",
         "Longest item (seconds)":
             "Längster Eintrag (Sekunden)",
         "Skip items longer than this, which is how multi-hour streams are left behind. 0 takes any length.":
-            "Längere Einträge überspringen — so bleiben mehrstündige Streams außen vor. 0 nimmt jede Länge.",
+            "Längere Einträge überspringen, damit mehrstündige Streams außen vor bleiben. 0 nimmt jede Länge.",
         "Performance":
             "Leistung",
-        "Tray behavior":
-            "Infobereich",
         "Maintenance":
             "Wartung",
         "Checking installed tools…":
@@ -452,8 +446,6 @@ CATALOGS = {
             "Adresse der Website, bei der Sie angemeldet sind, zum Beispiel x.com, instagram.com oder vimeo.com",
         "Profile (optional)":
             "Profil (optional)",
-        "Import this site's cookies to unblock the download waiting on it.":
-            "Cookies dieser Website importieren, um den wartenden Download freizugeben.",
         "Reading cookies from the browser…":
             "Cookies werden aus dem Browser gelesen…",
         "Settings":
@@ -494,18 +486,12 @@ CATALOGS = {
             "Verwendet das gebündelte mehrsprachige Whisper-Modell und die erste Sprache unter Untertitelsprachen. Beim Aktivieren dieser Option lädt die Einrichtung das Modell herunter.",
         "Ready":
             "Bereit",
-        "Local transcription is enabled and the pinned Whisper model is ready.":
-            "Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell ist bereit.",
         "Local transcription is enabled and the pinned Whisper model and runtime are ready.":
             "Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell sowie die Laufzeit sind bereit.",
         "Repair needed":
             "Reparatur erforderlich",
-        "The local Whisper model is present but incomplete or damaged. Run setup to fetch it again.":
-            "Das lokale Whisper-Modell ist vorhanden, aber unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um es abzurufen.",
         "The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.":
             "Das lokale Whisper-Modell oder die whisper.cpp-Laufzeit ist unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um sie abzurufen.",
-        "Run setup to provision the local Whisper model before downloading.":
-            "Führen Sie die Einrichtung aus, um das lokale Whisper-Modell vor dem Download bereitzustellen.",
         "Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.":
             "Führen Sie die Einrichtung aus, um das lokale Whisper-Modell und die whisper.cpp-Laufzeit vor dem Download bereitzustellen.",
         "Keep intermediate files":
@@ -650,8 +636,8 @@ CATALOGS = {
             "Sprachänderungen gelten beim nächsten Start von Astra Downloader.",
         "Keep yt-dlp up to date automatically":
             "yt-dlp automatisch aktuell halten",
-        "Checks at most once every 12 hours - when the server starts and when the download queue goes idle.":
-            "Prüft höchstens alle 12 Stunden – beim Serverstart und wenn die Warteschlange leer läuft.",
+        "Checks at most once every 12 hours, when the server starts and when the download queue goes idle.":
+            "Prüft höchstens alle 12 Stunden, beim Serverstart und wenn die Warteschlange leer läuft.",
         "Close to the system tray":
             "In den Infobereich schließen",
         "Start minimized to the tray":
@@ -712,7 +698,7 @@ CATALOGS = {
             "Lesen aus",
         "Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.":
             "Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt. Exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername und Passwort. Firefox lässt sich normalerweise direkt lesen.",
-        "likely unreadable on Windows 127+":
+        "likely unreadable on Chromium 127+":
             "unter Windows 127+ wahrscheinlich nicht lesbar",
         "Site sign-in username":
             "Benutzername der Website-Anmeldung",
@@ -1029,7 +1015,7 @@ CATALOGS = {
             "Importierte Einstellungen konnten nicht gespeichert werden. Prüfen Sie Speicherplatz und Berechtigungen und versuchen Sie es erneut.",
         "Loading history…":
             "Verlauf wird geladen…",
-        "Copy error":
+        "Copy error text":
             "Fehler kopieren",
         "Install yt-dlp before checking for updates.":
             "Installieren Sie yt-dlp, bevor Sie nach Updates suchen.",
@@ -1065,9 +1051,9 @@ CATALOGS = {
             "Kopiertes Token wurde aus der Zwischenablage entfernt.",
         "Redacted diagnostics preview":
             "Vorschau der redigierten Diagnosedaten",
-        "Installing required download tools...":
+        "Installing required download tools…":
             "Erforderliche Download-Tools werden installiert…",
-        "Setting Up":
+        "Setting up":
             "Einrichtung",
         "Unavailable":
             "Nicht verfügbar",
@@ -1121,9 +1107,9 @@ CATALOGS = {
             "Indikator für Erweiterungsserverstatus: Fehler",
         "Server failed to start. Check the log for details.":
             "Serverstart fehlgeschlagen. Prüfen Sie das Protokoll auf Details.",
-        "Installing yt-dlp...":
+        "Installing yt-dlp…":
             "yt-dlp wird installiert…",
-        "Preparing transcription model...":
+        "Preparing transcription model…":
             "Transkriptionsmodell wird vorbereitet…",
         "{label} status indicator: {value}":
             "{label} Statusindikator: {value}",
@@ -1133,18 +1119,12 @@ CATALOGS = {
             "Erforderlich",
         "The local transcription model is missing or damaged.":
             "Das lokale Transkriptionsmodell fehlt oder ist beschädigt.",
-        "Run setup with local subtitle generation enabled, then retry the download.":
-            "Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie den Download.",
         "Run setup with local subtitle generation enabled, then retry subtitle generation on this completed media.":
             "Führen Sie die Einrichtung mit aktivierter lokaler Untertitelerzeugung aus und wiederholen Sie die Untertitelerzeugung für diese abgeschlossenen Medien.",
-        "run-setup":
-            "Einrichtung ausführen",
         "run-setup-and-retry-subtitles":
             "Einrichtung ausführen und Untertitel erneut erzeugen",
         "Local subtitle generation failed after the media downloaded.":
             "Die lokale Untertitelerzeugung ist nach dem Mediendownload fehlgeschlagen.",
-        "Check the ffmpeg and local transcription model readiness rows, then retry the download.":
-            "Prüfen Sie die Bereitschaftszeilen für ffmpeg und das lokale Transkriptionsmodell und wiederholen Sie den Download.",
         "The local transcription runtime is missing or cannot produce SRT output.":
             "Die lokale Transkriptionslaufzeit fehlt oder kann keine SRT-Ausgabe erzeugen.",
         "Local subtitle generation exceeded its time limit.":
@@ -1159,8 +1139,6 @@ CATALOGS = {
             "Untertitel erneut erzeugen",
         "Generate subtitles again without downloading the media.":
             "Untertitel erneut erzeugen, ohne die Medien erneut herunterzuladen.",
-        "retry":
-            "Erneut versuchen",
         "Optional":
             "Optional",
         "No subscriptions match these filters":
@@ -1205,7 +1183,7 @@ CATALOGS = {
             "Diagnose öffnen",
         "Settings status: {message}":
             "Einstellungsstatus: {message}",
-        "Installing ffmpeg...":
+        "Installing ffmpeg…":
             "ffmpeg wird installiert…",
         "This download goes to {path}. Click to use the default folder again.":
             "Dieser Download wird in {path} gespeichert. Klicken Sie, um wieder den Standardordner zu verwenden.",
@@ -1229,9 +1207,9 @@ CATALOGS = {
             "Keine aktuelle Meldung",
         "Port {configured} was unavailable at startup; bound to fallback port {port} for this session. Restart to retry {configured}.":
             "Port {configured} war beim Start nicht verfügbar; für diese Sitzung wurde auf Port {port} ausgewichen. Starten Sie neu, um {configured} erneut zu versuchen.",
-        "Registering shortcuts and protocols...":
+        "Registering shortcuts and protocols…":
             "Verknüpfungen und Protokolle werden registriert…",
-        "Finishing setup...":
+        "Finishing setup…":
             "Einrichtung wird abgeschlossen…",
         "This host is paused. Retry in {duration}.":
             "Dieser Host ist pausiert. Erneuter Versuch in {duration}.",
@@ -1321,8 +1299,6 @@ CATALOGS = {
             "Versuchen Sie es erneut über Astra Deck, damit neue Cookies bereitgestellt werden können.",
         "The site refused the request (HTTP 403).":
             "Die Website hat die Anfrage abgelehnt (HTTP 403).",
-        "Set a browser to imitate in Settings — this is the usual remedy for a Cloudflare or TLS-fingerprint block. A stored sign-in for the site also helps.":
-            "Stellen Sie in den Einstellungen einen Browser zur Nachahmung ein — dies ist das übliche Mittel gegen eine Cloudflare- oder TLS-Fingerprint-Sperre. Eine gespeicherte Anmeldung für die Website hilft ebenfalls.",
         "impersonate-and-retry":
             "impersonate-and-retry",
         "The site says this media is unavailable in your region.":
@@ -1456,7 +1432,7 @@ CATALOGS["de"].update({
     "sync-system-clock": "Uhr prüfen",
     "Refresh yt-dlp": "yt-dlp aktualisieren",
     "Provision runtime": "Laufzeit bereitstellen",
-    "Refresh FFmpeg": "FFmpeg aktualisieren",
+    "Refresh ffmpeg": "FFmpeg aktualisieren",
     "Open sign-ins": "Anmeldungen öffnen",
     "Try again later": "Später erneut versuchen",
     "Choose a folder": "Ordner wählen",
@@ -1476,9 +1452,6 @@ CATALOGS["de"].update({
         "Die Uhr dieses Rechners geht falsch. Aktivieren Sie in den "
         "Windows-Einstellungen die automatische Zeit und prüfen Sie erneut.",
     "Checking": "Wird geprüft",
-    "Pre-flight": "Vorabprüfung",
-    "Checks known download failure causes before a job starts. Each row names the remedy.":
-        "Prüft bekannte Downloadfehler, bevor ein Auftrag startet. Jede Zeile nennt die Lösung.",
     "GitHub's anonymous budget is exhausted; retry after its reset.":
         "Das anonyme GitHub-Budget ist erschöpft; versuchen Sie es nach dem Zurücksetzen erneut.",
     "{action} for {label}": "{action} für {label}",
@@ -1516,9 +1489,9 @@ CATALOGS["de"].update({
     "yt-dlp {yt}    •    ffmpeg {ffmpeg}":
         "yt-dlp {yt}    •    ffmpeg {ffmpeg}",
     "Show Astra Downloader": "Astra Downloader anzeigen",
-    "Open Downloads Folder": "Downloads-Ordner öffnen",
+    "Open downloads folder": "Downloads-Ordner öffnen",
     "Quit Astra Downloader": "Astra Downloader beenden",
-    "{app} - {status}": "{app} – {status}",
+    "{app} · {status}": "{app} · {status}",
     "MP3": "MP3",
     "M4A": "M4A",
     "Opus": "Opus",
@@ -1566,11 +1539,11 @@ CATALOGS["de"].update({
     "Your server token was regenerated, so the browser extension needs pairing again.":
         "Ihr Servertoken wurde neu erzeugt. Die Browsererweiterung muss erneut gekoppelt werden.",
     "{total} / {limit} jobs": "{total} / {limit} Aufträge",
-    "Export Settings": "Einstellungen exportieren",
-    "Import Settings": "Einstellungen importieren",
+    "Export settings": "Einstellungen exportieren",
+    "Import settings": "Einstellungen importieren",
     "No filtered history rows are available to export.":
         "Keine gefilterten Verlaufseinträge zum Exportieren vorhanden.",
-    "Export Download History": "Downloadverlauf exportieren",
+    "Export download history": "Downloadverlauf exportieren",
     "Both dates need to be YYYY-MM-DD, so neither is being used.":
         "Beide Datumsangaben müssen das Format JJJJ-MM-TT haben; keine von beiden wird verwendet.",
     "The saved-from date needs to be YYYY-MM-DD, so it is not being used.":
@@ -1579,8 +1552,10 @@ CATALOGS["de"].update({
         "Das Datum „bis“ muss das Format JJJJ-MM-TT haben und wird nicht verwendet.",
     "The saved-from date is after the through date, so nothing can match.":
         "Das Datum „gespeichert ab“ liegt nach dem Datum „bis“; damit kann nichts übereinstimmen.",
-    "Exported {count} filtered history row(s) to {path}":
-        "{count} gefilterte Verlaufseinträge nach {path} exportiert",
+    "Exported one filtered history row to {path}.":
+        "Ein gefilterter Verlaufseintrag nach {path} exportiert.",
+    "Exported {count} filtered history rows to {path}.":
+        "{count} gefilterte Verlaufseinträge nach {path} exportiert.",
     "Download history is already clear.": "Der Downloadverlauf ist bereits leer.",
     "Could not prepare the history undo snapshot. The existing history was preserved; check disk permissions and retry.":
         "Der Rückgängig-Schnappschuss für den Verlauf konnte nicht vorbereitet werden. Der vorhandene Verlauf blieb erhalten. Prüfen Sie die Berechtigungen und versuchen Sie es erneut.",
@@ -1593,12 +1568,11 @@ CATALOGS["de"].update({
     "Retry queued: {title}": "Erneuter Versuch eingereiht: {title}",
     "Download resumed.": "Download fortgesetzt.",
     "Checking…": "Wird geprüft …",
-    "Check yt-dlp Update": "yt-dlp-Update prüfen",
-    "Select Folder": "Ordner auswählen",
+    "Select folder": "Ordner auswählen",
     "Copied video link staged. Review the options, then choose Add to queue.":
         "Kopierter Videolink vorgemerkt. Prüfen Sie die Optionen und wählen Sie Zur Warteschlange hinzufügen.",
     "Endpoint copied.": "Endpunkt kopiert.",
-    "Review Diagnostics": "Diagnose prüfen",
+    "Review diagnostics": "Diagnose prüfen",
     "Review redacted diagnostics": "Geschwärzte Diagnose prüfen",
     "Review the support data before saving or copying it.":
         "Prüfen Sie die Supportdaten vor dem Speichern oder Kopieren.",
@@ -1649,10 +1623,6 @@ CATALOGS["de"].update({
         "{added} Abonnements hinzugefügt, {skipped} bereits vorhanden",
     "sign-ins still needed for {sites}": "Anmeldungen weiterhin erforderlich für {sites}",
     "not carried: {settings}": "nicht übernommen: {settings}",
-    "{start}–{end} of {filtered} filtered · {total} retained":
-        "{start}–{end} von {filtered} gefiltert · {total} behalten",
-    "0 of {filtered} filtered · {total} retained":
-        "0 von {filtered} gefiltert · {total} behalten",
     "{start} to {end} of {filtered} filtered · {total} retained · limit {limit}":
         "{start} bis {end} von {filtered} gefiltert · {total} behalten · Limit {limit}",
     "0 of {filtered} filtered · {total} retained · limit {limit}":
@@ -1711,10 +1681,8 @@ CATALOGS["de"].update({
     "{count} videos": "{count} Videos",
     "Copy command": "Befehl kopieren",
     "Close": "Schließen",
-    "Review Playlist": "Playlist überprüfen",
+    "Review playlist": "Playlist überprüfen",
     "Review playlist videos": "Playlist-Videos überprüfen",
-    "Choose which videos should be added to the download queue.":
-        "Wählen Sie aus, welche Videos zur Download-Warteschlange hinzugefügt werden sollen.",
     "(untitled playlist)": "(unbenannte Playlist)",
     "Select all": "Alle auswählen",
     "Select every video in this playlist preview.":
@@ -1803,7 +1771,7 @@ CATALOGS["de"].update({
     "Unpin": "Fixierung aufheben",
     "Roll back": "Zurückrollen",
     "Not pinned": "Nicht fixiert",
-    "Not pinned — {version} installed": "Nicht fixiert — {version} installiert",
+    "Not pinned. {version} installed": "Nicht fixiert. {version} installiert",
     "Not installed": "Nicht installiert",
     "Installed {version}": "Installiert {version}",
     "Pinned version for {tool}": "Fixierte Version für {tool}",
@@ -1844,11 +1812,11 @@ CATALOGS["de"].update({
         "Playlist-Prüfung schließen, ohne etwas zur Warteschlange hinzuzufügen.",
     "Add the selected playlist videos to the download queue.":
         "Ausgewählte Playlist-Videos zur Download-Warteschlange hinzufügen.",
-    "yt-dlp Command": "yt-dlp-Befehl",
+    "yt-dlp command": "yt-dlp-Befehl",
     "Review redacted yt-dlp command": "Geschwärzten yt-dlp-Befehl prüfen",
     "Review or copy the redacted command used for this download.":
         "Den für diesen Download verwendeten geschwärzten Befehl prüfen oder kopieren.",
-    "Scanning playlist items...": "Playlist-Einträge werden gelesen...",
+    "Scanning playlist items…": "Playlist-Einträge werden gelesen...",
     "(untitled)": "(ohne Titel)",
     "View yt-dlp command": "yt-dlp-Befehl anzeigen",
     "Command for {title}": "Befehl für {title}",
