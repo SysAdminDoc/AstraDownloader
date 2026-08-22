@@ -35,6 +35,7 @@ CAPTURE_NAMES = (
     "downloads-active-pending",
     "downloads-advanced-options",
     "downloads-health-error",
+    "downloads-health-german",
     "downloads-focus-1x",
     "downloads-light-theme",
     "downloads-clipboard-staged",
@@ -119,6 +120,7 @@ PAGE_LOCALE_SCENARIOS = {
 
 SCENARIO_LOCALES = {
     "dashboard-german": "de",
+    "downloads-health-german": "de",
     "downloads-arabic-rtl": "ar",
     **LOCALE_SCENARIOS,
     **PAGE_LOCALE_SCENARIOS,
@@ -636,8 +638,14 @@ def main():
                 # eleven locales still are. Assert body copy on EVERY page,
                 # so an English string surviving anywhere fails here.
                 for page, expected_german in (
+                    # The pre-flight rows take both their name and their
+                    # repair-button text from a lookup, and both were English
+                    # in an otherwise translated panel. Pin the row names
+                    # here and the buttons just below.
                     ("Download", {"Ausschnitt von",
-                                  "Ausschnitte gelten nur für einen einzelnen Link."}),
+                                  "Ausschnitte gelten nur für einen einzelnen Link.",
+                                  "Download-Ordner", "Systemuhr",
+                                  "Aktualität von yt-dlp"}),
                     ("History", {"Verlauf", "Datei", "Gespeichert ab"}),
                     ("Sign-ins", {"Anmeldungen", "Website-Anmeldung hinzufügen",
                                   "Lesen aus"}),
@@ -651,8 +659,30 @@ def main():
                     scroll_current_page_to_top(window)
                     if page == "Download":
                         window.btn_quick_options.setChecked(True)
+                        window.btn_preflight_toggle.setChecked(True)
+                        window._set_preflight_row(
+                            "ytdlp-freshness", "error", "", "refresh-ytdlp")
+                        window._set_preflight_row(
+                            "output-folder", "error", "", "choose-output-folder")
                         app.processEvents()
                     assert_visible_text(window, expected_german)
+                    if page == "Download":
+                        # visible_text reads QLabels; a button's text is not
+                        # one, which is how ten English repair buttons hid
+                        # inside a page this scenario already checked.
+                        buttons = {
+                            button.text()
+                            for button in window.preflight_details.findChildren(
+                                app_module.QPushButton)
+                            if button.isVisible() and button.text()
+                        }
+                        for expected_button in ("yt-dlp aktualisieren",
+                                                "Ordner wählen"):
+                            if expected_button not in buttons:
+                                raise RuntimeError(
+                                    "A pre-flight repair button is untranslated: "
+                                    f"{sorted(buttons)}"
+                                )
                 select_page(window, "Browser extension")
             elif scenario in LOCALE_SCENARIOS:
                 source_nav = [
@@ -920,19 +950,43 @@ def main():
                     window,
                     {"Clip from", "Save as"},
                 )
-            elif scenario == "downloads-health-error":
+            elif scenario in ("downloads-health-error", "downloads-health-german"):
+                german = scenario == "downloads-health-german"
                 for key in window.preflight_values:
                     window._set_preflight_row(key, "ok")
                 window._set_preflight_row("javascript-runtime", "error")
+                if german:
+                    # A second failing row, so the capture carries more than
+                    # one repair button to read.
+                    window._set_preflight_row(
+                        "output-folder", "error", "", "choose-output-folder")
                 window._update_preflight_summary()
                 app.processEvents()
                 scroll_current_page_to_top(window)
                 if not window.preflight_details.isVisible():
                     raise RuntimeError("Failing download health checks stayed collapsed")
-                assert_visible_text(
-                    window,
-                    {"One check needs repair. Open the checks to see the fix."},
-                )
+                if german:
+                    assert_visible_text(window, {
+                        "Aktualität von yt-dlp", "Download-Ordner", "Systemuhr",
+                    })
+                    buttons = {
+                        button.text()
+                        for button in window.preflight_details.findChildren(
+                            app_module.QPushButton)
+                        if button.isVisible() and button.text()
+                    }
+                    for expected_button in ("Laufzeit bereitstellen",
+                                            "Ordner wählen"):
+                        if expected_button not in buttons:
+                            raise RuntimeError(
+                                "A pre-flight repair button is untranslated: "
+                                f"{sorted(buttons)}"
+                            )
+                else:
+                    assert_visible_text(
+                        window,
+                        {"One check needs repair. Open the checks to see the fix."},
+                    )
             elif scenario == "downloads-subtitles-only":
                 # Subtitles is a third download type, not a settings toggle.
                 # Neither picker beside it describes a subtitle, so both are

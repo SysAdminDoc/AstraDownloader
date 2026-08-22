@@ -22,6 +22,29 @@ except ImportError:  # Flat source-path compatibility.
 
 
 
+# One table for both sides. The Download page builds its widgets from it and
+# MainWindowCore._apply_preflight writes statuses through it; two copies meant
+# a check could have a row nobody ever updated.
+#
+# It lives HERE rather than in gui_support because the string extractor
+# resolves a `for` target against assignments in the same file. Moving the
+# table one module away silently dropped every row label out of the
+# catalogues while the coverage gate stayed green, because a string that
+# leaves the extracted set just shrinks the total.
+PREFLIGHT_ROW_SPECS = (
+    ("ytdlp-freshness", "yt-dlp freshness", "refresh-ytdlp"),
+    ("javascript-runtime", "JavaScript runtime", "provision-runtime"),
+    ("ffmpeg-capabilities", "FFmpeg security and filters", "refresh-ffmpeg"),
+    ("sign-in-expiry", "Stored sign-in expiry", "refresh-sign-in"),
+    ("github-api-budget", "Anonymous GitHub API budget", "retry-github"),
+    ("po-token-provider", "Proof-of-origin token provider", "use-sign-in"),
+    ("output-folder", "Download folder", "choose-output-folder"),
+    ("state-location", "Settings and queue storage", "review-state-location"),
+    ("site-availability", "Site availability", "review-site-refusals"),
+    ("system-clock", "System clock", "sync-system-clock"),
+)
+
+
 class DownloadPageMixin:
     def _build_download(self):
         page = QWidget()

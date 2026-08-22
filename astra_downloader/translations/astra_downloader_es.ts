@@ -791,6 +791,38 @@
       <translation>{open_label} {name}</translation>
     </message>
     <message>
+      <source>Refresh yt-dlp</source>
+      <translation>Refresh yt-dlp</translation>
+    </message>
+    <message>
+      <source>Provision runtime</source>
+      <translation>Provision runtime</translation>
+    </message>
+    <message>
+      <source>Refresh FFmpeg</source>
+      <translation>Refresh FFmpeg</translation>
+    </message>
+    <message>
+      <source>Open sign-ins</source>
+      <translation>Open sign-ins</translation>
+    </message>
+    <message>
+      <source>Try again later</source>
+      <translation>Try again later</translation>
+    </message>
+    <message>
+      <source>Choose a folder</source>
+      <translation>Choose a folder</translation>
+    </message>
+    <message>
+      <source>Open settings</source>
+      <translation>Open settings</translation>
+    </message>
+    <message>
+      <source>Check the clock</source>
+      <translation>Check the clock</translation>
+    </message>
+    <message>
       <source>Choose a download folder this machine can write to.</source>
       <translation>Choose a download folder this machine can write to.</translation>
     </message>
@@ -1341,6 +1373,10 @@
     <message>
       <source>{label} status: {value}</source>
       <translation>{label} status: {value}</translation>
+    </message>
+    <message>
+      <source>Fix</source>
+      <translation>Fix</translation>
     </message>
     <message>
       <source>{action} for {label}</source>
@@ -2105,6 +2141,86 @@
     <message>
       <source>For a single protected link. Stored site credentials live under Sign-ins.</source>
       <translation>For a single protected link. Stored site credentials live under Sign-ins.</translation>
+    </message>
+    <message>
+      <source>yt-dlp freshness</source>
+      <translation>yt-dlp freshness</translation>
+    </message>
+    <message>
+      <source>JavaScript runtime</source>
+      <translation>JavaScript runtime</translation>
+    </message>
+    <message>
+      <source>FFmpeg security and filters</source>
+      <translation>FFmpeg security and filters</translation>
+    </message>
+    <message>
+      <source>Stored sign-in expiry</source>
+      <translation>Stored sign-in expiry</translation>
+    </message>
+    <message>
+      <source>Anonymous GitHub API budget</source>
+      <translation>Anonymous GitHub API budget</translation>
+    </message>
+    <message>
+      <source>Proof-of-origin token provider</source>
+      <translation>Proof-of-origin token provider</translation>
+    </message>
+    <message>
+      <source>Download folder</source>
+      <translation>Download folder</translation>
+    </message>
+    <message>
+      <source>Settings and queue storage</source>
+      <translation>Settings and queue storage</translation>
+    </message>
+    <message>
+      <source>Site availability</source>
+      <translation>Site availability</translation>
+    </message>
+    <message>
+      <source>System clock</source>
+      <translation>System clock</translation>
+    </message>
+    <message>
+      <source>refresh-ytdlp</source>
+      <translation>refresh-ytdlp</translation>
+    </message>
+    <message>
+      <source>provision-runtime</source>
+      <translation>provision-runtime</translation>
+    </message>
+    <message>
+      <source>refresh-ffmpeg</source>
+      <translation>refresh-ffmpeg</translation>
+    </message>
+    <message>
+      <source>refresh-sign-in</source>
+      <translation>refresh-sign-in</translation>
+    </message>
+    <message>
+      <source>retry-github</source>
+      <translation>retry-github</translation>
+    </message>
+    <message>
+      <source>use-sign-in</source>
+      <translation>use-sign-in</translation>
+    </message>
+    <message>
+      <source>choose-output-folder</source>
+      <translation>choose-output-folder</translation>
+    </message>
+    <message>
+      <source>review-state-location</source>
+      <translation>review-state-location</translation>
+    </message>
+    <message>
+      <source>review-site-refusals</source>
+      <translation>review-site-refusals</translation>
+    </message>
+    <message>
+      <source>sync-system-clock</source>
+      <translation>sync-system-clock</translation>
     </message>
     <message>
       <source>Clear history</source>
@@ -3147,10 +3263,6 @@
       <translation>Checking installed yt-dlp…</translation>
     </message>
     <message>
-      <source>JavaScript runtime</source>
-      <translation>JavaScript runtime</translation>
-    </message>
-    <message>
       <source>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</source>
       <translation>Auto prefers Deno, then Node 22+, then the QuickJS runtime the app downloads for itself (2 MB).</translation>
     </message>
@@ -3509,10 +3621,6 @@
     <message>
       <source>Open Astra Downloader and refresh ffmpeg before retrying.</source>
       <translation>Open Astra Downloader and refresh ffmpeg before retrying.</translation>
-    </message>
-    <message>
-      <source>refresh-ffmpeg</source>
-      <translation>refresh-ffmpeg</translation>
     </message>
     <message>
       <source>Astra Downloader could not reach the site or a required provider.</source>

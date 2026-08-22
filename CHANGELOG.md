@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The download-health panel is translated all the way through.** Its row
+  names and its ten repair buttons took their text from a lookup, which the
+  string extractor cannot read, so they stayed English inside a panel that
+  was otherwise fully translated. A German capture of the failing panel now
+  proves it, and a test refuses a new repair action that arrives without a
+  translatable label.
+
 ### Added
 
 - **Pin a managed tool, or roll one back.** Settings now lists yt-dlp, ffmpeg,

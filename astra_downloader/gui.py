@@ -41,14 +41,14 @@ except ImportError:  # Flat source-path compatibility.
     from i18n import ADVERTISED_LOCALES
 
 try:
-    from .gui_download_page import DownloadPageMixin
+    from .gui_download_page import DownloadPageMixin, PREFLIGHT_ROW_SPECS
     from .gui_extension_page import ExtensionPageMixin
     from .gui_history_page import HistoryPageMixin
     from .gui_site_logins_page import SiteLoginsPageMixin
     from .gui_subscriptions_page import SubscriptionsPageMixin
     from .gui_settings_page import SettingsPageMixin
 except ImportError:  # Flat source-path compatibility.
-    from gui_download_page import DownloadPageMixin
+    from gui_download_page import DownloadPageMixin, PREFLIGHT_ROW_SPECS
     from gui_extension_page import ExtensionPageMixin
     from gui_history_page import HistoryPageMixin
     from gui_site_logins_page import SiteLoginsPageMixin
@@ -110,8 +110,7 @@ def system_reduced_motion_enabled():
 try:
     from . import gui_support as _gui_support
     from .gui_support import (
-        GUI_ACCESSIBILITY_COLORS, PREFLIGHT_ROW_SPECS,
-        SUBTITLE_LANGUAGE_CHOICES,
+        GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
         describe_rejected_links, download_status_tone,
         filter_site_login_entries, filter_subscription_records,
         format_duration, human_status, make_card, make_divider,
@@ -123,8 +122,7 @@ try:
 except ImportError:  # Flat source-path compatibility.
     import gui_support as _gui_support
     from gui_support import (
-        GUI_ACCESSIBILITY_COLORS, PREFLIGHT_ROW_SPECS,
-        SUBTITLE_LANGUAGE_CHOICES,
+        GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
         describe_rejected_links, download_status_tone,
         filter_site_login_entries, filter_subscription_records,
         format_duration, human_status, make_card, make_divider,
@@ -2040,19 +2038,23 @@ class MainWindowCore(
         dot.setToolTip(str(message or ""))
         if action:
             self._preflight_actions[key] = str(action)
+            # `tr()` around each literal, not around the lookup: the string
+            # extractor reads literals passed to tr(), and `tr(map.get(...))`
+            # passes a Call, so every one of these buttons stayed English in
+            # a fully translated panel.
             action_labels = {
-                "refresh-ytdlp": "Refresh yt-dlp",
-                "provision-runtime": "Provision runtime",
-                "refresh-ffmpeg": "Refresh FFmpeg",
-                "refresh-sign-in": "Open sign-ins",
-                "retry-github": "Try again later",
-                "use-sign-in": "Open sign-ins",
-                "choose-output-folder": "Choose a folder",
-                "review-state-location": "Open settings",
-                "review-site-refusals": "Open sign-ins",
-                "sync-system-clock": "Check the clock",
+                "refresh-ytdlp": tr("Refresh yt-dlp"),
+                "provision-runtime": tr("Provision runtime"),
+                "refresh-ffmpeg": tr("Refresh FFmpeg"),
+                "refresh-sign-in": tr("Open sign-ins"),
+                "retry-github": tr("Try again later"),
+                "use-sign-in": tr("Open sign-ins"),
+                "choose-output-folder": tr("Choose a folder"),
+                "review-state-location": tr("Open settings"),
+                "review-site-refusals": tr("Open sign-ins"),
+                "sync-system-clock": tr("Check the clock"),
             }
-            button.setText(tr(action_labels.get(str(action), "Fix")))
+            button.setText(action_labels.get(str(action), tr("Fix")))
         button.setEnabled(status not in {"ok", "not-applicable"})
         button.setAccessibleName(
             tr("{action} for {label}").format(
