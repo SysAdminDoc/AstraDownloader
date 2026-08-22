@@ -2220,6 +2220,25 @@ def lookup_history_url(entries, url, *, archive_entries=None):
     }
 
 
+def normalize_history_date(value):
+    """Return one history date bound in the form the rows are stored in.
+
+    The filter compares dates as text, because text is what a history row
+    carries, so a bound only means what the person typing it meant once it is
+    zero-padded: `2026-8-1` sorts after `2026-08-22`, and used as a lower
+    bound it hides everything. Returns "" for an empty bound and None for a
+    string that is not a date at all.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = time.strptime(raw, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return None
+    return f"{parsed.tm_year:04d}-{parsed.tm_mon:02d}-{parsed.tm_mday:02d}"
+
+
 def query_history_entries(entries, *, query="", status="", fmt="",
                           date_from="", date_to="", sort="newest",
                           offset=0, limit=50, archive_entries=None):
@@ -2228,8 +2247,17 @@ def query_history_entries(entries, *, query="", status="", fmt="",
     query = str(query or "").strip().casefold()
     status = str(status or "").strip().casefold()
     fmt = str(fmt or "").strip().casefold()
-    date_from = str(date_from or "").strip()
-    date_to = str(date_to or "").strip()
+    # A bound nobody can read is dropped and named, never applied. Applied,
+    # it compares as text against every row and silently empties the page.
+    unreadable_dates = []
+    date_from = normalize_history_date(date_from)
+    if date_from is None:
+        unreadable_dates.append("from")
+        date_from = ""
+    date_to = normalize_history_date(date_to)
+    if date_to is None:
+        unreadable_dates.append("to")
+        date_to = ""
     sort = "oldest" if sort == "oldest" else "newest"
     try:
         offset = max(0, int(offset))
@@ -2281,6 +2309,9 @@ def query_history_entries(entries, *, query="", status="", fmt="",
         "limit": limit,
         "hasMore": offset + len(page) < filtered_total,
         "sort": sort,
+        "dateFrom": date_from,
+        "dateTo": date_to,
+        "unreadableDates": unreadable_dates,
     }
 
 

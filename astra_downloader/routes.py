@@ -205,6 +205,7 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'probe_po_token_provider',
     'provision_deno',
     'lookup_history_url',
+    'normalize_history_date',
     'query_history_entries',
     'read_update_recovery_status',
     'validate_download_request_body',
@@ -271,6 +272,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     probe_po_token_provider = dependencies['probe_po_token_provider']
     provision_deno = dependencies['provision_deno']
     lookup_history_url = dependencies['lookup_history_url']
+    normalize_history_date = dependencies['normalize_history_date']
     query_history_entries = dependencies['query_history_entries']
     read_update_recovery_status = dependencies['read_update_recovery_status']
     validate_download_request_body = dependencies['validate_download_request_body']
@@ -565,6 +567,7 @@ def _register_download_routes(api, context, dependencies):
     normalize_url = dependencies["normalize_url"]
     probe_javascript_runtime = dependencies["probe_javascript_runtime"]
     lookup_history_url = dependencies["lookup_history_url"]
+    normalize_history_date = dependencies["normalize_history_date"]
     query_history_entries = dependencies["query_history_entries"]
     validate_download_request_body = dependencies["validate_download_request_body"]
 
@@ -819,14 +822,14 @@ def _register_download_routes(api, context, dependencies):
                 "error": "History sort must be newest or oldest.",
                 "code": "invalid-sort",
             }, 400)
-        date_from = request.args.get('dateFrom', '').strip()
-        date_to = request.args.get('dateTo', '').strip()
+        # strptime alone accepted 2026-8-1 and then let the text comparison
+        # in query_history_entries hide every row, with a 200 and an empty
+        # page as the only symptom. Normalise to the padded form the rows
+        # carry, and range-check that.
+        date_from = normalize_history_date(request.args.get('dateFrom', ''))
+        date_to = normalize_history_date(request.args.get('dateTo', ''))
         for key, value in (('dateFrom', date_from), ('dateTo', date_to)):
-            if not value:
-                continue
-            try:
-                time.strptime(value, '%Y-%m-%d')
-            except (TypeError, ValueError):
+            if value is None:
                 return cors_response({
                     "error": f"History {key} must use YYYY-MM-DD.",
                     "code": "invalid-date",

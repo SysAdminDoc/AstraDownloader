@@ -95,7 +95,8 @@ try:
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
         FORMAT_SORT_FRAME_RATES,
-        lookup_history_url, query_history_entries, sanitize_history_entries,
+        lookup_history_url, normalize_history_date, query_history_entries,
+        sanitize_history_entries,
         quarantined_state_files, restore_quarantined_file,
         validate_download_request_body,
     )
@@ -244,7 +245,8 @@ except ImportError:  # Direct script / flat source-path compatibility.
         SPONSORBLOCK_CATEGORIES,
         FORMAT_SORT_VIDEO_CODECS, FORMAT_SORT_AUDIO_CODECS,
         FORMAT_SORT_FRAME_RATES,
-        lookup_history_url, query_history_entries, sanitize_history_entries,
+        lookup_history_url, normalize_history_date, query_history_entries,
+        sanitize_history_entries,
         quarantined_state_files, restore_quarantined_file,
         validate_download_request_body,
     )
@@ -4811,10 +4813,10 @@ QLineEdit, QSpinBox, QComboBox {
     font-size: 13px;
 }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #ff7664; background: #151b23; }
-QLineEdit[state="error"], QSpinBox[state="error"] { border-color: #c9675f; background: #1a1214; }
+QLineEdit[state="error"], QSpinBox[state="error"], QTextEdit[state="error"] { border-color: #c9675f; background: #1a1214; }
 /* Same cascade trap as heroUrl: the error attribute outranks :focus, so a
    highlighted field would otherwise lose its keyboard ring. */
-QLineEdit[state="error"]:focus, QSpinBox[state="error"]:focus { border-color: #ff7664; }
+QLineEdit[state="error"]:focus, QSpinBox[state="error"]:focus, QTextEdit[state="error"]:focus { border-color: #ff7664; }
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: #687381; background: #0e1319; border-color: #607080; }
 /* The paste box is the product's front door, so it is sized like one.
    An attribute selector outranks a pseudo-class in Qt's CSS2 cascade, so
@@ -4894,7 +4896,7 @@ QFrame[class="playlistRow"] {
     border: 1px solid #252d37;
     border-radius: 8px;
 }
-QFrame[class="playlistRow"]:hover { background: #11161d; border-color: #607080; }
+QFrame[class="playlistRow"]:hover { background: #19212c; border-color: #607080; }
 QFrame[class="listHeader"] { background: transparent; border: none; border-bottom: 1px solid #2a323c; }
 QFrame[class="historyRow"], QFrame[class="download"] {
     background: transparent;
@@ -4902,9 +4904,13 @@ QFrame[class="historyRow"], QFrame[class="download"] {
     border-bottom: 1px solid #252d37;
     border-radius: 0;
 }
-QFrame[class="historyRow"]:hover, QFrame[class="download"]:hover { background: #11161d; }
+QFrame[class="historyRow"]:hover, QFrame[class="download"]:hover { background: #19212c; }
 QFrame[class="download"][state="failed"] { background: #151113; border-left: 2px solid #b65a53; }
 QFrame[class="download"][state="complete"] { background: transparent; border-left: 2px solid #3f8b70; }
+/* Cancelled and skipped are terminal too. _update_download_card sets the
+   property for all four, and two of them used to style nothing. */
+QFrame[class="download"][state="cancelled"], QFrame[class="download"][state="skipped"] { background: transparent; border-left: 2px solid #607080; }
+QFrame[class="download"]:focus { background: #19212c; border-bottom-color: #ff7664; }
 QFrame[class="divider"] { background: #29313b; border: none; min-height: 1px; max-height: 1px; }
 QFrame[class="verticalDivider"] { background: #2b333d; border: none; min-width: 1px; max-width: 1px; }
 
@@ -4917,7 +4923,7 @@ QTextEdit {
     font-size: 12px;
     padding: 12px;
 }
-QTextEdit:focus { border-color: #ff7664; background: #11161d; }
+QTextEdit:focus { border-color: #ff7664; background: #151b23; }
 QTextEdit[class="monospaceLog"] { background: #080b0f; color: #d8dde3; }
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
@@ -4952,6 +4958,7 @@ _LIGHT_THEME_COLOR_REPLACEMENTS = {
     "#151b23": "#f2f5f8",
     "#170806": "#2c0d08",
     "#171d25": "#edf1f5",
+    "#19212c": "#e3eaf2",
     "#1a1214": "#fff1ef",
     "#1c1315": "#fff1ef",
     "#202630": "#dce5ee",
@@ -5009,9 +5016,18 @@ _LIGHT_THEME_COLOR_REPLACEMENTS = {
     "#fff8f4": "#18212b",
     "#fffaf6": "#18212b",
 }
-LIGHT_STYLESHEET = STYLESHEET
-for _dark_colour, _light_colour in _LIGHT_THEME_COLOR_REPLACEMENTS.items():
-    LIGHT_STYLESHEET = LIGHT_STYLESHEET.replace(_dark_colour, _light_colour)
+# One pass. Replacing colour by colour let an earlier row's output match a
+# later row's key: #394350 -> #718092 -> #526272 collapsed the light
+# scrollbar handle onto its own hover colour.
+_LIGHT_THEME_COLOR_PATTERN = re.compile(
+    "|".join(
+        re.escape(colour)
+        for colour in sorted(_LIGHT_THEME_COLOR_REPLACEMENTS, key=len, reverse=True)
+    )
+)
+LIGHT_STYLESHEET = _LIGHT_THEME_COLOR_PATTERN.sub(
+    lambda match: _LIGHT_THEME_COLOR_REPLACEMENTS[match.group(0)], STYLESHEET
+)
 
 
 def stylesheet_for_theme(theme):
@@ -5416,6 +5432,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'summarize_taskbar_progress': lambda *args, **kwargs: summarize_taskbar_progress(*args, **kwargs),
         'TaskbarProgress': TaskbarProgress,
         'lookup_history_url': lambda *args, **kwargs: lookup_history_url(*args, **kwargs),
+        'normalize_history_date': lambda *args, **kwargs: normalize_history_date(*args, **kwargs),
         'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,

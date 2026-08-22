@@ -3740,13 +3740,19 @@ class MainWindowCore(
         if hasattr(self, "_site_login_filter_timer"):
             self._site_login_filter_timer.start()
 
-    def _show_history_status(self, message, state="neutral"):
-        """Report a History action on the History page, and in the log."""
+    def _show_history_status(self, message, state="neutral", *, log=True):
+        """Report a History action on the History page, and in the log.
+
+        ``log`` is off for notes written on every refresh; an action the user
+        took is worth a log line, an observation about the filter bar is not.
+        """
+        self._history_status_is_filter_note = not log
         self.history_page_status.setText(tr(message))
         self.history_page_status.show()
         set_status_tone(self.history_page_status, state)
         repolish(self.history_page_status)
-        self._append_log(message)
+        if log:
+            self._append_log(message)
 
     def _show_site_login_status(self, message, state="neutral"):
         self.site_login_status.setText(tr(message))
@@ -5349,6 +5355,50 @@ class MainWindowCore(
         self._history_filter_timer.stop()
         self._refresh_history()
 
+    def _report_history_date_filters(self, result):
+        """Mark and explain a saved-date bound the filter could not use.
+
+        A bound that is not YYYY-MM-DD used to be compared as raw text
+        against every row, so `2026-8-1` or a date typed the American way
+        hid the whole list and the only thing on screen was the ordinary
+        "no matching downloads" panel.
+        """
+        unreadable = result.get("unreadableDates") or []
+        self._set_input_error(self.history_date_from, "from" in unreadable)
+        self._set_input_error(self.history_date_to, "to" in unreadable)
+        # Each of these stays a literal in the call position. Routed through a
+        # `note` variable they leave the extractor's sight and never reach a
+        # catalogue, and the coverage gate cannot tell: a string that stops
+        # being extracted only shrinks the denominator.
+        if len(unreadable) > 1:
+            self._show_history_status(
+                "Both dates need to be YYYY-MM-DD, so neither is being used.",
+                "warning", log=False,
+            )
+        elif "from" in unreadable:
+            self._show_history_status(
+                "The saved-from date needs to be YYYY-MM-DD, so it is not being used.",
+                "warning", log=False,
+            )
+        elif "to" in unreadable:
+            self._show_history_status(
+                "The through date needs to be YYYY-MM-DD, so it is not being used.",
+                "warning", log=False,
+            )
+        elif (
+            result.get("dateFrom")
+            and result.get("dateTo")
+            and result["dateFrom"] > result["dateTo"]
+        ):
+            self._show_history_status(
+                "The saved-from date is after the through date, so nothing can match.",
+                "warning", log=False,
+            )
+        elif getattr(self, "_history_status_is_filter_note", False):
+            self._history_status_is_filter_note = False
+            self.history_page_status.clear()
+            self.history_page_status.hide()
+
     def _move_history_page(self, direction):
         direction = -1 if direction < 0 else 1
         next_offset = self._history_offset + (direction * self._history_page_size)
@@ -6108,6 +6158,7 @@ class MainWindowCore(
                 * self._history_page_size,
             )
             result = self._history_query(entries=data)
+        self._report_history_date_filters(result)
         rows = result["history"]
         start = result["offset"] + 1 if rows else 0
         end = result["offset"] + len(rows)
