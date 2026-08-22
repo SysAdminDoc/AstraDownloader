@@ -3413,7 +3413,16 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_11_0(self):
+    def test_app_version_bumped_to_2_12_0(self):
+        # v2.12.0: an audit pass. The light theme is derived in one pass so a
+        # colour cannot be rewritten twice, a history date is read the way it
+        # is typed, a routine yt-dlp warning no longer outranks the real
+        # error, a run's own flags stop deciding the next run's outcome, the
+        # intermediate sweep stops matching files it did not write, a
+        # subscription folder is checked when it is set, a health probe
+        # started before a binary swap drops its answer, and the
+        # output-template preview reports the length yt-dlp will actually
+        # write.
         # v2.11.0: subscriptions carry their own destination, format, quality
         # and naming, their archive is browsable and reversible, and a scan
         # can notice an upload that vanished or a file that was deleted; a
@@ -3440,7 +3449,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.11.0")
+        self.assertEqual(ad.APP_VERSION, "2.12.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
