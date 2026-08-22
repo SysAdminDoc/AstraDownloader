@@ -33,13 +33,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: tests are split by domain (download / gui / routes / subscriptions / health / config / build); `-n auto` is the default and the suite is green under it; wall-clock is recorded in CLAUDE.md.
   Complexity: L
 
-- [ ] P2 — AD-38 — Take the cheap Windows shell integrations
-  Why: one prerequisite — a stable AppUserModelID set early in `main()` plus a Start-menu `.lnk` carrying it — unlocks jump-list Tasks ("Paste and download", "Open downloads folder"), correct taskbar grouping, and recent-items. Separately `RegisterApplicationRestart` makes a Windows Update reboot resume the queue instead of silently ending it, and `IFileOperation`/`send2trash` makes a queue delete recoverable.
-  Evidence: https://learn.microsoft.com/en-us/windows/win32/shell/taskbar-extensions; RESEARCH.md "Security, Privacy, and Reliability"; taskbar progress is already implemented, so the COM plumbing exists.
-  Touches: `astra_downloader/astra_downloader.py`, `gui.py`
-  Acceptance: the jump list shows context-free tasks that work when the app is closed; a simulated restart relaunches with `--start-server`; deleting a finished file from the queue sends it to the Recycle Bin. Toasts with action buttons stay out of scope — they need package identity.
-  Complexity: M
-
 - [ ] P2 — AD-40 — Detect archived items the source has since deleted
   Why: an archive whose upstream entry disappears silently rots. Tartube's "Missing Videos" folder is the only implementation in the field, and pinchflat#805 (11 reactions) asks for the inverse guarantee — do not re-download what the user deleted locally. Both need the same reconciliation between the archive and the last scan.
   Evidence: Tartube README §6.25; pinchflat#805; `astra_downloader/subscriptions.py` archive keys.

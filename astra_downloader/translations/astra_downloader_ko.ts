@@ -563,12 +563,20 @@
       <translation>Download resumed.</translation>
     </message>
     <message>
+      <source>Moved to the Recycle Bin.</source>
+      <translation>Moved to the Recycle Bin.</translation>
+    </message>
+    <message>
       <source>Play</source>
       <translation>Play</translation>
     </message>
     <message>
       <source>Show in folder</source>
       <translation>Show in folder</translation>
+    </message>
+    <message>
+      <source>Delete file</source>
+      <translation>Delete file</translation>
     </message>
     <message>
       <source>Copy link</source>
@@ -1203,6 +1211,10 @@
       <translation>Show</translation>
     </message>
     <message>
+      <source>That file could not be moved to the Recycle Bin.</source>
+      <translation>That file could not be moved to the Recycle Bin.</translation>
+    </message>
+    <message>
       <source>Retry</source>
       <translation>Retry</translation>
     </message>
@@ -1677,6 +1689,10 @@
     <message>
       <source>Cleared. This copy registers no browser hosts.</source>
       <translation>Cleared. This copy registers no browser hosts.</translation>
+    </message>
+    <message>
+      <source>Copy a video link, then choose Paste and download.</source>
+      <translation>Copy a video link, then choose Paste and download.</translation>
     </message>
     <message>
       <source>Still running in the tray so Astra Deck can keep sending downloads.</source>

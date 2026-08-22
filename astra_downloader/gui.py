@@ -929,6 +929,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'probe_impersonate_targets',
     'probe_output_folder',
     'group_playlist_selection',
+    'send_to_recycle_bin',
     'subscription_archive_key',
     'MANAGED_BINARY_NAMES',
     'managed_binary_inventory',
@@ -5995,6 +5996,30 @@ class MainWindowCore(
         self._set_quick_download_status("Link copied.", "success")
         return True
 
+    def _delete_download_file(self, download):
+        """Delete a finished download's file into the Recycle Bin.
+
+        Recoverably, because the reason to delete one of these is usually a
+        mistake made a minute earlier — the wrong quality, the wrong item of
+        a playlist — and an unrecoverable delete makes that mistake final.
+        """
+        filename = getattr(download, 'filename', '') or ''
+        if not filename:
+            return False
+        ok, reason = self._dependencies['send_to_recycle_bin'](filename)
+        if not ok:
+            self._set_quick_download_status(
+                tr("That file could not be moved to the Recycle Bin."), "error"
+            )
+            self._append_log(f"Recycle Bin delete failed ({reason}): {filename}")
+            return False
+        self._set_quick_download_status(
+            tr("Moved to the Recycle Bin."), "success"
+        )
+        self._append_log(f"Moved to the Recycle Bin: {filename}")
+        self._update_ui()
+        return True
+
     def _copy_download_error(self, error):
         if not error:
             return False
@@ -6018,6 +6043,9 @@ class MainWindowCore(
         reveal = menu.addAction(tr("Show in folder"))
         reveal.setEnabled(bool(filename))
         reveal.triggered.connect(lambda: self._show_download_location(filename))
+        delete = menu.addAction(tr("Delete file"))
+        delete.setEnabled(playable)
+        delete.triggered.connect(lambda: self._delete_download_file(download))
         menu.addSeparator()
         if self._is_retryable(download):
             retry = menu.addAction(tr("Retry"))
@@ -7473,6 +7501,9 @@ class MainWindowCore(
             # meets exactly the same URL policy a typed link does.
             self.enqueue_protocol_download(command.split(' ', 1)[1].strip())
             return
+        if command.lower().startswith('jump '):
+            self.run_jump_list_task(command.split(' ', 1)[1].strip())
+            return
         command = command.lower()
         if command == 'show':
             self._append_log("Received request to show the existing window.")
@@ -7492,6 +7523,36 @@ class MainWindowCore(
             self._append_log("Setup is running. The server will start when setup finishes.")
             return
         self._start_server()
+
+    def run_jump_list_task(self, task):
+        """Act on a taskbar jump-list Task, from a cold start or a live one."""
+        task = str(task or '').strip().lower()
+        if task == 'paste':
+            self._show_from_tray()
+            self._nav_click("Download")
+            link = QApplication.clipboard().text().strip()
+            # Only a link. The clipboard is whatever the user last copied,
+            # and pasting a paragraph of text into the box would be worse
+            # than pasting nothing.
+            url, error = self._dependencies['normalize_url'](link)
+            if error or not url:
+                self.quick_download_url.setFocus()
+                self._set_quick_download_status(
+                    tr("Copy a video link, then choose Paste and download."),
+                    "warning",
+                )
+                return False
+            self.quick_download_url.setText(url)
+            self._start_quick_download()
+            return True
+        if task == 'downloads':
+            # The task is context-free: it opens the folder and does not need
+            # the window, which is the point of offering it when the app is
+            # closed. _open_folder creates the folder if it is missing.
+            self._open_folder()
+            return True
+        self._append_log(f"Ignored an unknown jump-list task: {task}")
+        return False
 
     def enqueue_protocol_download(self, url):
         """Queue a URL handed over by the ytdl:// / mediadl:// handler."""

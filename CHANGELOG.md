@@ -23,6 +23,14 @@ repository's git log.
 
 ### Added
 
+- **Windows shell integrations.** The taskbar button now carries a jump list
+  with "Paste and download" and "Open downloads folder", and both work from a
+  cold start because Windows offers them whether or not the app is running.
+  Astra Downloader also asks Windows to bring it back after an update reboot,
+  so a queue no longer ends silently when the machine restarts overnight.
+  Deleting a finished download's file from the queue sends it to the Recycle
+  Bin instead of removing it outright.
+
 - **Pin a managed tool, or roll one back.** Settings now lists yt-dlp, ffmpeg,
   Deno, QuickJS and whisper with the version installed, a pin field and a Roll
   back button. Pinning holds a tool where it is, which is the way out of an
