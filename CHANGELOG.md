@@ -14,6 +14,13 @@ repository's git log.
 
 ### Added
 
+- **The original upload wins over YouTube's AI upscale.** YouTube serves
+  AI-upscaled renditions that sort above the creator's own file on resolution
+  alone. Format preferences carries a new "Prefer the original upload over an
+  AI upscale" tick, on by default, that tries the genuine source first and
+  falls back to an upscale only when nothing else fits. Verified against the
+  pinned yt-dlp with a `--load-info-json` fixture holding both.
+
 - **YouTube pacing now explains the tradeoff.** Settings turns the configured
   pause into per-worker and aggregate hourly estimates at the current
   concurrency, beside yt-dlp's published figures. The first stored YouTube

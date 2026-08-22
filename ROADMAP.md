@@ -68,14 +68,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: a scan that no longer sees a previously-archived item marks it, without deleting anything; a locally-deleted file is not silently re-fetched; both states are visible and reversible. Depends on AD-25.
   Complexity: M
 
-- [ ] P2 — AD-42 — Deprioritise YouTube's AI "Super Resolution" formats
-  Why: YouTube began serving AI-upscaled renditions that sort above the genuine source by resolution; yt-dlp#15433 (13 reactions, opened 2025-12-29) is open and no GUI exposes a control. An archivist wants the original, and the existing `--format-sort` builder already knows to emit `res` first.
-  Evidence: yt-dlp#15433; `astra_downloader/download.py` `build_video_format_args` and the `--format-sort` ordering rule recorded in CLAUDE.md.
-  Touches: `astra_downloader/download.py`, `gui_settings_page.py`
-  Acceptance: a setting deprioritises upscaled renditions; verified against a `--load-info-json` fixture carrying both a native and an upscaled format. *Needs live validation of the field yt-dlp exposes for the marker on the pinned yt-dlp (2026.08.19 once AD-48 lands; 2026.7.4 until then).*
-  Note (2026-08-21): 2026.08.19 release notes do not mention Super Resolution. #15433 is still open. Do not invent a format key — probe a fixture on the pinned exe.
-  Complexity: S
-
 ### P3
 
 - [ ] P3 — AD-46 — Also persist the queue outside the manager lock

@@ -4714,6 +4714,7 @@ class MainWindowCore(
         ("cfg_video_codec", "VideoCodecPreference", "combo"),
         ("cfg_audio_codec", "AudioCodecPreference", "combo"),
         ("cfg_frame_rate", "PreferredFrameRate", "combo"),
+        ("cfg_prefer_original", "PreferOriginalOverUpscaled", "check"),
         ("cfg_impersonate", "ImpersonateTarget", "combo"),
         ("cfg_force_ip_version", "ForceIPVersion", "combo"),
         ("cfg_subtitle_mode", "SubtitleMode", "combo"),
@@ -6341,6 +6342,7 @@ class MainWindowCore(
             "VideoCodecPreference": self.cfg_video_codec.currentData(),
             "AudioCodecPreference": self.cfg_audio_codec.currentData(),
             "PreferredFrameRate": self.cfg_frame_rate.currentData(),
+            "PreferOriginalOverUpscaled": self.cfg_prefer_original.isChecked(),
             "PlaylistMaxItems": self.cfg_playlist_max.value(),
             "PlaylistDateAfter": self._dependencies['normalize_playlist_date'](
                 self.cfg_playlist_dateafter.text()),
