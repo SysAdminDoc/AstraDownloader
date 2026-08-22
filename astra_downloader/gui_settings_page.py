@@ -1179,7 +1179,7 @@ class SettingsPageMixin:
         # server starts and again whenever the download queue goes idle (the
         # race-free moment to swap the binary).
         self.cfg_autoupdate.setToolTip(tr(
-            "Checks at most once every 12 hours - when the server starts and "
+            "Checks at most once every 12 hours, when the server starts and "
             "when the download queue goes idle."
         ))
         tools_l.addWidget(self.cfg_autoupdate)

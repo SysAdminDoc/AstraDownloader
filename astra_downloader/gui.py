@@ -966,7 +966,7 @@ class PlaylistStagingDialog(QDialog):
                  quality_choices=None, default_format=None,
                  default_quality=None, archived_indices=None):
         super().__init__(parent)
-        self.setWindowTitle(tr("Review Playlist"))
+        self.setWindowTitle(tr("Review playlist"))
         self.setMinimumSize(640, 480)
         self.resize(880, 620)
         self.setModal(True)
@@ -1790,7 +1790,7 @@ class MainWindowCore(
         show_action.triggered.connect(self._show_from_tray)
         self.tray_startstop = tray_menu.addAction(tr("Stop server"))
         self.tray_startstop.triggered.connect(self._toggle_server)
-        folder_action = tray_menu.addAction(tr("Open Downloads Folder"))
+        folder_action = tray_menu.addAction(tr("Open downloads folder"))
         folder_action.triggered.connect(self._open_folder)
         tray_menu.addSeparator()
         exit_action = tray_menu.addAction(tr("Quit Astra Downloader"))
@@ -1806,7 +1806,7 @@ class MainWindowCore(
         self._last_notified_file = ""
         self.tray.setToolTip(
             tr_format(
-                "{app} - {status}",
+                "{app} · {status}",
                 app=self._value("APP_NAME"),
                 status=tr("Running"),
             )
@@ -2319,7 +2319,7 @@ class MainWindowCore(
             action_labels = {
                 "refresh-ytdlp": tr("Refresh yt-dlp"),
                 "provision-runtime": tr("Provision runtime"),
-                "refresh-ffmpeg": tr("Refresh FFmpeg"),
+                "refresh-ffmpeg": tr("Refresh ffmpeg"),
                 "refresh-sign-in": tr("Open sign-ins"),
                 "retry-github": tr("Try again later"),
                 "use-sign-in": tr("Open sign-ins"),
@@ -2355,7 +2355,7 @@ class MainWindowCore(
         errors = sum(status == "error" for status in statuses)
         warnings = sum(status == "warning" for status in statuses)
         if checking:
-            message = tr("Checking download readiness...")
+            message = tr("Checking download readiness…")
             tone = "neutral"
         elif errors:
             if errors == 1:
@@ -2370,11 +2370,11 @@ class MainWindowCore(
         elif warnings:
             if warnings == 1:
                 message = tr(
-                    "One check needs attention. Downloads can still be available."
+                    "One check needs attention. Downloads can still run."
                 )
             else:
                 message = tr(
-                    "{count} checks need attention. Downloads can still be available."
+                    "{count} checks need attention. Downloads can still run."
                 ).format(count=warnings)
             tone = "warning"
         else:
@@ -2584,7 +2584,7 @@ class MainWindowCore(
             if not row["field"].hasFocus():
                 row["field"].setText(pinned)
             row["field"].setPlaceholderText(
-                tr_format("Not pinned — {version} installed", version=installed)
+                tr_format("Not pinned. {version} installed", version=installed)
                 if installed else tr("Not pinned")
             )
             row["pin"].setText(tr("Unpin") if pinned else tr("Pin"))
@@ -2858,11 +2858,13 @@ class MainWindowCore(
         label = tr("Fewer options") if expanded else tr("More options")
         self.btn_quick_options.setText(label)
         self.btn_quick_options.setAccessibleName(label)
-        self.btn_quick_options.setToolTip(
+        description = (
             tr("Hide password, clip range, and custom file name controls.")
             if expanded
             else tr("Show password, clip range, and custom file name controls.")
         )
+        self.btn_quick_options.setToolTip(description)
+        self.btn_quick_options.setAccessibleDescription(description)
 
     def _sync_quick_download_profile(self, *, apply=False):
         combo = getattr(self, "quick_download_profile", None)
@@ -4682,7 +4684,7 @@ class MainWindowCore(
             self.tray_startstop.setEnabled(False)
             self.tray.setToolTip(
                 tr_format(
-                    "{app} - {status}",
+                    "{app} · {status}",
                     app=self._value("APP_NAME"),
                     status=tr("Starting"),
                 )
@@ -4708,7 +4710,7 @@ class MainWindowCore(
             self.tray_startstop.setEnabled(True)
             self.tray.setToolTip(
                 tr_format(
-                    "{app} - {status}",
+                    "{app} · {status}",
                     app=self._value("APP_NAME"),
                     status=tr("Running"),
                 )
@@ -4734,7 +4736,7 @@ class MainWindowCore(
             self.tray_startstop.setEnabled(True)
             self.tray.setToolTip(
                 tr_format(
-                    "{app} - {status}",
+                    "{app} · {status}",
                     app=self._value("APP_NAME"),
                     status=tr("Stopped"),
                 )
@@ -5764,7 +5766,7 @@ class MainWindowCore(
             self.config.get("DownloadPath", str(Path.home()))
         ) / "astra-downloader-settings.json"
         path, _selected = QFileDialog.getSaveFileName(
-            self, tr("Export Settings"), str(suggested), "JSON files (*.json)"
+            self, tr("Export settings"), str(suggested), "JSON files (*.json)"
         )
         if not path:
             return False
@@ -5797,7 +5799,7 @@ class MainWindowCore(
     def _import_settings_bundle(self):
         """Apply a bundle, then say what it actually changed."""
         path, _selected = QFileDialog.getOpenFileName(
-            self, tr("Import Settings"),
+            self, tr("Import settings"),
             str(Path(self.config.get("DownloadPath", str(Path.home())))),
             "JSON files (*.json)",
         )
@@ -6072,7 +6074,7 @@ class MainWindowCore(
         suggested = default_path / "astra-download-history.csv"
         path, _selected_filter = QFileDialog.getSaveFileName(
             self,
-            tr("Export Download History"),
+            tr("Export download history"),
             str(suggested),
             "CSV files (*.csv)",
         )
@@ -6106,7 +6108,11 @@ class MainWindowCore(
             return
         self._show_history_status(
             tr_format(
-                "Exported {count} filtered history row(s) to {path}",
+                "Exported one filtered history row to {path}.", path=path,
+            )
+            if len(rows) == 1 else
+            tr_format(
+                "Exported {count} filtered history rows to {path}.",
                 count=len(rows),
                 path=path,
             ),
@@ -6491,7 +6497,7 @@ class MainWindowCore(
         copy_link.setEnabled(bool(url))
         copy_link.triggered.connect(lambda: self._copy_download_url(url))
         error = getattr(download, 'error', '') or ''
-        copy_error = menu.addAction(tr("Copy error"))
+        copy_error = menu.addAction(tr("Copy error text"))
         copy_error.setEnabled(bool(error))
         copy_error.triggered.connect(lambda: self._copy_download_error(error))
         again = menu.addAction(tr("Download again"))
@@ -6507,7 +6513,7 @@ class MainWindowCore(
     def _show_download_command_dialog(self, download):
         """Show the sanitized yt-dlp command for this download in a modal dialog."""
         dialog = QDialog(self)
-        dialog.setWindowTitle(tr("yt-dlp Command"))
+        dialog.setWindowTitle(tr("yt-dlp command"))
         dialog.setMinimumWidth(560)
         dialog.resize(720, 410)
         dialog.setModal(True)
@@ -6591,7 +6597,7 @@ class MainWindowCore(
             self._set_quick_download_status(tr("Enter a playlist URL to review."), "error")
             return
 
-        self._set_quick_download_status(tr("Scanning playlist items..."), "neutral")
+        self._set_quick_download_status(tr("Scanning playlist items…"), "neutral")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             preview, err = self.dl_manager.preview_playlist(url)
@@ -7328,7 +7334,7 @@ class MainWindowCore(
 
     def _browse(self, line_edit):
         path = QFileDialog.getExistingDirectory(
-            self, tr("Select Folder"), line_edit.text()
+            self, tr("Select folder"), line_edit.text()
         )
         if path:
             line_edit.setText(path)
@@ -7648,7 +7654,7 @@ class MainWindowCore(
         text = self._diagnostics_text()
 
         dialog = QDialog(self)
-        dialog.setWindowTitle(tr("Review Diagnostics"))
+        dialog.setWindowTitle(tr("Review diagnostics"))
         dialog.setModal(True)
         dialog.resize(720, 520)
         dialog.setAccessibleName(tr("Review redacted diagnostics"))
@@ -8117,12 +8123,12 @@ class MainWindowCore(
                 self._model_setup_attempted = True
         self._setup_running = True
         self._append_log("Refreshing ffmpeg..." if force_ffmpeg else "Running first-time setup...")
-        self.setup_status.setText(tr("Installing required download tools..."))
+        self.setup_status.setText(tr("Installing required download tools…"))
         self.setup_status.show()
         self.setup_progress.setValue(0)
         self.setup_progress.show()
         self.btn_startstop.setEnabled(False)
-        self._set_control_label(self.btn_startstop, tr("Setting Up"))
+        self._set_control_label(self.btn_startstop, tr("Setting up"))
         self.setup_worker = self._dependencies['SetupWorker'](
             force_ffmpeg=force_ffmpeg,
             auto_update_ytdlp=self.config.get("AutoUpdateYtDlp", True),
@@ -8138,15 +8144,15 @@ class MainWindowCore(
     def _setup_progress(self, value):
         self.setup_progress.setValue(value)
         if value < 30:
-            self.setup_status.setText(tr("Installing yt-dlp..."))
+            self.setup_status.setText(tr("Installing yt-dlp…"))
         elif value < 60:
-            self.setup_status.setText(tr("Installing ffmpeg..."))
+            self.setup_status.setText(tr("Installing ffmpeg…"))
         elif value < 70:
-            self.setup_status.setText(tr("Preparing transcription model..."))
+            self.setup_status.setText(tr("Preparing transcription model…"))
         elif value < 95:
-            self.setup_status.setText(tr("Registering shortcuts and protocols..."))
+            self.setup_status.setText(tr("Registering shortcuts and protocols…"))
         else:
-            self.setup_status.setText(tr("Finishing setup..."))
+            self.setup_status.setText(tr("Finishing setup…"))
 
     def _setup_done(self):
         ffmpeg_refresh = bool(getattr(getattr(self, 'setup_worker', None), 'force_ffmpeg', False))

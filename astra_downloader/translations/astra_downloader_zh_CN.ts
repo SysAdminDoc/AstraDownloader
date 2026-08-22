@@ -151,8 +151,8 @@
       <translation>New token ready. Save settings to apply it.</translation>
     </message>
     <message>
-      <source>Review Playlist</source>
-      <translation>Review Playlist</translation>
+      <source>Review playlist</source>
+      <translation>Review playlist</translation>
     </message>
     <message>
       <source>Review playlist videos</source>
@@ -403,16 +403,16 @@
       <translation>Stop server</translation>
     </message>
     <message>
-      <source>Open Downloads Folder</source>
-      <translation>Open Downloads Folder</translation>
+      <source>Open downloads folder</source>
+      <translation>Open downloads folder</translation>
     </message>
     <message>
       <source>Quit Astra Downloader</source>
       <translation>Quit Astra Downloader</translation>
     </message>
     <message>
-      <source>{app} - {status}</source>
-      <translation>{app} - {status}</translation>
+      <source>{app} · {status}</source>
+      <translation>{app} · {status}</translation>
     </message>
     <message>
       <source>mp3</source>
@@ -455,8 +455,8 @@
       <translation>Show checks</translation>
     </message>
     <message>
-      <source>Checking download readiness...</source>
-      <translation>Checking download readiness...</translation>
+      <source>Checking download readiness…</source>
+      <translation>Checking download readiness…</translation>
     </message>
     <message>
       <source>Missing</source>
@@ -509,6 +509,14 @@
     <message>
       <source>More options</source>
       <translation>More options</translation>
+    </message>
+    <message>
+      <source>Hide password, clip range, and custom file name controls.</source>
+      <translation>Hide password, clip range, and custom file name controls.</translation>
+    </message>
+    <message>
+      <source>Show password, clip range, and custom file name controls.</source>
+      <translation>Show password, clip range, and custom file name controls.</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -619,12 +627,12 @@
       <translation>Both dates need to be YYYY-MM-DD, so neither is being used.</translation>
     </message>
     <message>
-      <source>Export Settings</source>
-      <translation>Export Settings</translation>
+      <source>Export settings</source>
+      <translation>Export settings</translation>
     </message>
     <message>
-      <source>Import Settings</source>
-      <translation>Import Settings</translation>
+      <source>Import settings</source>
+      <translation>Import settings</translation>
     </message>
     <message>
       <source>Could not save the imported settings. Check disk space and permissions, then retry.</source>
@@ -643,12 +651,8 @@
       <translation>No filtered history rows are available to export.</translation>
     </message>
     <message>
-      <source>Export Download History</source>
-      <translation>Export Download History</translation>
-    </message>
-    <message>
-      <source>Exported {count} filtered history row(s) to {path}</source>
-      <translation>Exported {count} filtered history row(s) to {path}</translation>
+      <source>Export download history</source>
+      <translation>Export download history</translation>
     </message>
     <message>
       <source>Loading history…</source>
@@ -707,16 +711,16 @@
       <translation>Copy link</translation>
     </message>
     <message>
-      <source>Copy error</source>
-      <translation>Copy error</translation>
+      <source>Copy error text</source>
+      <translation>Copy error text</translation>
     </message>
     <message>
       <source>Download again</source>
       <translation>Download again</translation>
     </message>
     <message>
-      <source>yt-dlp Command</source>
-      <translation>yt-dlp Command</translation>
+      <source>yt-dlp command</source>
+      <translation>yt-dlp command</translation>
     </message>
     <message>
       <source>Review redacted yt-dlp command</source>
@@ -739,8 +743,8 @@
       <translation>Copy command status</translation>
     </message>
     <message>
-      <source>Scanning playlist items...</source>
-      <translation>Scanning playlist items...</translation>
+      <source>Scanning playlist items…</source>
+      <translation>Scanning playlist items…</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -831,8 +835,8 @@
       <translation>Saved</translation>
     </message>
     <message>
-      <source>Select Folder</source>
-      <translation>Select Folder</translation>
+      <source>Select folder</source>
+      <translation>Select folder</translation>
     </message>
     <message>
       <source>Best</source>
@@ -867,8 +871,8 @@
       <translation>Copied token cleared from the clipboard.</translation>
     </message>
     <message>
-      <source>Review Diagnostics</source>
-      <translation>Review Diagnostics</translation>
+      <source>Review diagnostics</source>
+      <translation>Review diagnostics</translation>
     </message>
     <message>
       <source>Review redacted diagnostics</source>
@@ -903,12 +907,12 @@
       <translation>Copy the redacted diagnostics and close this review.</translation>
     </message>
     <message>
-      <source>Installing required download tools...</source>
-      <translation>Installing required download tools...</translation>
+      <source>Installing required download tools…</source>
+      <translation>Installing required download tools…</translation>
     </message>
     <message>
-      <source>Setting Up</source>
-      <translation>Setting Up</translation>
+      <source>Setting up</source>
+      <translation>Setting up</translation>
     </message>
     <message>
       <source>A subscription scan already captured this video. Tick it to download it again.</source>
@@ -951,8 +955,8 @@
       <translation>Provision runtime</translation>
     </message>
     <message>
-      <source>Refresh FFmpeg</source>
-      <translation>Refresh FFmpeg</translation>
+      <source>Refresh ffmpeg</source>
+      <translation>Refresh ffmpeg</translation>
     </message>
     <message>
       <source>Open sign-ins</source>
@@ -1013,14 +1017,6 @@
     <message>
       <source>Plugin-based proof-of-origin providers are disabled. Downloads use the verified token-exempt YouTube client chain.</source>
       <translation>Plugin-based proof-of-origin providers are disabled. Downloads use the verified token-exempt YouTube client chain.</translation>
-    </message>
-    <message>
-      <source>Hide password, clip range, and custom file name controls.</source>
-      <translation>Hide password, clip range, and custom file name controls.</translation>
-    </message>
-    <message>
-      <source>Show password, clip range, and custom file name controls.</source>
-      <translation>Show password, clip range, and custom file name controls.</translation>
     </message>
     <message>
       <source>Automatic matching is on; no profile matches this link.</source>
@@ -1327,6 +1323,14 @@
       <translation>Settings were restored, but the Undo record could not be updated on disk.</translation>
     </message>
     <message>
+      <source>Exported one filtered history row to {path}.</source>
+      <translation>Exported one filtered history row to {path}.</translation>
+    </message>
+    <message>
+      <source>Exported {count} filtered history rows to {path}.</source>
+      <translation>Exported {count} filtered history rows to {path}.</translation>
+    </message>
+    <message>
       <source>History unavailable</source>
       <translation>History unavailable</translation>
     </message>
@@ -1503,8 +1507,8 @@
       <translation>Server failed to start. Check the log for details.</translation>
     </message>
     <message>
-      <source>Installing yt-dlp...</source>
-      <translation>Installing yt-dlp...</translation>
+      <source>Installing yt-dlp…</source>
+      <translation>Installing yt-dlp…</translation>
     </message>
     <message>
       <source>Start server</source>
@@ -1575,8 +1579,8 @@
       <translation>Not installed</translation>
     </message>
     <message>
-      <source>Not pinned — {version} installed</source>
-      <translation>Not pinned — {version} installed</translation>
+      <source>Not pinned. {version} installed</source>
+      <translation>Not pinned. {version} installed</translation>
     </message>
     <message>
       <source>Not pinned</source>
@@ -1871,8 +1875,8 @@
       <translation>Still running in the tray so Astra Deck can keep sending downloads.</translation>
     </message>
     <message>
-      <source>Installing ffmpeg...</source>
-      <translation>Installing ffmpeg...</translation>
+      <source>Installing ffmpeg…</source>
+      <translation>Installing ffmpeg…</translation>
     </message>
     <message>
       <source>page</source>
@@ -1883,8 +1887,8 @@
       <translation>Open</translation>
     </message>
     <message>
-      <source>One check needs attention. Downloads can still be available.</source>
-      <translation>One check needs attention. Downloads can still be available.</translation>
+      <source>One check needs attention. Downloads can still run.</source>
+      <translation>One check needs attention. Downloads can still run.</translation>
     </message>
     <message>
       <source>Settings, queue and history live at {path}. Copy that folder before replacing this build.</source>
@@ -1995,8 +1999,8 @@
       <translation>Closing now will cancel {count} active downloads.</translation>
     </message>
     <message>
-      <source>Preparing transcription model...</source>
-      <translation>Preparing transcription model...</translation>
+      <source>Preparing transcription model…</source>
+      <translation>Preparing transcription model…</translation>
     </message>
     <message>
       <source>{count} checks need repair. Open the checks to see the fixes.</source>
@@ -2051,16 +2055,16 @@
       <translation>The import was only partly applied because its Undo snapshot could not be saved.</translation>
     </message>
     <message>
-      <source>Registering shortcuts and protocols...</source>
-      <translation>Registering shortcuts and protocols...</translation>
+      <source>Registering shortcuts and protocols…</source>
+      <translation>Registering shortcuts and protocols…</translation>
     </message>
     <message>
-      <source>Finishing setup...</source>
-      <translation>Finishing setup...</translation>
+      <source>Finishing setup…</source>
+      <translation>Finishing setup…</translation>
     </message>
     <message>
-      <source>{count} checks need attention. Downloads can still be available.</source>
-      <translation>{count} checks need attention. Downloads can still be available.</translation>
+      <source>{count} checks need attention. Downloads can still run.</source>
+      <translation>{count} checks need attention. Downloads can still run.</translation>
     </message>
     <message>
       <source>unknown</source>
@@ -2109,10 +2113,6 @@
     <message>
       <source>Open extension pairing</source>
       <translation>Open extension pairing</translation>
-    </message>
-    <message>
-      <source>Review playlist</source>
-      <translation>Review playlist</translation>
     </message>
     <message>
       <source>From link</source>
@@ -2229,10 +2229,6 @@
     <message>
       <source>Download quality</source>
       <translation>Download quality</translation>
-    </message>
-    <message>
-      <source>Shows password, clip range, and custom file name controls.</source>
-      <translation>Shows password, clip range, and custom file name controls.</translation>
     </message>
     <message>
       <source>Clip from</source>
@@ -2639,8 +2635,8 @@
       <translation>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</translation>
     </message>
     <message>
-      <source>likely unreadable on Windows 127+</source>
-      <translation>likely unreadable on Windows 127+</translation>
+      <source>likely unreadable on Chromium 127+</source>
+      <translation>likely unreadable on Chromium 127+</translation>
     </message>
     <message>
       <source>New subscription</source>
@@ -2745,10 +2741,6 @@
     <message>
       <source>Local API</source>
       <translation>Local API</translation>
-    </message>
-    <message>
-      <source>Review diagnostics</source>
-      <translation>Review diagnostics</translation>
     </message>
     <message>
       <source>Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.</source>
@@ -2929,14 +2921,6 @@
     <message>
       <source>Import and export</source>
       <translation>Import and export</translation>
-    </message>
-    <message>
-      <source>Export settings</source>
-      <translation>Export settings</translation>
-    </message>
-    <message>
-      <source>Import settings</source>
-      <translation>Import settings</translation>
     </message>
     <message>
       <source>Undo import</source>
@@ -3539,8 +3523,8 @@
       <translation>Keep yt-dlp up to date automatically</translation>
     </message>
     <message>
-      <source>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</source>
-      <translation>Checks at most once every 12 hours - when the server starts and when the download queue goes idle.</translation>
+      <source>Checks at most once every 12 hours, when the server starts and when the download queue goes idle.</source>
+      <translation>Checks at most once every 12 hours, when the server starts and when the download queue goes idle.</translation>
     </message>
     <message>
       <source>Installed tools</source>
