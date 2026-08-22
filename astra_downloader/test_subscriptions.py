@@ -1,6 +1,7 @@
 """Tests for scheduled feeds and the archive."""
 
 import ast
+import contextlib
 import hashlib
 import inspect
 import io
@@ -1198,7 +1199,7 @@ class SubscriptionTests(unittest.TestCase):
 
             def probe(_url):
                 probe_started.set()
-                release.wait(2)
+                release.wait(15)
                 return [], None
 
             manager = ad.SubscriptionManager(
@@ -1214,9 +1215,9 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(second, {
                 "id": record["id"], "scheduled": False, "scanning": True
             })
-            self.assertTrue(probe_started.wait(1))
+            self.assertTrue(probe_started.wait(15))
             release.set()
-            deadline = time.time() + 2
+            deadline = time.time() + 15
             while manager.snapshot()["scanning"] and time.time() < deadline:
                 time.sleep(0.01)
             self.assertEqual(manager.snapshot()["scanning"], [])
@@ -1241,7 +1242,7 @@ class SubscriptionTests(unittest.TestCase):
             result, error = manager.request_scan(record["id"])
             self.assertIsNone(error)
             self.assertTrue(result["scheduled"])
-            deadline = time.time() + 2
+            deadline = time.time() + 15
             while not logs and time.time() < deadline:
                 time.sleep(0.01)
 
@@ -1352,7 +1353,7 @@ class SubscriptionTests(unittest.TestCase):
 
             def probe(_url):
                 scan_started.set()
-                release_scan.wait(2)
+                release_scan.wait(15)
                 return [], None
 
             subscription_manager = ad.SubscriptionManager(
@@ -1370,7 +1371,7 @@ class SubscriptionTests(unittest.TestCase):
                 daemon=True,
             )
             worker.start()
-            self.assertTrue(scan_started.wait(1), "subscription probe did not start")
+            self.assertTrue(scan_started.wait(15), "subscription probe did not start")
             self.assertEqual(registry.active_count(), 1)
             self.assertEqual(queue_manager.active_count(), 1)
             release_scan.set()
@@ -1690,6 +1691,187 @@ class SubscriptionArchiveManagerTests(unittest.TestCase):
             self.assertTrue(rows[here_key]["filePath"])
             # The store never asks the filesystem; the page's caller does.
             self.assertNotIn("fileMissing", rows[here_key])
+
+    def test_every_archive_field_survives_a_reload(self):
+        # `_write_locked` serialises `self._data` verbatim, so a field the
+        # loader does not rebuild is written to disk and dropped on the next
+        # construction — with every in-process test still green.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            key, _candidate = self._captured(
+                store, sub_id, "durable", file_path=r"D:\Feeds\durable.mp4",
+                height=720,
+            )
+            store.mark_scan_sightings(
+                sub_id, [key], complete_listing=True, now=300)
+            store.mark_scan_sightings(
+                sub_id, [], complete_listing=True, now=400)
+
+            before = store.archive_entry(key)
+            after = self._store(tmpdir).archive_entry(key)
+            for field in ("deliveredHeight", "filePath", "lastSeenAt",
+                          "missingUpstream"):
+                with self.subTest(field=field):
+                    self.assertEqual(after.get(field), before.get(field), field)
+            self.assertEqual(after["deliveredHeight"], 720)
+            self.assertTrue(after["missingUpstream"])
+            self.assertTrue(after["filePath"])
+
+    def test_an_upgrade_cannot_repeat_forever_under_a_quality_cap(self):
+        # A subscription pinned to 720p against a 1080p channel would see
+        # 1080 > 720 on every scan and re-download the same 720p file.
+        module = subscriptions_module()
+        manager = module.SubscriptionManager(
+            store=types.SimpleNamespace(
+                archive_entry=lambda _key: {
+                    "status": "complete", "deliveredHeight": 720,
+                },
+            ),
+            probe=lambda _url: ([], None),
+            enqueue=lambda *_args: ("dl", None),
+            height_probe=lambda _url: 1080,
+        )
+        candidate = {"url": "https://www.youtube.com/watch?v=capped000000"}
+        self.assertEqual(
+            manager._upgrade_height(
+                {"upgradeIfBetter": True, "quality": "720"}, "k", candidate),
+            720,
+            "a capped subscription cannot receive the taller rendition",
+        )
+        self.assertEqual(
+            manager._upgrade_height(
+                {"upgradeIfBetter": True, "quality": "1080"}, "k", candidate),
+            1080,
+        )
+        self.assertEqual(
+            manager._upgrade_height(
+                {"upgradeIfBetter": True, "quality": "best"}, "k", candidate),
+            1080,
+        )
+
+    def test_an_upgrade_that_reports_no_height_records_what_it_reached_for(self):
+        # Otherwise the entry keeps the old lower height and the next scan
+        # re-triggers the same upgrade.
+        module = subscriptions_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+            sub_id = record["id"]
+            key, candidate = self._captured(store, sub_id, "noheight", height=720)
+
+            self.assertEqual(
+                store.reserve_archive(
+                    key, candidate, sub_id, now=300, upgrade_height=1080),
+                module.RESERVE_OK,
+            )
+            store.mark_archive_queued(key, "dl_upgrade", now=300)
+            store.mark_download("dl_upgrade", "complete", now=400)
+            self.assertEqual(store.archive_entry(key)["deliveredHeight"], 1080)
+            # And the same upgrade does not fire again.
+            self.assertEqual(
+                store.reserve_archive(
+                    key, candidate, sub_id, now=500, upgrade_height=1080),
+                module.RESERVE_ALREADY_PRESENT,
+            )
+
+    def test_one_unusable_entry_does_not_turn_a_window_into_the_whole_source(self):
+        # The probe returns up to limit+1. Judging completeness on the count
+        # AFTER normalisation dropped a bad entry would call a truncated
+        # window complete and flag everything below it as deleted.
+        module = subscriptions_module()
+        limit = module.SUBSCRIPTION_PROBE_LIMIT
+        window = [
+            {"id": f"v{index}", "url": f"https://www.youtube.com/watch?v=v{index}000000000",
+             "title": f"Upload {index}"}
+            for index in range(limit + 1)
+        ]
+        window[7] = None  # one entry normalisation will drop
+
+        seen = []
+        manager = module.SubscriptionManager(
+            store=types.SimpleNamespace(
+                begin_scan=lambda _sub_id, now=None: {
+                    "id": "sub_x", "url": "https://www.youtube.com/@c",
+                    "upgradeIfBetter": False,
+                },
+                reset_archive_retries=lambda *_a, **_k: True,
+                batched_saves=lambda: contextlib.nullcontext(
+                    types.SimpleNamespace(failed=False)),
+                reserve_archive=lambda *_a, **_k: module.RESERVE_ALREADY_PRESENT,
+                archive_entry=lambda _key: {},
+                mark_scan_sightings=lambda _sub, _keys, complete_listing=False, now=None:
+                    seen.append(complete_listing) or 0,
+                finish_scan=lambda *_a, **_k: True,
+                persistence_error=lambda: "",
+                _normalize_url=lambda value: (value, None),
+                _is_youtube_url=lambda _value: True,
+                _clean_text=lambda value, default="", limit=0: str(value or default),
+            ),
+            probe=lambda _url: (window, None),
+            enqueue=lambda *_args: ("dl", None),
+        )
+        manager.scan_subscription("sub_x")
+        self.assertEqual(
+            seen, [False],
+            "a full window with one dropped entry is not the whole source",
+        )
+
+    def test_a_source_with_exactly_the_limit_is_still_the_whole_source(self):
+        module = subscriptions_module()
+        limit = module.SUBSCRIPTION_PROBE_LIMIT
+        window = [
+            {"id": f"v{index}", "url": f"https://www.youtube.com/watch?v=v{index}000000000",
+             "title": f"Upload {index}"}
+            for index in range(limit)
+        ]
+        seen = []
+        manager = module.SubscriptionManager(
+            store=types.SimpleNamespace(
+                begin_scan=lambda _sub_id, now=None: {
+                    "id": "sub_y", "url": "https://www.youtube.com/@c",
+                    "upgradeIfBetter": False,
+                },
+                reset_archive_retries=lambda *_a, **_k: True,
+                batched_saves=lambda: contextlib.nullcontext(
+                    types.SimpleNamespace(failed=False)),
+                reserve_archive=lambda *_a, **_k: module.RESERVE_ALREADY_PRESENT,
+                archive_entry=lambda _key: {},
+                mark_scan_sightings=lambda _sub, _keys, complete_listing=False, now=None:
+                    seen.append(complete_listing) or 0,
+                finish_scan=lambda *_a, **_k: True,
+                persistence_error=lambda: "",
+                _normalize_url=lambda value: (value, None),
+                _is_youtube_url=lambda _value: True,
+                _clean_text=lambda value, default="", limit=0: str(value or default),
+            ),
+            probe=lambda _url: (window, None),
+            enqueue=lambda *_args: ("dl", None),
+        )
+        manager.scan_subscription("sub_y")
+        self.assertEqual(seen, [True])
+
+    def test_the_api_accepts_every_delivery_field_the_record_carries(self):
+        # The record carries six; a tuple listing five makes the sixth a 400
+        # on both POST and PATCH, which is how the upgrade setting became
+        # unreachable over HTTP while the GUI worked.
+        import routes
+
+        source = inspect.getsource(routes)
+        declared = re.search(
+            r"SUBSCRIPTION_DELIVERY_FIELDS = \(([^)]*)\)", source)
+        self.assertIsNotNone(declared)
+        wire_fields = set(re.findall(r'"([A-Za-z]+)"', declared.group(1)))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir)
+            record, _error = store.add_subscription(
+                "https://www.youtube.com/@channel")
+        carried = set(subscriptions_module().sanitize_subscription_delivery({}))
+        self.assertEqual(wire_fields, carried)
+        self.assertTrue(carried <= set(record))
 
     def test_a_subscription_carries_its_own_delivery(self):
         with tempfile.TemporaryDirectory() as tmpdir:

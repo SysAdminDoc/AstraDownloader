@@ -33,7 +33,7 @@ import pytest
 # A full run is the product's regression contract. This floor catches a
 # missing optional dependency, a Qt bootstrap failure, or an accidentally
 # deleted test group even when pytest would otherwise report a green run.
-MIN_FULL_SUITE_EXECUTED_TESTS = 1122
+MIN_FULL_SUITE_EXECUTED_TESTS = 1133
 
 _executed_nodeids = set()
 _skipped_nodeids = {}
@@ -223,6 +223,22 @@ def _keep_probe_caches_warm():
     # writer creates its atomic temp file while rmtree is walking the
     # directory, and Windows reports WinError 145.
     _drain_queue_writers()
+    # The observed system-clock offset is process-wide too: it is set from the
+    # Date header of any response that reaches observe_github_api_budget, so a
+    # test feeding a synthetic one changes what every later pre-flight sees.
+    _reset_system_clock()
+
+
+def _reset_system_clock():
+    import astra_downloader as ad
+
+    state = getattr(ad, "_SYSTEM_CLOCK_STATE", None)
+    lock = getattr(ad, "_SYSTEM_CLOCK_LOCK", None)
+    if state is None or lock is None:
+        return
+    with lock:
+        state.clear()
+        state.update({"measured": False, "offsetSeconds": 0})
 
 
 def _drain_queue_writers():

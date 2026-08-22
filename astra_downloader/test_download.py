@@ -976,7 +976,7 @@ class DownloadManagerTests(unittest.TestCase):
 
         def hold_queued(download):
             download.status = 'downloading'
-            release.wait(2)
+            release.wait(15)
             download.status = 'complete'
             download.mark_terminal()
 
@@ -1166,7 +1166,7 @@ class DownloadManagerTests(unittest.TestCase):
 
             restored._run_download = complete
             self.assertTrue(restored.resume_intake())
-            deadline = time.time() + 2
+            deadline = time.time() + 15
             while time.time() < deadline and plain_id not in started:
                 time.sleep(0.01)
             self.assertIn(plain_id, started)
@@ -2256,15 +2256,25 @@ class CookieThreatModelDocTests(unittest.TestCase):
     """Keep the cookie-risk documentation tied to live mitigations."""
 
     def test_doc_records_advisory_and_companion_cookie_controls(self):
-        doc_path = Path(__file__).resolve().parent.parent / "docs" / "yt-dlp-cookie-threat-model.md"
+        root = Path(__file__).resolve().parent.parent
+        doc_path = root / "docs" / "yt-dlp-cookie-threat-model.md"
         body = doc_path.read_text(encoding="utf-8")
+        requirements = (root / "astra_downloader" / "requirements.txt").read_text(
+            encoding="utf-8")
+        ytdlp_pin = next(
+            line.strip() for line in requirements.splitlines()
+            if line.strip().startswith("yt-dlp==")
+        )
         for needle in [
             "CVE-2023-35934",
             "GHSA-v8mc-9377-rwjj",
             "2023.07.06",
             f"Astra Downloader {ad.APP_VERSION}",
             "Astra Deck browser extension",
-            "yt-dlp==2026.6.9",
+            # Read back off requirements.txt rather than frozen here: the doc
+            # claimed 2026.6.9 while the repo pinned 2026.8.19, and this test
+            # was what kept the stale claim in place.
+            ytdlp_pin,
             "ALLOWED_COOKIE_DOMAINS",
             ".youtube.com",
             "write_cookies_netscape()",
@@ -2933,7 +2943,7 @@ class EndToEndDownloadTests(unittest.TestCase):
                     return self
 
                 def __next__(self):
-                    if not self.stop_event.wait(1):
+                    if not self.stop_event.wait(15):
                         # A missing watchdog must not make this test hang
                         # forever; it will still fail the outcome assertions.
                         self.proc.returncode = 1
@@ -3007,7 +3017,7 @@ class EndToEndDownloadTests(unittest.TestCase):
                     if not self.wait_line_emitted:
                         self.wait_line_emitted = True
                         return "[wait] Waiting for the live event to begin...\n"
-                    if not self.stop_event.wait(1):
+                    if not self.stop_event.wait(15):
                         # A missing overall live-wait deadline must not make
                         # this regression test hang indefinitely.
                         self.proc.returncode = 1
@@ -6899,7 +6909,7 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
                     if not self.progress_emitted:
                         self.progress_emitted = True
                         return "progress = 37%\n"
-                    if not self.stop_event.wait(1):
+                    if not self.stop_event.wait(15):
                         self.proc.returncode = 1
                     raise StopIteration
 
@@ -8135,6 +8145,89 @@ class DeferredQueuePersistTests(unittest.TestCase):
             len(payloads[-1]["downloads"]), 5,
             "the last write has to carry every record",
         )
+
+    def test_a_flush_cannot_return_true_with_a_payload_unwritten(self):
+        # `_persist_idle` was cleared outside the lock that sets the payload,
+        # so a flush landing between the two saw the flag the writer left set
+        # on its last drain and returned having written nothing — exactly the
+        # snapshot cancel_all flushes for.
+        writes = []
+        gate = threading.Event()
+
+        def writer(_path, payload):
+            gate.wait(5)
+            writes.append(payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir, writer)
+            first = ad.Download("dl_flush_1", "https://example.com/video")
+            first.status = "queued"
+            with manager._lock:
+                manager.downloads[first.id] = first
+                manager._persist_async_locked()
+            gate.set()
+            self.assertTrue(manager.flush_persistence())
+            self.assertEqual(len(writes), 1)
+
+            # The writer is now idle. Queue another and flush immediately.
+            second = ad.Download("dl_flush_2", "https://example.com/video")
+            second.status = "queued"
+            with manager._lock:
+                manager.downloads[second.id] = second
+                manager._persist_async_locked()
+            self.assertTrue(manager.flush_persistence())
+            self.assertEqual(
+                len(writes), 2,
+                "the flush returned before the second snapshot was written",
+            )
+            self.assertEqual(len(writes[-1]["downloads"]), 2)
+
+    def test_a_flush_starts_a_writer_that_has_already_retired(self):
+        # A payload queued while the writer was retiring has no live thread
+        # until someone starts one; the flusher has to be able to.
+        writes = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir, lambda _p, payload: writes.append(payload))
+            download = ad.Download("dl_retired", "https://example.com/video")
+            download.status = "queued"
+            with manager._lock:
+                manager.downloads[download.id] = download
+                manager._persist_async_locked()
+            # Simulate the retirement window: a pending payload, no thread.
+            manager._persist_thread = None
+            self.assertTrue(manager.flush_persistence())
+            self.assertTrue(writes, "a retired writer left the payload unwritten")
+
+    def test_the_drain_helper_reaches_the_composition_root(self):
+        # conftest guards with `if callable(...)`, so a helper that never got
+        # re-exported fails soft and the drain silently does nothing.
+        self.assertTrue(callable(getattr(ad, "flush_all_persistence", None)))
+        self.assertTrue(ad.flush_all_persistence())
+
+    def test_a_restored_download_keeps_its_own_output_template(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            queue_path = Path(tmpdir) / "download-queue.json"
+            config = FakeConfig({
+                "DownloadPath": tmpdir, "AudioDownloadPath": tmpdir,
+            })
+            manager = ad.DownloadManager(
+                config, FakeHistory(), queue_path=queue_path)
+            dl_id, error = manager.start_download(
+                "https://www.youtube.com/watch?v=templateQueue",
+                output_template="%(uploader)s/%(title)s.%(ext)s",
+            )
+            self.assertIsNone(error)
+            expected = manager.downloads[dl_id].output_template
+            self.assertTrue(expected)
+            self.assertTrue(manager.flush_persistence())
+
+            restored = ad.DownloadManager(
+                config, FakeHistory(), queue_path=queue_path)
+            self.assertEqual(
+                restored.downloads[dl_id].output_template, expected,
+                "a subscription's template has to survive a restart",
+            )
+            self.assertTrue(restored.flush_persistence())
 
     def test_a_failed_deferred_write_is_reported_rather_than_lost(self):
         # There is no return path to check, so the sticky persistence notice

@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "astra-downloader",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "description": "A desktop video downloader for Windows \u2014 paste a link from almost any site. Also serves the Astra Deck browser extension over a local API.",
   "author": "SysAdminDoc",
   "license": "MIT",

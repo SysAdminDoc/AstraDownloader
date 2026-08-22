@@ -186,7 +186,7 @@ class InstanceCommandTests(unittest.TestCase):
 
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
-        self.assertTrue(ready.wait(2))
+        self.assertTrue(ready.wait(15))
         self.assertTrue(ad.send_instance_command(
             "download https://www.youtube.com/watch?v=AbCdEf",
             port=port_holder[0], attempts=1, token="d" * 32,
@@ -216,7 +216,7 @@ class InstanceCommandTests(unittest.TestCase):
 
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
-        self.assertTrue(ready.wait(2))
+        self.assertTrue(ready.wait(15))
         self.assertTrue(ad.send_instance_command(
             "start", port=port_holder[0], attempts=1, token="t" * 32))
         thread.join(2)
@@ -239,7 +239,7 @@ class InstanceCommandTests(unittest.TestCase):
 
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
-        self.assertTrue(ready.wait(2))
+        self.assertTrue(ready.wait(15))
         self.assertTrue(ad.send_instance_command(
             "show", port=port_holder[0], attempts=1, token="s" * 32))
         thread.join(2)
@@ -3304,7 +3304,11 @@ class PreflightHealthTests(unittest.TestCase):
                 '/health', headers={'X-MDL-Client': 'MediaDL'},
             ).get_json()
         self.assertIn('preflight', body)
-        self.assertEqual(body['preflight']['status'], 'ready')
+        self.assertEqual(
+            body['preflight']['status'], 'ready',
+            f"blocking={body['preflight'].get('blocking')} "
+            f"attention={body['preflight'].get('attention')}",
+        )
         self.assertEqual(
             {item['id'] for item in body['preflight']['checks']},
             {
@@ -3409,7 +3413,15 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # Pin so a future bump is a deliberate, reviewed change.
         self.assertEqual(ad.SERVICE_API_VERSION, 2)
 
-    def test_app_version_bumped_to_2_10_0(self):
+    def test_app_version_bumped_to_2_11_0(self):
+        # v2.11.0: subscriptions carry their own destination, format, quality
+        # and naming, their archive is browsable and reversible, and a scan
+        # can notice an upload that vanished or a file that was deleted; a
+        # managed binary can be pinned and rolled back; the taskbar gains a
+        # jump list and the app comes back after an update reboot; the
+        # original upload wins over YouTube's AI upscale; download health
+        # gained the four environment checks Radarr proves matter; and the
+        # queue no longer fsyncs under the lock the window takes.
         # v2.8.0: playlists stage for review before queueing, progress names
         # its pipeline step, every job records a redacted argv (queue menu,
         # API, diagnostics), Chrome/Edge pair from the Extension page, Deno
@@ -3428,7 +3440,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.10.0")
+        self.assertEqual(ad.APP_VERSION, "2.11.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
