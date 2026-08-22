@@ -1078,7 +1078,7 @@ def _render_output_template_preview(template):
     template = template.replace("%%", literal_percent)
 
     def replace(match):
-        field, _pad, precision, conversion = match.groups()
+        field, pad, precision, conversion = match.groups()
         value = str(_OUTPUT_TEMPLATE_PREVIEW_VALUES.get(field, field))
         if precision:
             # `B` counts bytes, `s` counts characters. Reporting the character
@@ -1088,6 +1088,22 @@ def _render_output_template_preview(template):
                 truncate_utf8_bytes(value, int(precision))
                 if conversion == "B" else value[:int(precision)]
             )
+        # The pad was parsed and thrown away, and yt-dlp honours it: it is a
+        # minimum width, so it can only ever lengthen the component.
+        # `%(title)200.5B` renders five characters here and two hundred on
+        # disk, which is exactly how the length, oversizedComponents and
+        # too_long this preview feeds came to promise a path that fits.
+        if pad:
+            try:
+                width = int(pad)
+            except (TypeError, ValueError):
+                width = 0
+            if width > 0:
+                value = (
+                    value.rjust(width, "0")
+                    if pad.startswith("0") and conversion == "d"
+                    else value.rjust(width)
+                )
         return value
 
     return _OUTPUT_TOKEN_RE.sub(replace, template).replace(literal_percent, "%")

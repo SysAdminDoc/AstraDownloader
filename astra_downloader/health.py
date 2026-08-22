@@ -985,6 +985,10 @@ class ImpersonateTargetsProbe:
         self._ttl_seconds = max(0, float(ttl_seconds))
         self._value = None
         self._checked_at = 0.0
+        # See ExecutableVersionProbe: the subprocess runs with the lock
+        # released, so a probe started before a binary swap must not publish
+        # its answer after one.
+        self._generation = 0
         self._lock = threading.Lock()
 
     @staticmethod
@@ -1003,11 +1007,16 @@ class ImpersonateTargetsProbe:
                 and (now - self._checked_at) < self._ttl_seconds
             ):
                 return list(self._value)
+            generation = self._generation
         # Spawning yt-dlp outside the lock, as the other probes here do.
         targets = parse_impersonate_targets(
             self._runner([str(path), "--list-impersonate-targets"])
         )
         with self._lock:
+            if generation != self._generation:
+                # reset() ran while this was out, which is what a binary swap
+                # does. The answer describes a yt-dlp that is gone.
+                return list(self._value or ())
             self._value = targets
             self._checked_at = self._clock()
             return list(self._value)
@@ -1016,6 +1025,7 @@ class ImpersonateTargetsProbe:
         with self._lock:
             self._value = None
             self._checked_at = 0.0
+            self._generation += 1
 
 
 def _parse_ytdlp_release_date(version_string):
@@ -1298,6 +1308,12 @@ class ExecutableVersionProbe:
         self._has_value = False
         self._checked_at = 0.0
         self._in_flight = False
+        # Bumped by reset() and prime(). The I/O below runs with the condition
+        # released, so a probe that started before a binary was swapped could
+        # land afterwards and republish the old version for a whole TTL. It
+        # compares this on the way back in and drops its answer if the world
+        # moved.
+        self._generation = 0
         self._condition = threading.Condition()
 
     @staticmethod
@@ -1326,6 +1342,7 @@ class ExecutableVersionProbe:
                 if self._has_value:
                     return self._value
             self._in_flight = True
+            generation = self._generation
         # The executable probe can take several seconds on a cold cache. The
         # condition is released while it runs, so callers can wait on the
         # in-flight marker without blocking reset/prime operations.
@@ -1339,9 +1356,15 @@ class ExecutableVersionProbe:
                 value = None
         finally:
             with self._condition:
-                self._value = value
-                self._has_value = True
-                self._checked_at = self._clock()
+                if generation == self._generation:
+                    self._value = value
+                    self._has_value = True
+                    self._checked_at = self._clock()
+                else:
+                    # reset() or prime() ran while this was out. Answer with
+                    # what they left rather than with the binary that is no
+                    # longer installed.
+                    value = self._value
                 self._in_flight = False
                 self._condition.notify_all()
         return value
@@ -1351,6 +1374,7 @@ class ExecutableVersionProbe:
             self._value = None
             self._has_value = False
             self._checked_at = 0.0
+            self._generation += 1
 
     def prime(self, value, checked_at=None):
         """Publish a version already verified by an update transaction."""
@@ -1358,6 +1382,7 @@ class ExecutableVersionProbe:
             self._value = value
             self._has_value = True
             self._checked_at = self._clock() if checked_at is None else float(checked_at)
+            self._generation += 1
 
 
 class FfmpegCapabilitiesProbe:
@@ -1380,6 +1405,8 @@ class FfmpegCapabilitiesProbe:
         self._ttl_seconds = max(0, float(ttl_seconds))
         self._value = None
         self._checked_at = 0.0
+        # See ExecutableVersionProbe.
+        self._generation = 0
         self._lock = threading.Lock()
 
     def check(self, force=False):
@@ -1391,11 +1418,16 @@ class FfmpegCapabilitiesProbe:
                 and (now - self._checked_at) < self._ttl_seconds
             ):
                 return dict(self._value)
+            generation = self._generation
         # The version getter can invoke an executable probe. Keep that I/O
         # outside the capabilities-cache lock so concurrent health calls do
         # not wait for a cold ffmpeg subprocess.
         raw = self._version_getter()
         with self._lock:
+            if generation != self._generation and self._value is not None:
+                # reset() ran while the version getter was out, which is what
+                # a rollback does. Keep what it left.
+                return dict(self._value)
             now = self._clock()
             major = parse_ffmpeg_major(raw)
             if major is None:
@@ -1471,6 +1503,7 @@ class FfmpegCapabilitiesProbe:
         with self._lock:
             self._value = None
             self._checked_at = 0.0
+            self._generation += 1
 
 
 _OWNED_EXPORTS = {
