@@ -4381,7 +4381,11 @@ class MainWindowCore(
             self._value("DEFAULT_CONFIG")["DownloadPath"],
         )
         if error:
-            self.first_run_status.setText(error)
+            # Wrapped like every other message this function writes. The
+            # folder-policy strings live in config.py, which the extractor
+            # cannot reach, so this passes through today; it is the shape the
+            # rest of the file uses and the one that will work when they do.
+            self.first_run_status.setText(tr(str(error)))
             set_status_tone(self.first_run_status, "error")
             repolish(self.first_run_status)
             self.first_run_destination.setFocus(Qt.FocusReason.OtherFocusReason)
