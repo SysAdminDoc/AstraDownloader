@@ -1063,6 +1063,7 @@ def _register_subscriptions_routes(api, context, dependencies):
     # schema 2.
     SUBSCRIPTION_DELIVERY_FIELDS = (
         "outputDir", "format", "quality", "outputTemplate", "audioOnly",
+        "upgradeIfBetter",
     )
 
     def _subscription_delivery(body):

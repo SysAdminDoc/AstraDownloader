@@ -10,7 +10,7 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
-## [Unreleased]
+## [2.11.0] - 2026-08-22
 
 ### Changed
 

@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 PackageIdentifier: SysAdminDoc.AstraDownloader
-PackageVersion: 2.10.0
+PackageVersion: 2.11.0
 Platform:
 - Windows.Desktop
 MinimumOSVersion: 10.0.17763.0
 InstallerType: portable
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.10.0/AstraDownloader.exe
+  InstallerUrl: https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.11.0/AstraDownloader.exe
   InstallerSha256: 96803e74839dab398ab065d0f7ae8d31780968ed6788fe6e5dc101646628de28
 ManifestType: installer
 ManifestVersion: 1.12.0

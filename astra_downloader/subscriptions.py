@@ -517,6 +517,34 @@ class SubscriptionStore:
             ),
         }
 
+    # Everything an archive entry carries beyond the schema-1 set. Written
+    # verbatim by `_write_locked`, so a field missing from `_sanitize_archive`
+    # is written to disk and silently dropped on the next load — which is how
+    # upgrade detection and the missing-upstream flag stopped surviving a
+    # restart while every in-process test still passed.
+    _ARCHIVE_EXTRA_FIELDS = (
+        ("deliveredHeight", "int"),
+        ("upgradeTargetHeight", "int"),
+        ("filePath", "path"),
+        ("lastSeenAt", "time"),
+        ("missingUpstream", "bool"),
+    )
+
+    def _sanitize_archive_extras(self, raw):
+        extras = {}
+        for name, kind in self._ARCHIVE_EXTRA_FIELDS:
+            if name not in raw:
+                continue
+            if kind == "int":
+                extras[name] = _safe_nonnegative_int(raw.get(name))
+            elif kind == "path":
+                extras[name] = self._clean(raw.get(name), "", 4096)
+            elif kind == "time":
+                extras[name] = _finite_timestamp(raw.get(name), None)
+            else:
+                extras[name] = self._coerce_bool(raw.get(name), False)
+        return extras
+
     def _sanitize_archive(self, raw):
         if not isinstance(raw, dict):
             return {}
@@ -540,6 +568,7 @@ class SubscriptionStore:
                 "lastError": self._clean(value.get("lastError"), "", 500),
                 "attempts": _safe_nonnegative_int(value.get("attempts")),
                 "nextRetryAt": _finite_timestamp(value.get("nextRetryAt"), None),
+                **self._sanitize_archive_extras(value),
             }
             # Migrate pre-fix URL keys through the bounded hash form while
             # the full URL is still available in the archive value.
@@ -1003,6 +1032,10 @@ class SubscriptionStore:
                 "deliveredHeight": _safe_nonnegative_int(
                     (existing or {}).get("deliveredHeight")
                 ),
+                # What this reservation is reaching for. A completion that
+                # reports no height falls back to it, so an upgrade whose
+                # height yt-dlp did not print cannot re-trigger forever.
+                "upgradeTargetHeight": _safe_nonnegative_int(upgrade_height),
                 "filePath": self._clean((existing or {}).get("filePath"), "", 4096),
                 "lastSeenAt": _finite_timestamp(
                     (existing or {}).get("lastSeenAt"), None
@@ -1058,8 +1091,16 @@ class SubscriptionStore:
                     entry["completedAt"] = now
                     entry["nextRetryAt"] = None
                     height = _safe_nonnegative_int(delivered_height)
+                    if not height:
+                        # yt-dlp prints no height for an audio-only run, and
+                        # occasionally not at all. Falling back to what the
+                        # reservation was reaching for is what stops an
+                        # upgrade repeating on every scan.
+                        height = _safe_nonnegative_int(
+                            entry.get("upgradeTargetHeight"))
                     if height:
                         entry["deliveredHeight"] = height
+                    entry["upgradeTargetHeight"] = 0
                     path = self._clean(file_path, "", 4096)
                     if path:
                         entry["filePath"] = path
@@ -1581,12 +1622,17 @@ class SubscriptionManager:
 
 
     def _upgrade_height(self, subscription, key, candidate):
-        """The best height available for a video already in the archive.
+        """The height a re-fetch would actually deliver, if it beats the copy.
 
         Returns 0 — meaning "do not re-fetch" — unless the subscription asked
         for upgrades, the entry is a completed one with a recorded height, and
         a probe is wired up. The probe costs a metadata fetch per captured
         video per scan, which is why nothing here happens by default.
+
+        The available height is capped by the subscription's own quality
+        first. Without that, a subscription pinned to 720p against a 1080p
+        channel sees 1080 > 720 on every scan and re-downloads the same 720p
+        file forever.
         """
         if not subscription.get("upgradeIfBetter") or self._height_probe is None:
             return 0
@@ -1596,13 +1642,17 @@ class SubscriptionManager:
         if not _safe_nonnegative_int(entry.get("deliveredHeight")):
             return 0
         try:
-            return max(0, int(self._height_probe(candidate.get("url")) or 0))
+            available = max(0, int(self._height_probe(candidate.get("url")) or 0))
         except Exception as error:  # noqa: BLE001
             self._logger(
                 f"Could not check {candidate.get('title') or 'an upload'} for a "
                 f"better version: {error}"
             )
             return 0
+        cap = str(subscription.get("quality") or "").strip()
+        if cap.isdigit():
+            available = min(available, int(cap))
+        return available
 
     def _reserve_candidates(self, sub_id, candidates, now, subscription=None):
         """Claim every candidate. Returns the claimed keys and the tallies."""
@@ -1750,8 +1800,15 @@ class SubscriptionManager:
                 self.store.finish_scan(sub_id, error=message, now=now)
                 return {"id": sub_id, "queued": 0, "skipped": 0, "error": message}
 
+            raw_entries = list(entries) if isinstance(entries, (list, tuple)) else []
+            # The probe asks for one more than its limit, so "fewer than the
+            # limit came back" and "the source has exactly the limit" stop
+            # being the same observation. Judged on the RAW count: a single
+            # unusable entry dropped below would otherwise turn a truncated
+            # window into a claim that the whole source was seen.
+            complete_listing = len(raw_entries) <= self._probe_limit
             candidates = []
-            for entry in entries if isinstance(entries, (list, tuple)) else []:
+            for entry in raw_entries[:self._probe_limit]:
                 candidate = normalize_subscription_candidate(
                     entry,
                     normalize_url=self.store._normalize_url,
@@ -1783,7 +1840,7 @@ class SubscriptionManager:
                     sub_id,
                     [subscription_archive_key(candidate)
                      for candidate in candidates],
-                    complete_listing=len(candidates) < self._probe_limit,
+                    complete_listing=complete_listing,
                     now=now,
                 )
                 finished = self.store.finish_scan(

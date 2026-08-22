@@ -120,7 +120,7 @@ try:
         parse_netscape_cookies, registrable_domain, site_login_key,
         select_site_profile,
         Download, DownloadManagerCore,
-        DownloadQueueStore, YTDLPActivityRegistry,
+        DownloadQueueStore, YTDLPActivityRegistry, flush_all_persistence,
         PO_PROVIDER_NUDGE, PO_PROVIDER_NUDGE_CODES, po_provider_nudge_advice,
         apply_download_failure_classification, build_video_format_args,
         build_format_sort_args, group_playlist_selection,
@@ -269,7 +269,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         parse_netscape_cookies, registrable_domain, site_login_key,
         select_site_profile,
         Download, DownloadManagerCore,
-        DownloadQueueStore, YTDLPActivityRegistry,
+        DownloadQueueStore, YTDLPActivityRegistry, flush_all_persistence,
         PO_PROVIDER_NUDGE, PO_PROVIDER_NUDGE_CODES, po_provider_nudge_advice,
         apply_download_failure_classification, build_video_format_args,
         build_format_sort_args, group_playlist_selection,
@@ -362,7 +362,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.10.0"
+APP_VERSION = "2.11.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -841,7 +841,11 @@ def probe_subscription_uploads(
     args = [
         str(YTDLP_PATH), '--ignore-config', '--color', 'no_color', '--no-warnings',
         '--flat-playlist', '--dump-single-json', '--skip-download',
-        '--playlist-end', str(SUBSCRIPTION_PROBE_LIMIT),
+        # One more than the limit on purpose: the scheduler decides whether a
+        # scan saw the WHOLE source by comparing the count against the limit,
+        # and asking for exactly the limit makes "the source has 50 uploads"
+        # and "the source has 500 and we saw 50" the same observation.
+        '--playlist-end', str(SUBSCRIPTION_PROBE_LIMIT + 1),
     ]
     args += build_youtube_extractor_args(normalized)
     args += build_javascript_runtime_args(
@@ -896,7 +900,7 @@ def probe_subscription_uploads(
     entries = info.get('entries')
     if not isinstance(entries, list):
         entries = [info] if info.get('id') or info.get('url') else []
-    return entries[:SUBSCRIPTION_PROBE_LIMIT], None
+    return entries[:SUBSCRIPTION_PROBE_LIMIT + 1], None
 
 
 def spawn_media_process(args, **kwargs):
@@ -5866,7 +5870,6 @@ class MainWindow(MainWindowCore):
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
-                'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'output_template_preview': lambda *args, **kwargs: output_template_preview(*args, **kwargs),
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),

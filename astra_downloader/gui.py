@@ -3554,7 +3554,15 @@ class MainWindowCore(
             if not path:
                 continue
             try:
-                item["fileMissing"] = not Path(path).is_file()
+                # `os.stat`, not `Path.is_file()`: is_file swallows the
+                # "drive exists but is not ready" error and answers False, so
+                # an ejected USB stick would be reported as a deleted file —
+                # the one claim this must never make. Only FileNotFoundError
+                # is a deletion.
+                os.stat(path)
+                item["fileMissing"] = False
+            except FileNotFoundError:
+                item["fileMissing"] = True
             except OSError:
                 # reason: an unreachable drive is not proof the file was deleted
                 item["fileMissing"] = False

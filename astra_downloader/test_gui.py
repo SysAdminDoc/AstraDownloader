@@ -5914,5 +5914,64 @@ class WindowsShellIntegrationTests(unittest.TestCase):
             _retire_test_window(window)
 
 
+class SubscriptionArchiveViewTests(unittest.TestCase):
+    """What the archive dialog is allowed to claim about a file."""
+
+    def test_an_unreachable_drive_is_not_reported_as_a_deleted_file(self):
+        # Path.is_file() swallows "drive exists but is not ready" and answers
+        # False, so an ejected USB stick used to read as "the file is no
+        # longer on this machine" — the one claim this must never make.
+        _get_qapp_or_skip(self)
+        config = FakeConfig()
+        manager = ad.DownloadManager(config, FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(config, manager, FakeHistory())
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                present = Path(tmpdir) / "here.mp4"
+                present.write_bytes(b"downloaded")
+                page = {"total": 3, "offset": 0, "items": [
+                    {"key": "id:1", "title": "Here", "status": "complete",
+                     "filePath": str(present)},
+                    {"key": "id:2", "title": "Deleted", "status": "complete",
+                     "filePath": str(Path(tmpdir) / "gone.mp4")},
+                    {"key": "id:3", "title": "Unplugged", "status": "complete",
+                     "filePath": str(Path(tmpdir) / "not-ready.mp4")},
+                ]}
+                manager_double = types.SimpleNamespace(
+                    get_subscription=lambda _sub_id: {"id": "s", "title": "T"},
+                    archive_page=lambda _sub_id: page,
+                    forget_archive_entry=lambda _key: (True, ""),
+                    stop=lambda: None,
+                )
+                window._dependencies['subscription_manager'] = manager_double
+
+                real_stat = os.stat
+
+                def stat(path, *args, **kwargs):
+                    # ERROR_NOT_READY, which a drive with no media in it
+                    # raises. It cannot be produced on demand here, and it is
+                    # the one Path.is_file() swallows into a plain False.
+                    if str(path).endswith("not-ready.mp4"):
+                        raise OSError(5, "The device is not ready", str(path), 21)
+                    return real_stat(path, *args, **kwargs)
+
+                with mock.patch.object(ad.SubscriptionArchiveDialog, "exec",
+                                       lambda _self: None), \
+                        mock.patch.object(ad.os, "stat", stat):
+                    self.assertTrue(window._open_subscription_archive("s"))
+                by_key = {item["key"]: item for item in page["items"]}
+                self.assertFalse(by_key["id:1"]["fileMissing"])
+                self.assertTrue(by_key["id:2"]["fileMissing"])
+                self.assertFalse(
+                    by_key["id:3"]["fileMissing"],
+                    "an unreachable drive is not proof of a deletion",
+                )
+        finally:
+            _retire_test_window(window)
+
+
 if __name__ == "__main__":
     unittest.main()

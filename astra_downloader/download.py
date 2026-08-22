@@ -3954,6 +3954,9 @@ class DownloadManagerCore:
                 # Re-normalized on restore rather than trusted: the queue file
                 # is on disk and a name written by an older, laxer build (or by
                 # hand) must not become an output path after a restart.
+                output_template=self._dependencies['normalize_output_template'](
+                    item.get('outputTemplate')
+                ),
                 output_name=self._dependencies['normalize_output_name'](
                     item.get('outputName')
                 ),
@@ -4033,7 +4036,11 @@ class DownloadManagerCore:
             return
         with self._persist_lock:
             self._persist_pending = payload
-        self._persist_idle.clear()
+            # Cleared under the same lock that sets the payload. Outside it,
+            # a flush landing between the two statements sees the flag the
+            # writer left set on its last drain and returns having written
+            # nothing — which is exactly the snapshot cancel_all flushes for.
+            self._persist_idle.clear()
         self._persist_ready.set()
         self._start_persist_writer()
 
@@ -4090,9 +4097,15 @@ class DownloadManagerCore:
 
     def flush_persistence(self, timeout=5.0):
         """Wait for any deferred queue write to reach disk."""
-        if self._persist_thread is None:
+        with self._persist_lock:
+            pending = self._persist_pending is not None
+        if not pending and self._persist_thread is None:
             return True
+        # A payload queued while the writer was retiring has no live thread
+        # until someone starts one, and the flusher is as good a someone as
+        # the producer.
         self._persist_ready.set()
+        self._start_persist_writer()
         return self._persist_idle.wait(max(0.0, float(timeout)))
 
     def _capacity_locked(self):
