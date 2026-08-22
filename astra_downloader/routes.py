@@ -188,6 +188,9 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'evaluate_sabr_support',
     'evaluate_preflight_checks',
     'get_preflight_ffmpeg_capabilities',
+    'get_preflight_output_folder',
+    'get_preflight_state_location',
+    'get_system_clock_state',
     'get_github_api_budget',
     'describe_media_url_block',
     'is_youtube_url',
@@ -1328,6 +1331,9 @@ def _register_system_routes(api, context, dependencies):
     evaluate_sabr_support = dependencies["evaluate_sabr_support"]
     evaluate_preflight_checks = dependencies["evaluate_preflight_checks"]
     get_preflight_ffmpeg_capabilities = dependencies["get_preflight_ffmpeg_capabilities"]
+    get_preflight_output_folder = dependencies["get_preflight_output_folder"]
+    get_preflight_state_location = dependencies["get_preflight_state_location"]
+    get_system_clock_state = dependencies["get_system_clock_state"]
     get_github_api_budget = dependencies["get_github_api_budget"]
     normalize_extension_origin = dependencies["normalize_extension_origin"]
     is_extension_origin_shape = dependencies["is_extension_origin_shape"]
@@ -1417,6 +1423,11 @@ def _register_system_routes(api, context, dependencies):
             # empty, non-blocking sign-in surface until the GUI can repair it.
             # reason: the pre-flight must not expose a persistence exception or the names of stored sites
             sign_in_entries = []
+        try:
+            site_refusals = dl_manager.refusing_sites()
+        except Exception:
+            # reason: the pre-flight must not expose a manager exception or the names of refusing sites
+            site_refusals = []
         resp["preflight"] = evaluate_preflight_checks(
             ytdlp_version=ytdlp_version,
             ffmpeg_capabilities=ffmpeg_capabilities,
@@ -1424,6 +1435,10 @@ def _register_system_routes(api, context, dependencies):
             sign_in_entries=sign_in_entries,
             github_api_budget=get_github_api_budget(),
             po_token_provider=po_token_provider,
+            output_folder=get_preflight_output_folder(config),
+            state_location=get_preflight_state_location(),
+            site_refusals=site_refusals,
+            system_clock=get_system_clock_state(),
         )
         # The snapshot carries every subscribed channel URL and title, which is
         # a list of what this user follows — the same class of thing as

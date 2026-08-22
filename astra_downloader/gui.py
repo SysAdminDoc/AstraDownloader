@@ -153,7 +153,9 @@ class ReadinessProbe(QObject):
                  impersonate_targets=None, whisper_model_state=None,
                  whisper_runtime_state=None, readiness_sink=None,
                  preflight_evaluator=None, ffmpeg_capabilities=None,
-                 sign_in_entries=None, github_api_budget=None):
+                 sign_in_entries=None, github_api_budget=None,
+                 output_folder=None, state_location=None,
+                 site_refusals=None, system_clock=None):
         super().__init__()
         self.configured_runtime = configured_runtime
         self._runtime_probe = runtime_probe
@@ -169,6 +171,19 @@ class ReadinessProbe(QObject):
         self._ffmpeg_capabilities = ffmpeg_capabilities
         self._sign_in_entries = sign_in_entries
         self._github_api_budget = github_api_budget
+        self._output_folder = output_folder
+        self._state_location = state_location
+        self._site_refusals = site_refusals
+        self._system_clock = system_clock
+
+    def _environment_probe(self, probe, label):
+        if probe is None:
+            return None
+        try:
+            return probe()
+        except Exception as error:
+            self._logger(f"{label} pre-flight failed: {error}")
+            return None
 
     def run(self):
         try:
@@ -223,6 +238,16 @@ class ReadinessProbe(QObject):
                         sign_in_entries=sign_in_entries,
                         github_api_budget=github_api_budget,
                         po_token_provider=provider,
+                        # An environment probe that raises leaves its own check
+                        # unmeasured rather than taking the pre-flight down.
+                        output_folder=self._environment_probe(
+                            self._output_folder, "Download folder"),
+                        state_location=self._environment_probe(
+                            self._state_location, "Settings storage"),
+                        site_refusals=self._environment_probe(
+                            self._site_refusals, "Site refusals"),
+                        system_clock=self._environment_probe(
+                            self._system_clock, "System clock"),
                     )
                 except Exception as error:
                     self._logger(f"Pre-flight evaluation failed: {error}")
@@ -888,6 +913,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_playlist_date',
     'normalize_impersonate_target',
     'probe_impersonate_targets',
+    'probe_output_folder',
     'normalize_proxy',
     'normalize_force_ip_version',
     'normalize_source_address',
@@ -1861,6 +1887,10 @@ class MainWindowCore(
                 "refresh-sign-in": "Open sign-ins",
                 "retry-github": "Try again later",
                 "use-sign-in": "Open sign-ins",
+                "choose-output-folder": "Choose a folder",
+                "review-state-location": "Open settings",
+                "review-site-refusals": "Open sign-ins",
+                "sync-system-clock": "Check the clock",
             }
             button.setText(tr(action_labels.get(str(action), "Fix")))
         button.setEnabled(status not in {"ok", "not-applicable"})
@@ -1912,7 +1942,11 @@ class MainWindowCore(
                 ).format(count=warnings)
             tone = "warning"
         else:
-            message = tr("All six checks passed. Downloads are ready.")
+            # Not "all six": the row set grows, and a count written into the
+            # sentence goes stale silently the next time it does.
+            message = tr("All {count} checks passed. Downloads are ready.").format(
+                count=len(statuses)
+            )
             tone = "success"
         summary.setText(message)
         set_status_tone(summary, tone)
@@ -1956,6 +1990,39 @@ class MainWindowCore(
         if action in {"refresh-sign-in", "use-sign-in"}:
             self._nav_click("Sign-ins")
             return
+        if action == "choose-output-folder":
+            self._nav_click("Settings")
+            self._show_settings_status(
+                tr("Choose a download folder this machine can write to."),
+                "warning",
+            )
+            return
+        if action == "review-state-location":
+            self._nav_click("Settings")
+            self._show_settings_status(
+                tr(
+                    "Settings, queue and history live at {path}. Copy that "
+                    "folder before replacing this build."
+                ).format(path=self._value('INSTALL_DIR')),
+                "warning",
+            )
+            return
+        if action == "review-site-refusals":
+            self._nav_click("Sign-ins")
+            self._append_log(
+                "A site refused repeatedly; downloads to it are paused."
+            )
+            return
+        if action == "sync-system-clock":
+            self._show_settings_status(
+                tr(
+                    "This machine's clock is out of step. Turn on automatic "
+                    "time in Windows Settings, then re-check."
+                ),
+                "warning",
+            )
+            self._append_log("System clock drift can expire sign-ins early.")
+            return
         if action == "retry-github":
             self._show_settings_status(
                 tr("GitHub's anonymous budget is exhausted; retry after its reset."),
@@ -1972,6 +2039,14 @@ class MainWindowCore(
             'sign_in_entries': lambda: (
                 self.dl_manager.site_logins.entries()
                 if getattr(self.dl_manager, 'site_logins', None) is not None
+                else []
+            ),
+            'output_folder': lambda: self._dependencies['probe_output_folder'](
+                self.config.get('DownloadPath', '')
+            ),
+            'site_refusals': lambda: (
+                self.dl_manager.refusing_sites()
+                if callable(getattr(self.dl_manager, 'refusing_sites', None))
                 else []
             ),
         }

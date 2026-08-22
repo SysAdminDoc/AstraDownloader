@@ -1,7 +1,9 @@
 """Import-safe runtime health policy and compatibility boundary."""
 
+import email.utils
 import hashlib
 import hmac
+import os
 import re
 import subprocess
 import threading
@@ -46,6 +48,10 @@ __all__ = (
     "probe_javascript_execution", "evaluate_javascript_runtime",
     "REQUIRED_FFMPEG_FILTERS", "missing_ffmpeg_filters",
     "YTDLP_STALE_AFTER_DAYS", "evaluate_preflight_checks",
+    "probe_output_folder", "probe_state_location",
+    "parse_http_date_epoch", "measure_system_clock_offset",
+    "SYSTEM_CLOCK_WARN_SECONDS", "SYSTEM_CLOCK_ERROR_SECONDS",
+    "SITE_LONG_TERM_REFUSAL_SECONDS",
 )
 
 YTDLP_EXTERNAL_RUNTIME_CUTOFF = (2026, 4, 1)
@@ -240,6 +246,141 @@ def missing_ffmpeg_filters(output, required=REQUIRED_FFMPEG_FILTERS):
     return [name for name in required if str(name) not in available]
 
 
+# Radarr's 33 named health checks are the field's best-tested list of
+# environment problems that present as download problems. Four of them map
+# onto failure classes this program has already met: state living where an
+# update overwrites it, an output folder that is gone or read-only, a site
+# refusing for an extended period rather than one download failing, and a
+# clock far enough out to break TLS validation and cookie expiry.
+#
+# Every probe below is I/O the caller owns; `evaluate_preflight_checks` stays
+# pure and never learns a path.
+SYSTEM_CLOCK_WARN_SECONDS = 5 * 60
+SYSTEM_CLOCK_ERROR_SECONDS = 24 * 60 * 60
+SITE_LONG_TERM_REFUSAL_SECONDS = 60 * 60
+
+
+def probe_output_folder(path):
+    """Report whether the configured download folder accepts a write now.
+
+    `.exists()` is not the question. A folder on a disconnected network or
+    removable drive, and one whose ACLs were tightened after it was chosen,
+    both fail at the first download with a yt-dlp error that names neither
+    cause. The probe writes a zero-byte file and removes it.
+    """
+    text = str(path or '').strip()
+    if not text:
+        return {'configured': False, 'exists': False, 'writable': False}
+    target = Path(text)
+    try:
+        exists = target.is_dir()
+    except OSError:
+        # reason: an unreachable UNC path raises rather than returning False
+        exists = False
+    if not exists:
+        return {'configured': True, 'exists': False, 'writable': False}
+    probe = target / f'.astra-write-probe-{os.getpid()}'
+    try:
+        with open(probe, 'wb'):
+            pass
+    except OSError:
+        return {'configured': True, 'exists': True, 'writable': False}
+    finally:
+        try:
+            probe.unlink()
+        except OSError:
+            # reason: the probe file never existed, or something else removed it
+            pass
+    return {'configured': True, 'exists': True, 'writable': True}
+
+
+def _protected_program_roots():
+    roots = []
+    for name in ('ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432'):
+        value = str(os.environ.get(name, '') or '').strip()
+        if value:
+            roots.append(value)
+    return roots
+
+
+def probe_state_location(state_dir, *, portable=False, protected_roots=None):
+    """Report whether settings, queue and history survive the next update.
+
+    A portable copy keeps its state beside the executable, so replacing that
+    folder with a newer build takes the config, queue and history with it.
+    A copy unpacked under Program Files has the second half of the problem:
+    the writes need elevation, and without it Windows either refuses them or
+    redirects them somewhere the next launch will not look.
+    """
+    roots = _protected_program_roots() if protected_roots is None else list(protected_roots)
+    target = Path(str(state_dir or '.'))
+    protected = any(_path_is_inside(target, root) for root in roots if str(root or '').strip())
+    try:
+        exists = target.is_dir()
+    except OSError:
+        exists = False
+    writable = False
+    if exists:
+        probe = target / f'.astra-state-probe-{os.getpid()}'
+        try:
+            with open(probe, 'wb'):
+                pass
+            writable = True
+        except OSError:
+            writable = False
+        finally:
+            try:
+                probe.unlink()
+            except OSError:
+                # reason: the probe file never existed, or something else removed it
+                pass
+    return {
+        'portable': bool(portable),
+        'exists': exists,
+        'writable': writable,
+        'protected': protected,
+    }
+
+
+def _path_is_inside(path, root):
+    try:
+        Path(path).resolve().relative_to(Path(root).resolve())
+        return True
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def parse_http_date_epoch(value):
+    """Return the epoch seconds an RFC 7231 `Date` header names, or None."""
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        parsed = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    try:
+        return parsed.timestamp()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def measure_system_clock_offset(date_header, local_epoch=None):
+    """Compare this machine's clock against a server's `Date` header.
+
+    Positive means the local clock runs ahead. The header arrives on requests
+    the app already makes, so this costs nothing extra, and it is the only
+    reference available to a program with no NTP client of its own.
+    """
+    server_epoch = parse_http_date_epoch(date_header)
+    if server_epoch is None:
+        return None
+    now = time.time() if local_epoch is None else float(local_epoch)
+    return {'measured': True, 'offsetSeconds': now - server_epoch}
+
+
 def _preflight_now_date(value):
     if value is None:
         return date.today()
@@ -270,6 +411,8 @@ def _preflight_check(check_id, name, status, action, message, **details):
 def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
                               javascript_runtime=None, sign_in_entries=None,
                               github_api_budget=None, po_token_provider=None,
+                              output_folder=None, state_location=None,
+                              site_refusals=None, system_clock=None,
                               now=None):
     """Classify known download prerequisites without performing I/O.
 
@@ -473,6 +616,157 @@ def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
             "use-sign-in",
             "The proof-of-origin token provider cannot mint a session-bound token; use a site sign-in or retry later.",
         ))
+
+    folder = output_folder if isinstance(output_folder, dict) else None
+    if folder is None:
+        checks.append(_preflight_check(
+            "output-folder", "Download folder", "unknown", "choose-output-folder",
+            "The download folder has not been checked yet.",
+        ))
+    elif not folder.get("configured"):
+        checks.append(_preflight_check(
+            "output-folder", "Download folder", "error", "choose-output-folder",
+            "No download folder is set; choose one before starting a download.",
+            configured=False,
+        ))
+    elif not folder.get("exists"):
+        checks.append(_preflight_check(
+            "output-folder", "Download folder", "error", "choose-output-folder",
+            "The download folder is missing, or the drive holding it is not connected.",
+            configured=True, exists=False,
+        ))
+    elif not folder.get("writable"):
+        checks.append(_preflight_check(
+            "output-folder", "Download folder", "error", "choose-output-folder",
+            "The download folder exists but will not accept a write; choose another one.",
+            configured=True, exists=True, writable=False,
+        ))
+    else:
+        checks.append(_preflight_check(
+            "output-folder", "Download folder", "ok", "choose-output-folder",
+            "The download folder exists and accepts a write.",
+            configured=True, exists=True, writable=True,
+        ))
+
+    location = state_location if isinstance(state_location, dict) else None
+    if location is None:
+        checks.append(_preflight_check(
+            "state-location", "Settings and queue storage", "unknown",
+            "review-state-location",
+            "Where settings, queue and history live has not been checked yet.",
+        ))
+    elif location.get("writable") is not True:
+        checks.append(_preflight_check(
+            "state-location", "Settings and queue storage", "error",
+            "review-state-location",
+            "Settings, queue and history cannot be written; nothing this session "
+            "changes will survive a restart.",
+            writable=False, portable=bool(location.get("portable")),
+            protected=bool(location.get("protected")),
+        ))
+    elif location.get("protected"):
+        checks.append(_preflight_check(
+            "state-location", "Settings and queue storage", "warning",
+            "review-state-location",
+            "This copy stores its settings under a protected program folder, "
+            "where Windows may redirect or refuse the writes.",
+            writable=True, protected=True,
+            portable=bool(location.get("portable")),
+        ))
+    elif location.get("portable"):
+        checks.append(_preflight_check(
+            "state-location", "Settings and queue storage", "warning",
+            "review-state-location",
+            "Settings, queue and history live beside the program, so replacing "
+            "this folder with a newer build erases them. Copy them first.",
+            writable=True, portable=True, protected=False,
+        ))
+    else:
+        checks.append(_preflight_check(
+            "state-location", "Settings and queue storage", "ok",
+            "review-state-location",
+            "Settings, queue and history live outside the program folder and an "
+            "update leaves them alone.",
+            writable=True, portable=False, protected=False,
+        ))
+
+    refusals = site_refusals if isinstance(site_refusals, (list, tuple)) else None
+    if refusals is None:
+        checks.append(_preflight_check(
+            "site-availability", "Site availability", "not-applicable",
+            "review-site-refusals",
+            "Repeated site refusals have not been checked yet.",
+        ))
+    else:
+        open_count = 0
+        longest = 0.0
+        for entry in refusals:
+            if not isinstance(entry, dict):
+                continue
+            open_count += 1
+            try:
+                longest = max(longest, float(entry.get("openForSeconds") or 0.0))
+            except (TypeError, ValueError, OverflowError):
+                # reason: a malformed streak still counts as one refusing site
+                pass
+        long_term = longest >= SITE_LONG_TERM_REFUSAL_SECONDS
+        if not open_count:
+            checks.append(_preflight_check(
+                "site-availability", "Site availability", "not-applicable",
+                "review-site-refusals",
+                "No site is refusing downloads.", refusingSites=0,
+            ))
+        else:
+            checks.append(_preflight_check(
+                "site-availability", "Site availability", "warning",
+                "review-site-refusals",
+                (
+                    f"{open_count} site(s) have refused every attempt for over "
+                    f"{int(longest // 3600)} hour(s); a sign-in or a long pause is "
+                    "more use than another retry."
+                    if long_term else
+                    f"{open_count} site(s) refused repeatedly, so downloads to them are paused."
+                ),
+                refusingSites=open_count,
+                longestStreakSeconds=int(longest),
+                longTerm=long_term,
+            ))
+
+    clock = system_clock if isinstance(system_clock, dict) else None
+    if clock is None or clock.get("measured") is not True:
+        # Not "unknown": the reading rides along on responses the app already
+        # makes, so before the first one there is nothing the user could do
+        # about it and nothing to draw their attention to.
+        checks.append(_preflight_check(
+            "system-clock", "System clock", "not-applicable", "sync-system-clock",
+            "No server response has arrived yet to compare this machine's clock against.",
+        ))
+    else:
+        try:
+            offset = float(clock.get("offsetSeconds") or 0.0)
+        except (TypeError, ValueError, OverflowError):
+            offset = 0.0
+        drift = abs(offset)
+        if drift >= SYSTEM_CLOCK_ERROR_SECONDS:
+            checks.append(_preflight_check(
+                "system-clock", "System clock", "error", "sync-system-clock",
+                f"This machine's clock is {int(drift // 3600)} hour(s) out, which "
+                "breaks certificate validation and expires cookies early.",
+                offsetSeconds=int(offset),
+            ))
+        elif drift >= SYSTEM_CLOCK_WARN_SECONDS:
+            checks.append(_preflight_check(
+                "system-clock", "System clock", "warning", "sync-system-clock",
+                f"This machine's clock is {int(drift // 60)} minute(s) out; stored "
+                "sign-ins may look expired before they are.",
+                offsetSeconds=int(offset),
+            ))
+        else:
+            checks.append(_preflight_check(
+                "system-clock", "System clock", "ok", "sync-system-clock",
+                "This machine's clock agrees with the server it was compared against.",
+                offsetSeconds=int(offset),
+            ))
 
     blocking = [item["id"] for item in checks if item["status"] == "error"]
     attention = [

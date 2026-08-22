@@ -27,6 +27,10 @@ _PREFLIGHT_ROW_SPECS = (
     ("sign-in-expiry", "Stored sign-in expiry", "refresh-sign-in"),
     ("github-api-budget", "Anonymous GitHub API budget", "retry-github"),
     ("po-token-provider", "Proof-of-origin token provider", "use-sign-in"),
+    ("output-folder", "Download folder", "choose-output-folder"),
+    ("state-location", "Settings and queue storage", "review-state-location"),
+    ("site-availability", "Site availability", "review-site-refusals"),
+    ("system-clock", "System clock", "sync-system-clock"),
 )
 
 
@@ -411,7 +415,7 @@ class DownloadPageMixin:
         preflight_header.addWidget(self.btn_preflight_toggle)
         preflight_layout.addLayout(preflight_header)
         self.preflight_summary = make_label(
-            "Checking six common download blockers...",
+            "Checking the common causes of a failed download...",
             "fieldHint",
             word_wrap=True,
         )

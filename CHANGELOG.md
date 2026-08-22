@@ -14,6 +14,15 @@ repository's git log.
 
 ### Added
 
+- **Four more pre-flight checks, taken from Radarr's list.** Download health
+  now also reports whether the download folder exists and accepts a write,
+  whether settings and the queue live somewhere an update would erase, how
+  many sites are refusing every attempt and for how long, and whether this
+  machine's clock has drifted far enough to break certificate checks and
+  expire stored sign-ins early. Each has its own repair button, and each
+  appears on `/health` too. The clock reading comes off the `Date` header of
+  requests the app already makes, so it costs nothing.
+
 - **The original upload wins over YouTube's AI upscale.** YouTube serves
   AI-upscaled renditions that sort above the creator's own file on resolution
   alone. Format preferences carries a new "Prefer the original upload over an

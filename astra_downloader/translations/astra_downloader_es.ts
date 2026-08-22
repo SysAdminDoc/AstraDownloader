@@ -731,6 +731,14 @@
       <translation>{open_label} {name}</translation>
     </message>
     <message>
+      <source>Choose a download folder this machine can write to.</source>
+      <translation>Choose a download folder this machine can write to.</translation>
+    </message>
+    <message>
+      <source>This machine's clock is out of step. Turn on automatic time in Windows Settings, then re-check.</source>
+      <translation>This machine's clock is out of step. Turn on automatic time in Windows Settings, then re-check.</translation>
+    </message>
+    <message>
       <source>GitHub's anonymous budget is exhausted; retry after its reset.</source>
       <translation>GitHub's anonymous budget is exhausted; retry after its reset.</translation>
     </message>
@@ -1267,10 +1275,6 @@
       <translation>One check needs repair. Open the checks to see the fix.</translation>
     </message>
     <message>
-      <source>All six checks passed. Downloads are ready.</source>
-      <translation>All six checks passed. Downloads are ready.</translation>
-    </message>
-    <message>
       <source>{target} (unavailable)</source>
       <translation>{target} (unavailable)</translation>
     </message>
@@ -1555,6 +1559,10 @@
       <translation>One check needs attention. Downloads can still be available.</translation>
     </message>
     <message>
+      <source>Settings, queue and history live at {path}. Copy that folder before replacing this build.</source>
+      <translation>Settings, queue and history live at {path}. Copy that folder before replacing this build.</translation>
+    </message>
+    <message>
       <source>Runtime floor</source>
       <translation>Runtime floor</translation>
     </message>
@@ -1665,6 +1673,10 @@
     <message>
       <source>{count} checks need repair. Open the checks to see the fixes.</source>
       <translation>{count} checks need repair. Open the checks to see the fixes.</translation>
+    </message>
+    <message>
+      <source>All {count} checks passed. Downloads are ready.</source>
+      <translation>All {count} checks passed. Downloads are ready.</translation>
     </message>
     <message>
       <source>{runtime} {version} is below the security floor {floor}; update it before downloading.</source>
@@ -1787,8 +1799,8 @@
       <translation>Last 30 s</translation>
     </message>
     <message>
-      <source>Checking six common download blockers...</source>
-      <translation>Checking six common download blockers...</translation>
+      <source>Checking the common causes of a failed download...</source>
+      <translation>Checking the common causes of a failed download...</translation>
     </message>
     <message>
       <source>Restore</source>
@@ -2015,6 +2027,22 @@
       <translation>Proof-of-origin token provider</translation>
     </message>
     <message>
+      <source>Download folder</source>
+      <translation>Download folder</translation>
+    </message>
+    <message>
+      <source>Settings and queue storage</source>
+      <translation>Settings and queue storage</translation>
+    </message>
+    <message>
+      <source>Site availability</source>
+      <translation>Site availability</translation>
+    </message>
+    <message>
+      <source>System clock</source>
+      <translation>System clock</translation>
+    </message>
+    <message>
       <source>refresh-ytdlp</source>
       <translation>refresh-ytdlp</translation>
     </message>
@@ -2037,6 +2065,22 @@
     <message>
       <source>use-sign-in</source>
       <translation>use-sign-in</translation>
+    </message>
+    <message>
+      <source>choose-output-folder</source>
+      <translation>choose-output-folder</translation>
+    </message>
+    <message>
+      <source>review-state-location</source>
+      <translation>review-state-location</translation>
+    </message>
+    <message>
+      <source>review-site-refusals</source>
+      <translation>review-site-refusals</translation>
+    </message>
+    <message>
+      <source>sync-system-clock</source>
+      <translation>sync-system-clock</translation>
     </message>
     <message>
       <source>Clear history</source>

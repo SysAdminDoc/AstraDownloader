@@ -40,13 +40,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: with the sidecar running, a video that previously failed `po-token-required` succeeds; with it absent, behaviour and the named cause are unchanged; no yt-dlp plugin directory is enabled. *Needs live validation that a self-minted token is accepted on the pinned 2026.7.4.*
   Complexity: L
 
-- [ ] P2 — AD-32 — Extend the health-check set with the checks Radarr proves matter
-  Why: the pre-flight panel checks download preconditions; Radarr's 33 named checks cover the *environment*, and three map onto known bug classes here — state living where the updater will wipe it (`AppDataLocationCheck`, the portable-mode class), a site failing for an extended period rather than one download failing (`IndexerLongTermStatusCheck`, the right shape for bot-gating), and clock skew breaking TLS and cookie expiry (`SystemTimeCheck`). Output folder missing/unwritable/on a disconnected drive is the same family.
-  Evidence: https://github.com/Radarr/Radarr/tree/develop/src/NzbDrone.Core/HealthCheck/Checks; `astra_downloader/health.py`; existing per-domain refusal circuits in `download.py`.
-  Touches: `astra_downloader/health.py`, `gui_download_page.py`
-  Acceptance: each new check is a named class with its own remedy action, surfaced in the same panel; a test drives each into its failing state.
-  Complexity: M
-
 - [ ] P2 — AD-33 — Split the test monolith and run it in parallel
   Why: `test_astra_downloader.py` is 21,137 lines holding 951 of 964 tests, and the suite runs 964 tests + 610 subtests in 545 s serially with no `pytest-xdist`. Every change pays that.
   Evidence: measured 2026-08-14; `pytest.ini` has no parallel configuration.
@@ -67,6 +60,13 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: `astra_downloader/subscriptions.py`, `gui_subscriptions_page.py`, `gui_history_page.py`
   Acceptance: a scan that no longer sees a previously-archived item marks it, without deleting anything; a locally-deleted file is not silently re-fetched; both states are visible and reversible. Depends on AD-25.
   Complexity: M
+
+- [ ] P2 — AD-57 — Translate the pre-flight repair button labels
+  Why: `_set_preflight_row` picks its button text from an `action_labels` dict and calls `tr(action_labels.get(...))`. The extractor only sees string *literals* inside a translating call, so a `.get()` result is invisible and none of the ten repair buttons ("Refresh yt-dlp", "Provision runtime", "Choose a folder", ...) reach any catalogue. The German window shows English buttons in an otherwise translated panel.
+  Evidence: `astra_downloader/gui.py` `_set_preflight_row`; CLAUDE.md 2026-08-11 "A module-level string constant is invisible to the i18n extractor"; found while landing AD-32.
+  Touches: `astra_downloader/gui.py`, `scripts/build-companion-translations.py`
+  Acceptance: every repair button label is declared in all eleven catalogues, and a German render capture shows a translated button; a test fails if a new action code arrives without one.
+  Complexity: S
 
 ### P3
 
