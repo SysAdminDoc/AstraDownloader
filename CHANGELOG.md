@@ -10,6 +10,100 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [2.12.0] - 2026-08-22
+
+An audit pass. Nothing here is a new feature; it is a list of things that were
+quietly wrong.
+
+### Fixed
+
+- **A history date now filters the way it reads.** The saved-date boxes compare
+  what you type against the date stored on each row, as text, and nothing
+  checked what you typed. So `2026-8-1` sorted after `2026-08-22` and hid the
+  whole list, an American-format date hid it too, and so did half a date on the
+  way to typing a whole one. All you saw was the ordinary "no matching
+  downloads" panel. Dates are read properly now: one that is not a date is
+  ignored, the box it came from is marked, and the page says so. A range whose
+  start is after its end says that instead of looking like no results. The API
+  had a check, but it accepted `2026-8-1` and then answered 200 with an empty
+  page; it does the same thing the window does now.
+
+- **A routine yt-dlp warning no longer decides why a download failed.** yt-dlp
+  prints "YouTube is forcing SABR streaming for this client" as a warning on
+  ordinary runs. The failure path read the last thirty lines as one string
+  after it had already worked out the real cause, so a video that needed a
+  sign-in was reported as a SABR limitation: wrong advice, the real message
+  thrown away, and no Retry button, because that state has no retry.
+
+- **A retry starts a clean run.** Three things yt-dlp reports about a run were
+  never cleared when you retried it. The damaging one meant a first attempt
+  that printed the SABR warning and failed could be retried, download the file,
+  and be marked failed anyway, in a state with no way out. The other two skipped
+  the subtitle generation the retry was for, and left a subscription comparing
+  its next upgrade against a height from a run that failed.
+
+- **The cleanup after a download stops deleting files it did not write.** One
+  of the four patterns it swept matched `Movie.f1080p.WEB-DL.mp4` when a
+  download called `Movie.mp4` finished in the same folder. That is a name a
+  person gives a file, in the user's own download folder.
+
+- **A subscription's folder is checked when you set it.** An unusable one used
+  to fail on the next scan, and then once per video from then on, while the
+  subscription itself looked configured and simply never delivered.
+
+- **Rolling a tool back sticks.** A version check already running against the
+  old copy could land after the rollback and put the old version back for an
+  hour.
+
+- **The naming-template preview reports the length yt-dlp will write.** It
+  parsed the width in a template like `%(title)200.5s` and threw it away, so it
+  showed five characters where yt-dlp writes two hundred, and told you a path
+  fitted when it did not.
+
+- **Settings tell you what is wrong with a field.** A rejected field turned its
+  border a slightly redder shade and the page said "Check the highlighted
+  fields before saving." The reason was written where only a screen reader
+  could reach it. It is on the field and in the status line now.
+
+- **Exporting settings no longer records a port you never chose.** When the
+  configured port is busy, the app picks another one for that session only. An
+  export taken in that session wrote the temporary port into the file as your
+  setting, and importing it made it permanent.
+
+- **Removing a sign-in cannot leave a cookie jar behind.** If the file could not
+  be deleted, the entry was already gone from the index, so the jar stayed on
+  disk with nothing listing it and no way to try again.
+
+### Changed
+
+- **A finished download has a More button.** Play, delete the file, copy the
+  link, copy the error, download again and view the command were only ever
+  reachable by right-clicking the row, with nothing on screen saying so and no
+  way to get there from the keyboard.
+
+- **The light theme was derived one colour at a time,** which let an earlier
+  substitution be rewritten by a later one. The scrollbar handle ended up the
+  same colour as its own hover, and it wore the hover colour at rest. Row hover
+  did nothing at all in the light theme, because the hover colour and the card
+  behind it both came out white. A cancelled or skipped download rendered like
+  a pending one. A row that took the keyboard focus drew nothing. A rejected
+  site-profiles document was marked in a way nothing drew.
+
+- **Two light-theme colours were below the contrast floor the dark theme
+  clears:** the running-server indicator in the sidebar, and the label on every
+  primary button. A checked checkbox drew its focus ring on top of its own
+  fill, at 1.5:1.
+
+- **One capitalisation convention.** Ten Title Case strings against 237
+  sentence-case ones, six of them naming an action a sentence-case string
+  already named. The Sign-ins page labels its username and password boxes
+  instead of relying on placeholder text that disappears as you type.
+
+- **The gate meant to keep German complete was never wired up.** It was
+  written down, documented as enforced, and read by nothing, so a new English
+  string could reach the German window untranslated. It also found eighteen
+  German translations keyed on English that no longer exists.
+
 ## [2.11.0] - 2026-08-22
 
 ### Changed
