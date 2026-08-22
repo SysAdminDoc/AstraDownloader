@@ -20,6 +20,10 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P2
 
+- [ ] P2 — AD-72 — The GUI smoke names dialogs by their window title, and nothing pins the two together
+  Why: `capture_modal_dialog` matches `dialog.windowTitle()` against a literal in the render script. Renaming a dialog title in `gui.py` therefore breaks a gate in a file nobody editing the GUI would think to open, and the failure this pass hit was silent for eight minutes before it was even visible as a stall. The raise-inside-the-timer hang is fixed, but the coupling is still a literal in one file matching a literal in another. Either read the expected title from the module under test, or add a unit test that asserts the two agree.
+  Where: `scripts/render-companion-gui.py` `capture_modal_dialog` and its five callers; the `setWindowTitle` calls in `astra_downloader/gui.py`.
+
 - [ ] P2 — AD-60 — A site profile's download type is stored and never applied outside the paste box
   Why: `sanitize_site_profiles` validates and stores `DownloadType`, and `start_download` applies a profile's `VideoFormat`, `AudioFormat` and `Quality` but not its `DownloadType`. The only consumer is the GUI paste box. An API or subscription download for a profiled domain therefore ignores the audio-only or subtitles-only preference the user set for that site. Decide whether the field is a paste-box default (rename it, or say so in the setting's help text) or a profile rule, then make one true.
   Where: `astra_downloader/config.py` (`DownloadType` in the profile schema), `astra_downloader/download.py` `start_download`, `astra_downloader/gui.py` `_sync_quick_download_profile`.
