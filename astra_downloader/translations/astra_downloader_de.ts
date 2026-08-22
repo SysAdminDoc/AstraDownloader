@@ -155,8 +155,8 @@
       <translation>Playlist-Videos überprüfen</translation>
     </message>
     <message>
-      <source>Choose which videos should be added to the download queue.</source>
-      <translation>Wählen Sie aus, welche Videos zur Download-Warteschlange hinzugefügt werden sollen.</translation>
+      <source>Choose which videos should be added to the download queue, and change the format, quality or name of any of them.</source>
+      <translation>Wählen Sie, welche Videos in die Warteschlange kommen, und ändern Sie Format, Qualität oder Namen einzelner Videos.</translation>
     </message>
     <message>
       <source>(untitled playlist)</source>
@@ -187,6 +187,26 @@
       <translation>Nicht ausgewählte Videos auswählen und ausgewählte Videos abwählen.</translation>
     </message>
     <message>
+      <source>Apply to selected</source>
+      <translation>Auf Auswahl anwenden</translation>
+    </message>
+    <message>
+      <source>Format to apply to the selected videos</source>
+      <translation>Format, das auf die ausgewählten Videos angewendet wird</translation>
+    </message>
+    <message>
+      <source>Quality to apply to the selected videos</source>
+      <translation>Qualität, die auf die ausgewählten Videos angewendet wird</translation>
+    </message>
+    <message>
+      <source>Apply</source>
+      <translation>Anwenden</translation>
+    </message>
+    <message>
+      <source>Give every selected video the format and quality chosen here.</source>
+      <translation>Allen ausgewählten Videos das hier gewählte Format und die gewählte Qualität geben.</translation>
+    </message>
+    <message>
       <source>Cancel</source>
       <translation>Abbrechen</translation>
     </message>
@@ -201,6 +221,50 @@
     <message>
       <source>Add the selected playlist videos to the download queue.</source>
       <translation>Ausgewählte Playlist-Videos zur Download-Warteschlange hinzufügen.</translation>
+    </message>
+    <message>
+      <source>(untitled)</source>
+      <translation>(ohne Titel)</translation>
+    </message>
+    <message>
+      <source>Select playlist item {index}: {title}</source>
+      <translation>Playlist-Eintrag {index} auswählen: {title}</translation>
+    </message>
+    <message>
+      <source>Duration {duration}</source>
+      <translation>Dauer {duration}</translation>
+    </message>
+    <message>
+      <source>Already in the subscription archive.</source>
+      <translation>Bereits im Abonnement-Archiv.</translation>
+    </message>
+    <message>
+      <source>In archive</source>
+      <translation>Im Archiv</translation>
+    </message>
+    <message>
+      <source>Use the naming template</source>
+      <translation>Namensvorlage verwenden</translation>
+    </message>
+    <message>
+      <source>File name for playlist item {index}</source>
+      <translation>Dateiname für Playlist-Eintrag {index}</translation>
+    </message>
+    <message>
+      <source>Leave empty to name this file the way every other download is named. A name here applies to this video only.</source>
+      <translation>Leer lassen, damit diese Datei wie jeder andere Download benannt wird. Ein Name hier gilt nur für dieses Video.</translation>
+    </message>
+    <message>
+      <source>Format for playlist item {index}</source>
+      <translation>Format für Playlist-Eintrag {index}</translation>
+    </message>
+    <message>
+      <source>Quality for playlist item {index}</source>
+      <translation>Qualität für Playlist-Eintrag {index}</translation>
+    </message>
+    <message>
+      <source>Applied to {count} videos</source>
+      <translation>Auf {count} Videos angewendet</translation>
     </message>
     <message>
       <source>{selected} of {total} selected</source>
@@ -715,12 +779,8 @@
       <translation>Einrichtung</translation>
     </message>
     <message>
-      <source>(untitled)</source>
-      <translation>(ohne Titel)</translation>
-    </message>
-    <message>
-      <source>Select playlist item {index}: {title}</source>
-      <translation>Playlist-Eintrag {index} auswählen: {title}</translation>
+      <source>A subscription scan already captured this video. Tick it to download it again.</source>
+      <translation>Ein Abonnement-Scan hat dieses Video bereits erfasst. Ankreuzen, um es erneut zu laden.</translation>
     </message>
     <message>
       <source>{name} {page}</source>
@@ -1139,6 +1199,18 @@
       <translation>Zum Überprüfen eine Playlist-URL eingeben.</translation>
     </message>
     <message>
+      <source>No playlist items selected.</source>
+      <translation>Keine Playlist-Einträge ausgewählt.</translation>
+    </message>
+    <message>
+      <source>Queued {count} items; the rest were refused: {reason}</source>
+      <translation>{count} Einträge eingereiht; der Rest wurde abgelehnt: {reason}</translation>
+    </message>
+    <message>
+      <source>Queued {count} items from playlist.</source>
+      <translation>{count} Einträge aus der Playlist eingereiht.</translation>
+    </message>
+    <message>
       <source>yt-dlp {version} is ready.</source>
       <translation>yt-dlp {version} ist bereit.</translation>
     </message>
@@ -1245,10 +1317,6 @@
     <message>
       <source>Setup failed. Check the log for details.</source>
       <translation>Die Einrichtung ist fehlgeschlagen. Details finden Sie im Protokoll.</translation>
-    </message>
-    <message>
-      <source>Duration {duration}</source>
-      <translation>Dauer {duration}</translation>
     </message>
     <message>
       <source>No videos found</source>
@@ -1513,14 +1581,6 @@
     <message>
       <source>Could not preview playlist.</source>
       <translation>Playlist-Vorschau nicht möglich.</translation>
-    </message>
-    <message>
-      <source>No playlist items selected.</source>
-      <translation>Keine Playlist-Einträge ausgewählt.</translation>
-    </message>
-    <message>
-      <source>Queued {count} items from playlist.</source>
-      <translation>{count} Einträge aus der Playlist eingereiht.</translation>
     </message>
     <message>
       <source>Settings status: {message}</source>

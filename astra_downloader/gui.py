@@ -914,6 +914,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_impersonate_target',
     'probe_impersonate_targets',
     'probe_output_folder',
+    'group_playlist_selection',
+    'subscription_archive_key',
     'normalize_proxy',
     'normalize_force_ip_version',
     'normalize_source_address',
@@ -939,22 +941,48 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
 
 
 class PlaylistStagingDialog(QDialog):
-    """Interactive staging dialog to review and select playlist videos before downloading."""
+    """Interactive staging dialog to review and edit playlist videos before downloading."""
 
-    def __init__(self, parent, playlist_info):
+    def __init__(self, parent, playlist_info, *, format_choices=None,
+                 quality_choices=None, default_format=None,
+                 default_quality=None, archived_indices=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Review Playlist"))
         self.setMinimumSize(640, 480)
-        self.resize(760, 560)
+        self.resize(880, 620)
         self.setModal(True)
         self.setAccessibleName(tr("Review playlist videos"))
         self.setAccessibleDescription(
-            tr("Choose which videos should be added to the download queue.")
+            tr("Choose which videos should be added to the download queue, "
+               "and change the format, quality or name of any of them.")
         )
         self.playlist_info = playlist_info or {}
         self.items = self.playlist_info.get("items") or []
+        self._format_choices = list(format_choices or [])
+        self._quality_choices = list(quality_choices or [(tr("Best"), "best")])
+        self._default_format = default_format
+        self._default_quality = default_quality or "best"
+        # Indices the subscription archive already holds. They start
+        # unselected: re-fetching what an archive captured is the mistake the
+        # flag exists to prevent, not a choice to make silently.
+        self.archived_indices = {
+            int(value) for value in (archived_indices or [])
+            if str(value).lstrip("-").isdigit()
+        }
         self.checkboxes = []
+        self.rows = []
         self._build_ui()
+
+    def _make_choice_combo(self, choices, current, accessible_name):
+        combo = QComboBox()
+        combo.setAccessibleName(accessible_name)
+        for label, value in choices:
+            combo.addItem(label, value)
+        found = combo.findData(current)
+        if found >= 0:
+            combo.setCurrentIndex(found)
+        combo.setMinimumWidth(96)
+        return combo
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -1013,6 +1041,33 @@ class PlaylistStagingDialog(QDialog):
         toolbar.addWidget(self.lbl_selected_count)
         layout.addLayout(toolbar)
 
+        # Batch apply. Editing fifty rows one at a time is the reason
+        # LinkGrabber grew this bar; it writes onto the selected rows only,
+        # so an unselected row keeps whatever it already had.
+        batch = QHBoxLayout()
+        batch.setSpacing(8)
+        batch.addWidget(make_label("Apply to selected", "fieldHint"))
+        self.batch_format = self._make_choice_combo(
+            self._format_choices, self._default_format,
+            tr("Format to apply to the selected videos"),
+        )
+        batch.addWidget(self.batch_format)
+        self.batch_quality = self._make_choice_combo(
+            self._quality_choices, self._default_quality,
+            tr("Quality to apply to the selected videos"),
+        )
+        batch.addWidget(self.batch_quality)
+        self.btn_batch_apply = QPushButton(tr("Apply"))
+        self.btn_batch_apply.setProperty("class", "ghost")
+        self.btn_batch_apply.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_batch_apply.setAccessibleDescription(
+            tr("Give every selected video the format and quality chosen here.")
+        )
+        self.btn_batch_apply.clicked.connect(self._apply_batch)
+        batch.addWidget(self.btn_batch_apply)
+        batch.addStretch()
+        layout.addLayout(batch)
+
         # Scrollable items area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1022,42 +1077,7 @@ class PlaylistStagingDialog(QDialog):
         items_layout.setSpacing(6)
 
         for item in self.items:
-            row_frame = QFrame()
-            row_frame.setProperty("class", "playlistRow")
-            row = QHBoxLayout(row_frame)
-            row.setContentsMargins(12, 9, 12, 9)
-            row.setSpacing(10)
-            cb = QCheckBox()
-            cb.setChecked(True)
-            cb.stateChanged.connect(self._update_count)
-            self.checkboxes.append((cb, item))
-            row.addWidget(cb)
-
-            idx = item.get("index", len(self.checkboxes))
-            item_title = item.get("title") or tr("(untitled)")
-            dur = format_duration(item.get("duration", 0))
-            cb.setAccessibleName(
-                tr_format(
-                    "Select playlist item {index}: {title}",
-                    index=idx,
-                    title=item_title,
-                )
-            )
-            if dur:
-                cb.setAccessibleDescription(
-                    tr_format("Duration {duration}", duration=dur)
-                )
-            lbl = make_label(f"#{idx}  {item_title}", "fieldLabel", word_wrap=True)
-            lbl.setToolTip(item_title)
-            row.addWidget(lbl, 1)
-            if dur:
-                duration_label = make_label(dur, "toolbarMeta")
-                duration_label.setAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-                )
-                row.addWidget(duration_label)
-
-            items_layout.addWidget(row_frame)
+            items_layout.addWidget(self._build_item_row(item))
 
         if not self.items:
             items_layout.addWidget(
@@ -1104,6 +1124,91 @@ class PlaylistStagingDialog(QDialog):
         if self.checkboxes:
             self.checkboxes[0][0].setFocus(Qt.FocusReason.TabFocusReason)
 
+    def _build_item_row(self, item):
+        row_frame = QFrame()
+        row_frame.setProperty("class", "playlistRow")
+        row_layout = QVBoxLayout(row_frame)
+        row_layout.setContentsMargins(12, 9, 12, 9)
+        row_layout.setSpacing(6)
+
+        top = QHBoxLayout()
+        top.setSpacing(10)
+        cb = QCheckBox()
+        idx = item.get("index", len(self.checkboxes) + 1)
+        archived = idx in self.archived_indices
+        cb.setChecked(not archived)
+        cb.stateChanged.connect(self._update_count)
+        self.checkboxes.append((cb, item))
+        top.addWidget(cb)
+
+        item_title = item.get("title") or tr("(untitled)")
+        dur = format_duration(item.get("duration", 0))
+        cb.setAccessibleName(
+            tr_format(
+                "Select playlist item {index}: {title}",
+                index=idx,
+                title=item_title,
+            )
+        )
+        description = tr_format("Duration {duration}", duration=dur) if dur else ""
+        if archived:
+            archived_note = tr("Already in the subscription archive.")
+            description = f"{description} {archived_note}".strip()
+        if description:
+            cb.setAccessibleDescription(description)
+        lbl = make_label(f"#{idx}  {item_title}", "fieldLabel", word_wrap=True)
+        lbl.setToolTip(item_title)
+        top.addWidget(lbl, 1)
+        if archived:
+            badge = make_label("In archive", "toolbarMeta")
+            badge.setToolTip(tr(
+                "A subscription scan already captured this video. Tick it to "
+                "download it again."
+            ))
+            top.addWidget(badge)
+        if dur:
+            duration_label = make_label(dur, "toolbarMeta")
+            duration_label.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
+            top.addWidget(duration_label)
+        row_layout.addLayout(top)
+
+        edits = QHBoxLayout()
+        edits.setSpacing(8)
+        edits.addSpacing(26)
+        name_field = QLineEdit()
+        name_field.setPlaceholderText(tr("Use the naming template"))
+        name_field.setAccessibleName(
+            tr_format("File name for playlist item {index}", index=idx)
+        )
+        name_field.setToolTip(tr(
+            "Leave empty to name this file the way every other download is "
+            "named. A name here applies to this video only."
+        ))
+        edits.addWidget(name_field, 1)
+        format_combo = self._make_choice_combo(
+            self._format_choices, self._default_format,
+            tr_format("Format for playlist item {index}", index=idx),
+        )
+        edits.addWidget(format_combo)
+        quality_combo = self._make_choice_combo(
+            self._quality_choices, self._default_quality,
+            tr_format("Quality for playlist item {index}", index=idx),
+        )
+        edits.addWidget(quality_combo)
+        row_layout.addLayout(edits)
+
+        self.rows.append({
+            "index": idx,
+            "checkbox": cb,
+            "name": name_field,
+            "format": format_combo,
+            "quality": quality_combo,
+            "archived": archived,
+        })
+        return row_frame
+
     def _select_all(self):
         for cb, _ in self.checkboxes:
             cb.setChecked(True)
@@ -1116,6 +1221,23 @@ class PlaylistStagingDialog(QDialog):
         for cb, _ in self.checkboxes:
             cb.setChecked(not cb.isChecked())
 
+    def _apply_batch(self):
+        fmt = self.batch_format.currentData()
+        quality = self.batch_quality.currentData()
+        applied = 0
+        for row in self.rows:
+            if not row["checkbox"].isChecked():
+                continue
+            for field, value in (("format", fmt), ("quality", quality)):
+                combo = row[field]
+                found = combo.findData(value)
+                if found >= 0:
+                    combo.setCurrentIndex(found)
+            applied += 1
+        self.lbl_selected_count.setText(
+            tr_format("Applied to {count} videos", count=applied)
+        )
+
     def _update_count(self):
         selected = sum(1 for cb, _ in self.checkboxes if cb.isChecked())
         total = len(self.checkboxes)
@@ -1126,6 +1248,20 @@ class PlaylistStagingDialog(QDialog):
     def get_selected_indices(self):
         """Return 1-based playlist indices of selected items."""
         return [item.get("index", i + 1) for i, (cb, item) in enumerate(self.checkboxes) if cb.isChecked()]
+
+    def get_selection(self):
+        """Return the per-item choices for every selected row, in order."""
+        selection = []
+        for row in self.rows:
+            if not row["checkbox"].isChecked():
+                continue
+            selection.append({
+                "index": row["index"],
+                "format": row["format"].currentData(),
+                "quality": row["quality"].currentData(),
+                "output_name": row["name"].text().strip(),
+            })
+        return selection
 
 
 class MainWindowCore(
@@ -5896,31 +6032,86 @@ class MainWindowCore(
             return
 
         self.quick_download_status.hide()
-        dialog = PlaylistStagingDialog(self, preview)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            selected_indices = dialog.get_selected_indices()
-            if not selected_indices:
-                self._set_quick_download_status(tr("No playlist items selected."), "warning")
-                return
-            kind = self.quick_download_type.currentData()
-            dl_id, error = self.dl_manager.start_download(
+        dialog = PlaylistStagingDialog(
+            self,
+            preview,
+            format_choices=self._combo_choices(self.quick_download_format),
+            quality_choices=self._combo_choices(self.quick_download_quality),
+            default_format=self.quick_download_format.currentData(),
+            default_quality=self.quick_download_quality.currentData() or "best",
+            archived_indices=self._archived_playlist_indices(preview),
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        selection = dialog.get_selection()
+        if not selection:
+            self._set_quick_download_status(tr("No playlist items selected."), "warning")
+            return
+        kind = self.quick_download_type.currentData()
+        groups = self._dependencies['group_playlist_selection'](selection)
+        queued = 0
+        failure = ""
+        for group in groups:
+            _dl_id, error = self.dl_manager.start_download(
                 url=url,
                 audio_only=kind == "audio",
                 subtitles_only=kind == "subtitles",
-                fmt=self.quick_download_format.currentData(),
-                quality=self.quick_download_quality.currentData() or "best",
+                fmt=group['format'],
+                quality=group['quality'] or "best",
                 output_dir=self._quick_download_dir or None,
-                playlist_items=selected_indices,
+                playlist_items=group['items'],
+                output_name=group['output_name'] or None,
             )
             if error:
-                self._set_quick_download_status(error, "error")
-            else:
-                self._set_quick_download_status(
-                    tr_format("Queued {count} items from playlist.", count=len(selected_indices)),
-                    "success",
-                )
-                self.quick_download_url.clear()
-                self._sync_playlist_staging_button()
+                # One rejected group must not hide the ones that queued, so
+                # the first reason is reported and the rest still go.
+                failure = failure or error
+                continue
+            queued += len(group['items'])
+        if failure and not queued:
+            self._set_quick_download_status(failure, "error")
+            return
+        if failure:
+            self._set_quick_download_status(
+                tr_format(
+                    "Queued {count} items; the rest were refused: {reason}",
+                    count=queued, reason=failure,
+                ),
+                "warning",
+            )
+        else:
+            self._set_quick_download_status(
+                tr_format("Queued {count} items from playlist.", count=queued),
+                "success",
+            )
+        self.quick_download_url.clear()
+        self._sync_playlist_staging_button()
+
+    @staticmethod
+    def _combo_choices(combo):
+        return [(combo.itemText(row), combo.itemData(row))
+                for row in range(combo.count())]
+
+    def _archived_playlist_indices(self, preview):
+        """Return the preview indices a subscription scan already captured."""
+        manager = self._subscription_manager()
+        lookup = getattr(manager, "archive_entry", None) if manager else None
+        if not callable(lookup):
+            return set()
+        archive_key = self._dependencies['subscription_archive_key']
+        archived = set()
+        for item in (preview or {}).get("items") or []:
+            key = archive_key({"id": item.get("id"), "url": item.get("url")})
+            if not key:
+                continue
+            try:
+                entry = lookup(key)
+            except Exception as error:  # noqa: BLE001
+                self._append_log(f"Could not read the subscription archive: {error}")
+                return archived
+            if entry:
+                archived.add(item.get("index"))
+        return archived
 
     def _redownload(self, download):
         """Put a finished download's link back in the paste box, ready to go.

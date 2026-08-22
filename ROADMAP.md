@@ -19,13 +19,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: a subscription carries its own destination, format, quality and template; an archive view lists captured items with an "allow re-download" action; a re-scan fetches only when the available format is a strict upgrade over what is on disk; schema migration covers existing records.
   Complexity: XL
 
-- [ ] P2 — AD-26 — Finish the playlist staging step: per-item edits and archive flags
-  Why: the selection-only staging dialog shipped 2026-08-14 (Review playlist → `PlaylistStagingDialog` → `playlist_items`), but pruning is the smaller half — JDownloader's LinkGrabber and YTDLnis both let the user edit items (format/quality/name) per item or batch-apply, and nothing yet flags entries the subscription archive already holds.
-  Evidence: RESEARCH.md "Competitive Landscape" (JDownloader, YTDLnis per-item editing); `astra_downloader/gui.py` `PlaylistStagingDialog`; `subscriptions.py` archive keys.
-  Touches: `astra_downloader/gui.py` (`PlaylistStagingDialog`), `download.py`, `subscriptions.py`
-  Acceptance: per-item and batch-apply edits both work in the staging dialog; items already in the subscription archive are flagged; a render scenario captures the dialog.
-  Complexity: M
-
 - [ ] P2 — AD-29 — Let the user pin and roll back a managed binary
   Why: auto-updating yt-dlp/ffmpeg/Deno is survival, but it also silently breaks things (GDownloader#54: an auto-update killed nvenc). Pinning is also the clean way out of the ffmpeg security-floor-vs-capability deadlock, and YTDLnis ships exactly this.
   Evidence: RESEARCH.md "Competitive Landscape" (YTDLnis component management); `Roadmap_Blocked.md` §"Make `npm run check` pass" item 2; `astra_downloader/health.py` `managed_binary_state()`.
