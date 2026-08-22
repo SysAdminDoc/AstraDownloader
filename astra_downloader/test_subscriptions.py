@@ -1157,6 +1157,76 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(removed.status_code, 200)
             self.assertTrue(removed.get_json()["removed"])
 
+    def test_the_api_refuses_a_subscription_folder_it_could_not_write_to(self):
+        token = "s" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            allowed = Path(tmp) / "downloads"
+            allowed.mkdir()
+            config = FakeConfig({
+                "ServerToken": token, "DownloadPath": str(allowed),
+            })
+            store = self._store(Path(tmp) / "subscriptions.json")
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: ([], None),
+                enqueue=lambda *_args: ("dl", None),
+            )
+            api = ad.create_api(
+                config,
+                ad.DownloadManager(config, FakeHistory()),
+                FakeHistory(),
+                subscriptions=manager,
+            )
+            client = api.test_client()
+            headers = {"X-Auth-Token": token, "Host": "127.0.0.1"}
+
+            # Stored unchecked, this failed once per video on every scan from
+            # then on, and the subscription itself read as configured.
+            rejected = client.post(
+                "/subscriptions",
+                json={
+                    "url": "https://www.youtube.com/@astra-channel",
+                    "outputDir": "relative/path",
+                },
+                headers=headers,
+            )
+            self.assertEqual(rejected.status_code, 400, rejected.get_json())
+            self.assertEqual(
+                rejected.get_json()["code"], "invalid-subscription-output-dir"
+            )
+            self.assertEqual(manager.list_subscriptions(), [])
+
+            outside = client.post(
+                "/subscriptions",
+                json={
+                    "url": "https://www.youtube.com/@astra-channel",
+                    "outputDir": str(Path(tmp) / "elsewhere"),
+                },
+                headers=headers,
+            )
+            self.assertEqual(outside.status_code, 400, outside.get_json())
+            self.assertEqual(manager.list_subscriptions(), [])
+
+            created = client.post(
+                "/subscriptions",
+                json={
+                    "url": "https://www.youtube.com/@astra-channel",
+                    "outputDir": str(allowed / "feed"),
+                },
+                headers=headers,
+            )
+            self.assertEqual(created.status_code, 201, created.get_json())
+            self.assertEqual(
+                created.get_json()["outputDir"], str(allowed / "feed")
+            )
+
+            patched = client.patch(
+                f"/subscriptions/{created.get_json()['id']}",
+                json={"outputDir": "still relative"},
+                headers=headers,
+            )
+            self.assertEqual(patched.status_code, 400, patched.get_json())
+
     def test_subscription_scan_endpoint_is_rate_limited(self):
         token = "s" * 32
 

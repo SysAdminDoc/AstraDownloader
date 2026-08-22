@@ -953,6 +953,61 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
             finally:
                 _retire_test_window(window)
 
+    def test_a_subscription_folder_is_checked_when_it_is_typed(self):
+        from PySide6.QtWidgets import QApplication, QDialog
+
+        _get_qapp_or_skip(self)
+
+        history = FakeHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                saved = []
+                window._dependencies['subscription_manager'] = types.SimpleNamespace(
+                    get_subscription=lambda _sub_id: {"id": "s", "title": "T",
+                                                      "url": "https://youtube.com/@t"},
+                    update_subscription=lambda sub_id, **fields: (
+                        saved.append(fields) or ({"id": sub_id}, None)
+                    ),
+                    stop=lambda: None,
+                )
+
+                def deliver(folder):
+                    return lambda self_dialog: {
+                        "outputDir": folder, "format": "", "quality": "",
+                        "outputTemplate": "", "audioOnly": False,
+                        "upgradeIfBetter": False,
+                    }
+
+                # Stored unchecked, a relative path failed once per video on
+                # every scan and never at the moment it was typed.
+                with mock.patch.object(ad.SubscriptionDeliveryDialog, "exec",
+                                       lambda _self: QDialog.DialogCode.Accepted), \
+                        mock.patch.object(ad.SubscriptionDeliveryDialog, "delivery",
+                                          deliver("not-an-absolute-path")):
+                    self.assertFalse(window._edit_subscription_delivery("s"))
+                QApplication.processEvents()
+                self.assertEqual(saved, [], "an unusable folder must not be stored")
+                self.assertIn("absolute", window.subscription_status.text().lower())
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    target = str(Path(tmpdir) / "feed")
+                    with mock.patch.object(ad.SubscriptionDeliveryDialog, "exec",
+                                           lambda _self: QDialog.DialogCode.Accepted), \
+                            mock.patch.object(ad.SubscriptionDeliveryDialog, "delivery",
+                                              deliver(target)):
+                        self.assertTrue(window._edit_subscription_delivery("s"))
+                    self.assertEqual(len(saved), 1)
+                    self.assertEqual(
+                        saved[0]["delivery"]["outputDir"], target,
+                        "a usable folder is stored resolved",
+                    )
+            finally:
+                _retire_test_window(window)
+
     def test_a_terminal_card_offers_its_menu_without_a_right_click(self):
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QApplication, QPushButton
@@ -4731,6 +4786,57 @@ class StylesheetContrastTests(unittest.TestCase):
                     f"[{theme}] {selector} border {border} is {ratio:.2f}:1 "
                     f"against {background}",
                 )
+
+    # Every keyboard focus ring, and the colour the eye actually compares it
+    # against. A filled control is compared against its own fill, not the
+    # page behind it; that distinction is what the checked checkbox got wrong,
+    # drawing a light ring at 1.5:1 on top of its own accent face.
+    FOCUS_RINGS = (
+        ("QLineEdit:focus", "border-color", "#0a0d12"),
+        ("QSpinBox:focus", "border-color", "#0a0d12"),
+        ("QComboBox:focus", "border-color", "#0a0d12"),
+        ("QTextEdit:focus", "border-color", "#0a0d12"),
+        ('QLineEdit[class="heroUrl"]:focus', "border-color", "#0a0d12"),
+        ("QPushButton:focus", "border-color", "#0a0d12"),
+        ('QPushButton[class="ghost"]:focus', "border-color", "#171d25"),
+        ('QPushButton[class="secondary"]:focus', "border-color", "#0a0d12"),
+        ('QPushButton[class="danger"]:focus', "border-color", "#0a0d12"),
+        ('QPushButton[class="primary"]:focus', "border-color", "#ff6552"),
+        ("QCheckBox::indicator:focus", "border-color", "#0a0d12"),
+        ("QCheckBox::indicator:checked:focus", "border-color", "#ff7867"),
+        ('QPushButton[class="nav"]:focus', "border-left-color", "#0a0d12"),
+        ('QPushButton[class="nav"][active="true"]:focus',
+         "border-left-color", "#0a0d12"),
+    )
+
+    def test_every_focus_ring_separates_from_what_is_behind_it(self):
+        # SC 2.4.13 wants 3:1 between the focus indicator and the colours
+        # adjacent to it. Nothing measured these, and the sheet's own comments
+        # carried the numbers by hand.
+        for theme, sheet in (("dark", ad.STYLESHEET), ("light", ad.LIGHT_STYLESHEET)):
+            rules = self._stylesheet_rules(sheet)
+            replacements = ad._LIGHT_THEME_COLOR_REPLACEMENTS
+            for selector, prop, dark_background in self.FOCUS_RINGS:
+                with self.subTest(theme=theme, selector=selector):
+                    self.assertIn(
+                        selector, rules,
+                        f"[{theme}] {selector} draws no focus indicator",
+                    )
+                    ring = self._declared_colour(rules[selector], (prop,))
+                    self.assertRegex(
+                        ring or "", r"^#[0-9a-f]{6}$",
+                        f"[{theme}] {selector} declares no {prop}",
+                    )
+                    background = (
+                        dark_background if theme == "dark"
+                        else replacements.get(dark_background, dark_background)
+                    )
+                    measured = self._contrast(ring, background)
+                    self.assertGreaterEqual(
+                        measured, 3.0,
+                        f"[{theme}] {selector} ring {ring} is {measured:.2f}:1 "
+                        f"against {background}",
+                    )
 
     def test_the_light_theme_boundaries_clear_the_same_floor(self):
         # LIGHT_STYLESHEET is generated by substituting the dark palette, so a

@@ -4846,7 +4846,10 @@ QCheckBox::indicator:checked { background: #ff6552; border-color: #ff6552; }
 /* A styled indicator suppresses Qt's native focus rect, so the checked and
    unchecked focus states have to draw their own. */
 QCheckBox::indicator:focus { border-color: #ffb2a5; }
-QCheckBox::indicator:checked:focus { border-color: #ffb2a5; background: #ff7867; }
+/* Checked, the indicator is filled, so the ring the eye compares against is
+   the fill and not the page. The light ring reaches 1.5:1 there; the same
+   dark ring the primary button takes for the same reason reaches 7.6:1. */
+QCheckBox::indicator:checked:focus { border-color: #170806; background: #ff7867; }
 QCheckBox:focus { color: #fff8f4; }
 QCheckBox:disabled { color: #687381; }
 
@@ -5433,6 +5436,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'TaskbarProgress': TaskbarProgress,
         'lookup_history_url': lambda *args, **kwargs: lookup_history_url(*args, **kwargs),
         'normalize_history_date': lambda *args, **kwargs: normalize_history_date(*args, **kwargs),
+        'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
         'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,
