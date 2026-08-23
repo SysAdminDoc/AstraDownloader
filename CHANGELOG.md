@@ -17,12 +17,15 @@ repository's git log.
 - **A routine YouTube warning no longer turns a finished download into a
   failure.** If yt-dlp writes the file and exits normally, Astra now reports it
   as complete. The same warning still explains the failure when no file was
-  delivered.
+  delivered. A retry with fresh sign-in data also clears the previous run's
+  filename, so an old path cannot make an empty retry look successful.
 
 - **Disk space is checked no matter where a download begins.** The desktop
   window, browser extension, and scheduled subscriptions now use the same
   probed-size check before anything enters the queue. API callers receive the
   named `insufficient-disk-space` response instead of a later yt-dlp failure.
+  The estimate includes yt-dlp's uncapped final fallback when the requested
+  resolution isn't available.
 
 - **Settings bundles keep each subscription's delivery choices.** Audio-only
   mode, format, quality, naming template, output folder, and upgrade checks now

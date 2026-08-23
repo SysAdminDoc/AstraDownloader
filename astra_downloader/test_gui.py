@@ -2777,6 +2777,22 @@ class DiskSpacePreflightTests(unittest.TestCase):
             0,
         )
 
+    def test_estimate_accounts_for_the_uncapped_best_fallback(self):
+        fallback_size = 2 * 1024 * 1024 * 1024
+        summary = {
+            "formats": [{
+                "has_video": True,
+                "has_audio": True,
+                "height": 2160,
+                "filesize": fallback_size,
+            }],
+        }
+
+        self.assertEqual(
+            ad.estimate_download_bytes(summary, quality="1080"),
+            fallback_size,
+        )
+
     def test_disk_space_check_reports_a_classified_shortfall(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch.object(

@@ -33,7 +33,7 @@ import pytest
 # A full run is the product's regression contract. This floor catches a
 # missing optional dependency, a Qt bootstrap failure, or an accidentally
 # deleted test group even when pytest would otherwise report a green run.
-MIN_FULL_SUITE_EXECUTED_TESTS = 1171
+MIN_FULL_SUITE_EXECUTED_TESTS = 1180
 
 _executed_nodeids = set()
 _skipped_nodeids = {}
