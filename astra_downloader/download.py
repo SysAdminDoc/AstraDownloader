@@ -5214,14 +5214,14 @@ class DownloadManagerCore:
         )
 
     def _apply_zero_exit_outcome(self, dl):
-        """Classify a yt-dlp exit 0 as skipped, SABR-capped, or complete."""
-        if getattr(dl, 'sabr_capped_warning', False):
-            dl.status = "failed"
-            dl.step = "failed"
-            apply_download_failure_classification(dl, 'sabr-limited')
-            return
+        """Classify a yt-dlp exit 0 from its delivered result first."""
         skip_reason = self._empty_result_reason(dl)
         if skip_reason:
+            if getattr(dl, 'sabr_capped_warning', False):
+                dl.status = "failed"
+                dl.step = "failed"
+                apply_download_failure_classification(dl, 'sabr-limited')
+                return
             dl.status = "skipped"
             dl.step = "skipped"
             dl.progress = 0

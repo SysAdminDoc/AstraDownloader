@@ -10,10 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-58 — A benign warning can still steer the failure path from `_apply_zero_exit_outcome`
-  Why: the classification chain no longer re-decides from the joined output, but `_line_shows_sabr_capped_stream` still turns a single warning line into a `failed` result on an exit-0 run that wrote the file. It is now cleared between runs, so the stuck-forever case is gone; what remains is that one warning outranks a delivered file, and `sabr-limited` is not retryable, so the only route back is Download again.
-  Where: `astra_downloader/download.py` `_consume_ytdlp_output` (the `sabr_capped_warning` write) and `_apply_zero_exit_outcome`.
-
 - [ ] P1 — AD-59 — A disk-space check runs only for downloads the GUI starts
   Why: `estimate_download_bytes` / `check_download_disk_space` are called from `gui.py` before a paste-box download. Nothing on the API or subscription path calls them, so `insufficient-disk-space` is unreachable for an extension-initiated or scheduled download; those fail partway with whatever yt-dlp says instead. A subscription filling a disk overnight is the case that matters.
   Where: `astra_downloader/gui.py` (the two call sites), `astra_downloader/download.py` `start_download`, `astra_downloader/routes.py` `/download`.

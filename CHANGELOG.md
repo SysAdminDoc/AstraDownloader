@@ -10,6 +10,15 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [Unreleased]
+
+### Fixed
+
+- **A routine YouTube warning no longer turns a finished download into a
+  failure.** If yt-dlp writes the file and exits normally, Astra now reports it
+  as complete. The same warning still explains the failure when no file was
+  delivered.
+
 ## [2.12.0] - 2026-08-22
 
 An audit pass. Nothing here is a new feature; it is a list of things that were
