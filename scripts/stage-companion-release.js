@@ -12,26 +12,29 @@ const {
 const {
     LOCK_NAME,
     SBOM_NAME,
-    sbomDescribesArtifact
+    sbomDescribesArtifact,
+    writeReleaseProvenance
 } = require('./write-release-provenance');
+const { resolveRuntimeHelpers } = require('./resolve-runtime-helpers');
+const { checkCompanionInventory } = require('./check-companion-inventory');
 
-function readReleaseArtifact(name) {
+function readReleaseArtifact(name, releaseDir = BUILD_DIR) {
     // No existence check: opening the file is the check, and a separate
     // exists-then-read pair is a race the staging path must not carry.
     try {
-        return fs.readFileSync(path.join(BUILD_DIR, name), 'utf8');
+        return fs.readFileSync(path.join(releaseDir, name), 'utf8');
     } catch (error) {
         if (error.code === 'ENOENT') {
             throw new Error(
-                `missing build/${name}; run \`npm run release:provenance\` after building`
+                `missing release artifact ${path.join(releaseDir, name)}`
             );
         }
         throw error;
     }
 }
 
-function readReleaseArtifactJson(name) {
-    return JSON.parse(readReleaseArtifact(name));
+function readReleaseArtifactJson(name, releaseDir = BUILD_DIR) {
+    return JSON.parse(readReleaseArtifact(name, releaseDir));
 }
 
 const REPO_ROOT = path.join(__dirname, '..');
@@ -40,14 +43,18 @@ const DEFAULT_SOURCE = path.join(REPO_ROOT, 'AstraDownloader.exe');
 const DEFAULT_METADATA_SOURCE = path.join(REPO_ROOT, 'astra_downloader', 'build', COMPANION_BUILD_METADATA_NAME);
 const DEFAULT_SIDECAR_SOURCE = `${DEFAULT_SOURCE}.sha256`;
 const DEFAULT_ONEDIR_SOURCE = path.join(REPO_ROOT, 'AstraDownloader-onedir.zip');
-const DEST = path.join(BUILD_DIR, 'AstraDownloader.exe');
-const METADATA_DEST = path.join(BUILD_DIR, COMPANION_BUILD_METADATA_NAME);
-const SIDECAR_DEST = path.join(BUILD_DIR, 'AstraDownloader.exe.sha256');
-const ONEDIR_DEST = path.join(BUILD_DIR, 'AstraDownloader-onedir.zip');
-const ONEDIR_SIDECAR_DEST = path.join(BUILD_DIR, 'AstraDownloader-onedir.zip.sha256');
 const MIN_BYTES = 1024;
 const ONEDIR_ENTRY = 'AstraDownloader/AstraDownloader.exe';
 const ONEDIR_METADATA_ENTRY = `AstraDownloader/${COMPANION_BUILD_METADATA_NAME}`;
+const RELEASE_FILE_NAMES = Object.freeze([
+    'AstraDownloader.exe',
+    COMPANION_BUILD_METADATA_NAME,
+    'AstraDownloader.exe.sha256',
+    'AstraDownloader-onedir.zip',
+    'AstraDownloader-onedir.zip.sha256',
+    SBOM_NAME,
+    LOCK_NAME,
+]);
 
 function openCompanionExe(filePath) {
     try {
@@ -254,88 +261,18 @@ function readValidatedOnedirArchive(filePath) {
     }
 }
 
-const WINGET_MANIFEST_ROOT = path.join(
-    REPO_ROOT, 'packaging', 'winget', 'manifests', 's', 'SysAdminDoc', 'AstraDownloader'
-);
-
-function wingetInstallerManifestPath(version) {
-    return path.join(
-        WINGET_MANIFEST_ROOT, version, 'SysAdminDoc.AstraDownloader.installer.yaml'
-    );
-}
-
-function readWingetInstallerSha256(manifestText) {
-    const match = String(manifestText).match(/^\s*InstallerSha256:\s*([0-9a-fA-F]{64})\s*$/m);
-    return match ? match[1].toLowerCase() : null;
-}
-
-// The digest in the winget manifest is generated from the staged artifact,
-// never written by hand: a hand-typed digest once shipped that matched no
-// artifact in existence, and the version gate only checked that it was 64 hex
-// digits. Staging writes it; the gate compares it (wingetDigestFailures).
-function updateWingetManifestDigest(version, digest,
-                                    manifestPath = wingetInstallerManifestPath(version)) {
-    let text;
-    try {
-        text = fs.readFileSync(manifestPath, 'utf8');
-    } catch (error) {
-        throw new Error(
-            `winget installer manifest for ${version} is missing: ${manifestPath}`
-        );
-    }
-    if (!readWingetInstallerSha256(text)) {
-        throw new Error(
-            `winget installer manifest carries no InstallerSha256 field: ${manifestPath}`
-        );
-    }
-    const updated = text.replace(
-        /^(\s*InstallerSha256:\s*)[0-9a-fA-F]{64}\s*$/m,
-        `$1${String(digest).toLowerCase()}`
-    );
-    fs.writeFileSync(manifestPath, updated, 'utf8');
-    return manifestPath;
-}
-
-// Shared with check-versions.js so the gate and the writer agree by
-// construction. `stagedMetadata` is build/companion-build-metadata.json; a
-// missing or different-version build means there is nothing to compare, which
-// is not a failure — the staging path above guarantees the digest is written
-// whenever a release is actually staged.
-function wingetDigestFailures(manifestText, version, stagedMetadata) {
-    const declared = readWingetInstallerSha256(manifestText);
-    if (!declared) {
-        return ['winget installer manifest: InstallerSha256 must be a 64-digit hex digest'];
-    }
-    const metadata = stagedMetadata && typeof stagedMetadata === 'object' ? stagedMetadata : null;
-    if (!metadata || metadata.version !== version) {
-        return [];
-    }
-    const stagedDigest = metadata.artifact && metadata.artifact.sha256;
-    if (typeof stagedDigest !== 'string' || !/^[0-9a-f]{64}$/i.test(stagedDigest)) {
-        return [];
-    }
-    if (declared !== stagedDigest.toLowerCase()) {
-        return [
-            `winget InstallerSha256 (${declared.slice(0, 12)}…) does not match the staged ` +
-            `AstraDownloader.exe (${stagedDigest.slice(0, 12).toLowerCase()}…) for v${version}; ` +
-            'run `npm run release:stage` to regenerate it from the artifact'
-        ];
-    }
-    return [];
-}
-
-function assertBuildDirExists() {
+function assertBuildDirExists(buildDir = BUILD_DIR) {
     let stat;
     try {
-        stat = fs.statSync(BUILD_DIR);
+        stat = fs.statSync(buildDir);
     } catch (err) {
         if (err && err.code === 'ENOENT') {
-            throw new Error('build/ does not exist. Run `py -3.13 astra_downloader/build.py` before staging the companion EXE.');
+            throw new Error(`${buildDir} does not exist. Build the companion before staging the release.`);
         }
         throw err;
     }
     if (!stat.isDirectory()) {
-        throw new Error('build/ exists but is not a directory.');
+        throw new Error(`${buildDir} is not a directory.`);
     }
 }
 
@@ -420,18 +357,16 @@ function writeValidatedSidecar(sidecarPath, companionBytes, artifactName = 'Astr
     return readValidatedSidecar(sidecarPath, companionBytes, artifactName);
 }
 
-function stageCompanionRelease(
-    sourcePath = DEFAULT_SOURCE,
-    metadataPath = DEFAULT_METADATA_SOURCE,
-    sidecarPath = `${sourcePath}.sha256`,
-    onedirPath = DEFAULT_ONEDIR_SOURCE,
-    onedirSidecarPath = `${onedirPath}.sha256`,
-) {
+function writeCandidateArtifacts(candidateDir, options = {}) {
+    const sourcePath = options.sourcePath || DEFAULT_SOURCE;
+    const metadataPath = options.metadataPath || DEFAULT_METADATA_SOURCE;
+    const sidecarPath = options.sidecarPath || `${sourcePath}.sha256`;
+    const onedirPath = options.onedirPath || DEFAULT_ONEDIR_SOURCE;
+    const onedirSidecarPath = options.onedirSidecarPath || `${onedirPath}.sha256`;
     const resolvedSource = path.resolve(sourcePath);
     const resolvedSidecar = path.resolve(sidecarPath || DEFAULT_SIDECAR_SOURCE);
     const resolvedOnedir = path.resolve(onedirPath);
     const resolvedOnedirSidecar = path.resolve(onedirSidecarPath);
-    assertBuildDirExists();
     const companionExe = readValidatedCompanionExe(resolvedSource);
     const metadata = readValidatedMetadata(path.resolve(metadataPath), companionExe);
     const companionDigest = readValidatedSidecar(resolvedSidecar, companionExe);
@@ -444,72 +379,222 @@ function stageCompanionRelease(
         onedirArchive,
         onedirName,
     );
-    fs.writeFileSync(DEST, companionExe);
-    fs.writeFileSync(METADATA_DEST, JSON.stringify(metadata, null, 2) + '\n', 'utf8');
-    writeValidatedSidecar(SIDECAR_DEST, companionExe);
-    fs.writeFileSync(ONEDIR_DEST, onedirArchive);
-    writeValidatedSidecar(ONEDIR_SIDECAR_DEST, onedirArchive, onedirName);
-    const stagedExe = fs.readFileSync(DEST);
-    const stagedDigest = readValidatedSidecar(SIDECAR_DEST, stagedExe);
-    const stagedOnedir = fs.readFileSync(ONEDIR_DEST);
-    const stagedOnedirDigest = readValidatedSidecar(
-        ONEDIR_SIDECAR_DEST,
-        stagedOnedir,
+    fs.writeFileSync(path.join(candidateDir, 'AstraDownloader.exe'), companionExe);
+    fs.writeFileSync(
+        path.join(candidateDir, COMPANION_BUILD_METADATA_NAME),
+        `${JSON.stringify(metadata, null, 2)}\n`,
+        'utf8',
+    );
+    const stagedDigest = writeValidatedSidecar(
+        path.join(candidateDir, 'AstraDownloader.exe.sha256'),
+        companionExe,
+    );
+    fs.writeFileSync(path.join(candidateDir, 'AstraDownloader-onedir.zip'), onedirArchive);
+    const stagedOnedirDigest = writeValidatedSidecar(
+        path.join(candidateDir, 'AstraDownloader-onedir.zip.sha256'),
+        onedirArchive,
         onedirName,
     );
     if (
         stagedDigest !== companionDigest
-        || stagedDigest !== sha256(stagedExe)
+        || stagedDigest !== sha256(companionExe)
         || stagedOnedirDigest !== onedirDigest
-        || stagedOnedirDigest !== crypto.createHash('sha256').update(stagedOnedir).digest('hex')
+        || stagedOnedirDigest !== sha256(onedirArchive)
     ) {
-        throw new Error('staged companion artifacts and SHA-256 sidecars do not match');
+        throw new Error('candidate companion artifacts and SHA-256 sidecars do not match');
     }
-    // Provenance must describe THIS binary. A release that ships last build's
-    // SBOM is worse than one that ships none: it reads as a verified inventory
-    // while naming components that were never in the artifact.
-    const stagedArtifactSha256 = crypto.createHash('sha256').update(companionExe).digest('hex');
-    if (!sbomDescribesArtifact(readReleaseArtifactJson(SBOM_NAME), stagedArtifactSha256)) {
+    return { companionDigest, metadata, onedirDigest };
+}
+
+function validateReleaseCandidate(candidateDir) {
+    const entries = fs.readdirSync(candidateDir, { withFileTypes: true });
+    const actualNames = entries.map((entry) => entry.name).sort();
+    const expectedNames = [...RELEASE_FILE_NAMES].sort();
+    if (
+        entries.some((entry) => !entry.isFile())
+        || actualNames.length !== expectedNames.length
+        || actualNames.some((name, index) => name !== expectedNames[index])
+    ) {
         throw new Error(
-            `build/${SBOM_NAME} does not describe the staged AstraDownloader.exe; ` +
-            'regenerate it with `npm run release:provenance`'
+            `release candidate must contain exactly: ${expectedNames.join(', ')}`
         );
     }
-    // Read rather than probed: the lock must exist and be non-empty, and an
-    // existence check would only tell us it was there a moment ago.
-    if (!readReleaseArtifact(LOCK_NAME).trim()) {
-        throw new Error(`build/${LOCK_NAME} is empty; regenerate it with \`npm run release:provenance\``);
+
+    const companionExe = readValidatedCompanionExe(
+        path.join(candidateDir, 'AstraDownloader.exe')
+    );
+    const metadata = readValidatedMetadata(
+        path.join(candidateDir, COMPANION_BUILD_METADATA_NAME),
+        companionExe,
+    );
+    const companionDigest = readValidatedSidecar(
+        path.join(candidateDir, 'AstraDownloader.exe.sha256'),
+        companionExe,
+    );
+    const onedirName = 'AstraDownloader-onedir.zip';
+    const onedirArchive = readValidatedOnedirArchive(path.join(candidateDir, onedirName));
+    const embeddedMetadata = readEmbeddedBuildMetadata(onedirArchive);
+    validateSharedBuildMetadata(metadata, embeddedMetadata, onedirName);
+    readValidatedSidecar(
+        path.join(candidateDir, `${onedirName}.sha256`),
+        onedirArchive,
+        onedirName,
+    );
+
+    const sbom = readReleaseArtifactJson(SBOM_NAME, candidateDir);
+    if (!sbomDescribesArtifact(sbom, companionDigest)) {
+        throw new Error(
+            `${SBOM_NAME} does not describe the candidate AstraDownloader.exe`
+        );
+    }
+    if (!readReleaseArtifact(LOCK_NAME, candidateDir).trim()) {
+        throw new Error(`${LOCK_NAME} is empty`);
+    }
+    checkCompanionInventory(sbom, companionDigest);
+    return { companionDigest, metadata, onedirBytes: onedirArchive.length };
+}
+
+function safeRemoveTemporaryDirectory(directory, parentDirectory, prefix) {
+    const resolvedDirectory = path.resolve(directory);
+    const resolvedParent = path.resolve(parentDirectory);
+    if (
+        path.dirname(resolvedDirectory) !== resolvedParent
+        || !path.basename(resolvedDirectory).startsWith(prefix)
+    ) {
+        throw new Error(`refusing to remove unsafe temporary path: ${resolvedDirectory}`);
+    }
+    fs.rmSync(resolvedDirectory, { recursive: true, force: true });
+}
+
+function publishReleaseCandidate(
+    candidateDir,
+    buildDir = BUILD_DIR,
+    names = RELEASE_FILE_NAMES,
+) {
+    assertBuildDirExists(buildDir);
+    const parentDirectory = path.dirname(path.resolve(buildDir));
+    const backupPrefix = '.astra-release-backup-';
+    const backupDir = fs.mkdtempSync(path.join(parentDirectory, backupPrefix));
+    const movedOriginals = [];
+    const movedCandidates = [];
+
+    try {
+        for (const name of names) {
+            try {
+                fs.renameSync(path.join(buildDir, name), path.join(backupDir, name));
+                movedOriginals.push(name);
+            } catch (error) {
+                if (!error || error.code !== 'ENOENT') throw error;
+            }
+        }
+        for (const name of names) {
+            fs.renameSync(path.join(candidateDir, name), path.join(buildDir, name));
+            movedCandidates.push(name);
+        }
+    } catch (publicationError) {
+        const rollbackErrors = [];
+        for (const name of [...movedCandidates].reverse()) {
+            try {
+                fs.renameSync(path.join(buildDir, name), path.join(candidateDir, name));
+            } catch (error) {
+                rollbackErrors.push(error);
+            }
+        }
+        for (const name of [...movedOriginals].reverse()) {
+            try {
+                fs.renameSync(path.join(backupDir, name), path.join(buildDir, name));
+            } catch (error) {
+                rollbackErrors.push(error);
+            }
+        }
+        if (rollbackErrors.length) {
+            throw new AggregateError(
+                [publicationError, ...rollbackErrors],
+                `release publication failed and rollback is incomplete; recovery files remain in ${backupDir}`,
+            );
+        }
+        safeRemoveTemporaryDirectory(backupDir, parentDirectory, backupPrefix);
+        throw publicationError;
     }
 
-    const wingetManifest = updateWingetManifestDigest(metadata.version, stagedArtifactSha256);
-    console.log(`Staged companion EXE: build/AstraDownloader.exe (${companionExe.length} bytes)`);
-    console.log(`Updated winget InstallerSha256: ${path.relative(REPO_ROOT, wingetManifest)}`);
+    safeRemoveTemporaryDirectory(backupDir, parentDirectory, backupPrefix);
+}
+
+async function runReleaseTransaction(options = {}) {
+    const buildDir = path.resolve(options.buildDir || BUILD_DIR);
+    const resolveHelpers = options.resolveHelpers || resolveRuntimeHelpers;
+    const writeCandidate = options.writeCandidate || (
+        (candidateDir) => writeCandidateArtifacts(candidateDir, options.artifacts)
+    );
+    const writeProvenance = options.writeProvenance || writeReleaseProvenance;
+    const validateCandidate = options.validateCandidate || validateReleaseCandidate;
+    const publishCandidate = options.publishCandidate || publishReleaseCandidate;
+
+    assertBuildDirExists(buildDir);
+    await resolveHelpers();
+
+    const parentDirectory = path.dirname(buildDir);
+    const candidatePrefix = '.astra-release-candidate-';
+    const candidateDir = fs.mkdtempSync(path.join(parentDirectory, candidatePrefix));
+    try {
+        await writeCandidate(candidateDir);
+        await writeProvenance(candidateDir);
+        const validation = await validateCandidate(candidateDir);
+        await publishCandidate(candidateDir, buildDir, RELEASE_FILE_NAMES);
+        return validation;
+    } finally {
+        safeRemoveTemporaryDirectory(candidateDir, parentDirectory, candidatePrefix);
+    }
+}
+
+async function stageCompanionRelease(
+    sourcePath = DEFAULT_SOURCE,
+    metadataPath = DEFAULT_METADATA_SOURCE,
+    sidecarPath = `${sourcePath}.sha256`,
+    onedirPath = DEFAULT_ONEDIR_SOURCE,
+    onedirSidecarPath = `${onedirPath}.sha256`,
+) {
+    const validation = await runReleaseTransaction({
+        buildDir: BUILD_DIR,
+        artifacts: {
+            sourcePath,
+            metadataPath,
+            sidecarPath,
+            onedirPath,
+            onedirSidecarPath,
+        },
+    });
+
+    console.log(`Staged companion EXE: build/AstraDownloader.exe`);
     console.log(`Staged release SBOM: build/${SBOM_NAME}`);
     console.log(`Staged release lock: build/${LOCK_NAME}`);
     console.log(`Staged companion inventory input: build/${COMPANION_BUILD_METADATA_NAME}`);
     console.log('Staged companion SHA-256 sidecar: build/AstraDownloader.exe.sha256');
-    console.log(`Staged one-folder archive: build/${onedirName} (${onedirArchive.length} bytes)`);
-    console.log(`Staged one-folder SHA-256 sidecar: build/${onedirName}.sha256`);
+    console.log(`Staged one-folder archive: build/AstraDownloader-onedir.zip (${validation.onedirBytes} bytes)`);
+    console.log('Staged one-folder SHA-256 sidecar: build/AstraDownloader-onedir.zip.sha256');
+    return validation;
 }
 
 if (require.main === module) {
-    try {
-        stageCompanionRelease(process.argv[2] || DEFAULT_SOURCE, process.argv[3] || DEFAULT_METADATA_SOURCE);
-    } catch (err) {
+    stageCompanionRelease(
+        process.argv[2] || DEFAULT_SOURCE,
+        process.argv[3] || DEFAULT_METADATA_SOURCE,
+    ).catch((err) => {
         console.error('[stage-companion-release] ' + err.message);
-        process.exit(1);
-    }
+        process.exitCode = 1;
+    });
 }
 
 module.exports = {
+    RELEASE_FILE_NAMES,
+    publishReleaseCandidate,
     readValidatedMetadata,
     readValidatedOnedirArchive,
     readEmbeddedBuildMetadata,
     readValidatedSidecar,
+    runReleaseTransaction,
+    validateReleaseCandidate,
     validateSharedBuildMetadata,
+    writeCandidateArtifacts,
     stageCompanionRelease,
-    wingetInstallerManifestPath,
-    readWingetInstallerSha256,
-    updateWingetManifestDigest,
-    wingetDigestFailures
 };

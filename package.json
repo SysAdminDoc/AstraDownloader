@@ -28,6 +28,6 @@
     "translations": "py -3.13 scripts/build-companion-translations.py",
     "release:provenance": "node scripts/write-release-provenance.js",
     "release:helpers": "node scripts/resolve-runtime-helpers.js",
-    "release:stage": "node scripts/resolve-runtime-helpers.js && node scripts/stage-companion-release.js"
+    "release:stage": "node scripts/stage-companion-release.js"
   }
 }

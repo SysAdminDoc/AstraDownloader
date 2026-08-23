@@ -12,6 +12,18 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- **Release staging is now one transaction.** `npm run release:stage` resolves
+  runtime helpers, creates provenance against an isolated candidate, validates
+  every release file, then publishes the complete set. A failed helper, hash,
+  metadata, inventory, or provenance check leaves the previous files in
+  `build/` byte-for-byte unchanged.
+
+- **The repository no longer carries Winget submission manifests.** Releases
+  continue through GitHub Releases, with the maintained Scoop manifest for
+  package-manager installs.
+
 ### Fixed
 
 - **The local API now describes and enforces its real routes.** Flask accepts
