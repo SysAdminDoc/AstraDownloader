@@ -2156,9 +2156,9 @@ class QuickDownloadBatchTests(unittest.TestCase):
                     ad.MainWindow._start_quick_download(window)
                 self.assertEqual(calls[0]["section"], expected)
 
-    def test_probed_size_can_refuse_a_quick_download_before_queueing(self):
+    def test_probed_size_reaches_the_central_queue_preflight(self):
         window, calls = self._window(
-            "https://vimeo.com/1", [("dl_1", None)]
+            "https://vimeo.com/1", [(None, "Not enough free disk space.")]
         )
         with tempfile.TemporaryDirectory() as tmpdir:
             window.config = FakeConfig({"DownloadPath": tmpdir})
@@ -2173,14 +2173,12 @@ class QuickDownloadBatchTests(unittest.TestCase):
             }
             window._dependencies.update({
                 "normalize_url": ad.normalize_url,
-                "estimate_download_bytes": ad.estimate_download_bytes,
-                "check_download_disk_space": lambda *_args, **_kwargs:
-                    ad.download_error_payload("insufficient-disk-space"),
             })
             with mock.patch.object(gui_module_for_tests(), "repolish"):
                 ad.MainWindow._start_quick_download(window)
 
-        self.assertEqual(calls, [])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["format_summary"], window._format_probe_summary)
         self.assertEqual(
             window.quick_download_status.properties["tone"], "danger"
         )
@@ -2820,15 +2818,16 @@ class DiskSpacePreflightTests(unittest.TestCase):
         self.assertIn("staging volume", failure["error"])
         self.assertNotIn("output volume", failure["error"])
 
-    def test_quick_download_preflight_passes_the_install_volume(self):
-        window, calls = QuickDownloadBatchTests()._window(
-            "https://vimeo.com/1", [("dl_1", None)]
-        )
+    def test_queue_preflight_passes_the_install_volume(self):
         with tempfile.TemporaryDirectory() as output_dir, \
                 tempfile.TemporaryDirectory() as install_dir:
-            window.config = FakeConfig({"DownloadPath": output_dir})
-            window._format_probe_summary_url = "https://vimeo.com/1"
-            window._format_probe_summary = {
+            config = FakeConfig({
+                "DownloadPath": output_dir,
+                "AudioDownloadPath": output_dir,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager.pause_intake()
+            summary = {
                 "formats": [{
                     "has_video": True,
                     "has_audio": True,
@@ -2842,17 +2841,15 @@ class DiskSpacePreflightTests(unittest.TestCase):
                 received.update(kwargs)
                 return None
 
-            window._dependencies.update({
-                "normalize_url": ad.normalize_url,
-                "estimate_download_bytes": ad.estimate_download_bytes,
-                "check_download_disk_space": check,
-                "INSTALL_DIR": lambda: Path(install_dir),
-            })
-            with mock.patch.object(gui_module_for_tests(), "repolish"):
-                ad.MainWindow._start_quick_download(window)
+            manager._dependencies["check_download_disk_space"] = check
+            manager._dependencies["INSTALL_DIR"] = lambda: Path(install_dir)
+            download_id, error = manager.start_download(
+                "https://vimeo.com/1", format_summary=summary
+            )
 
         self.assertEqual(received["staging_path"], Path(install_dir))
-        self.assertEqual(len(calls), 1)
+        self.assertIsNone(error)
+        self.assertIn(download_id, manager.downloads)
 
 
 class FormatProbeTests(unittest.TestCase):

@@ -4301,6 +4301,35 @@ class MediaSourcePolicyTests(unittest.TestCase):
             self.assertIsNone(error)
             self.assertIn(dl_id, manager.downloads)
 
+    def test_start_download_rejects_a_probed_size_before_queueing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager.pause_intake()
+            manager._dependencies["check_download_disk_space"] = (
+                lambda *_args, **_kwargs: ad.download_error_payload(
+                    "insufficient-disk-space",
+                    error="The selected format is 400 MiB short of free space.",
+                )
+            )
+
+            dl_id, error = manager.start_download(
+                url="https://example.com/video",
+                format_summary={
+                    "formats": [{
+                        "has_video": True,
+                        "has_audio": True,
+                        "height": 1080,
+                        "filesize": 500 * 1024 * 1024,
+                    }],
+                },
+            )
+
+        self.assertIsNone(dl_id)
+        self.assertEqual(error.error_code, "insufficient-disk-space")
+        self.assertIn("400 MiB short", str(error))
+        self.assertEqual(manager.downloads, {})
+
     def test_playlist_detection_covers_other_sites_without_changing_youtube(self):
         for playlist in (
             "https://www.youtube.com/playlist?list=PL123",

@@ -2725,6 +2725,20 @@ def download_error_payload(error_code, error=None, advice=None):
     }
 
 
+class DownloadStartError(str):
+    """A string-compatible queue refusal with a stable recovery payload."""
+
+    def __new__(cls, payload):
+        safe_payload = dict(payload) if isinstance(payload, dict) else {}
+        message = str(safe_payload.get('error') or 'Download could not start.')
+        instance = super().__new__(cls, message)
+        instance.payload = safe_payload
+        instance.error_code = str(
+            safe_payload.get('error_code') or safe_payload.get('code') or ''
+        )
+        return instance
+
+
 def _format_byte_count(value):
     value = max(0.0, float(value or 0))
     units = ('B', 'KiB', 'MiB', 'GiB', 'TiB')
@@ -4677,7 +4691,8 @@ class DownloadManagerCore:
                        section=None, playlist_items=None, subscription_id=None,
                        archive_key=None, subtitles_only=False, video_password=None,
                        profile_name=None, output_name=None,
-                       output_template=None):
+                       output_template=None, format_summary=None,
+                       probe_size=False):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
@@ -4710,6 +4725,7 @@ class DownloadManagerCore:
             url, self.config.get('SiteProfiles', []), profile_name
         )
         audio_only = self._dependencies['coerce_bool'](audio_only, False)
+        subtitles_only = self._dependencies['coerce_bool'](subtitles_only, False)
         section, section_error = self._dependencies['normalize_download_section'](section)
         if section_error:
             return None, section_error
@@ -4789,12 +4805,53 @@ class DownloadManagerCore:
         )
         if err:
             return None, err
+
+        # The queue boundary owns storage admission because every producer
+        # lands here. GUI callers can hand over the summary their asynchronous
+        # picker already fetched; API and subscription callers request the same
+        # bounded yt-dlp probe here. An unavailable estimate deliberately keeps
+        # the historical queue path open, matching estimate_download_bytes().
+        summary = format_summary if isinstance(format_summary, dict) else None
+        should_probe_size = self._dependencies['coerce_bool'](probe_size, False)
+        if summary is None and should_probe_size and not subtitles_only:
+            summary, probe_error = self.list_formats(url)
+            if probe_error:
+                self._dependencies['write_persistent_log'](
+                    'Download disk-space preflight could not obtain a size '
+                    f'estimate: {str(probe_error)[:240]}'
+                )
+                summary = None
+        if summary is not None and not subtitles_only:
+            required_bytes = estimate_download_bytes(
+                summary,
+                audio_only=audio_only,
+                quality=quality,
+            )
+            if playlist_items:
+                required_bytes *= len(playlist_items)
+            staging_path = None
+            if not self.config.get('KeepIntermediateFiles', False):
+                staging_path = self._dependencies['INSTALL_DIR']()
+            try:
+                space_failure = self._dependencies['check_download_disk_space'](
+                    output_dir,
+                    required_bytes,
+                    staging_path=staging_path,
+                )
+            except Exception as error:  # noqa: BLE001
+                space_failure = download_error_payload(
+                    'insufficient-disk-space',
+                    error=(
+                        'Could not check free disk space before starting the '
+                        f'download: {error}'
+                    ),
+                )
+            if space_failure:
+                return None, DownloadStartError(space_failure)
         title = self._dependencies['clean_text'](title, None, 500) or None
         referer, _ = self._dependencies['normalize_url'](referer) if referer else (None, None)
         subscription_id = self._dependencies['clean_text'](subscription_id, '', 120) or None
         archive_key = self._dependencies['clean_text'](archive_key, '', 430) or None
-        subtitles_only = self._dependencies['coerce_bool'](subtitles_only, False)
-
         with self._lock:
             # Re-check capacity under the lock. The first check released the
             # lock for URL/output normalization, so concurrent requests could

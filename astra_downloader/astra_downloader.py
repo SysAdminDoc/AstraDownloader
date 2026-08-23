@@ -5353,6 +5353,7 @@ def build_subscription_manager(config, dl_manager):
             quality=subscription.get('quality') or None,
             output_dir=subscription.get('outputDir') or None,
             output_template=subscription.get('outputTemplate') or None,
+            probe_size=True,
         )
 
     return SubscriptionManager(
@@ -5880,7 +5881,6 @@ class MainWindow(MainWindowCore):
                 'probed_video_heights': lambda *args, **kwargs: probed_video_heights(*args, **kwargs),
                 'SABR_LIMITED_NOTICE': lambda: SABR_LIMITED_NOTICE,
                 'describe_sabr_voided_options': lambda *args, **kwargs: describe_sabr_voided_options(*args, **kwargs),
-                'estimate_download_bytes': lambda *args, **kwargs: estimate_download_bytes(*args, **kwargs),
                 'sabr_only_formats': lambda *args, **kwargs: sabr_only_formats(*args, **kwargs),
                 'quality_choices_for_heights': lambda *args, **kwargs: quality_choices_for_heights(*args, **kwargs),
                 'looks_like_media_link': lambda *args, **kwargs: looks_like_media_link(*args, **kwargs),

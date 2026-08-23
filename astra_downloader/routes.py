@@ -673,8 +673,17 @@ def _register_download_routes(api, context, dependencies):
             section=body.get('section'),
             playlist_items=body.get('playlistItems'),
             video_password=body.get('videoPassword'),
+            probe_size=True,
         )
         if err:
+            error_code = getattr(err, 'error_code', '')
+            if error_code == 'insufficient-disk-space':
+                payload = getattr(err, 'payload', None)
+                if not isinstance(payload, dict):
+                    payload = download_error_payload(
+                        'insufficient-disk-space', error=str(err)
+                    )
+                return cors_response(payload, 507)
             if 'queue is full' in err.lower():
                 return cors_response({
                     "error": err,

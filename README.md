@@ -78,6 +78,9 @@ pasting a link never needs it.
   expired sign-ins, GitHub API exhaustion, and token-provider trouble, with a
   repair action for each condition. Download failures retain the same named
   causes and recovery guidance.
+- **It checks that the selected format fits.** A known size is compared with
+  free space before the request enters the queue, whether it came from the
+  desktop window, browser extension, or a scheduled subscription.
 - **Get past a block.** Imitate a real browser's TLS fingerprint, chosen from
   the targets your yt-dlp actually ships, for sites that answer 403.
 - **Inherit the system proxy.** Turn one Settings option on and downloads use
@@ -218,7 +221,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1173 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1175 tests across every core; scratch stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
