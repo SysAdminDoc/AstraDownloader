@@ -1595,33 +1595,54 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertIn("already finished", resp.get_json()["error"])
 
     def test_dns_rebinding_attack_is_rejected_before_handler(self):
-        """Verify Host-header validation blocks DNS rebinding to attacker-controlled domains."""
+        """Only canonical loopback authorities may reach a route handler."""
+        from werkzeug.test import create_environ, run_wsgi_app
+
         token = "e" * 32
         config = FakeConfig({"ServerToken": token})
         manager = ad.DownloadManager(config, FakeHistory())
         api = ad.create_api(config, manager, FakeHistory())
-        client = api.test_client()
+        reached = []
 
-        # Simulate a DNS-rebinding attack: the browser resolved attacker.com
-        # to 127.0.0.1 after the page loaded, but it still sends the attacker
-        # hostname in the Host header. Legitimate local clients always send
-        # 127.0.0.1 / localhost / ::1.
-        for bad_host in ("attacker.com", "attacker.com:9751", "example.org:80"):
+        @api.get("/host-probe")
+        def host_probe():
+            reached.append(True)
+            return {"ok": True}
+
+        def request_with_raw_host(host):
+            environ = create_environ(path="/host-probe", base_url="http://localhost")
+            environ["HTTP_HOST"] = host
+            app_iter, status, _headers = run_wsgi_app(api, environ, buffered=True)
+            return int(status.split()[0]), json.loads(b"".join(app_iter))
+
+        self.assertEqual(
+            api.config["TRUSTED_HOSTS"],
+            ["127.0.0.1", "localhost", "[::1]"],
+        )
+        bad_hosts = (
+            "", "attacker.com", "attacker.com:9751", "localhost.evil",
+            "127.0.0.1.evil", "[::1].evil", "localhost@attacker.com",
+            "[::2]", "::1", "[::1", "localhost:notaport",
+            "localhost:0", "localhost:65536", "localhost:80:90",
+        )
+        for bad_host in bad_hosts:
             with self.subTest(host=bad_host):
-                resp = client.get(
-                    "/health",
-                    headers={"Host": bad_host, "X-MDL-Client": "MediaDL"},
-                )
-                self.assertEqual(resp.status_code, 421, f"Expected 421 Misdirected Request for Host={bad_host}")
-                self.assertIn("Invalid Host", resp.get_json().get("error", ""))
+                status, body = request_with_raw_host(bad_host)
+                self.assertEqual(status, 421, f"Expected 421 for Host={bad_host}")
+                self.assertIn("Invalid Host", body.get("error", ""))
+                self.assertEqual(reached, [])
 
-        for good_host in ("127.0.0.1:9751", "localhost:9751", "[::1]:9751"):
+        good_hosts = (
+            "127.0.0.1", "127.0.0.1:9751", "localhost",
+            "localhost:65535", "[::1]", "[::1]:9751",
+        )
+        for good_host in good_hosts:
             with self.subTest(host=good_host):
-                resp = client.get(
-                    "/health",
-                    headers={"Host": good_host, "X-MDL-Client": "MediaDL"},
-                )
-                self.assertEqual(resp.status_code, 200, f"Expected 200 for Host={good_host}")
+                reached.clear()
+                status, body = request_with_raw_host(good_host)
+                self.assertEqual(status, 200, f"Expected 200 for Host={good_host}")
+                self.assertEqual(body, {"ok": True})
+                self.assertEqual(reached, [True])
 
     def test_missing_source_dependency_message_requires_explicit_virtualenv_setup(self):
         error = ModuleNotFoundError("missing PySide6", name="PySide6")
@@ -2547,6 +2568,61 @@ class CorsHeaderTests(unittest.TestCase):
         }
         self.assertEqual(resp.status_code, 200)
         self.assertTrue({"x-mdl-token", "x-mdl-token-source"}.issubset(allowed))
+
+    def test_preflight_methods_match_routes_and_patch_succeeds(self):
+        token = "p" * 32
+        origin = "chrome-extension://trustedlegacyid"
+        updates = []
+
+        def update_subscription(subscription_id, **fields):
+            updates.append((subscription_id, fields))
+            return {"id": subscription_id, **fields}, None
+
+        subscriptions = types.SimpleNamespace(
+            update_subscription=update_subscription,
+        )
+        config = FakeConfig({
+            "ServerToken": token,
+            "LegacyHealthTokenOrigins": origin,
+        })
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(
+            config, manager, FakeHistory(), subscriptions=subscriptions,
+        )
+        client = api.test_client()
+
+        preflight = client.options(
+            "/subscriptions/sub-1",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "PATCH",
+                "Access-Control-Request-Headers": "X-Auth-Token,Content-Type",
+            },
+        )
+        actual = {
+            method.strip()
+            for method in preflight.headers["Access-Control-Allow-Methods"].split(",")
+            if method.strip()
+        }
+        expected = set()
+        for rule in api.url_map.iter_rules():
+            if rule.endpoint != "static":
+                expected.update(set(rule.methods or ()) - {"HEAD"})
+
+        self.assertEqual(preflight.status_code, 200)
+        self.assertEqual(preflight.headers["Access-Control-Allow-Origin"], origin)
+        self.assertEqual(actual, expected)
+        self.assertIn("PATCH", actual)
+        self.assertNotIn("PUT", actual)
+
+        patched = client.patch(
+            "/subscriptions/sub-1",
+            json={"title": "Updated source"},
+            headers={"Origin": origin, "X-Auth-Token": token},
+        )
+        self.assertEqual(patched.status_code, 200)
+        self.assertEqual(patched.headers["Access-Control-Allow-Origin"], origin)
+        self.assertEqual(updates, [("sub-1", {"title": "Updated source"})])
 
     def test_response_disables_intermediary_caching(self):
         # v1.4.0 NX11: defense-in-depth against intermediary caching of

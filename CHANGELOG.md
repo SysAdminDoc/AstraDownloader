@@ -14,6 +14,12 @@ repository's git log.
 
 ### Fixed
 
+- **The local API now describes and enforces its real routes.** Flask accepts
+  only canonical loopback Host headers with valid ports. Empty or malformed
+  authorities are rejected before a route runs. Browser preflights now list
+  the methods registered by the application, including subscription updates
+  through PATCH, and no longer advertise an unused PUT method.
+
 - **A routine YouTube warning no longer turns a finished download into a
   failure.** If yt-dlp writes the file and exits normally, Astra now reports it
   as complete. The same warning still explains the failure when no file was

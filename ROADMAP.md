@@ -10,13 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-74 | Derive loopback Host and CORS policy from Flask's registered contract
-  Why: The custom Host parser accepts [::1].evil as loopback, while the hand-written CORS list omits PATCH even though the subscriptions route registers it.
-  Evidence: astra_downloader/routes.py is_allowed_host, cors_response, and subscriptions_update; astra_downloader/test_routes.py preflight tests; Flask 3.1 TRUSTED_HOSTS documentation.
-  Touches: astra_downloader/routes.py, astra_downloader/test_routes.py.
-  Acceptance: Flask TRUSTED_HOSTS permits only 127.0.0.1, localhost, and [::1] with valid optional ports. Empty hosts, suffixes, userinfo, and malformed ports fail before a route runs. Access-Control-Allow-Methods is derived from registered browser-callable routes, an allowed-origin OPTIONS request advertises PATCH, the following PATCH succeeds, and a route-map parity test prevents drift.
-  Complexity: M
-
 - [ ] P1 | AD-75 | Make release staging one successful transaction
   Why: The documented release flow currently requires staging to copy new bytes and fail on stale provenance before provenance is regenerated and staging is run again.
   Evidence: CLAUDE.md release procedure; scripts/stage-companion-release.js; scripts/write-release-provenance.js; tests/release-provenance.test.js. This converts the concrete build-pipeline gap recorded in AD-71 into a testable fix.

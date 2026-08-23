@@ -8,9 +8,10 @@ import traceback
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, request
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, SecurityError
 
 try:
     from ._compat import make_legacy_resolver
@@ -293,6 +294,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     # The error handlers below keep Flask's rejection in the same JSON/CORS
     # contract as an ordinary route response.
     api.config['MAX_CONTENT_LENGTH'] = MAX_REQUEST_BYTES
+    api.config['TRUSTED_HOSTS'] = ['127.0.0.1', 'localhost', '[::1]']
 
     # v1.2.0: token-bucket rate limit on /download. Other endpoints are
     # cheap and read-only; we don't limit them (local-only service, no
@@ -365,21 +367,52 @@ def create_api(config, dl_manager, history, *, dependencies):
         origins = legacy_health_token_origin_allowlist(config)
         return bool(normalized and normalized in origins)
 
-    # v3.15.0: DNS-rebinding defense. A browser visiting attacker.com that
-    # rebinds the host to 127.0.0.1 will send `Host: attacker.com` — legitimate
-    # local clients always send `Host: 127.0.0.1:PORT` or `localhost:PORT`.
-    # Werkzeug does not validate Host by default, so we have to do it ourselves.
+    # Flask owns the primary DNS-rebinding boundary through TRUSTED_HOSTS.
+    # Keep one canonical-authority check because Werkzeug 3.1 treats every
+    # bracketed IPv6 literal as equivalent while matching a trusted `[::1]`.
     def is_allowed_host():
-        host = (request.headers.get("Host") or "").strip().lower()
-        if not host:
+        authority = request.environ.get('HTTP_HOST', '')
+        if not isinstance(authority, str) or not authority:
             return False
-        # Strip the port so we compare hostnames reliably across port fallbacks.
-        if host.startswith('['):  # ipv6 literal like "[::1]:9751"
-            end = host.find(']')
-            hostname = host[1:end] if end != -1 else host
-        else:
-            hostname = host.split(':', 1)[0]
-        return hostname in {'127.0.0.1', 'localhost', '::1'}
+        if authority != authority.strip():
+            return False
+        try:
+            parsed = urlsplit(f'//{authority}')
+            hostname = parsed.hostname
+            port = parsed.port
+        except (TypeError, ValueError):
+            return False
+        if any((
+            parsed.scheme, parsed.path, parsed.query, parsed.fragment,
+            parsed.username is not None, parsed.password is not None,
+        )):
+            return False
+        if hostname not in {'127.0.0.1', 'localhost', '::1'}:
+            return False
+        canonical_host = '[::1]' if hostname == '::1' else hostname
+        lowered = authority.casefold()
+        if port is None:
+            return lowered == canonical_host
+        prefix = canonical_host + ':'
+        port_text = lowered[len(prefix):] if lowered.startswith(prefix) else ''
+        return bool(
+            port_text
+            and port_text.isascii()
+            and port_text.isdecimal()
+            and 1 <= port <= 65535
+        )
+
+    def registered_cors_methods():
+        methods = set()
+        for rule in api.url_map.iter_rules():
+            if rule.endpoint != 'static':
+                methods.update(rule.methods or ())
+        methods.discard('HEAD')
+        priority = {'GET': 0, 'POST': 1, 'PATCH': 2, 'DELETE': 3, 'OPTIONS': 4}
+        return ','.join(sorted(
+            methods,
+            key=lambda method: (priority.get(method, len(priority)), method),
+        ))
 
     def cors_response(data, status=200, extra_headers=None, *, allow_origin=None):
         resp = jsonify(data)
@@ -408,7 +441,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         if reflected:
             resp.headers["Access-Control-Allow-Origin"] = reflected
             resp.headers["Vary"] = "Origin"
-        resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+        resp.headers["Access-Control-Allow-Methods"] = registered_cors_methods()
         resp.headers["Access-Control-Allow-Headers"] = (
             "Content-Type,X-Auth-Token,X-MDL-Api,X-MDL-Client,"
             "X-MDL-Token,X-MDL-Token-Source"
@@ -460,6 +493,11 @@ def create_api(config, dl_manager, history, *, dependencies):
     def handle_http_error(error):
         if error.code == 413:
             return handle_request_too_large(error)
+        if isinstance(error, SecurityError):
+            return cors_response({
+                "error": "Invalid Host header",
+                "code": "invalid-host",
+            }, 421)
         return cors_response({
             "error": error.description or "The request could not be completed.",
             "code": f"http-{error.code or 500}",
