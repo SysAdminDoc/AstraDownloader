@@ -223,7 +223,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1181 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1182 tests across every core; scratch stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
@@ -253,9 +253,10 @@ reporting.
 
 The port list is a contract between the two repositories, checked in both from
 identical copies of `scripts/companion-port-catalogue.json`. Requests are
-accepted from this machine only and must carry the session token; the server
-rejects any request whose `Host` header is not loopback, which closes DNS
-rebinding.
+accepted from this machine only and must carry the session token. Flask accepts
+only canonical `127.0.0.1`, `localhost`, or `[::1]` Host authorities with valid
+ports, which closes DNS rebinding. Browser preflight methods are generated from
+the routes the server actually registers.
 
 ## Security
 

@@ -42,9 +42,10 @@ documentation mistakes, and feature requests.
 
 ## Scope Notes
 
-Astra Downloader binds to loopback only and rejects any request whose `Host`
-header is not loopback, which closes DNS rebinding. Requests must carry the
-session token.
+Astra Downloader binds to loopback only. Flask accepts only canonical
+`127.0.0.1`, `localhost`, or `[::1]` Host authorities with valid ports, which
+closes DNS rebinding before a route runs. Requests must carry the session
+token.
 
 These are known and accepted properties, not vulnerabilities:
 
