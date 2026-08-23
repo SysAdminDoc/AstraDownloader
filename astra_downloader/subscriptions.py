@@ -20,9 +20,21 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 try:
-    from .config import DurableUndoStore
+    from .config import (
+        DurableUndoStore,
+        SUBSCRIPTION_AUDIO_FORMATS,
+        SUBSCRIPTION_QUALITY_CHOICES,
+        SUBSCRIPTION_VIDEO_FORMATS,
+        sanitize_subscription_delivery,
+    )
 except ImportError:  # Flat source-path compatibility.
-    from config import DurableUndoStore
+    from config import (
+        DurableUndoStore,
+        SUBSCRIPTION_AUDIO_FORMATS,
+        SUBSCRIPTION_QUALITY_CHOICES,
+        SUBSCRIPTION_VIDEO_FORMATS,
+        sanitize_subscription_delivery,
+    )
 
 
 __all__ = (
@@ -58,16 +70,6 @@ SUBSCRIPTION_SCHEMA_VERSION = 2
 # saw the whole source or only a window of it; a test pins the two together.
 SUBSCRIPTION_PROBE_LIMIT = 50
 
-# What a subscription may override about how its videos are delivered. An
-# empty value always means "fall back to the global setting", so the absence
-# of an override and an override that matches the global are the same thing.
-# config.py owns the same vocabulary for site profiles; a test pins the two
-# together, because the modules never cross-import.
-SUBSCRIPTION_VIDEO_FORMATS = frozenset({"", "mp4", "mkv", "webm"})
-SUBSCRIPTION_AUDIO_FORMATS = frozenset({"", "mp3", "m4a", "opus", "flac", "wav"})
-SUBSCRIPTION_QUALITY_CHOICES = frozenset({
-    "", "best", "2160", "1440", "1080", "720", "480",
-})
 SUBSCRIPTION_MIN_INTERVAL_MINUTES = 5
 SUBSCRIPTION_MAX_INTERVAL_MINUTES = 7 * 24 * 60
 SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS = 3
@@ -251,38 +253,6 @@ def normalize_subscription_candidate(
         "title": title,
         "channel": channel,
         "uploadDate": upload_date,
-    }
-
-
-def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
-    """Reduce a delivery override to the fields a subscription may carry.
-
-    Every value is optional and an empty one means "use the global setting".
-    A format that does not match the chosen kind is dropped rather than
-    corrected: silently turning a requested `mp3` into `mp4` because the
-    subscription is a video one would deliver something nobody asked for.
-    """
-    clean = clean_text or _default_clean_text
-    boolean = coerce_bool or _default_coerce_bool
-    raw = raw if isinstance(raw, dict) else {}
-    audio_only = boolean(raw.get("audioOnly"), False)
-    fmt = clean(raw.get("format"), "", 16).lower()
-    allowed = SUBSCRIPTION_AUDIO_FORMATS if audio_only else SUBSCRIPTION_VIDEO_FORMATS
-    if fmt not in allowed:
-        fmt = ""
-    quality = clean(raw.get("quality"), "", 8).lower()
-    if quality not in SUBSCRIPTION_QUALITY_CHOICES:
-        quality = ""
-    return {
-        "outputDir": clean(raw.get("outputDir"), "", 4096),
-        "format": fmt,
-        "quality": quality,
-        "outputTemplate": clean(raw.get("outputTemplate"), "", 300),
-        "audioOnly": audio_only,
-        # Off by default, and it costs a metadata fetch per already-captured
-        # video on every scan. That is the whole reason it is a choice: a
-        # channel with 500 archived uploads would pay 500 probes an hour.
-        "upgradeIfBetter": boolean(raw.get("upgradeIfBetter"), False),
     }
 
 

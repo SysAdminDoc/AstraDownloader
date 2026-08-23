@@ -10,13 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-73 | Preserve subscription delivery policy in settings bundles
-  Why: A successful schema-1 export and import silently resets every per-subscription delivery override, including audio-only mode, format, quality, template, and upgrade behavior.
-  Evidence: astra_downloader/config.py _BUNDLE_SUBSCRIPTION_FIELDS and read_settings_bundle; astra_downloader/gui.py _import_settings_bundle; astra_downloader/subscriptions.py sanitize_subscription_delivery.
-  Touches: astra_downloader/config.py, astra_downloader/gui.py, astra_downloader/subscriptions.py, astra_downloader/test_gui.py.
-  Acceptance: Schema 2 exports a nested delivery object, normalizes it through sanitize_subscription_delivery, and passes it to add_subscription. An outputDir under the incoming DownloadPath or AudioDownloadPath survives; any other path is omitted with a visible import warning and never widens ExtraOutputRoots. Schema 1 remains readable, and full round-trip plus migration tests pass.
-  Complexity: M
-
 - [ ] P1 | AD-74 | Derive loopback Host and CORS policy from Flask's registered contract
   Why: The custom Host parser accepts [::1].evil as loopback, while the hand-written CORS list omits PATCH even though the subscriptions route registers it.
   Evidence: astra_downloader/routes.py is_allowed_host, cors_response, and subscriptions_update; astra_downloader/test_routes.py preflight tests; Flask 3.1 TRUSTED_HOSTS documentation.

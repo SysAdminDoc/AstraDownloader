@@ -3594,6 +3594,97 @@ class SettingsBundleTests(unittest.TestCase):
         self.assertEqual(record["intervalMinutes"], 120)
         self.assertIs(record["enabled"], True)
 
+    def test_subscription_delivery_round_trips_in_schema_two(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            video_root = root / "video"
+            audio_root = root / "audio"
+            delivery_root = audio_root / "feeds" / "astra"
+            settings = ad.sanitize_config({
+                "DownloadPath": str(video_root),
+                "AudioDownloadPath": str(audio_root),
+            })
+            subscription = dict(
+                self.SUBSCRIPTION,
+                outputDir=str(delivery_root),
+                format="opus",
+                quality="best",
+                outputTemplate="%(channel)s/%(title)s.%(ext)s",
+                audioOnly=True,
+                upgradeIfBetter=True,
+            )
+
+            exported = ad.build_settings_bundle(settings, [subscription])
+            imported, error = ad.read_settings_bundle(
+                json.loads(json.dumps(exported))
+            )
+
+        self.assertIsNone(error)
+        self.assertEqual(exported["schemaVersion"], 2)
+        exported_record = exported["subscriptions"][0]
+        self.assertNotIn("outputDir", exported_record)
+        self.assertEqual(exported_record["delivery"]["format"], "opus")
+        self.assertEqual(imported["subscriptions"][0]["delivery"], {
+            "outputDir": str(delivery_root.resolve()),
+            "format": "opus",
+            "quality": "best",
+            "outputTemplate": "%(channel)s/%(title)s.%(ext)s",
+            "audioOnly": True,
+            "upgradeIfBetter": True,
+        })
+
+    def test_schema_one_subscription_migrates_without_delivery_overrides(self):
+        imported, error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": 1,
+            "settings": {"SubLangs": "en"},
+            "subscriptions": [{
+                "url": "https://www.youtube.com/@legacy",
+                "title": "Legacy",
+                "intervalMinutes": 90,
+                "enabled": True,
+            }],
+        })
+
+        self.assertIsNone(error)
+        self.assertEqual(imported["subscriptions"][0]["title"], "Legacy")
+        self.assertNotIn("delivery", imported["subscriptions"][0])
+
+    def test_subscription_output_outside_incoming_roots_is_omitted(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            video_root = root / "video"
+            audio_root = root / "audio"
+            outside = root / "outside" / "feed"
+            imported, error = ad.read_settings_bundle({
+                "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+                "schemaVersion": 2,
+                "settings": {
+                    "DownloadPath": str(video_root),
+                    "AudioDownloadPath": str(audio_root),
+                    "ExtraOutputRoots": [str(outside)],
+                },
+                "subscriptions": [{
+                    "url": "https://www.youtube.com/@outside",
+                    "title": "Outside",
+                    "intervalMinutes": 60,
+                    "enabled": True,
+                    "delivery": {
+                        "outputDir": str(outside),
+                        "format": "mp4",
+                        "quality": "1080",
+                    },
+                }],
+            })
+
+        self.assertIsNone(error)
+        self.assertEqual(
+            imported["subscriptions"][0]["delivery"]["outputDir"], ""
+        )
+        self.assertNotIn("ExtraOutputRoots", imported["settings"])
+        self.assertTrue(imported["warnings"])
+        self.assertIn("Outside", imported["warnings"][0])
+
     def test_every_exported_setting_is_one_the_app_knows(self):
         # A key the app no longer has would be silently dropped at import;
         # a key it has but never exports cannot be migrated at all.
@@ -4169,6 +4260,115 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertEqual(config.get("SubLangs"), "en")
         self.assertFalse(config.get("EmbedSubs"))
         self.assertNotIn("settingsImport", config.undo)
+
+    def test_settings_import_passes_delivery_and_reports_a_confined_path(self):
+        class MutableConfig(FakeConfig):
+            def __init__(self, data=None):
+                super().__init__(data)
+                self.undo = {}
+
+            def update(self, mapping):
+                self.data.update(mapping)
+                return True
+
+            def save_undo(self, key, value):
+                self.undo[key] = json.loads(json.dumps(value))
+                return True
+
+            def clear_undo(self, key):
+                self.undo.pop(key, None)
+                return True
+
+        class ImportedSubscriptions:
+            def __init__(self):
+                self.calls = []
+
+            def snapshot(self):
+                return {"subscriptions": [], "archive": {}, "scanning": []}
+
+            def add_subscription(self, url, **kwargs):
+                self.calls.append({"url": url, **kwargs})
+                return {"id": f"imported-{len(self.calls)}"}, None
+
+            def remove_subscription(self, _sub_id):
+                return True, None
+
+            def stop(self):
+                return None
+
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            video_root = root / "video"
+            audio_root = root / "audio"
+            valid_output = audio_root / "feed"
+            outside_output = root / "outside"
+            config = MutableConfig({
+                "DownloadPath": str(video_root),
+                "AudioDownloadPath": str(audio_root),
+                "ExtraOutputRoots": [str(root / "local-only")],
+            })
+            subscriptions = ImportedSubscriptions()
+            window = self._window(config, subscriptions=subscriptions)
+            payload = {
+                "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+                "schemaVersion": 2,
+                "settings": {
+                    "DownloadPath": str(video_root),
+                    "AudioDownloadPath": str(audio_root),
+                    "ExtraOutputRoots": [str(outside_output)],
+                },
+                "subscriptions": [
+                    {
+                        "url": "https://www.youtube.com/@inside",
+                        "title": "Inside",
+                        "intervalMinutes": 60,
+                        "enabled": True,
+                        "delivery": {
+                            "outputDir": str(valid_output),
+                            "format": "opus",
+                            "quality": "best",
+                            "audioOnly": True,
+                        },
+                    },
+                    {
+                        "url": "https://www.youtube.com/@outside",
+                        "title": "Outside",
+                        "intervalMinutes": 60,
+                        "enabled": True,
+                        "delivery": {
+                            "outputDir": str(outside_output),
+                            "format": "mp4",
+                        },
+                    },
+                ],
+            }
+            path = root / "settings.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with mock.patch.object(
+                ad.QFileDialog,
+                "getOpenFileName",
+                return_value=(str(path), "JSON files (*.json)"),
+            ):
+                self.assertTrue(window._import_settings_bundle())
+            QApplication.processEvents()
+
+            self.assertEqual(
+                subscriptions.calls[0]["delivery"]["outputDir"],
+                str(valid_output.resolve()),
+            )
+            self.assertEqual(
+                subscriptions.calls[1]["delivery"]["outputDir"], ""
+            )
+            self.assertEqual(
+                config.get("ExtraOutputRoots"), [str(root / "local-only")]
+            )
+            self.assertIn("Outside", window.settings_status.text())
+            self.assertEqual(
+                window.settings_status.property("tone"), "warning"
+            )
 
     def test_sign_in_browser_list_marks_chromium_entries_before_selection(self):
         from PySide6.QtWidgets import QApplication

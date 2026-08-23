@@ -5879,6 +5879,7 @@ class MainWindowCore(
                 interval_minutes=record["intervalMinutes"],
                 enabled=record["enabled"],
                 title=record["title"],
+                delivery=record.get("delivery"),
             )
             if add_error:
                 # A subscription already present is the ordinary case when
@@ -5961,13 +5962,15 @@ class MainWindowCore(
             parts.append(
                 tr_format("not carried: {settings}", settings=", ".join(excluded))
             )
+        bundle_warnings = changes.get("warnings") or []
+        parts.extend(str(warning) for warning in bundle_warnings[:5] if warning)
         if import_undo_warning:
             parts.append(
                 tr("The import stopped before all subscriptions were added.")
             )
         self._show_settings_status(
             ". ".join(parts) + ".",
-            "warning" if import_undo_warning else "success",
+            "warning" if import_undo_warning or bundle_warnings else "success",
         )
         self._append_log(
             f"Imported settings bundle from {path}: "
