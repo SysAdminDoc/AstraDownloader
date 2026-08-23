@@ -4798,12 +4798,14 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         self.assertEqual(download.progress, 100)
         self.assertEqual(download.filename, "clip.mp4")
 
-    def test_zero_exit_with_a_sabr_warning_is_not_complete(self):
-        # yt-dlp#12482: SABR leftover 360p still exits 0. Progress lines after
-        # the warning must not hide it from the zero-exit classifier.
+    def test_zero_exit_with_a_sabr_warning_and_file_completes(self):
+        # A warning describes formats yt-dlp skipped, not the file it did
+        # deliver. The finished file must be the source of truth at exit 0.
         def popen(args, **_kwargs):
             if '--ignore-config' not in args:
                 return self._FakeProc([], 0)
+            delivered = Path(tmpdir) / 'clip.mp4'
+            delivered.write_bytes(b'media')
             progress = [f'[download] {index}.0%' for index in range(1, 32)]
             return self._FakeProc(
                 [
@@ -4811,7 +4813,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
                     'been skipped as they are missing a url. YouTube is forcing '
                     'SABR streaming',
                     *progress,
-                    '[download] Destination: clip.mp4',
+                    f'MDLP_FILEPATH {json.dumps(str(delivered))}',
                 ],
                 0,
             )
@@ -4824,6 +4826,41 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             manager = ad.DownloadManager(config, FakeHistory())
             download = ad.Download(
                 "dl_sabr", "https://www.youtube.com/watch?v=abc", output_dir=tmpdir,
+            )
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                 mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                 mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                manager._run_download(download)
+
+        self.assertEqual(download.status, "complete")
+        self.assertEqual(download.progress, 100)
+        self.assertEqual(download.filename, str(Path(tmpdir) / 'clip.mp4'))
+        self.assertEqual(download.error_code, "")
+        self.assertTrue(getattr(download, "sabr_capped_warning", False))
+
+    def test_zero_exit_with_only_a_sabr_warning_still_fails(self):
+        def popen(args, **_kwargs):
+            if '--ignore-config' not in args:
+                return self._FakeProc([], 0)
+            return self._FakeProc(
+                [
+                    'WARNING: [youtube] abc: Some web client https formats have '
+                    'been skipped as they are missing a url. YouTube is forcing '
+                    'SABR streaming',
+                ],
+                0,
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({
+                "DownloadPath": tmpdir,
+                "AudioDownloadPath": tmpdir,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            download = ad.Download(
+                "dl_sabr_empty", "https://www.youtube.com/watch?v=abc",
+                output_dir=tmpdir,
             )
             download.status = "queued"
             with mock.patch.object(ad.subprocess, 'Popen', popen), \
