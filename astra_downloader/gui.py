@@ -907,7 +907,6 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'is_youtube_url',
     'probed_video_heights',
     'describe_sabr_voided_options',
-    'estimate_download_bytes',
     'sabr_only_formats',
     'SABR_LIMITED_NOTICE',
     'quality_choices_for_heights',
@@ -3072,11 +3071,10 @@ class MainWindowCore(
                 self._set_quick_download_status(error, "error")
                 return
 
-        # A format probe is the only honest size estimate yt-dlp gives us
-        # before a run. Use it for one-link quick downloads; batches and
-        # unprobed links retain the normal queue path rather than pretending
-        # an unknown size is safe or unsafe.
+        # Hand the queue boundary the asynchronous probe this page already
+        # owns. The manager applies the actual storage policy for every caller.
         kind = self.quick_download_type.currentData()
+        format_summary = None
         if len(urls) == 1 and kind != "subtitles":
             normalize_url = self._dependencies.get('normalize_url')
             normalized, normalize_error = (
@@ -3087,37 +3085,7 @@ class MainWindowCore(
                 and normalized
                 and normalized == getattr(self, "_format_probe_summary_url", "")
             ):
-                estimate = self._dependencies['estimate_download_bytes'](
-                    getattr(self, "_format_probe_summary", {}),
-                    audio_only=kind == "audio",
-                    quality=self.quick_download_quality.currentData() or "best",
-                )
-                if estimate:
-                    output_dir = self._quick_download_dir or (
-                        self.config.get("AudioDownloadPath")
-                        if kind == "audio" and self.config.get("AudioDownloadPath")
-                        else self.config.get("DownloadPath")
-                    )
-                    staging_path = None
-                    if not self.config.get("KeepIntermediateFiles", False):
-                        install_value = self._dependencies.get("INSTALL_DIR")
-                        staging_path = (
-                            install_value() if callable(install_value)
-                            else install_value
-                        )
-                    space_failure = self._dependencies['check_download_disk_space'](
-                        output_dir, estimate, staging_path=staging_path
-                    )
-                    if space_failure:
-                        self._set_quick_download_status(
-                            space_failure.get("error") or "Not enough free disk space.",
-                            "error",
-                        )
-                        self._append_log(
-                            f"Quick download refused before start: "
-                            f"{space_failure.get('error', 'insufficient disk space')}"
-                        )
-                        return
+                format_summary = getattr(self, "_format_probe_summary", {})
 
         queued = []
         failures = []
@@ -3139,6 +3107,7 @@ class MainWindowCore(
                 video_password=video_password if len(urls) == 1 else None,
                 profile_name=profile_name,
                 output_name=output_name or None,
+                format_summary=format_summary,
             )
             if error:
                 failures.append((url, error))

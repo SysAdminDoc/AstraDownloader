@@ -2209,6 +2209,7 @@ class SubscriptionArchiveManagerTests(unittest.TestCase):
         self.assertEqual(queued[0]["output_dir"], "D:/Feeds/Channel")
         self.assertEqual(queued[0]["output_template"], "%(title)s.%(ext)s")
         self.assertFalse(queued[0]["audio_only"])
+        self.assertTrue(queued[0]["probe_size"])
 
         # An unconfigured subscription passes None everywhere, which is what
         # keeps a schema-1 record behaving exactly as it did.

@@ -1293,6 +1293,44 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(retry_payload['capacity']['available'], 0)
         self.assertIn('Cancel a pending item', retry_payload['remediation'])
 
+    def test_download_endpoint_classifies_a_disk_space_refusal(self):
+        token = "s" * 32
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({
+                "ServerToken": token,
+                "DownloadPath": tmpdir,
+                "AudioDownloadPath": tmpdir,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager.pause_intake()
+            summary = {
+                "formats": [{
+                    "has_video": True,
+                    "has_audio": True,
+                    "height": 1080,
+                    "filesize": 500 * 1024 * 1024,
+                }],
+            }
+            manager._dependencies["check_download_disk_space"] = (
+                lambda *_args, **_kwargs: ad.download_error_payload(
+                    "insufficient-disk-space",
+                    error="The API download is 400 MiB short of free space.",
+                )
+            )
+            api = ad.create_api(config, manager, FakeHistory())
+            with mock.patch.object(manager, "list_formats", return_value=(summary, None)):
+                response = api.test_client().post(
+                    "/download",
+                    json={"url": "https://example.com/video"},
+                    headers={"X-Auth-Token": token},
+                )
+
+        self.assertEqual(response.status_code, 507)
+        payload = response.get_json()
+        self.assertEqual(payload["code"], "insufficient-disk-space")
+        self.assertIn("400 MiB short", payload["error"])
+        self.assertEqual(manager.downloads, {})
+
     def test_queue_api_controls_pause_reorder_and_fresh_auth_resume(self):
         token = 'r' * 32
         config = FakeConfig({'ServerToken': token})

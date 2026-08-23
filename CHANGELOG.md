@@ -19,6 +19,11 @@ repository's git log.
   as complete. The same warning still explains the failure when no file was
   delivered.
 
+- **Disk space is checked no matter where a download begins.** The desktop
+  window, browser extension, and scheduled subscriptions now use the same
+  probed-size check before anything enters the queue. API callers receive the
+  named `insufficient-disk-space` response instead of a later yt-dlp failure.
+
 ## [2.12.0] - 2026-08-22
 
 An audit pass. Nothing here is a new feature; it is a list of things that were

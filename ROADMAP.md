@@ -10,10 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 — AD-59 — A disk-space check runs only for downloads the GUI starts
-  Why: `estimate_download_bytes` / `check_download_disk_space` are called from `gui.py` before a paste-box download. Nothing on the API or subscription path calls them, so `insufficient-disk-space` is unreachable for an extension-initiated or scheduled download; those fail partway with whatever yt-dlp says instead. A subscription filling a disk overnight is the case that matters.
-  Where: `astra_downloader/gui.py` (the two call sites), `astra_downloader/download.py` `start_download`, `astra_downloader/routes.py` `/download`.
-
 - [ ] P1 | AD-73 | Preserve subscription delivery policy in settings bundles
   Why: A successful schema-1 export and import silently resets every per-subscription delivery override, including audio-only mode, format, quality, template, and upgrade behavior.
   Evidence: astra_downloader/config.py _BUNDLE_SUBSCRIPTION_FIELDS and read_settings_bundle; astra_downloader/gui.py _import_settings_bundle; astra_downloader/subscriptions.py sanitize_subscription_delivery.
