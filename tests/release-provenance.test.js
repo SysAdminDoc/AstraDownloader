@@ -2,6 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
     LOCK_NAME,
@@ -11,8 +15,13 @@ const {
     renderPylock,
     sbomDescribesArtifact,
     uuidFromDigest,
+    writeReleaseProvenance,
 } = require('../scripts/write-release-provenance');
 const { PROPERTY } = require('../scripts/companion-license-inventory');
+const {
+    RELEASE_FILE_NAMES,
+    runReleaseTransaction,
+} = require('../scripts/stage-companion-release');
 
 const ARTIFACT_SHA = 'a'.repeat(64);
 const OTHER_SHA = 'b'.repeat(64);
@@ -101,4 +110,133 @@ test('the published artifact names are stable', () => {
     // stage-companion-release.js refuses to stage without these exact files.
     assert.equal(SBOM_NAME, 'astra-downloader-sbom.cdx.json');
     assert.equal(LOCK_NAME, 'pylock.toml');
+});
+
+test('a failed lock resolution does not replace either prior provenance file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-provenance-'));
+    const exe = Buffer.from('candidate executable bytes');
+    const artifactSha = crypto.createHash('sha256').update(exe).digest('hex');
+    const constraintsPath = path.join(root, 'constraints.txt');
+    fs.writeFileSync(path.join(root, 'AstraDownloader.exe'), exe);
+    fs.writeFileSync(path.join(root, SBOM_NAME), 'previous SBOM', 'utf8');
+    fs.writeFileSync(path.join(root, LOCK_NAME), 'previous lock', 'utf8');
+    fs.writeFileSync(constraintsPath, 'flask==3.1.3\n', 'utf8');
+
+    await assert.rejects(
+        writeReleaseProvenance(root, {
+            constraintsPath,
+            generatedAt: '2026-08-23T00:00:00.000Z',
+            inventoryBuilder: () => inventory(artifactSha),
+            resolvePin: async () => {
+                throw new Error('forced registry failure');
+            },
+        }),
+        /forced registry failure/,
+    );
+
+    assert.equal(fs.readFileSync(path.join(root, SBOM_NAME), 'utf8'), 'previous SBOM');
+    assert.equal(fs.readFileSync(path.join(root, LOCK_NAME), 'utf8'), 'previous lock');
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+function writeReleaseSet(directory, marker) {
+    fs.mkdirSync(directory, { recursive: true });
+    for (const name of RELEASE_FILE_NAMES) {
+        fs.writeFileSync(path.join(directory, name), `${marker}:${name}`, 'utf8');
+    }
+}
+
+function releaseSnapshot(directory) {
+    return Object.fromEntries(RELEASE_FILE_NAMES.map((name) => [
+        name,
+        fs.readFileSync(path.join(directory, name)),
+    ]));
+}
+
+function assertSameSnapshot(actual, expected) {
+    for (const name of RELEASE_FILE_NAMES) {
+        assert.deepEqual(actual[name], expected[name], `${name} changed before validation passed`);
+    }
+}
+
+test('one release command owns helper resolution, provenance, validation, and publish', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+    const source = fs.readFileSync(
+        path.join(__dirname, '..', 'scripts', 'stage-companion-release.js'),
+        'utf8',
+    );
+
+    assert.equal(pkg.scripts['release:stage'], 'node scripts/stage-companion-release.js');
+    assert.doesNotMatch(pkg.scripts['release:stage'], /&&/);
+    assert.match(source, /resolveRuntimeHelpers/);
+    assert.match(source, /writeReleaseProvenance/);
+    assert.match(source, /validateReleaseCandidate/);
+    assert.match(source, /publishReleaseCandidate/);
+});
+
+test('candidate failures leave the prior staged set byte-identical', async (t) => {
+    const failures = [
+        ['helper', 'resolveHelpers'],
+        ['hash', 'writeCandidate'],
+        ['metadata', 'writeCandidate'],
+        ['stale SBOM', 'validateCandidate'],
+    ];
+
+    for (const [label, failingPhase] of failures) {
+        await t.test(label, async () => {
+            const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-release-transaction-'));
+            const buildDir = path.join(root, 'build');
+            writeReleaseSet(buildDir, 'previous');
+            const before = releaseSnapshot(buildDir);
+            const phase = async (name, action = () => undefined) => {
+                if (name === failingPhase) throw new Error(`forced ${label} failure`);
+                return action();
+            };
+
+            await assert.rejects(
+                runReleaseTransaction({
+                    buildDir,
+                    resolveHelpers: () => phase('resolveHelpers'),
+                    writeCandidate: (candidateDir) => phase(
+                        'writeCandidate', () => writeReleaseSet(candidateDir, 'candidate'),
+                    ),
+                    writeProvenance: () => phase('writeProvenance'),
+                    validateCandidate: () => phase('validateCandidate'),
+                }),
+                new RegExp(`forced ${label} failure`),
+            );
+
+            assertSameSnapshot(releaseSnapshot(buildDir), before);
+            assert.equal(
+                fs.readdirSync(root).filter((name) => name.startsWith('.astra-release-candidate-')).length,
+                0,
+                'the failed candidate directory must be removed',
+            );
+            fs.rmSync(root, { recursive: true, force: true });
+        });
+    }
+});
+
+test('a fully validated candidate replaces the complete staged set', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-release-transaction-'));
+    const buildDir = path.join(root, 'build');
+    writeReleaseSet(buildDir, 'previous');
+    const order = [];
+
+    await runReleaseTransaction({
+        buildDir,
+        resolveHelpers: async () => order.push('helpers'),
+        writeCandidate: async (candidateDir) => {
+            order.push('artifacts');
+            writeReleaseSet(candidateDir, 'candidate');
+        },
+        writeProvenance: async () => order.push('provenance'),
+        validateCandidate: async () => order.push('validate'),
+    });
+
+    assert.deepEqual(order, ['helpers', 'artifacts', 'provenance', 'validate']);
+    for (const [name, contents] of Object.entries(releaseSnapshot(buildDir))) {
+        assert.equal(contents.toString('utf8'), `candidate:${name}`);
+    }
+    fs.rmSync(root, { recursive: true, force: true });
 });

@@ -10,13 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-75 | Make release staging one successful transaction
-  Why: The documented release flow currently requires staging to copy new bytes and fail on stale provenance before provenance is regenerated and staging is run again.
-  Evidence: CLAUDE.md release procedure; scripts/stage-companion-release.js; scripts/write-release-provenance.js; tests/release-provenance.test.js. This converts the concrete build-pipeline gap recorded in AD-71 into a testable fix.
-  Touches: scripts/stage-companion-release.js, scripts/write-release-provenance.js, scripts/resolve-runtime-helpers.js, package.json, tests/release-provenance.test.js, tests/companion-license-inventory.test.js, README.md, CLAUDE.md.
-  Acceptance: One documented command resolves helpers, generates provenance for the candidate root artifact, validates the complete candidate set in a temporary staging directory, and publishes final staged files only after all checks pass. A forced stale-SBOM, hash, helper, or metadata failure leaves the prior staged set byte-identical.
-  Complexity: M
-
 - [ ] P1 | AD-76 | Notify hidden users when a download fails
   Why: _notify_completed_downloads handles complete and skipped jobs only, so an overnight failure is silent until the user reopens the window.
   Evidence: astra_downloader/gui.py _notify_completed_downloads; durable failure recording in astra_downloader/download.py _record_history; the YT-DLP Studio README advertises both finish and failure alerts. AD-63 remains the accessibility half of this work.

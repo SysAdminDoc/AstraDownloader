@@ -36,24 +36,6 @@ the German catalogue carries `Duration` as `Dauer`. What is left is the fixed
 column width, which a longer translated header overflows, and that is tracked
 as AD-35 in `ROADMAP.md` rather than here.
 
-## Submit the portable manifest to the official winget repository — maintainer decision
-
-**State:** the application has a self-contained `--portable` mode, a GUI-free
-`--install` path, and a schema-valid manifest under
-`packaging/winget/manifests` whose installer digest staging keeps in step with
-the released bytes. `winget validate` passes locally.
-
-**What is blocked:** nothing technical any more. `v2.9.0` is published with the
-artifact the manifest points at, so the release URL and checksum requirements
-are met. Submitting to `microsoft/winget-pkgs` is a publication decision the
-maintainer has not taken, and it is not something a coding agent should make on
-their behalf.
-
-**To unblock:** the maintainer opens the pull request against
-`microsoft/winget-pkgs` with `packaging/winget/manifests`, or decides the
-project is distributed through GitHub Releases only and the manifest directory
-is retired.
-
 ## AD-30 — Mint PO tokens from a sidecar the app owns — needs a licence review
 
 **State:** the argv route is confirmed and the candidate is identified, so the
@@ -111,7 +93,7 @@ flips on its own.
 
 ## AD-56 — Areas this audit did not exercise — five separate external needs
 
-**State:** a self-audit note rather than one task. The five areas and what
+**State:** a self-audit note rather than one task. The four areas and what
 each actually needs:
 
 1. **The signed-release chain.** There is no code-signing certificate on this
@@ -119,15 +101,13 @@ each actually needs:
    instead. Exercising a signed chain needs a certificate the maintainer would
    have to buy and hold.
 2. **The whisper transcription live path.** Needs a real audio file and the
-   whisper.cpp model downloaded — a live run, not a fixture.
-3. **winget publish.** Submitting to `microsoft/winget-pkgs` is a publication
-   decision the maintainer has not taken; see the winget entry above.
-4. **Native-host stdio against a real Chrome profile.** Needs a browser
+   whisper.cpp model downloaded for a live run, not a fixture.
+3. **Native-host stdio against a real Chrome profile.** Needs a browser
    session with the extension loaded; the loopback pairing route is covered by
    tests but the stdio channel to a live Chrome is not.
-5. **The Astra Deck userscript `/health` token echo.** Lives in the Astra-Deck
+4. **The Astra Deck userscript `/health` token echo.** Lives in the Astra-Deck
    repository and is deliberately off.
 
 **To unblock:** each area separately. This is not one item and should not be
-picked up as one — when an area gets a live check or a named test, strike it
+picked up as one. When an area gets a live check or a named test, strike it
 from this list rather than closing the whole entry.

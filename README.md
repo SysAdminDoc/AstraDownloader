@@ -139,9 +139,7 @@ portable marker, so its state stays beside the executable automatically:
 Portable mode keeps configuration, queue/history, sign-ins, logs, and the
 managed yt-dlp/ffmpeg/runtime files beside the executable. It does not create
 Start Menu, desktop, protocol, logon-task, or browser native-messaging
-registrations. The checked-in portable manifest under
-`packaging/winget/manifests` is validated by Windows Package Manager before
-release submission.
+registrations.
 
 The one-file executable is the installable layout: running it normally copies
 the executable to `%LOCALAPPDATA%\AstraDownloader` and registers integrations.
@@ -214,9 +212,11 @@ obligations are recorded in
 [`astra_downloader/license-policy.json`](astra_downloader/license-policy.json).
 Both artifacts are tied to the same version and one-file analysis build ID;
 the portable zip carries the shared build metadata for staging verification.
-`npm run release:provenance` writes the CycloneDX SBOM and the PEP 751
-`pylock.toml`; `npm run release:stage` validates and stages both artifacts
-and refuses a release whose SBOM does not describe the staged binary.
+After the build finishes, `npm run release:stage` resolves the pinned runtime
+helpers, creates the CycloneDX SBOM and PEP 751 `pylock.toml` for a temporary
+candidate, then validates the complete release set before replacing anything
+in `build/`. A failed helper, hash, metadata, inventory, or provenance check
+leaves the previous staged release unchanged.
 Release dependencies are pinned in
 [`astra_downloader/constraints-release.txt`](astra_downloader/constraints-release.txt).
 

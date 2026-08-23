@@ -11,8 +11,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { wingetDigestFailures } = require('./stage-companion-release');
-
 const ROOT = path.join(__dirname, '..');
 const failures = [];
 
@@ -33,84 +31,10 @@ function match(relativePath, pattern, label) {
     return record(label, found && found[1]);
 }
 
-function checkWingetManifest(version) {
-    const manifestRoot = path.join(
-        ROOT, 'packaging', 'winget', 'manifests', 's', 'SysAdminDoc', 'AstraDownloader'
-    );
-    let versionDirectories;
-    try {
-        versionDirectories = fs.readdirSync(manifestRoot, { withFileTypes: true })
-            .filter((entry) => entry.isDirectory() && /^\d+\.\d+\.\d+$/.test(entry.name))
-            .map((entry) => entry.name)
-            .sort();
-    } catch (error) {
-        failures.push(`winget manifest: could not read ${manifestRoot}: ${error.message}`);
-        return null;
-    }
-    if (versionDirectories.length !== 1 || versionDirectories[0] !== version) {
-        failures.push(
-            `winget manifest directories must contain only ${version}; found ` +
-            (versionDirectories.join(', ') || 'none')
-        );
-        return null;
-    }
-
-    const directory = path.join(manifestRoot, version);
-    const files = fs.readdirSync(directory)
-        .filter((name) => name.endsWith('.yaml'))
-        .sort();
-    if (files.length !== 3) {
-        failures.push(`winget manifest ${version}: expected three YAML files, found ${files.length}`);
-    }
-    const contents = files.map((name) => ({ name, text: fs.readFileSync(path.join(directory, name), 'utf8') }));
-    for (const { name, text } of contents) {
-        const packageVersion = text.match(/^PackageVersion:\s*([^\s#]+)/m);
-        if (!packageVersion || packageVersion[1] !== version) {
-            failures.push(`winget ${name}: PackageVersion must be ${version}`);
-        }
-    }
-
-    const installer = contents.find(({ name }) => name.endsWith('.installer.yaml'));
-    if (!installer) {
-        failures.push(`winget manifest ${version}: installer manifest is missing`);
-    } else {
-        const expectedUrl = `https://github.com/SysAdminDoc/AstraDownloader/releases/download/v${version}/AstraDownloader.exe`;
-        const installerUrl = installer.text.match(/^\s+InstallerUrl:\s*(\S+)/m);
-        const checksum = installer.text.match(/^\s+InstallerSha256:\s*([0-9a-f]{64})\s*$/im);
-        if (!installerUrl || installerUrl[1] !== expectedUrl) {
-            failures.push(`winget ${installer.name}: InstallerUrl must target v${version}`);
-        }
-        if (!checksum) {
-            failures.push(`winget ${installer.name}: InstallerSha256 must be a 64-digit hex digest`);
-        } else {
-            // A well-formed digest is not a correct one: 2.7.0 shipped a
-            // manifest digest that matched no artifact in existence. Compare
-            // against the staged build whenever one exists for this version.
-            let stagedMetadata = null;
-            try {
-                stagedMetadata = JSON.parse(read('build/companion-build-metadata.json'));
-            } catch (error) {
-                stagedMetadata = null;
-            }
-            failures.push(...wingetDigestFailures(installer.text, version, stagedMetadata));
-        }
-    }
-
-    const locale = contents.find(({ name }) => name.endsWith('.locale.en-US.yaml'));
-    if (locale) {
-        const releaseNotesUrl = locale.text.match(/^ReleaseNotesUrl:\s*(\S+)/m);
-        const expectedReleaseNotes = `https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v${version}`;
-        if (!releaseNotesUrl || releaseNotesUrl[1] !== expectedReleaseNotes) {
-            failures.push(`winget ${locale.name}: ReleaseNotesUrl must target v${version}`);
-        }
-    }
-    return record('winget manifest PackageVersion', version);
-}
-
 function checkScoopManifest(version) {
-    // Same failure the winget manifest had at 2.7.0: a manifest that names a
-    // version nobody published, or a hash that matches no artifact, installs
-    // nothing and says nothing. Both are read from the staged sidecar.
+    // A manifest that names a version nobody published, or a hash that matches
+    // no artifact, installs nothing and says nothing. Both are read from the
+    // staged sidecar.
     const relativePath = path.posix.join('packaging', 'scoop', 'astra-downloader.json');
     let manifest;
     try {
@@ -178,10 +102,6 @@ if (appVersionForManifests) {
 }
 
 const appVersion = sources.find((source) => source.label.includes('APP_VERSION'));
-if (appVersion) {
-    const winget = checkWingetManifest(appVersion.value);
-    if (winget) sources.push(winget);
-}
 
 const versions = new Set(sources.map((source) => source.value));
 if (versions.size > 1) {
