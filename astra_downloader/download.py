@@ -2797,8 +2797,6 @@ def estimate_download_bytes(summary, *, audio_only=False, quality='best'):
             if height > cap:
                 continue
         eligible_video.append((entry, size))
-    if not eligible_video:
-        return 0
     muxed = max(
         (size for entry, size in eligible_video if entry.get('has_audio')),
         default=0,
@@ -2813,7 +2811,22 @@ def estimate_download_bytes(summary, *, audio_only=False, quality='best'):
     )
     if separate and audio_sizes:
         separate += max(audio_sizes)
-    return max(muxed, separate)
+    else:
+        separate = 0
+    selected = max(muxed, separate)
+    if selected:
+        return selected
+
+    # build_video_format_args finishes every capped selector with uncapped
+    # `best`. When no capped muxed or split path can run, account for that
+    # last-resort combined format instead of reporting an unknown zero size.
+    return max(
+        (
+            size for entry, size in formats
+            if entry.get('has_video') and entry.get('has_audio')
+        ),
+        default=0,
+    )
 
 
 def _check_one_download_volume(path, required, reserve, label):
@@ -3509,7 +3522,7 @@ AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'output_name',
     'output_template',
     'subscription_id', 'archive_key', 'requires_auth', 'status',
-    'error', 'error_code', 'error_advice', 'error_action',
+    'filename', 'error', 'error_code', 'error_advice', 'error_action',
     '_credentials', '_video_password', 'profile_name',
 )
 
@@ -4894,6 +4907,7 @@ class DownloadManagerCore:
                 # run's flags on it.
                 self._clear_run_flags(dl)
                 dl.status = 'pending'
+                dl.filename = ''
                 dl.error = ''
                 dl.error_code = ''
                 dl.error_advice = ''

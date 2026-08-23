@@ -3080,7 +3080,6 @@ class EndToEndDownloadTests(unittest.TestCase):
 
         download_module = importlib.import_module("download")
         terminated = []
-        stopped = threading.Event()
 
         class CompletedProc:
             def __init__(self):
@@ -3105,7 +3104,8 @@ class EndToEndDownloadTests(unittest.TestCase):
         class HangingProc:
             def __init__(self):
                 self.returncode = None
-                self.stdout = self.BlockingStdout(self, stopped)
+                self.stop_event = threading.Event()
+                self.stdout = self.BlockingStdout(self, self.stop_event)
 
             class BlockingStdout:
                 def __init__(self, proc, stop_event):
@@ -3141,7 +3141,8 @@ class EndToEndDownloadTests(unittest.TestCase):
 
         def terminate(proc):
             terminated.append(proc)
-            stopped.set()
+            if hasattr(proc, "stop_event"):
+                proc.stop_event.set()
             proc.returncode = 1
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4329,6 +4330,37 @@ class MediaSourcePolicyTests(unittest.TestCase):
         self.assertEqual(error.error_code, "insufficient-disk-space")
         self.assertIn("400 MiB short", str(error))
         self.assertEqual(manager.downloads, {})
+
+    def test_auth_recovery_clears_the_previous_run_filename(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager.pause_intake()
+            url = "https://www.youtube.com/watch?v=authRetry1"
+            download = ad.Download("dl_auth_retry", url, output_dir=tmpdir)
+            download.status = "needs-auth"
+            download.filename = str(Path(tmpdir) / "previous.mp4")
+            manager.downloads[download.id] = download
+
+            recovered_id, error = manager.start_download(
+                url,
+                cookies=[{
+                    "domain": ".youtube.com",
+                    "name": "SID",
+                    "value": "fresh-cookie",
+                    "path": "/",
+                    "secure": True,
+                }],
+            )
+
+            self.assertIsNone(error)
+            self.assertEqual(recovered_id, download.id)
+            self.assertEqual(download.filename, "")
+            download.sabr_capped_warning = True
+            manager._apply_zero_exit_outcome(download)
+
+        self.assertEqual(download.status, "failed")
+        self.assertEqual(download.error_code, "sabr-limited")
 
     def test_playlist_detection_covers_other_sites_without_changing_youtube(self):
         for playlist in (
