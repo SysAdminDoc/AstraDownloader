@@ -57,6 +57,8 @@ __all__ = (
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
+    "SUBSCRIPTION_VIDEO_FORMATS", "SUBSCRIPTION_AUDIO_FORMATS",
+    "SUBSCRIPTION_QUALITY_CHOICES", "sanitize_subscription_delivery",
     "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
     "SETTINGS_BUNDLE_SCHEMA", "SETTINGS_BUNDLE_VERSION", "BUNDLE_EXCLUDED_SETTINGS",
     "write_persistent_log", "get_recent_log_entries", "log_crash",
@@ -83,6 +85,8 @@ _OWNED_EXPORTS = {
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
+    "SUBSCRIPTION_VIDEO_FORMATS", "SUBSCRIPTION_AUDIO_FORMATS",
+    "SUBSCRIPTION_QUALITY_CHOICES", "sanitize_subscription_delivery",
     "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
     "SETTINGS_BUNDLE_SCHEMA", "SETTINGS_BUNDLE_VERSION", "BUNDLE_EXCLUDED_SETTINGS",
     "bound_output_template_fields",
@@ -537,6 +541,49 @@ _SITE_PROFILE_DOWNLOAD_TYPES = frozenset({"", "video", "audio", "subtitles"})
 _SITE_PROFILE_VIDEO_FORMATS = frozenset({"", "mp4", "mkv", "webm"})
 _SITE_PROFILE_AUDIO_FORMATS = frozenset({"", "mp3", "m4a", "opus", "flac", "wav"})
 _SITE_PROFILE_QUALITY = frozenset({"", "best", "2160", "1440", "1080", "720", "480"})
+
+# Subscription delivery uses the same format vocabulary as site profiles.
+# It lives at the configuration boundary so settings bundles and the durable
+# subscription store cannot drift while sanitizing the same document shape.
+SUBSCRIPTION_VIDEO_FORMATS = _SITE_PROFILE_VIDEO_FORMATS
+SUBSCRIPTION_AUDIO_FORMATS = _SITE_PROFILE_AUDIO_FORMATS
+SUBSCRIPTION_QUALITY_CHOICES = _SITE_PROFILE_QUALITY
+_SUBSCRIPTION_CLEAN_TEXT = clean_text
+_SUBSCRIPTION_COERCE_BOOL = coerce_bool
+
+
+def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
+    """Reduce a delivery override to the fields a subscription may carry.
+
+    Empty values mean "use the global setting". A format that does not match
+    the chosen kind is dropped instead of being changed into a different media
+    type that nobody requested.
+    """
+    clean = clean_text or _SUBSCRIPTION_CLEAN_TEXT
+    boolean = coerce_bool or _SUBSCRIPTION_COERCE_BOOL
+    raw = raw if isinstance(raw, dict) else {}
+    audio_only = boolean(raw.get("audioOnly"), False)
+    fmt = clean(raw.get("format"), "", 16).lower()
+    allowed = (
+        SUBSCRIPTION_AUDIO_FORMATS
+        if audio_only
+        else SUBSCRIPTION_VIDEO_FORMATS
+    )
+    if fmt not in allowed:
+        fmt = ""
+    quality = clean(raw.get("quality"), "", 8).lower()
+    if quality not in SUBSCRIPTION_QUALITY_CHOICES:
+        quality = ""
+    return {
+        "outputDir": clean(raw.get("outputDir"), "", 4096),
+        "format": fmt,
+        "quality": quality,
+        "outputTemplate": clean(raw.get("outputTemplate"), "", 300),
+        "audioOnly": audio_only,
+        # This costs a metadata fetch for each archived video during a scan,
+        # so it remains an explicit opt-in.
+        "upgradeIfBetter": boolean(raw.get("upgradeIfBetter"), False),
+    }
 
 
 def normalize_site_profile_domain(value):
@@ -1572,7 +1619,7 @@ def _is_path_under(child, root):
 # corrupted config back without hand-editing JSON.
 
 SETTINGS_BUNDLE_SCHEMA = "astra-downloader-settings"
-SETTINGS_BUNDLE_VERSION = 1
+SETTINGS_BUNDLE_VERSION = 2
 
 # Settings deliberately left out of an exported bundle.
 #
@@ -1616,6 +1663,10 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
 _BUNDLE_SUBSCRIPTION_FIELDS = (
     "id", "url", "title", "intervalMinutes", "enabled",
 )
+_BUNDLE_SUBSCRIPTION_DELIVERY_FIELDS = (
+    "outputDir", "format", "quality", "outputTemplate",
+    "audioOnly", "upgradeIfBetter",
+)
 
 
 def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
@@ -1646,10 +1697,16 @@ def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
     for record in subscriptions or ():
         if not isinstance(record, dict):
             continue
-        exported_subscriptions.append(
-            {field: record.get(field) for field in _BUNDLE_SUBSCRIPTION_FIELDS
-             if field in record}
-        )
+        exported = {
+            field: record.get(field) for field in _BUNDLE_SUBSCRIPTION_FIELDS
+            if field in record
+        }
+        delivery = sanitize_subscription_delivery(record)
+        exported["delivery"] = {
+            field: delivery[field]
+            for field in _BUNDLE_SUBSCRIPTION_DELIVERY_FIELDS
+        }
+        exported_subscriptions.append(exported)
     names = []
     for entry in site_logins or ():
         site = entry.get("site") if isinstance(entry, dict) else entry
@@ -1704,18 +1761,52 @@ def read_settings_bundle(payload):
     for key in BUNDLE_EXCLUDED_SETTINGS:
         settings.pop(key, None)
     subscriptions = []
+    warnings = []
+    incoming_roots = allowed_output_roots(settings)
     for record in (payload.get("subscriptions") or []):
         if not isinstance(record, dict):
             continue
         url, url_error = normalize_url(record.get("url"))
         if url_error or not url:
             continue
-        subscriptions.append({
+        title = clean_text(record.get("title"), "", 300)
+        imported = {
             "url": url,
-            "title": clean_text(record.get("title"), "", 300),
+            "title": title,
             "intervalMinutes": clamp_int(record.get("intervalMinutes"), 60, 1, 40320),
             "enabled": coerce_bool(record.get("enabled"), True),
-        })
+        }
+        if version >= 2:
+            delivery = sanitize_subscription_delivery(record.get("delivery"))
+            output_dir = delivery.get("outputDir", "")
+            if output_dir:
+                candidate = None
+                try:
+                    candidate = Path(output_dir).expanduser()
+                    resolved = candidate.resolve()
+                except (OSError, RuntimeError):
+                    resolved = None
+                if (
+                    resolved is None
+                    or candidate is None
+                    or not candidate.is_absolute()
+                    or not any(
+                        _is_path_under(resolved, root)
+                        for root in incoming_roots
+                    )
+                ):
+                    delivery["outputDir"] = ""
+                    if len(warnings) < 5:
+                        label = title or url
+                        warnings.append(
+                            f'The output folder for subscription "{label}" '
+                            "was not imported because it is outside the "
+                            "bundle's download folders"
+                        )
+                else:
+                    delivery["outputDir"] = str(resolved)
+            imported["delivery"] = delivery
+        subscriptions.append(imported)
     sites = []
     for site in (payload.get("siteLoginSites") or []):
         site = clean_text(site, "", 253)
@@ -1728,6 +1819,7 @@ def read_settings_bundle(payload):
         "subscriptions": subscriptions,
         "excludedSettings": sorted(BUNDLE_EXCLUDED_SETTINGS),
         "siteLoginSites": sites,
+        "warnings": warnings,
     }, None
 
 
@@ -1755,6 +1847,7 @@ def describe_bundle_changes(current, bundle):
             bundle.get("excludedSettings") or sorted(BUNDLE_EXCLUDED_SETTINGS)
         ),
         "siteLoginSites": list(bundle.get("siteLoginSites") or []),
+        "warnings": list(bundle.get("warnings") or []),
     }
 
 

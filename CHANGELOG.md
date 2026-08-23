@@ -24,6 +24,11 @@ repository's git log.
   probed-size check before anything enters the queue. API callers receive the
   named `insufficient-disk-space` response instead of a later yt-dlp failure.
 
+- **Settings bundles keep each subscription's delivery choices.** Audio-only
+  mode, format, quality, naming template, output folder, and upgrade checks now
+  survive export and import. A folder outside the bundle's own download roots
+  is left out and named in the import result.
+
 ## [2.12.0] - 2026-08-22
 
 An audit pass. Nothing here is a new feature; it is a list of things that were

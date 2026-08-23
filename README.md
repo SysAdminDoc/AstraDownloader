@@ -104,8 +104,10 @@ pasting a link never needs it.
 - **Move it, or put it back.** Export settings and subscriptions to one JSON
   bundle and import it on another machine. Stored sign-ins are listed by site
   but never exported; cookies stay where they are. Proxy credentials, network
-  identity, site profiles and extra output roots stay local, and an import
-  reports the setting names it changed.
+  identity, site profiles and extra output roots stay local. Each
+  subscription keeps its format, quality, audio mode, naming template and
+  upgrade choice; its folder travels only when it sits under a carried
+  download root. An import reports the setting names it changed.
 - **Stays out of the way.** Tray icon, optional logon start, Start Menu and
   desktop entries, and a clipboard watcher that can stage copied links.
   Queue progress shows on the taskbar button, and a completion notification
@@ -221,7 +223,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1175 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1179 tests across every core; scratch stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
