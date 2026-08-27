@@ -364,7 +364,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.12.0"
+APP_VERSION = "2.13.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -474,8 +474,13 @@ SERVICE_ID = "astra-downloader"
 # /health.poTokenProvider field; 1.5.0 adds
 # /health.denoRuntime for the external JS runtime that yt-dlp >= 2026.04
 # requires on YouTube extractions. Older clients ignore unknown keys, so
-# the major version stays at 2 (additive, backward-compatible).
-SERVICE_API_VERSION = 2
+# the major version stayed at 2 (additive, backward-compatible).
+#
+# 3 is the first build that answers Astra Deck's endpoint challenge, over both
+# the native channel and GET /identity. Astra Deck refuses to attach YouTube
+# cookies to a download below this version, so a companion that cannot prove
+# which program is on the port simply downloads without a session instead.
+SERVICE_API_VERSION = 3
 # The oldest client wire version this build still answers. Astra Deck and this
 # program version independently and share only a port catalogue, so without a
 # floor there is nothing to compare an old extension against: it just gets
@@ -4380,6 +4385,31 @@ def parse_legacy_health_token_origins(value):
     return origins
 
 
+def paired_extension_origin_allowlist(config):
+    """Origins that completed the loopback pairing handshake.
+
+    Pairing already grants an extension the strongest credential this program
+    issues: `pair_browser_extension` writes the ID into the native-host
+    allowlist, so the paired extension can read the session token over the
+    native channel. Echoing that same token back to a paired Origin therefore
+    widens nothing — it only removes the requirement that native messaging be
+    reachable, which enterprise policy and unpacked installs routinely break.
+
+    Chrome only. A Firefox Origin host is a per-profile UUID that has no
+    relationship to the configured Gecko ID, so a moz-extension Origin can
+    never be matched against `NativeFirefoxExtensionIds`; Firefox keeps using
+    the native channel (or an explicit LegacyHealthTokenOrigins entry).
+    """
+    origins = []
+    for chrome_id in parse_native_extension_ids(
+        config.get("NativeChromeExtensionIds", ""), browser="chrome"
+    ):
+        normalized = normalize_extension_origin(f"chrome-extension://{chrome_id.strip().lower()}")
+        if normalized and normalized not in origins:
+            origins.append(normalized)
+    return frozenset(origins)
+
+
 def legacy_health_token_origin_allowlist(config):
     origins = []
     for chrome_id in parse_native_extension_ids(config.get("NativeChromeExtensionIds", "")):
@@ -5432,6 +5462,8 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'pair_browser_extension': lambda origin, requested_id='': pair_browser_extension(
             config, origin, requested_id
         ),
+        'paired_extension_origin_allowlist': lambda *a, **k: paired_extension_origin_allowlist(*a, **k),
+        'compute_endpoint_proof': lambda *a, **k: compute_endpoint_proof(*a, **k),
         'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
         'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
         'probe_po_token_provider': lambda *args, **kwargs: probe_po_token_provider(*args, **kwargs),
@@ -6717,6 +6749,32 @@ def write_native_message(stream, obj):
     stream.flush()
 
 
+ENDPOINT_CHALLENGE_PATTERN = re.compile(r"^[a-f0-9]{32}$")
+
+
+def compute_endpoint_proof(token, challenge):
+    """Answer an Astra Deck endpoint challenge, or None when it is unusable.
+
+    Astra Deck sends one random challenge over the native channel and the same
+    challenge to the HTTP endpoint, then requires identical answers before it
+    will attach any YouTube cookie to a download. Only a program holding the
+    session token can produce both, so a process that merely squatted a
+    companion port and answered /health cannot collect cookies.
+
+    HMAC keyed by the session token: the answer proves possession without ever
+    putting the token on the wire, so /identity stays safe to serve unauthed.
+    """
+    if not token or not isinstance(challenge, str):
+        return None
+    if not ENDPOINT_CHALLENGE_PATTERN.match(challenge):
+        return None
+    return hmac.new(
+        str(token).encode("utf-8"),
+        challenge.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def handle_native_bootstrap_request(request, token):
     """Pure handler for a parsed bootstrap request. No I/O — easy to unit test."""
     if not isinstance(request, dict):
@@ -6727,12 +6785,18 @@ def handle_native_bootstrap_request(request, token):
     if req_type == "get-token":
         if not token:
             return {"ok": False, "error": "no token configured"}
-        return {
+        response = {
             "ok": True,
             "service": SERVICE_ID,
             "api": SERVICE_API_VERSION,
             "token": token,
         }
+        # Only answered when Astra Deck asks (cookie handoff). A plain token
+        # request carries no challenge and gets no proof field.
+        proof = compute_endpoint_proof(token, request.get("challenge"))
+        if proof:
+            response["challengeProof"] = proof
+        return response
     return {"ok": False, "error": "unsupported request type"}
 
 

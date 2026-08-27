@@ -11,6 +11,9 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, request
+
+# Astra Deck sends its endpoint challenge in this header (and as ?challenge=).
+ENDPOINT_CHALLENGE_HEADER = "X-MDL-Endpoint-Challenge"
 from werkzeug.exceptions import HTTPException, SecurityError
 
 try:
@@ -196,6 +199,8 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'describe_media_url_block',
     'is_youtube_url',
     'legacy_health_token_origin_allowlist',
+    'paired_extension_origin_allowlist',
+    'compute_endpoint_proof',
     'media_url_block_reason',
     'MAX_SITE_LOGIN_COOKIES',
     'normalize_extension_origin',
@@ -264,6 +269,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     describe_media_url_block = dependencies['describe_media_url_block']
     is_youtube_url = dependencies['is_youtube_url']
     legacy_health_token_origin_allowlist = dependencies['legacy_health_token_origin_allowlist']
+    paired_extension_origin_allowlist = dependencies['paired_extension_origin_allowlist']
     media_url_block_reason = dependencies['media_url_block_reason']
     MAX_SITE_LOGIN_COOKIES = dependencies['MAX_SITE_LOGIN_COOKIES']
     normalize_extension_origin = dependencies['normalize_extension_origin']
@@ -367,6 +373,17 @@ def create_api(config, dl_manager, history, *, dependencies):
         origins = legacy_health_token_origin_allowlist(config)
         return bool(normalized and normalized in origins)
 
+    def is_paired_extension_origin(origin):
+        """True once this Origin completed the /pair-extension handshake.
+
+        Pairing already put the ID in the native-host allowlist, so the token
+        is reachable over the native channel anyway; recognising the paired
+        Origin here only removes the requirement that native messaging work.
+        """
+        normalized = normalize_extension_origin(origin)
+        origins = paired_extension_origin_allowlist(config)
+        return bool(normalized and normalized in origins)
+
     # Flask owns the primary DNS-rebinding boundary through TRUSTED_HOSTS.
     # Keep one canonical-authority check because Werkzeug 3.1 treats every
     # bracketed IPv6 literal as equivalent while matching a trusted `[::1]`.
@@ -444,7 +461,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         resp.headers["Access-Control-Allow-Methods"] = registered_cors_methods()
         resp.headers["Access-Control-Allow-Headers"] = (
             "Content-Type,X-Auth-Token,X-MDL-Api,X-MDL-Client,"
-            "X-MDL-Token,X-MDL-Token-Source"
+            "X-MDL-Token,X-MDL-Token-Source," + ENDPOINT_CHALLENGE_HEADER
         )
         # v1.2.0: cache preflight for 10 minutes. Multi-video downloads
         # previously re-negotiated OPTIONS on every POST /download.
@@ -557,7 +574,7 @@ def create_api(config, dl_manager, history, *, dependencies):
             allow = None
             if is_allowed_extension_origin(origin):
                 allow = origin
-            elif request.path == '/pair-extension' and is_extension_origin_shape(origin):
+            elif request.path in {'/pair-extension', '/identity'} and is_extension_origin_shape(origin):
                 allow = normalize_extension_origin(origin)
             return cors_response({"ok": True}, allow_origin=allow)
 
@@ -578,6 +595,7 @@ def create_api(config, dl_manager, history, *, dependencies):
         check_auth=check_auth,
         request_json_object=request_json_object,
         is_allowed_extension_origin=is_allowed_extension_origin,
+        is_paired_extension_origin=is_paired_extension_origin,
         cors_response=cors_response,
     )
     _register_download_routes(api, context, dependencies)
@@ -1481,6 +1499,8 @@ def _register_system_routes(api, context, dependencies):
     get_github_api_budget = dependencies["get_github_api_budget"]
     normalize_extension_origin = dependencies["normalize_extension_origin"]
     is_extension_origin_shape = dependencies["is_extension_origin_shape"]
+    is_paired_extension_origin = context.is_paired_extension_origin
+    compute_endpoint_proof = dependencies["compute_endpoint_proof"]
     pair_browser_extension = dependencies["pair_browser_extension"]
     probe_javascript_runtime = dependencies["probe_javascript_runtime"]
     probe_po_token_provider = dependencies["probe_po_token_provider"]
@@ -1494,6 +1514,12 @@ def _register_system_routes(api, context, dependencies):
             config.get("LegacyHealthTokenEcho", DEFAULT_CONFIG["LegacyHealthTokenEcho"]),
             DEFAULT_CONFIG["LegacyHealthTokenEcho"],
         )
+        # A paired extension can already read this token over the native
+        # channel, so the bearer handshake must not stall when native
+        # messaging is unavailable (enterprise policy, unpacked installs,
+        # or a browser that has not reloaded the host manifest yet).
+        paired_origin = is_paired_extension_origin(request.headers.get("Origin", ""))
+        token_reachable = legacy_health_token_echo or paired_origin
         allowed, retry_after = health_rate_limiter.allow('health')
         if not allowed:
             return cors_response(
@@ -1517,7 +1543,8 @@ def _register_system_routes(api, context, dependencies):
             "queue": dl_manager.capacity(),
             "token_required": True,
             "legacyTokenEcho": legacy_health_token_echo,
-            "nativeChannelRequired": not legacy_health_token_echo,
+            "paired": paired_origin,
+            "nativeChannelRequired": not token_reachable,
             # v1.2.0: surface tool versions so the extension can show
             # "yt-dlp 2026.04.01" in the repair panel + warn on stale binaries.
             "ytDlpVersion": ytdlp_version,
@@ -1607,13 +1634,56 @@ def _register_system_routes(api, context, dependencies):
         if token_source:
             resp["tokenSource"] = token_source
         if (
-            legacy_health_token_echo
-            and token_source != "native"
+            token_source != "native"
             and request.headers.get("X-MDL-Client") == "MediaDL"
-            and is_allowed_extension_origin(origin)
+            and (
+                paired_origin
+                or (legacy_health_token_echo and is_allowed_extension_origin(origin))
+            )
         ):
             resp["token"] = token
         return cors_response(resp)
+
+    @api.route('/identity', methods=['GET'])
+    def endpoint_identity():
+        """Answer Astra Deck's endpoint challenge so cookies may be attached.
+
+        Astra Deck sends the same random challenge over the native channel and
+        to this route, then requires both answers to match before it attaches a
+        YouTube cookie to a download. A process that squatted a companion port
+        and answered /health cannot produce the answer, because the answer is
+        keyed by the session token it does not hold.
+
+        Deliberately unauthenticated: the response is an HMAC, so it proves
+        possession of the token without disclosing it, and the caller must
+        already know a fresh challenge for the answer to be worth anything.
+        """
+        origin = request.headers.get("Origin", "")
+        reflected = normalize_extension_origin(origin) if is_extension_origin_shape(origin) else ""
+        challenge = clean_text(
+            request.args.get("challenge", "")
+            or request.headers.get(ENDPOINT_CHALLENGE_HEADER, ""),
+            "", 64,
+        ).strip()
+        # Compared byte-for-byte against the native channel's answer, so the
+        # challenge is opaque here: normalising case would make this route
+        # answer inputs the native host refuses, and the two answers would
+        # then disagree for the same challenge.
+        proof = compute_endpoint_proof(config.get("ServerToken"), challenge)
+        if not proof:
+            return cors_response({
+                "ok": False,
+                "service": SERVICE_ID,
+                "api": SERVICE_API_VERSION,
+                "code": "invalid-challenge",
+                "error": "A 32-character hex challenge is required.",
+            }, 400, allow_origin=reflected)
+        return cors_response({
+            "ok": True,
+            "service": SERVICE_ID,
+            "api": SERVICE_API_VERSION,
+            "challengeProof": proof,
+        }, allow_origin=reflected)
 
     @api.route('/pair-extension', methods=['POST'])
     def pair_extension():

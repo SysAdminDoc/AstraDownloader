@@ -2,6 +2,7 @@
 
 import ast
 import hashlib
+import hmac
 import inspect
 import io
 import re
@@ -969,6 +970,113 @@ class ApiSecurityTests(unittest.TestCase):
             "X-MDL-Client": "MediaDL",
         }).get_json()
         self.assertNotIn("token", disabled_health)
+
+    def test_paired_extension_reads_the_token_without_native_messaging(self):
+        # The install-day path. Native messaging is not registered yet, the
+        # shipped default leaves LegacyHealthTokenEcho off, and the extension
+        # dead-ended here: pairing succeeded but /health kept withholding the
+        # token, so every download failed with "not installed".
+        token = "b" * 32
+        ext_id = "abcdefghijklmnopabcdefghijklmnop"
+        origin = f"chrome-extension://{ext_id}"
+        config = FakeConfig({"ServerToken": token, "LegacyHealthTokenEcho": False})
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        client = api.test_client()
+        headers = {"Origin": origin, "X-MDL-Client": "MediaDL"}
+
+        before = client.get("/health", headers=headers).get_json()
+        self.assertNotIn("token", before)
+        self.assertFalse(before["paired"])
+        self.assertTrue(before["nativeChannelRequired"])
+
+        paired = client.post("/pair-extension", json={"id": ext_id}, headers=headers).get_json()
+        self.assertTrue(paired["paired"])
+
+        after = client.get("/health", headers=headers).get_json()
+        self.assertEqual(after.get("token"), token)
+        self.assertTrue(after["paired"])
+        self.assertFalse(after["nativeChannelRequired"])
+        # The legacy switch is untouched; pairing is what granted this.
+        self.assertFalse(after["legacyTokenEcho"])
+
+    def test_unpaired_extension_still_gets_no_token(self):
+        token = "b" * 32
+        config = FakeConfig({
+            "ServerToken": token,
+            "LegacyHealthTokenEcho": False,
+            "NativeChromeExtensionIds": "abcdefghijklmnopabcdefghijklmnop",
+        })
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        stranger = "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba"
+        body = api.test_client().get("/health", headers={
+            "Origin": stranger,
+            "X-MDL-Client": "MediaDL",
+        }).get_json()
+        self.assertNotIn("token", body)
+        self.assertFalse(body["paired"])
+
+    def test_paired_origin_token_still_withheld_from_the_native_source(self):
+        # A native-sourced probe already holds the token; echoing it back would
+        # only widen where the token appears.
+        token = "b" * 32
+        ext_id = "abcdefghijklmnopabcdefghijklmnop"
+        config = FakeConfig({
+            "ServerToken": token,
+            "LegacyHealthTokenEcho": False,
+            "NativeChromeExtensionIds": ext_id,
+        })
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        body = api.test_client().get("/health", headers={
+            "Origin": f"chrome-extension://{ext_id}",
+            "X-MDL-Client": "MediaDL",
+            "X-MDL-Token-Source": "native",
+        }).get_json()
+        self.assertNotIn("token", body)
+
+    def test_identity_answers_the_endpoint_challenge(self):
+        # Astra Deck attaches YouTube cookies only when the native channel and
+        # this route return the same answer, which proves the program holding
+        # the port is the one that issued the token.
+        token = "b" * 32
+        challenge = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        api = ad.create_api(config, manager, FakeHistory())
+        client = api.test_client()
+
+        body = client.get(f"/identity?challenge={challenge}").get_json()
+        expected = hmac.new(token.encode(), challenge.encode(), hashlib.sha256).hexdigest()
+        self.assertEqual(body["challengeProof"], expected)
+        self.assertEqual(body["api"], ad.SERVICE_API_VERSION)
+        # Never a route that leaks the credential it proves possession of.
+        self.assertNotIn("token", body)
+
+        # The native channel must agree, or the handoff fails closed.
+        native = ad.handle_native_bootstrap_request(
+            {"type": "get-token", "challenge": challenge}, token
+        )
+        self.assertEqual(native["challengeProof"], expected)
+
+        # A squatter holding a different token cannot produce the answer.
+        self.assertNotEqual(
+            ad.compute_endpoint_proof("z" * 32, challenge), expected
+        )
+
+    def test_identity_refuses_a_malformed_challenge(self):
+        config = FakeConfig({"ServerToken": "b" * 32})
+        manager = ad.DownloadManager(config, FakeHistory())
+        client = ad.create_api(config, manager, FakeHistory()).test_client()
+        for bad in ("", "nothex", "abc", "A" * 32, "a" * 31, "a" * 33):
+            self.assertEqual(client.get(f"/identity?challenge={bad}").status_code, 400, bad)
+
+    def test_plain_token_request_carries_no_proof(self):
+        # A companion that was not asked a challenge must not volunteer one.
+        native = ad.handle_native_bootstrap_request({"type": "get-token"}, "b" * 32)
+        self.assertNotIn("challengeProof", native)
+        self.assertEqual(native["token"], "b" * 32)
 
     def test_download_rejects_non_object_json_body(self):
         token = "c" * 32
@@ -3522,12 +3630,25 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         for key in ("runtime", "version", "supported", "ejsReady", "reason"):
             self.assertIn(key, body["javascriptRuntime"])
 
-    def test_api_version_constant_at_2(self):
-        # Adding fields to /health is additive — wire-major stays at 2.
-        # Pin so a future bump is a deliberate, reviewed change.
-        self.assertEqual(ad.SERVICE_API_VERSION, 2)
+    def test_api_version_constant_at_3(self):
+        # 3 is the first build that answers Astra Deck's endpoint challenge
+        # (native channel + GET /identity). Astra Deck gates cookie handoff on
+        # api >= 3, so this is a behavioural bump, not an additive one.
+        # Pin so a future bump stays a deliberate, reviewed change.
+        self.assertEqual(ad.SERVICE_API_VERSION, 3)
 
-    def test_app_version_bumped_to_2_12_0(self):
+    def test_minimum_client_api_still_accepts_older_astra_deck(self):
+        # The bump must not strand a shipped extension: the floor is what
+        # decides who gets a 426, and it stays where it was.
+        self.assertEqual(ad.SERVICE_API_MINIMUM_CLIENT, 1)
+
+    def test_app_version_bumped_to_2_13_0(self):
+        # v2.13.0: Astra Deck can reach this companion again. A paired
+        # extension reads the bearer token straight from /health, so the
+        # handshake no longer dead-ends when native messaging is not
+        # registered, and the endpoint challenge Astra Deck has always sent
+        # is finally answered over both channels, so a signed-in download
+        # can carry its cookies.
         # v2.12.0: an audit pass. The light theme is derived in one pass so a
         # colour cannot be rewritten twice, a history date is read the way it
         # is typed, a routine yt-dlp warning no longer outranks the real
@@ -3563,7 +3684,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.12.0")
+        self.assertEqual(ad.APP_VERSION, "2.13.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
