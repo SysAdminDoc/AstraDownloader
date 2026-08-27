@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.13.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.13.1-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.13-3776ab)](astra_downloader/requirements.txt)
@@ -223,7 +223,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1189 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1190 tests across every core; scratch stays under build/pytest
 npm run check               # all seven gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp

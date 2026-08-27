@@ -50,6 +50,16 @@ repository's git log.
   survive export and import. A folder outside the bundle's own download roots
   is left out and named in the import result.
 
+## [2.13.1] - 2026-08-27
+
+### Fixed
+
+- **The packaged `--version` probe no longer opens a crash dialog.** The
+  windowed executable now falls back to its inherited Windows output handle
+  when Python exposes an unusable standard-output stream. It still prints the
+  exact version for command-line callers, exits cleanly, and never starts Qt.
+  Silent installation uses the same safe output path.
+
 ## [2.13.0] - 2026-08-26
 
 Astra Deck can talk to this program again. If downloads from the extension have
