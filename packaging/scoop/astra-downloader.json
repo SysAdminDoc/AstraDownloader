@@ -1,5 +1,5 @@
 {
-    "version": "2.12.0",
+    "version": "2.13.0",
     "description": "Windows desktop video downloader. Paste a link from almost any site; also serves the Astra Deck browser extension over a local API.",
     "homepage": "https://github.com/SysAdminDoc/AstraDownloader",
     "license": "MIT",
@@ -9,8 +9,8 @@
     ],
     "architecture": {
         "64bit": {
-            "url": "https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.12.0/AstraDownloader-onedir.zip",
-            "hash": "99bfe903a3c8517096b40a68e563b50bd1b9f7f7806b427667e03be21d0b58b2",
+            "url": "https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.13.0/AstraDownloader-onedir.zip",
+            "hash": "6baf96f9e8d95d62ed2adc842363c47a813e15a96b96f725a4e8d63daf23967f",
             "extract_dir": "AstraDownloader"
         }
     },
