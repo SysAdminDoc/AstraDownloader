@@ -136,7 +136,7 @@
     {
       "key": "ffmpeg",
       "name": "FFmpeg GPL build",
-      "version": "master-2026-08-22T142931Z",
+      "version": "master-2026-08-26T150327Z",
       "licenseExpression": "GPL-3.0-or-later",
       "licenseReviewed": true,
       "decision": "approved",
@@ -147,8 +147,8 @@
       "obligations": [
         "Record the resolved build version and SHA-256, identify the exact configured license, retain notices, and provide corresponding source for the distributed GPL build."
       ],
-      "sha256": "109febb32da7c1a8f75fcc1f6f5d34e629ef0fd4c12e31612584909db422428c",
-      "approvalEvidence": "Resolved at staging from the publisher's own checksum sidecar: ffmpeg-master-latest-win64-gpl.zip at master-2026-08-22T142931Z is SHA-256 109febb32da7c1a8f75fcc1f6f5d34e629ef0fd4c12e31612584909db422428c, read from https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/checksums.sha256. The application downloads the same rolling alias and verifies it against the same sidecar before use, so the reviewed bytes and the shipped bytes are the same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, which would break first-run setup once the pin aged out."
+      "sha256": "11e2a987d40040127fe94dafafed0cf4c4f4c03bae0270d57b807f1cbbc57137",
+      "approvalEvidence": "Resolved at staging from the publisher's own checksum sidecar: ffmpeg-master-latest-win64-gpl.zip at master-2026-08-26T150327Z is SHA-256 11e2a987d40040127fe94dafafed0cf4c4f4c03bae0270d57b807f1cbbc57137, read from https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/checksums.sha256. The application downloads the same rolling alias and verifies it against the same sidecar before use, so the reviewed bytes and the shipped bytes are the same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, which would break first-run setup once the pin aged out."
     },
     {
       "key": "deno",

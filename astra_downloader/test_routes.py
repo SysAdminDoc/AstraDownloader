@@ -3642,7 +3642,9 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # decides who gets a 426, and it stays where it was.
         self.assertEqual(ad.SERVICE_API_MINIMUM_CLIENT, 1)
 
-    def test_app_version_bumped_to_2_13_0(self):
+    def test_app_version_bumped_to_2_13_1(self):
+        # v2.13.1: windowed CLI probes tolerate PyInstaller's invalid stdout
+        # stream and write the version through the inherited Windows handle.
         # v2.13.0: Astra Deck can reach this companion again. A paired
         # extension reads the bearer token straight from /health, so the
         # handshake no longer dead-ends when native messaging is not
@@ -3684,7 +3686,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.13.0")
+        self.assertEqual(ad.APP_VERSION, "2.13.1")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
@@ -4551,6 +4553,20 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
              mock.patch.object(ad.sys, 'stdout', None), \
              mock.patch.object(ad, 'QApplication') as application:
             ad.main()
+        application.assert_not_called()
+
+    def test_windowed_version_probe_falls_back_when_python_stdout_is_invalid(self):
+        class InvalidStdout:
+            def write(self, _value):
+                raise OSError(22, 'Invalid argument')
+
+        with mock.patch.object(ad.sys, 'argv', ['AstraDownloader.exe', '--version']), \
+             mock.patch.object(ad.sys, 'stdout', InvalidStdout()), \
+             mock.patch.object(ad, '_write_windows_standard_output', return_value=True) as fallback, \
+             mock.patch.object(ad, 'QApplication') as application:
+            ad.main()
+
+        fallback.assert_called_once_with(ad.APP_VERSION + '\n')
         application.assert_not_called()
 
     def test_windows_update_helper_contains_verified_backup_and_rollback_contract(self):

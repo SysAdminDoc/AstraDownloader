@@ -364,7 +364,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.13.0"
+APP_VERSION = "2.13.1"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -6893,6 +6893,67 @@ def companion_probe_exit_code(argv):
     return 0 if hmac.compare_digest(expected, APP_VERSION) else 3
 
 
+def _write_windows_standard_output(text):
+    """Write text through the inherited Windows stdout handle."""
+    if sys.platform != 'win32':
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel32.GetStdHandle.argtypes = [wintypes.DWORD]
+        kernel32.GetStdHandle.restype = wintypes.HANDLE
+        kernel32.GetFileType.argtypes = [wintypes.HANDLE]
+        kernel32.GetFileType.restype = wintypes.DWORD
+        kernel32.WriteConsoleW.argtypes = [
+            wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID,
+        ]
+        kernel32.WriteConsoleW.restype = wintypes.BOOL
+        kernel32.WriteFile.argtypes = [
+            wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID,
+        ]
+        kernel32.WriteFile.restype = wintypes.BOOL
+
+        handle = kernel32.GetStdHandle(wintypes.DWORD(-11 & 0xFFFFFFFF))
+        invalid_handle = ctypes.c_void_p(-1).value
+        if handle in (None, 0, invalid_handle):
+            return False
+
+        if kernel32.GetFileType(handle) == 2:  # FILE_TYPE_CHAR
+            written = wintypes.DWORD()
+            return bool(kernel32.WriteConsoleW(
+                handle, text, len(text), ctypes.byref(written), None,
+            )) and written.value == len(text)
+
+        payload = text.encode('utf-8')
+        buffer = ctypes.create_string_buffer(payload)
+        written = wintypes.DWORD()
+        return bool(kernel32.WriteFile(
+            handle, buffer, len(payload), ctypes.byref(written), None,
+        )) and written.value == len(payload)
+    except (AttributeError, OSError, TypeError, ValueError):
+        # reason: a windowed process may have no inherited stdout handle
+        return False
+
+
+def write_cli_output(text):
+    """Write CLI text without crashing a windowed PyInstaller build."""
+    text = str(text)
+    output = getattr(sys, 'stdout', None)
+    if output is not None:
+        try:
+            output.write(text)
+            output.flush()
+            return True
+        except (AttributeError, OSError, UnicodeError, ValueError):
+            # reason: --windowed can expose a stream backed by an invalid fd
+            pass
+    return _write_windows_standard_output(text)
+
+
 def companion_install_exit_code(argv=None):
     """Install a frozen copy and integrations without opening the GUI."""
     args = list(sys.argv[1:] if argv is None else argv)
@@ -6925,10 +6986,7 @@ def companion_install_exit_code(argv=None):
     except Exception as error:  # noqa: BLE001 - a CLI path must return a code
         write_persistent_log(f"Silent install integration setup failed: {error}")
         return 1
-    output = getattr(sys, "stdout", None)
-    if output is not None:
-        output.write(f"{APP_NAME} installed to {target}\n")
-        output.flush()
+    write_cli_output(f"{APP_NAME} installed to {target}\n")
     return 0
 
 
@@ -6936,10 +6994,7 @@ def main():
     probe_exit = companion_probe_exit_code(sys.argv[1:])
     if probe_exit is not None:
         if probe_exit == 0:
-            output = getattr(sys, 'stdout', None)
-            if output is not None:
-                output.write(APP_VERSION + '\n')
-                output.flush()
+            write_cli_output(APP_VERSION + '\n')
             return
         raise SystemExit(probe_exit)
 
