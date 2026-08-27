@@ -50,6 +50,48 @@ repository's git log.
   survive export and import. A folder outside the bundle's own download roots
   is left out and named in the import result.
 
+## [2.13.0] - 2026-08-26
+
+Astra Deck can talk to this program again. If downloads from the extension have
+been failing with "Astra Downloader is not running" while the window was open in
+front of you, this is the release that fixes it.
+
+### Fixed
+
+- **A paired extension can read the bearer token again.** Every request Astra
+  Deck makes has to carry a token, and there were only two ways to get one:
+  native messaging, or an explicit compatibility switch that ships off. On
+  Chrome and Edge the native host isn't registered until the extension pairs, so
+  a fresh install had no way in. Pairing worked, wrote the extension ID, and
+  registered the host, and then the extension still had no token because
+  `/health` was only willing to hand one to an origin the switch had already
+  blessed. Now `/health` gives the token to any extension that completed
+  pairing. That grants nothing new: pairing already puts the ID in the
+  native-host allowlist, so the same extension could read the same token over
+  the native channel. It just stops the handshake dying when native messaging
+  isn't available, which is normal for unpacked installs and for machines where
+  policy blocks it. An extension that hasn't paired still gets nothing, and a
+  probe that came in over the native channel still gets nothing echoed back.
+
+- **The endpoint challenge is answered instead of ignored.** Before attaching
+  your YouTube cookies to a download, Astra Deck sends one random challenge over
+  the native channel and the same challenge to `GET /identity`, then refuses to
+  send cookies unless both answers match. The point is to prove that the program
+  holding the companion port is the one that issued the token, so a process that
+  squatted the port and answered `/health` can't collect a signed-in session.
+  This program never implemented either half. There was no `/identity` route at
+  all, and the native host dropped the challenge field on the floor. So the
+  check failed closed every single time and no signed-in download ever carried a
+  cookie. Both halves answer now, with an HMAC keyed by the session token, which
+  proves possession without putting the token on the wire.
+
+### Changed
+
+- The wire version is now 3. Astra Deck only turns the cookie handoff on for a
+  companion at 3 or above, which is what tells it the challenge will be
+  answered. The oldest client version this program accepts is unchanged, so an
+  older extension keeps working exactly as it did.
+
 ## [2.12.0] - 2026-08-22
 
 An audit pass. Nothing here is a new feature; it is a list of things that were
