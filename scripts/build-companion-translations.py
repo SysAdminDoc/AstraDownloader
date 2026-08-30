@@ -27,6 +27,12 @@ SOURCE_STRINGS = tuple(extract_all())
 
 CATALOGS = {
     "ar": {
+        "The site would not hand over this video.":
+            "الموقع لا يسلّم هذا الفيديو.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "قد يكون الفيديو خاصًا أو للمشتركين فقط أو محذوفًا أو لا يزال قيد المعالجة. تأكد من أن الرابط يعمل في المتصفح ثم أعد المحاولة.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "المواقع",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -74,6 +80,12 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "The site would not hand over this video.":
+            "Die Website gibt dieses Video nicht heraus.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "Das Video ist möglicherweise privat, nur für Abonnenten, gelöscht oder wird noch verarbeitet. Prüfen Sie, ob der Link im Browser abspielt, und versuchen Sie es dann erneut.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "Websites",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1432,6 +1444,12 @@ CATALOGS = {
     },
     "en": {},
     "es": {
+        "The site would not hand over this video.":
+            "El sitio no entrega este vídeo.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "El vídeo puede ser privado, solo para suscriptores, estar eliminado o aún en proceso. Compruebe que el enlace se reproduce en un navegador y vuelva a intentarlo.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "Sitios",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1479,6 +1497,12 @@ CATALOGS = {
         "Settings": "Configuración",
     },
     "fr": {
+        "The site would not hand over this video.":
+            "Le site ne fournit pas cette vidéo.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "La vidéo est peut-être privée, réservée aux abonnés, supprimée ou encore en cours de traitement. Vérifiez que le lien fonctionne dans un navigateur, puis réessayez.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "Sites",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1526,6 +1550,12 @@ CATALOGS = {
         "Settings": "Paramètres",
     },
     "it": {
+        "The site would not hand over this video.":
+            "Il sito non consegna questo video.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "Il video potrebbe essere privato, riservato agli abbonati, eliminato o ancora in elaborazione. Verifica che il link si apra nel browser, poi riprova.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "Siti",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1573,6 +1603,12 @@ CATALOGS = {
         "Settings": "Impostazioni",
     },
     "ja": {
+        "The site would not hand over this video.":
+            "サイトがこの動画を提供しません。",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "動画が非公開、サブスクライバー限定、削除済み、または処理中の可能性があります。ブラウザーでリンクが再生できることを確認してから再試行してください。",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "サイト",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1620,6 +1656,12 @@ CATALOGS = {
         "Settings": "設定",
     },
     "ko": {
+        "The site would not hand over this video.":
+            "사이트가 이 동영상을 제공하지 않습니다.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "동영상이 비공개이거나 구독자 전용이거나 삭제되었거나 아직 처리 중일 수 있습니다. 브라우저에서 링크가 재생되는지 확인한 뒤 다시 시도하세요.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "사이트",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1667,6 +1709,12 @@ CATALOGS = {
         "Settings": "설정",
     },
     "pt_BR": {
+        "The site would not hand over this video.":
+            "O site não entrega este vídeo.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "O vídeo pode ser privado, exclusivo para assinantes, excluído ou ainda em processamento. Verifique se o link abre no navegador e tente novamente.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "Sites",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1714,6 +1762,12 @@ CATALOGS = {
         "Settings": "Configurações",
     },
     "ru": {
+        "The site would not hand over this video.":
+            "Сайт не выдаёт это видео.",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "Видео может быть приватным, доступным только подписчикам, удалённым или ещё обрабатываться. Проверьте, что ссылка открывается в браузере, и повторите попытку.",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "Сайты",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
@@ -1761,6 +1815,12 @@ CATALOGS = {
         "Settings": "Настройки",
     },
     "zh_CN": {
+        "The site would not hand over this video.":
+            "站点不提供此视频。",
+        "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
+            "该视频可能为私密、仅限订阅者、已删除或仍在处理中。请先确认链接能在浏览器中播放，然后重试。",
+        "check-link-and-retry":
+            "check-link-and-retry",
         "Sites":
             "站点",
         "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":

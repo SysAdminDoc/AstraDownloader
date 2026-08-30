@@ -3642,7 +3642,11 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # decides who gets a 426, and it stays where it was.
         self.assertEqual(ad.SERVICE_API_MINIMUM_CLIENT, 1)
 
-    def test_app_version_bumped_to_2_14_0(self):
+    def test_app_version_bumped_to_2_15_0(self):
+        # v2.15.0: Kick VODs download again through a native resolver that
+        # asks the playback endpoint Kick's own player uses, and the site
+        # registry's browser impersonation default now matches the versioned
+        # targets yt-dlp really reports instead of silently never firing.
         # v2.14.0: the downloader reaches the rest of the web. The extension
         # cookie bridge is scoped to the site being downloaded from instead of
         # to YouTube, so a sign-in works anywhere the extension can read one; a
@@ -3692,7 +3696,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.14.0")
+        self.assertEqual(ad.APP_VERSION, "2.15.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a

@@ -5654,7 +5654,7 @@ class SiteLoginDownloadTests(unittest.TestCase):
 
     def _run(self, url, *, seed_site=None, seed_credentials=None,
              request_cookies=None, video_password=None,
-             impersonate_targets=None):
+             impersonate_targets=None, native_source=None):
         captured = []
         live_jar = []
         # The cookie jar's owner-only ACL is applied by shelling out to
@@ -5687,6 +5687,13 @@ class SiteLoginDownloadTests(unittest.TestCase):
                 # gated on what it reports, so the test has to own the answer.
                 manager._dependencies['probe_impersonate_targets'] = (
                     lambda *_a, **_k: list(impersonate_targets)
+                )
+            if native_source is not None:
+                # A callable raises or returns; a dict is returned as-is. The
+                # real resolver talks to the site, which the suite never does.
+                manager._dependencies['resolve_native_source'] = (
+                    native_source if callable(native_source)
+                    else (lambda *_a, **_k: native_source)
                 )
             if seed_site:
                 manager.site_logins.import_netscape_text(
@@ -5895,6 +5902,86 @@ class SiteLoginDownloadTests(unittest.TestCase):
         for flag in ("--impersonate", "--referer", "--extractor-args"):
             with self.subTest(flag=flag):
                 self.assertNotIn(flag, argv)
+
+    _KICK_VOD = "https://kick.com/loulz/videos/01a04eaf-79f0-71f9-ad3e-342286927538"
+    _KICK_MANIFEST = "https://web.kick.com/api/v1/stream/manifest.m3u8?init=SECRET.JWT.SIG"
+
+    def test_a_native_source_replaces_the_url_ytdlp_is_given(self):
+        # The whole point of the resolver: yt-dlp is pointed at the manifest,
+        # with the header the delivery host insists on and the real title, and
+        # never sees the page URL its own extractor 404s on.
+        argv, download, _body = self._run(
+            self._KICK_VOD,
+            native_source={
+                "site": "kick", "url": self._KICK_MANIFEST, "title": "Fight night",
+                "duration": 30116, "headers": {"User-Agent": "UA/kick"},
+            },
+        )
+        self.assertEqual(argv[-1], self._KICK_MANIFEST)
+        self.assertNotIn(self._KICK_VOD, argv)
+        self.assertEqual(argv[argv.index("--user-agent") + 1], "UA/kick")
+        self.assertEqual(argv[argv.index("--parse-metadata") + 1], "Fight night:(?P<title>.+)")
+        self.assertEqual(download.status, "complete")
+        # The record keeps the page: that is what history, retry and the log show.
+        self.assertEqual(download.url, self._KICK_VOD)
+        self.assertEqual(download.title, "Fight night")
+
+    def test_the_visible_command_never_carries_the_session_token(self):
+        _argv, download, _body = self._run(
+            self._KICK_VOD,
+            native_source={"site": "kick", "url": self._KICK_MANIFEST, "title": "t",
+                           "duration": 1, "headers": {}},
+        )
+        shown = " ".join(download.command_args)
+        self.assertNotIn("SECRET.JWT.SIG", shown)
+        self.assertIn("init=[redacted]", shown)
+
+    def test_a_site_with_no_resolver_is_untouched(self):
+        argv, download, _body = self._run(
+            "https://vimeo.com/123", native_source=None,
+        )
+        self.assertEqual(argv[-1], "https://vimeo.com/123")
+        self.assertNotIn("--parse-metadata", argv)
+        self.assertEqual(download.status, "complete")
+
+    def test_a_refused_native_source_fails_with_its_own_reason(self):
+        from native_sources import NativeSourceError
+
+        def refuse(*_a, **_k):
+            raise NativeSourceError("Kick will not play this video (Forbidden).")
+
+        argv, download, _body = self._run(self._KICK_VOD, native_source=refuse)
+        self.assertEqual(argv, [], "yt-dlp must not be spawned for a refusal")
+        self.assertEqual(download.status, "failed")
+        self.assertEqual(download.error_code, "source-unavailable")
+        self.assertIn("Forbidden", download.error)
+        self.assertTrue(download.error_advice)
+
+    def test_an_unreachable_native_source_is_retryable(self):
+        from native_sources import NativeSourceError
+
+        def unreachable(*_a, **_k):
+            raise NativeSourceError("Kick could not be reached", code="network-unreachable")
+
+        _argv, download, _body = self._run(self._KICK_VOD, native_source=unreachable)
+        self.assertEqual(download.status, "failed")
+        self.assertEqual(download.error_code, "network-unreachable")
+        self.assertIn(download.error_code, ad.DOWNLOAD_RETRYABLE_ERROR_CODES)
+
+    def test_a_refusal_still_tears_down_the_cookie_jar(self):
+        from native_sources import NativeSourceError
+
+        def refuse(*_a, **_k):
+            raise NativeSourceError("no")
+
+        _argv, download, _body = self._run(
+            self._KICK_VOD, seed_site="kick.com", native_source=refuse,
+        )
+        self.assertEqual(download.status, "failed")
+        self.assertFalse(
+            download.cookies_file and Path(download.cookies_file).exists(),
+            "a jar exported for the run must not outlive a pre-spawn refusal",
+        )
 
     def test_stored_sign_in_probe_is_scoped_bounded_and_cleaned(self):
         captured = {}

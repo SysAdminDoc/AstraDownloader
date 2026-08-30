@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.14.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.15.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.13-3776ab)](astra_downloader/requirements.txt)
@@ -25,6 +25,10 @@ pasting a link never needs it.
   which sites want a sign-in before a download finds out for you. Sites that
   need a referer, a browser fingerprint, or particular extractor arguments
   get them without any configuring.
+- **Kick VODs work.** yt-dlp's own Kick extractor 404s on every recent VOD,
+  so Astra resolves them the way Kick's player does and hands yt-dlp the
+  stream. The page link stays on the record; only the download sees the
+  manifest.
 - **Pick your output.** MP4 / MKV / WebM up to 2160p, or extract audio as
   MP3 / M4A / Opus / FLAC / WAV. MP4 prefers H.264 + AAC so editors import it
   without transcoding, and codec and frame-rate preferences order whatever
@@ -230,7 +234,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1239 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1259 tests across every core; scratch stays under build/pytest
 npm run check               # all eight gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
