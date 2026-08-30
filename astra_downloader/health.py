@@ -22,6 +22,8 @@ __all__ = (
     "get_ytdlp_version", "get_ffmpeg_version", "_run_captured",
     "parse_impersonate_targets", "ImpersonateTargetsProbe",
     "IMPERSONATE_TARGET_RE",
+    "parse_extractor_list", "ExtractorListProbe",
+    "EXTRACTOR_LIST_TIMEOUT_SECONDS",
     "probe_po_token_provider", "reset_po_token_provider_cache",
     "probe_deno_runtime",
     "QUICKJS_MIN_VERSION", "JS_RUNTIMES",
@@ -1032,6 +1034,102 @@ class ImpersonateTargetsProbe:
             self._generation += 1
 
 
+# Listing every extractor is not a fast call: the pinned build reports over
+# 1,700 of them, and the process has to import the whole extractor package to
+# do it. The Sites page therefore renders the curated registry immediately and
+# merges this in when it arrives, rather than blocking on it.
+EXTRACTOR_LIST_TIMEOUT_SECONDS = 60
+
+# A broken extractor is still listed, with a marker. Surfacing that is the
+# honest thing to do: "supported" and "supported and currently working" are
+# different claims, and a site that yt-dlp itself has flagged is exactly the
+# one a user is about to file a bug about.
+_EXTRACTOR_BROKEN_MARKER = "(CURRENTLY BROKEN)"
+
+
+def parse_extractor_list(output):
+    """Read `yt-dlp --list-extractors` output into `(name, working)` pairs.
+
+    One extractor per line. yt-dlp appends a marker to the ones it knows are
+    broken, and prefixes progress chatter with `[`, which is dropped. The
+    generic fallbacks are dropped too: `generic` matching a page is not the
+    same as a site being supported, and listing them invites the reading that
+    every site on the web is covered.
+    """
+    seen = set()
+    extractors = []
+    for line in str(output or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("["):
+            continue
+        working = _EXTRACTOR_BROKEN_MARKER not in stripped
+        name = stripped.replace(_EXTRACTOR_BROKEN_MARKER, "").strip()
+        if not name or name.lower() in {"generic", "default"}:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        extractors.append((name, working))
+    return extractors
+
+
+class ExtractorListProbe:
+    """Thread-safe TTL cache over `yt-dlp --list-extractors`.
+
+    Same shape as `ImpersonateTargetsProbe`, including the generation guard: a
+    probe started before a binary swap must not publish an answer describing
+    the binary that is no longer installed.
+    """
+
+    def __init__(self, *, path, runner, clock=time.time, ttl_seconds=6 * 3600):
+        self._path = path
+        self._runner = runner
+        self._clock = clock
+        self._ttl_seconds = max(0, float(ttl_seconds))
+        self._value = None
+        self._checked_at = 0.0
+        self._generation = 0
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _resolve(value):
+        return value() if callable(value) else value
+
+    def get(self, force=False):
+        path = Path(self._resolve(self._path))
+        if not path.exists():
+            return []
+        with self._lock:
+            now = self._clock()
+            if (
+                not force
+                and self._value is not None
+                and (now - self._checked_at) < self._ttl_seconds
+            ):
+                return list(self._value)
+            generation = self._generation
+        extractors = []
+        for _attempt in range(_PROBE_RESTART_LIMIT):
+            extractors = parse_extractor_list(
+                self._runner([str(path), "--list-extractors"])
+            )
+            with self._lock:
+                if generation == self._generation:
+                    break
+                generation = self._generation
+        with self._lock:
+            self._value = extractors
+            self._checked_at = self._clock()
+            return list(self._value)
+
+    def reset(self):
+        with self._lock:
+            self._value = None
+            self._checked_at = 0.0
+            self._generation += 1
+
+
 def _parse_ytdlp_release_date(version_string):
     """Parse a yt-dlp date release into a comparable date tuple."""
     if not isinstance(version_string, str):
@@ -1541,6 +1639,8 @@ _OWNED_EXPORTS = {
     "_run_captured", "ExecutableVersionProbe", "parse_ytdlp_version_output",
     "parse_impersonate_targets", "ImpersonateTargetsProbe",
     "IMPERSONATE_TARGET_RE",
+    "parse_extractor_list", "ExtractorListProbe",
+    "EXTRACTOR_LIST_TIMEOUT_SECONDS",
     "parse_ffmpeg_version_output",
     "probe_whisper_runtime",
     "FfmpegCapabilitiesProbe",

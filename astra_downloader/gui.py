@@ -45,6 +45,7 @@ try:
     from .gui_extension_page import ExtensionPageMixin
     from .gui_history_page import HistoryPageMixin
     from .gui_site_logins_page import SiteLoginsPageMixin
+    from .gui_sites_page import SitesPageMixin
     from .gui_subscriptions_page import SubscriptionsPageMixin
     from .gui_settings_page import SettingsPageMixin
 except ImportError:  # Flat source-path compatibility.
@@ -52,6 +53,7 @@ except ImportError:  # Flat source-path compatibility.
     from gui_extension_page import ExtensionPageMixin
     from gui_history_page import HistoryPageMixin
     from gui_site_logins_page import SiteLoginsPageMixin
+    from gui_sites_page import SitesPageMixin
     from gui_subscriptions_page import SubscriptionsPageMixin
     from gui_settings_page import SettingsPageMixin
 
@@ -927,6 +929,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_playlist_date',
     'normalize_impersonate_target',
     'probe_impersonate_targets',
+    'probe_extractor_list',
     'probe_output_folder',
     'group_playlist_selection',
     'send_to_recycle_bin',
@@ -1565,6 +1568,7 @@ class MainWindowCore(
     ExtensionPageMixin,
     HistoryPageMixin,
     SiteLoginsPageMixin,
+    SitesPageMixin,
     SubscriptionsPageMixin,
     SettingsPageMixin,
     QMainWindow,
@@ -1577,6 +1581,7 @@ class MainWindowCore(
     site_login_finished = Signal(dict)
     site_login_test_finished = Signal(dict)
     format_probe_finished = Signal(dict)
+    site_catalog_ready = Signal(list)
 
     def __init__(self, config, dl_manager, history, start_minimized=False,
                  first_run=False, *, dependencies):
@@ -1600,6 +1605,9 @@ class MainWindowCore(
         # Download ids already accounted for by the completion notifier, so a
         # finished download notifies at most once and never re-fires each tick.
         self._seen_complete = set()
+        # Failure attempts need their generation as well as their id. Retry
+        # reuses the Download object and id, but it is a new terminal event.
+        self._seen_failures = {}
         self._cleared_history_snapshot = []
         self._history_offset = 0
         self._history_page_size = 50
@@ -1623,6 +1631,7 @@ class MainWindowCore(
         self.site_login_finished.connect(self._finish_site_login_import)
         self.site_login_test_finished.connect(self._finish_site_login_test)
         self.format_probe_finished.connect(self._apply_format_probe)
+        self.site_catalog_ready.connect(self._on_site_catalog_ready)
         # Format probing: the URL whose probe is currently reflected in the
         # quality picker, and a generation counter so a probe that lands
         # after the user has typed on is discarded rather than applied.
@@ -1698,7 +1707,7 @@ class MainWindowCore(
         # extension is one of the things it happens to run. Ordering the
         # rail any other way makes the paste box something you navigate to.
         self._page_names = [
-            "Download", "History", "Sign-ins", "Subscriptions",
+            "Download", "History", "Sites", "Sign-ins", "Subscriptions",
             "Browser extension", "Settings",
         ]
         for name in self._page_names:
@@ -1771,6 +1780,7 @@ class MainWindowCore(
         self._preflight_actions = {}
         self._build_download()
         self._build_history()
+        self._build_sites()
         self._build_site_logins()
         self._build_subscriptions()
         self._build_extension()
@@ -1804,6 +1814,8 @@ class MainWindowCore(
         # It fails soft: no taskbar bar is a missing nicety, not a broken app.
         self._taskbar_progress = self._dependencies['TaskbarProgress']()
         self._last_notified_file = ""
+        self._last_notified_download_id = ""
+        self._last_notification_kind = ""
         self.tray.setToolTip(
             tr_format(
                 "{app} · {status}",
@@ -5151,14 +5163,17 @@ class MainWindowCore(
                 replacement.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _notify_completed_downloads(self, downloads):
-        """Raise a one-shot tray notification when a download finishes while
-        the window is hidden (tray) or minimized to the taskbar — the states
-        where the user can't see the queue. Completions seen while the window
-        is visible are marked as already-notified so they never fire a stale
-        toast later."""
+        """Notify once for each terminal outcome the user cannot already see."""
         present = {d.id for d in downloads}
         # Prune ids that left the active queue so the set can't grow unbounded.
         self._seen_complete &= present
+        failed = [d for d in downloads if d.status == 'failed']
+        failed_ids = {d.id for d in failed}
+        seen_failures = getattr(self, '_seen_failures', {})
+        self._seen_failures = {
+            dl_id: marker for dl_id, marker in seen_failures.items()
+            if dl_id in failed_ids
+        }
         # `skipped` finishes the same way a completion does — the queue slot is
         # released and the user is done waiting — so it notifies too, with the
         # reason as the body. Without this a minimized companion said nothing
@@ -5166,16 +5181,29 @@ class MainWindowCore(
         newly_complete = [d for d in downloads
                           if d.status in ('complete', 'skipped')
                           and d.id not in self._seen_complete]
-        if not newly_complete:
+        failure_markers = {
+            d.id: (
+                getattr(d, 'start_time', None),
+                getattr(d, 'finished_time', None),
+            )
+            for d in failed
+        }
+        newly_failed = [
+            d for d in failed
+            if self._seen_failures.get(d.id) != failure_markers[d.id]
+        ]
+        if not newly_complete and not newly_failed:
             return
-        notify = (self.config.get("NotifyOnComplete", True)
-                  and (self.isHidden() or self.isMinimized()))
+        out_of_sight = self.isHidden() or self.isMinimized()
+        notify_complete = (
+            self.config.get("NotifyOnComplete", True) and out_of_sight
+        )
+        notify_failure = (
+            self.config.get("NotifyOnFailure", True) and out_of_sight
+        )
         for d in newly_complete:
             self._seen_complete.add(d.id)
-            if notify:
-                # What a click on this toast will act on. Windows gives no
-                # per-message identity, so the most recent one wins.
-                self._last_notified_file = getattr(d, 'filename', '') or ''
+            if notify_complete:
                 title = (getattr(d, 'title', '') or '').strip() or 'Your download is finished.'
                 skipped = d.status == 'skipped'
                 if skipped:
@@ -5191,9 +5219,47 @@ class MainWindowCore(
                         else QSystemTrayIcon.MessageIcon.Information,
                         4000,
                     )
+                    # Windows exposes no per-message identity. Keep the most
+                    # recent successful showMessage call as the click target.
+                    self._last_notified_file = getattr(d, 'filename', '') or ''
+                    self._last_notified_download_id = d.id
+                    self._last_notification_kind = "completion"
                 except Exception:
                     # reason: tray notifications are best-effort polish
                     pass
+        for d in newly_failed:
+            self._seen_failures[d.id] = failure_markers[d.id]
+            if not notify_failure:
+                continue
+            raw_reason = (
+                getattr(d, 'error', '')
+                or getattr(d, 'error_advice', '')
+                or tr("No failure details were recorded.")
+            )
+            reason = " ".join(tr(str(raw_reason)).split())
+            if not reason:
+                reason = tr("No failure details were recorded.")
+            if len(reason) > 240:
+                reason = reason[:237].rstrip() + "..."
+            try:
+                self.tray.showMessage(
+                    tr("Download failed"),
+                    reason,
+                    QSystemTrayIcon.MessageIcon.Warning,
+                    6000,
+                )
+                self._last_notified_file = ""
+                self._last_notified_download_id = d.id
+                self._last_notification_kind = "failure"
+                # quick_download_status is a StatusLabel. Its setText path
+                # posts the QAccessible Alert introduced for status messages.
+                self._set_quick_download_status(
+                    tr_format("Download failed: {reason}", reason=reason),
+                    "error",
+                )
+            except Exception:
+                # reason: tray notifications are best-effort polish
+                pass
 
     def _request_ui_refresh(self):
         """Collapse a burst of progress signals into one refresh.
@@ -5456,6 +5522,7 @@ class MainWindowCore(
         ("cfg_closetotray", "CloseToTray", "check"),
         ("cfg_startmin", "StartMinimized", "check"),
         ("cfg_notify", "NotifyOnComplete", "check"),
+        ("cfg_notify_failure", "NotifyOnFailure", "check"),
         ("cfg_clipboard", "ClipboardLinkGrabber", "check"),
         ("cfg_port", "ServerPort", "number"),
         ("cfg_fragments", "ConcurrentFragments", "number"),
@@ -6424,12 +6491,30 @@ class MainWindowCore(
         return taskbar.apply(int(self.winId()), state, completed, total)
 
     def _notification_clicked(self):
-        """Reveal whatever the last completion toast was about."""
+        """Reveal the file or failed card named by the latest tray message."""
         target = getattr(self, '_last_notified_file', '')
+        download_id = getattr(self, '_last_notified_download_id', '')
+        kind = getattr(self, '_last_notification_kind', '')
         self._show_from_tray()
+        if kind == 'failure' and download_id:
+            return self._focus_download_card(download_id)
         if target:
             self._show_download_location(target)
         return bool(target)
+
+    def _focus_download_card(self, download_id):
+        """Open Download, reveal one card, and focus its first useful action."""
+        self._nav_click("Download")
+        card = self._download_widgets.get(("download", download_id))
+        if card is None:
+            return False
+        self.downloads_scroll.ensureWidgetVisible(card, 24, 24)
+        action = next(iter(card.findChildren(QPushButton)), None)
+        if action is None:
+            card.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            action = card
+        action.setFocus(Qt.FocusReason.OtherFocusReason)
+        return True
 
     def _play_download(self, file_path):
         """Open a finished file in whatever the system plays it with."""
@@ -7313,6 +7398,7 @@ class MainWindowCore(
             "CloseToTray": self.cfg_closetotray.isChecked(),
             "StartMinimized": self.cfg_startmin.isChecked(),
             "NotifyOnComplete": self.cfg_notify.isChecked(),
+            "NotifyOnFailure": self.cfg_notify_failure.isChecked(),
             "ClipboardLinkGrabber": (
                 self.cfg_clipboard.isChecked()
                 if hasattr(self, "cfg_clipboard")

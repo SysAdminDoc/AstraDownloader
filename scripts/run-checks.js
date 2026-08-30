@@ -36,6 +36,7 @@ const GATES = [
     ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
     ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
     ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],
+    ['site registry', 'py', ['-3.13', 'scripts/check-site-registry.py']],
     ['translations', 'py', ['-3.13', 'scripts/check-companion-translations.py']],
     ['versions', process.execPath, ['scripts/check-versions.js']],
     ['python audit', process.execPath, ['scripts/audit-python-deps.js']],

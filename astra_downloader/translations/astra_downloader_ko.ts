@@ -1255,6 +1255,10 @@
       <translation>Play, reveal, delete, copy the link or error, or download this again.</translation>
     </message>
     <message>
+      <source>No failure details were recorded.</source>
+      <translation>No failure details were recorded.</translation>
+    </message>
+    <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
       <translation>Resume pending downloads explicitly. Items needing sign-in remain paused.</translation>
     </message>
@@ -1813,6 +1817,14 @@
     <message>
       <source>Download complete</source>
       <translation>Download complete</translation>
+    </message>
+    <message>
+      <source>Download failed</source>
+      <translation>Download failed</translation>
+    </message>
+    <message>
+      <source>Download failed: {reason}</source>
+      <translation>Download failed: {reason}</translation>
     </message>
     <message>
       <source>The through date needs to be YYYY-MM-DD, so it is not being used.</source>
@@ -2657,6 +2669,86 @@
     <message>
       <source>likely unreadable on Chromium 127+</source>
       <translation>likely unreadable on Chromium 127+</translation>
+    </message>
+    <message>
+      <source>{total} matching sites.</source>
+      <translation>일치하는 사이트 {total}개.</translation>
+    </message>
+    <message>
+      <source>No sites match this search.</source>
+      <translation>이 검색과 일치하는 사이트가 없습니다.</translation>
+    </message>
+    <message>
+      <source>Showing {shown} of {total} matching sites. Narrow the search to see the rest.</source>
+      <translation>일치하는 {total}개 중 {shown}개를 표시하고 있습니다. 검색어를 좁히면 나머지를 볼 수 있습니다.</translation>
+    </message>
+    <message>
+      <source>1 matching site.</source>
+      <translation>일치하는 사이트 1개.</translation>
+    </message>
+    <message>
+      <source>Sign-in needed</source>
+      <translation>로그인 필요</translation>
+    </message>
+    <message>
+      <source>Sometimes</source>
+      <translation>경우에 따라</translation>
+    </message>
+    <message>
+      <source>Sites</source>
+      <translation>사이트</translation>
+    </message>
+    <message>
+      <source>Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.</source>
+      <translation>설치된 yt-dlp가 지원하는 모든 사이트입니다. 이 중 아무 사이트의 링크나 다운로드 페이지에 붙여 넣으세요.</translation>
+    </message>
+    <message>
+      <source>Search supported sites</source>
+      <translation>지원 사이트 검색</translation>
+    </message>
+    <message>
+      <source>Search by site name or domain</source>
+      <translation>이름 또는 도메인으로 검색</translation>
+    </message>
+    <message>
+      <source>Site category</source>
+      <translation>사이트 분류</translation>
+    </message>
+    <message>
+      <source>All categories</source>
+      <translation>모든 분류</translation>
+    </message>
+    <message>
+      <source>Live streaming</source>
+      <translation>라이브 스트리밍</translation>
+    </message>
+    <message>
+      <source>Social</source>
+      <translation>소셜</translation>
+    </message>
+    <message>
+      <source>Music and audio</source>
+      <translation>음악 및 오디오</translation>
+    </message>
+    <message>
+      <source>News and broadcast</source>
+      <translation>뉴스 및 방송</translation>
+    </message>
+    <message>
+      <source>Learning</source>
+      <translation>학습</translation>
+    </message>
+    <message>
+      <source>Anime</source>
+      <translation>애니메이션</translation>
+    </message>
+    <message>
+      <source>Sports</source>
+      <translation>스포츠</translation>
+    </message>
+    <message>
+      <source>Adult</source>
+      <translation>성인</translation>
     </message>
     <message>
       <source>New subscription</source>
@@ -3525,6 +3617,10 @@
     <message>
       <source>Notify when a download finishes (while minimized)</source>
       <translation>Notify when a download finishes (while minimized)</translation>
+    </message>
+    <message>
+      <source>Notify when a download fails (while minimized)</source>
+      <translation>Notify when a download fails (while minimized)</translation>
     </message>
     <message>
       <source>Stage copied video links for review</source>

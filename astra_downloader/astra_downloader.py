@@ -158,6 +158,7 @@ try:
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
+        ExtractorListProbe, EXTRACTOR_LIST_TIMEOUT_SECONDS,
         YTDLP_EXTERNAL_RUNTIME_CUTOFF,
         _compare_semver, _parse_ytdlp_release_date, evaluate_sabr_support,
         _run_captured as _owned_run_captured,
@@ -308,6 +309,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
         ExecutableVersionProbe, FfmpegCapabilitiesProbe,
         ImpersonateTargetsProbe, parse_impersonate_targets,
+        ExtractorListProbe, EXTRACTOR_LIST_TIMEOUT_SECONDS,
         YTDLP_EXTERNAL_RUNTIME_CUTOFF,
         _compare_semver, _parse_ytdlp_release_date, evaluate_sabr_support,
         _run_captured as _owned_run_captured,
@@ -364,7 +366,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.13.1"
+APP_VERSION = "2.14.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -1738,6 +1740,26 @@ _impersonate_targets_probe = ImpersonateTargetsProbe(
 def probe_impersonate_targets(force=False):
     """Browser fingerprints the installed yt-dlp can actually imitate."""
     return _impersonate_targets_probe.get(force=force)
+
+
+# Listing every extractor is far slower than listing impersonation targets, so
+# this one gets a long timeout and a long TTL: the answer only changes when
+# yt-dlp itself is replaced.
+_extractor_list_probe = ExtractorListProbe(
+    path=lambda: YTDLP_PATH,
+    runner=lambda args: _run_captured(args, timeout=EXTRACTOR_LIST_TIMEOUT_SECONDS),
+    clock=lambda: time.time(),
+)
+
+
+def probe_extractor_list(force=False):
+    """Every site the installed yt-dlp has an extractor for."""
+    return _extractor_list_probe.get(force=force)
+
+
+def reset_extractor_list_cache():
+    """Forget the extractor list after the yt-dlp binary is replaced."""
+    _extractor_list_probe.reset()
 
 
 def reset_impersonate_targets_cache():
@@ -5308,6 +5330,7 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'probe_extractor_list': lambda *args, **kwargs: probe_extractor_list(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
                 'send_to_recycle_bin': lambda *args, **kwargs: send_to_recycle_bin(*args, **kwargs),
@@ -5935,6 +5958,7 @@ class MainWindow(MainWindowCore):
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'probe_extractor_list': lambda *args, **kwargs: probe_extractor_list(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
                 'send_to_recycle_bin': lambda *args, **kwargs: send_to_recycle_bin(*args, **kwargs),

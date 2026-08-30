@@ -1143,6 +1143,12 @@ class SettingsPageMixin:
         self.cfg_startmin.setChecked(self.config.get("StartMinimized", False))
         self.cfg_notify = QCheckBox(tr("Notify when a download finishes (while minimized)"))
         self.cfg_notify.setChecked(self.config.get("NotifyOnComplete", True))
+        self.cfg_notify_failure = QCheckBox(
+            tr("Notify when a download fails (while minimized)")
+        )
+        self.cfg_notify_failure.setChecked(
+            self.config.get("NotifyOnFailure", True)
+        )
         self.cfg_clipboard = QCheckBox(tr("Stage copied video links for review"))
         self.cfg_clipboard.setChecked(self.config.get("ClipboardLinkGrabber", False))
         self.cfg_clipboard.setToolTip(
@@ -1161,6 +1167,7 @@ class SettingsPageMixin:
         )
         for w in [
             self.cfg_closetotray, self.cfg_startmin, self.cfg_notify,
+            self.cfg_notify_failure,
         ]:
             beh_l.addWidget(w)
         layout.addWidget(beh_card)

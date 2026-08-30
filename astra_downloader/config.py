@@ -27,6 +27,17 @@ try:
 except ImportError:  # Flat source-path compatibility.
     from companion_ports import PORT_FALLBACKS, SERVER_PORT
 
+try:
+    from .sites import SITE_PROFILES as _SITE_PROFILES
+except ImportError:  # Flat source-path compatibility.
+    from sites import SITE_PROFILES as _SITE_PROFILES
+
+# Every registrable domain the site registry knows, its aliases included.
+_SITE_REGISTRY_HOSTS = frozenset(
+    {key for key in _SITE_PROFILES}
+    | {alias for profile in _SITE_PROFILES.values() for alias in profile["aliases"]}
+)
+
 
 __all__ = (
     "APP_NAME", "APP_VERSION", "SERVICE_ID", "SERVICE_API_VERSION",
@@ -358,6 +369,7 @@ DEFAULT_CONFIG = {
     "StartMinimized": False,
     "CloseToTray": True,
     "NotifyOnComplete": True,
+    "NotifyOnFailure": True,
     # Window state is local to this machine. It is deliberately excluded from
     # settings bundles below: a geometry valid on one monitor layout should
     # never strand the window off-screen on another machine.
@@ -1284,16 +1296,22 @@ _BLOCKED_MEDIA_HOST_SUFFIXES = (
 )
 # Hosts a paste-anything clipboard grabber should stage without being asked
 # twice. Purely a UX hint — it never gates a download.
-MEDIA_HOST_HINTS = (
-    "youtube.com", "youtu.be", "youtube-nocookie.com", "reddit.com", "redd.it",
-    "twitter.com", "x.com", "t.co", "tiktok.com", "vimeo.com", "twitch.tv",
-    "dailymotion.com", "dai.ly", "streamable.com", "bilibili.com",
-    "soundcloud.com", "facebook.com", "fb.watch", "instagram.com",
-    "bsky.app", "rumble.com", "odysee.com", "kick.com", "nicovideo.jp",
-    "vk.com", "ok.ru", "pscp.tv", "periscope.tv", "imgur.com", "gfycat.com",
-    "9gag.com", "newgrounds.com", "archive.org", "ted.com", "coub.com",
-    "bitchute.com", "peertube.tv", "loom.com", "vidyard.com", "wistia.com",
+#
+# Derived from the site registry rather than hand-listed beside it. The two
+# lists had already drifted once: the registry knew about hosts the grabber
+# stayed silent on, because adding a site meant remembering to edit a tuple in
+# a different module. Anything the downloader knows something about is worth
+# staging, so the registry is the one place a site gets added.
+_EXTRA_MEDIA_HOST_HINTS = (
+    # Recognisable media hosts that carry no fact worth a registry row: the
+    # grabber should still stage them, but yt-dlp needs no help with them.
+    "t.co", "pscp.tv", "periscope.tv", "dai.ly", "redd.it", "fb.watch",
+    "b23.tv", "youtu.be", "youtube-nocookie.com", "x.com",
 )
+MEDIA_HOST_HINTS = tuple(sorted({
+    *_SITE_REGISTRY_HOSTS,
+    *_EXTRA_MEDIA_HOST_HINTS,
+}))
 _MEDIA_PATH_HINTS = (
     "/watch", "/video", "/videos", "/v/", "/embed/", "/clip", "/clips/",
     "/shorts/", "/reel", "/status/", "/comments/", "/playlist", "/episode",
@@ -1937,7 +1955,8 @@ def sanitize_config(raw):
         "PreferOriginalOverUpscaled",
         "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
         "UseSystemProxy",
-        "NotifyOnComplete", "ClipboardLinkGrabber", "WindowMaximized",
+        "NotifyOnComplete", "NotifyOnFailure", "ClipboardLinkGrabber",
+        "WindowMaximized",
         "FirstRunComplete", "LegacyHealthTokenEcho",
         "YouTubeSignInRiskNoticeShown",
     ):
