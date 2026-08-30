@@ -12,6 +12,20 @@ repository's git log.
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-08-30
+
+### Added
+
+- **Kick VODs download again.** yt-dlp's own Kick extractor asks an endpoint
+  that answers 404 for every VOD created since Kick reworked its site, so a
+  pasted VOD link failed with "Unable to download JSON metadata". Astra now
+  asks the same playback endpoint Kick's player asks, hands yt-dlp the
+  manifest it returns, and keeps the page link on the record and in history.
+  The title and length come back from the same call, so the quality picker
+  and the saved filename show the real name rather than "manifest.m3u8". A
+  refused or deleted VOD fails with a plain reason instead of a 404, and the
+  session token in the resolved link never appears in the visible command.
+
 ### Fixed
 
 - **Browser impersonation now actually engages for the sites that need it.**
@@ -258,8 +272,8 @@ quietly wrong.
   because an answer that arrives after the lock is released is no use to them.
 
 - **The test suite runs in parallel and is split by domain.** 1,100 tests in
-  about 45 seconds instead of 140, across seven modules — download, GUI,
-  routes, subscriptions, health, config and build — with the shared fixtures
+  about 45 seconds instead of 140, across seven modules (download, GUI,
+  routes, subscriptions, health, config and build) with the shared fixtures
   in one place. Getting there meant fixing what made the suite depend on the
   order it ran in: process-wide probe caches, the yt-dlp activity registry,
   and several two-second waits on background threads that a busy machine
@@ -278,7 +292,7 @@ quietly wrong.
 
 - **An archive notices when a video disappears.** A scan that saw the whole
   source and no longer lists a captured video marks it, without deleting
-  anything — the record, the file and the claim all survive. A scan that only
+  anything. The record, the file and the claim all survive. A scan that only
   covered its usual window never judges, because an old upload falling out of
   that window is not a deletion. The archive also remembers where each file
   landed, so it can tell you when the copy on disk is gone, and neither state
@@ -288,7 +302,7 @@ quietly wrong.
   destination, format, quality and naming template, so one feed can land in
   its own folder shape while everything else keeps your defaults. An Archive
   view lists what a subscription has captured and lets you allow any item
-  through again — that forgets the archive claim and never touches the file
+  through again. That forgets the archive claim and never touches the file
   on disk. A subscription can also be told to re-fetch a video only when the
   site offers a taller one than the copy you already have; it is off by
   default because it costs a lookup per captured video on every scan.
@@ -573,7 +587,7 @@ quietly wrong.
 - **HTTP dependency floors raised and certifi declared.** Werkzeug's floor
   moves to 3.1.8 (quoted list-header parsing, Transfer-Encoding as a set,
   host validation, empty `Request.host` on an invalid header), requests to
-  the maintained 2.34 line, and certifi — a trust store, not a library — is
+  the maintained 2.34 line, and certifi (a trust store, not a library) is
   now declared explicitly instead of riding transitively at whatever version
   the resolver picked. The dependency-policy gate pins all three floors.
 - **Deno now has a security floor separate from its runtime floor.** A
@@ -585,7 +599,7 @@ quietly wrong.
 
 - **History no longer deep-copies the subscription archive on every
   refresh.** Merging archive records into the History view copied all
-  20,000 possible records — nested payloads included — under the store lock,
+  20,000 possible records (nested payloads included) under the store lock,
   on the Qt main thread, per refresh. A scalar projection now copies only
   the eight fields History reads, on both the GUI and `/history` paths.
 - **Icons render sharp on scaled displays.** Every line icon was an 18-pixel
@@ -599,20 +613,20 @@ quietly wrong.
   test requires an exact tally.
 - **Windows system binaries are invoked by absolute path, with timeouts.**
   `icacls`, `powershell`, and `schtasks` were spawned by bare name, which
-  CreateProcess resolves through the current working directory before PATH —
+  CreateProcess resolves through the current working directory before PATH.
   and the icacls call is the one that applies the cookie jar's owner-only
   ACL. All six sites now resolve through `%SystemRoot%\System32`, every
   `subprocess.run` in the package carries a timeout, and a test pins both
   properties so a bare-name spawn cannot come back.
 - **Status messages carry a visible tone.** "Download queue is full" used to
-  render in the same grey as "Clip ranges apply to a single link" — every
+  render in the same grey as "Clip ranges apply to a single link" (every
   status label set a `state` property that no stylesheet rule matched. All
   five status surfaces (download, history, sign-ins, subscriptions,
   first-run) now share the settingsStatus tone convention, so an error is
   red, a success green, and a warning amber, with a test that fails when a
   tone value gains no matching stylesheet rule.
 - **Concurrent subscription scans are capped.** Requesting a scan spawned an
-  unbounded thread per subscription, each running its own yt-dlp probe — at
+  unbounded thread per subscription, each running its own yt-dlp probe) at
   the 100-subscription cap, "Scan now" down the list could hold 100
   concurrent processes. A bounded gate now allows two at a time; the rest
   wait their turn and none are dropped.
@@ -662,8 +676,8 @@ quietly wrong.
 - **The local API version is a contract rather than a number.** `/health` now
   advertises the oldest client wire version this build serves, and a client that
   sends `X-MDL-Api` below it gets a named 426 with a remediation instead of
-  drifting into wrong answers. A client that sends no version — which is every
-  shipped Astra Deck today — is served exactly as before.
+  drifting into wrong answers. A client that sends no version (which is every
+  shipped Astra Deck today) is served exactly as before.
 
 - **A release carries a lock file and an SBOM.** `npm run release:provenance`
   writes a CycloneDX 1.6 document carrying the fields CISA's 2026 minimum
@@ -991,7 +1005,7 @@ quietly wrong.
   now preserves the specific stall message alongside its network recovery code.
 
 - **Choose which subtitles you get.** Subtitle tracks come from two
-  catalogues — the ones a creator wrote and the machine transcript — and the
+  catalogues (the ones a creator wrote and the machine transcript) and the
   app always asked for both. You can now ask for creator subtitles only, the
   auto-generated ones only, or the creator's with auto-generated as a fallback
   (which is what it has always done). Measured against the installed yt-dlp:
@@ -1009,7 +1023,7 @@ quietly wrong.
   code with no checkbox is never dropped when you untick another.
 
 - **A JavaScript runtime the app can fetch for itself.** YouTube needs one,
-  and until now the only one setup could obtain was Deno — a 40 MB archive
+  and until now the only one setup could obtain was Deno. A 40 MB archive
   whose download is the part of setup most likely to fail, leaving the install
   with no runtime and every YouTube download broken. QuickJS is 2 MB, yt-dlp
   accepts it, and it is now the automatic fallback. Verified end to end
@@ -1020,7 +1034,7 @@ quietly wrong.
 
 - **The German translation is actually complete, and the rest are measured.**
   The catalogue's source list was a hand-written tuple of 21 strings against a
-  window that shows 219, and nothing connected the two — so every string added
+  window that shows 219, and nothing connected the two. So every string added
   after the tuple was written never reached a translator, while the
   catalogues reported themselves finished. The strings are now extracted from
   the GUI's syntax tree, `npm run check` fails when one reaches the UI without
@@ -1037,7 +1051,7 @@ quietly wrong.
   reports which settings actually changed.
 
   Stored sign-ins are listed by site but never exported. Cookie values do not
-  leave their jar files — that is the store's stated contract — so the bundle
+  leave their jar files (that is the store's stated contract) so the bundle
   names the sites you will need to sign in to again rather than carrying the
   sessions. There is deliberately no option to include them. The local API
   token is left out for the same reason: it is a working credential, and a
@@ -1063,7 +1077,7 @@ quietly wrong.
   second, separate taskbar button, and it is also the identity notifications
   are attributed to.
 - The "Embed subtitles" checkbox is now "Download subtitles", which is what it
-  does — it fetches sidecar tracks as well as embedding them.
+  does. It fetches sidecar tracks as well as embedding them.
 
 ### Fixed
 
@@ -1082,7 +1096,7 @@ quietly wrong.
   passed only on a machine that happened to have none.
 - **The last positional rollback tuple is gone.** `start_download` reuses a
   waiting-for-sign-in record rather than queueing a duplicate, and restored
-  the previous request from a sixteen-field tuple — the same shape as the
+  the previous request from a sixteen-field tuple. The same shape as the
   retry defect fixed in 2.4.0. It now names its fields.
 - **A failed companion activation no longer pins update checks.** The
   suppression digest is written only after the detached helper verifies an
@@ -1124,7 +1138,7 @@ quietly wrong.
 - **A retry that cannot be saved is put back, not left half-done.** The
   rollback in the sign-in branch of a retry packed fifteen fields and
   restored fourteen, so when the queue write failed the rollback itself
-  raised — nothing was restored, the error escaped into the API and the
+  raised (nothing was restored, the error escaped into the API and the
   window, and the download was stranded waiting for a sign-in with none of it
   written to disk. The lists could disagree because they were positional;
   every rollback now names its fields.
@@ -1137,7 +1151,7 @@ quietly wrong.
   queue-wide resume, so recovering one item started every paused one.
 - **A subscription says when it cannot write its archive.** That failure was
   counted as "already downloaded", which is what a healthy scan with nothing
-  new reports — so a channel that had silently stopped downloading looked
+  new reports) so a channel that had silently stopped downloading looked
   completely up to date. Subscriptions run unattended, which is exactly why
   this needed to be visible.
 - **Retry, reorder, pause and resume report on the Download page.** Their only
@@ -1154,7 +1168,7 @@ quietly wrong.
   of it was reachable. Settings now lists the targets the installed binary
   actually reports. Off by default, because impersonation can itself provoke
   rate limiting. A target the binary does not have is refused rather than
-  passed through — yt-dlp aborts the whole download on an unknown one.
+  passed through. Yt-dlp aborts the whole download on an unknown one.
 - **A 403 is its own failure.** It used to fall into "network unreachable",
   whose advice is to check the firewall. It now names the refusal and points
   at the browser setting, and becomes retryable once one is chosen.
@@ -1166,7 +1180,7 @@ quietly wrong.
   3:1, and the fill was 1.07:1, so on a bright screen there was nothing
   marking where a field was. Secondary buttons had no background and no
   border, making them indistinguishable from the labels beside them until
-  hovered — "Save to" looked exactly like "Clip from". Text contrast was
+  hovered. "Save to" looked exactly like "Clip from". Text contrast was
   measured at the same time and was already fine, so it is unchanged.
 - "Start Server", "Stop Server" and "Check yt-dlp Update" are now sentence
   case, matching every other label.
@@ -1180,7 +1194,7 @@ quietly wrong.
   on a 720p video and learn the truth only from the result. A settled single
   link is now probed off the GUI thread, debounced, and the ladder is cut to
   what the link can serve. A video that tops out below the lowest rung keeps
-  none of them — measured against a real 240p upload, every rung would have
+  none of them (measured against a real 240p upload, every rung would have
   named a resolution it cannot serve, so Best is the only honest offer. The
   narrowing is undone the moment the URL leaves the box, a probe that lands
   after you have typed on is discarded, and a probe that fails says nothing.
@@ -1188,13 +1202,13 @@ quietly wrong.
   resolution ladder and could not express "1080p H.264, never AV1". Three
   settings now compile into one sort. Resolution always leads it: yt-dlp puts
   the fields it is given ahead of its own defaults, so a bare codec
-  preference reorders across resolutions — verified against the installed
+  preference reorders across resolutions) verified against the installed
   binary, `--format-sort vcodec:h264` on a 4K source selects 1080p. The MP4
   container remains a hard H.264 + AAC constraint; these order what it leaves
   open, and the defaults send no flag at all.
 - **Playlist bounds.** A pasted playlist queued everything it contained.
   Settings can now cap the item count and filter by upload date and by item
-  duration — the way a channel's shorts or its multi-hour streams get left
+  duration. The way a channel's shorts or its multi-hour streams get left
   behind. They apply only to a run that walks a playlist, so a bound meant
   for a playlist never silently skips the one video you asked for.
   `--download-archive` stays out: the subscription archive keys are this
@@ -1221,7 +1235,7 @@ quietly wrong.
   stream, so a clip range typed against one was accepted and quietly produced
   the whole video. Such a link is now recognised from the format probe, its
   clip fields are disabled, and the hint names all three voided options. One
-  ordinary format is enough to be unlimited — that format is what gets
+  ordinary format is enough to be unlimited. That format is what gets
   downloaded, so nothing is void.
 
 ### Changed
@@ -1239,15 +1253,15 @@ quietly wrong.
 - **Throttle recovery, socket timeout and extractor retries.** The only
   transfer controls were a bandwidth cap and a retry count, so a CDN that
   throttled to a trickle ran until the stall watchdog killed it. Settings now
-  exposes a throttle floor — below it yt-dlp re-extracts the video rather than
-  crawling — plus a socket timeout and a separate retry count for the page
+  exposes a throttle floor (below it yt-dlp re-extracts the video rather than
+  crawling) plus a socket timeout and a separate retry count for the page
   read that happens before any transfer starts. All three default to off,
   leaving the argv byte-identical until you change something.
 - **Request pacing, and an HTTP 429 that says so.** A bandwidth cap does
   nothing about a per-request rate limit. Settings now spaces downloads and
   the requests inside them, with an optional randomised upper bound. A 429 is
-  classified as its own failure — previously it fell into the generic
-  "network unreachable" bucket, whose advice was to check your firewall — and
+  classified as its own failure (previously it fell into the generic
+  "network unreachable" bucket, whose advice was to check your firewall) and
   its recovery advice points at the pacing. A paced download now reads
   "waiting 7s" in the queue instead of appearing hung on its last speed.
 - **Optional format verification.** yt-dlp can confirm a chosen format is
@@ -1257,8 +1271,8 @@ quietly wrong.
 ### Fixed
 
 - **A failure can be retried once you have fixed what it was waiting for.**
-  Eight of the thirteen classified failures — missing JavaScript runtime,
-  missing FFmpeg, sign-in required — refused Retry with "this failure needs
+  Eight of the thirteen classified failures (missing JavaScript runtime,
+  missing FFmpeg, sign-in required) refused Retry with "this failure needs
   its recovery action before it can be retried", and nothing re-checked after
   you performed it. Installing Deno left the download stuck and the only way
   forward was to re-paste the URL. The queue now re-evaluates the actual
@@ -1295,7 +1309,7 @@ quietly wrong.
   the four link-file flags from CVE-2026-55404; it now also refuses `--exec`,
   `--exec-before-download`, the `--netrc` family and every spelling of the
   external-downloader options, with the same long-option abbreviation
-  handling. None of these are ever built into an argv — the guard exists to
+  handling. None of these are ever built into an argv. The guard exists to
   catch a future regression that does.
 
 ### Added
@@ -1307,7 +1321,7 @@ quietly wrong.
   old all-categories behaviour. Unknown names are dropped rather than passed
   through to the subprocess, and the YouTube-only scoping is unchanged.
 - **`ytdl://` and `mediadl://` links download the video they name.** The
-  handlers were registered and the URL was thrown away — every such link
+  handlers were registered and the URL was thrown away (every such link
   mapped to the literal command "start", so clicking one opened the app and
   queued nothing. The link now goes through the same URL policy a typed link
   does, whether the app was already running or is starting because of it.
@@ -1318,12 +1332,12 @@ quietly wrong.
   default afterwards. Clicking it while an override is set clears it.
 - **Drop a link on the window and it downloads.** A dragged link, a selection
   of text containing links, or a dropped `.txt` list all land in the paste
-  box's batch path — junk lines are ignored, duplicates collapse, and the
+  box's batch path) junk lines are ignored, duplicates collapse, and the
   window switches to Download so you can watch the queue.
 - **One finished download, one file.** A merged download leaves `.part`,
   `.f###` and `.ytdl` files beside the result, and yt-dlp does not always
-  remove them. They are now swept once the download succeeds — never on
-  failure, where the `.part` file is what a resume continues from — and only
+  remove them. They are now swept once the download succeeds (never on
+  failure, where the `.part` file is what a resume continues from) and only
   files belonging to that download's own destination are touched. Settings has
   a "Keep intermediate files" switch for diagnosing a merge problem.
 
@@ -1350,7 +1364,7 @@ quietly wrong.
   same action, or on the card, whichever still exists.
 - **History reports its own failures on the History page.** Clear, Undo and
   Export wrote their results to the log panel, which lives on the Browser
-  extension page — so a permissions error produced no visible response at all.
+  extension page (so a permissions error produced no visible response at all.
 - **An oversized cookies.txt is refused before it is read.** The 1 MB cap sat
   downstream of a read on the GUI thread, so picking a huge file froze the
   window before the cap could apply.
@@ -1359,7 +1373,7 @@ quietly wrong.
   two constants disagreed.
 - **A quarantined state file is announced, and can be put back.** A corrupt
   `config.json` was renamed aside in silence, taking every setting with it and
-  regenerating the server token — which breaks extension pairing with no
+  regenerating the server token) which breaks extension pairing with no
   explanation. A corrupt `download-queue.json` was indistinguishable from an
   empty one, so pending downloads vanished. The Download page now names the
   file and its backup, says what the consequence was, and offers one-click
@@ -1382,14 +1396,14 @@ quietly wrong.
 - **Interrupted downloads resume instead of restarting.** `--force-overwrites`
   was sent on every run, and yt-dlp's own help notes it includes
   `--no-continue`, so a 4 GB file interrupted at 95% re-downloaded in full.
-  It is now sent only on a run meant to start over — a retry, a resume, or a
+  It is now sent only on a run meant to start over. A retry, a resume, or a
   download recovered after a restart continues from its `.part` file, while
   re-downloading the same URL still overwrites as it always did.
 
 - **`--uninstall` now actually removes the install directory.** The delayed
   removal ran `powershell -Command "<script>" <path>`, which never populates
   `$args`, so the command was well-formed, reported success and deleted
-  nothing — leaving per-site cookie jars, the server token, history and
+  nothing. Leaving per-site cookie jars, the server token, history and
   subscriptions on disk after an uninstall that said it had finished.
 - **YouTube URLs are recognised by parsed host, not by pattern match.**
   `https://evil.com?x=.youtube.com/` was classified as YouTube because the
@@ -1444,7 +1458,7 @@ the thing it is actually for: downloading a video.
   a compiled `.qm` with a `.ts` source, and nothing ships a catalogue the app
   cannot select.
 
-## Roadmap archive — 2026-08-10 — ROADMAP.md
+## Roadmap archive (2026-08-10) ROADMAP.md
 
 <details>
 <summary>Original roadmap snapshot</summary>
@@ -1452,14 +1466,14 @@ the thing it is actually for: downloading a video.
 ```markdown
 # Roadmap
 
-Actionable items only — work a coding agent can pick up and implement without
+Actionable items only. Work a coding agent can pick up and implement without
 external dependencies. Completed items are deleted; shipped work lives in git
 history and `CHANGELOG.md`. Items that need something outside this repository
 live in `Roadmap_Blocked.md`.
 
 ## Carried over
 
-- [ ] P2 — Build a light theme, including the surfaces that are already mixed
+- [ ] P2 (Build a light theme, including the surfaces that are already mixed
   Why: The product is dark-first by design, but nothing verifies what happens
   under a light Windows theme, and several surfaces already render light against
   the dark window today.
@@ -1471,13 +1485,13 @@ live in `Roadmap_Blocked.md`.
   system renders a white title bar over the `#0a0d12` body right now; (b)
   `make_line_icon` (`gui.py:189-204`) bakes stroke `#aab2bd` into a raster
   `QPixmap`, so every nav, tool and empty-state glyph is a pre-rendered dark
-  bitmap — a light theme re-renders icons, it does not swap CSS; (c) the pinned
+  bitmap) a light theme re-renders icons, it does not swap CSS; (c) the pinned
   Qt 6.11 exposes `QStyleHints.colorScheme()`, `setColorScheme()` and
   `colorSchemeChanged`, so following the system scheme is first-party API, and
   setting it also fixes the **8** native `QFileDialog` call sites (`gui.py:571`,
   2644, 3400, 5987, 6016, 6151, 7032, 7305) that follow the OS palette. Qt 6.10
   gave `windows11`/`fusion` automatic high-contrast support that a fully custom
-  stylesheet forfeits — decide that deliberately.
+  stylesheet forfeits. Decide that deliberately.
   Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/gui.py`,
   `astra_downloader/config.py`, `scripts/render-companion-gui.py`
   Acceptance: a theme setting follows the system scheme by default; the title
@@ -1485,7 +1499,7 @@ live in `Roadmap_Blocked.md`.
   harness gains a theme axis.
   Complexity: L
 
-## Research-Driven Additions — v2.6.0 pass (2026-08-09)
+## Research-Driven Additions. V2.6.0 pass (2026-08-09)
 
 Every item traces to a finding in `RESEARCH.md`. Measurements were taken on this
 machine (Intel Core Ultra 9 285, 24 logical cores, Windows 11 26100) against the
@@ -1499,24 +1513,24 @@ item is one root cause behind three destructive symptoms and should precede any
 packaging work; the two keyboard traps and the subscription error are each a
 short, self-contained fix; publishing unblocks everything downstream.
 
-- [ ] P0 — Restore a supply chain that can actually transcribe, and probe the capability
+- [ ] P0 (Restore a supply chain that can actually transcribe, and probe the capability
   Why: v2.6.0's headline feature cannot work on any current install, and the app
   converges every install to the broken state on its own.
   Evidence: yt-dlp/FFmpeg-Builds disabled the filter in commit `bfcf84000`
-  ("Disable Whisper", 2026-06-19) — `scripts.d/50-whisper.sh` now ends
+  ("Disable Whisper", 2026-06-19)) `scripts.d/50-whisper.sh` now ends
   `ffbuild_enabled() { …; return -1; }` for every target, and the
   `ffmpeg-master-latest-win64-gpl.zip` asset dropped from ~211 MiB to 162.4 MiB.
   `FFMPEG_URL` (`astra_downloader.py:381`) points at exactly that asset. Worse,
   `_ffmpeg_needs_refresh` (`gui.py:703-720`) logs "Installed ffmpeg is below the
   verified security floor; downloading a fresh copy" for any build older than
-  `_FFMPEG_MIN_SNAPSHOT_DATE = "2026-06-17"` (`astra_downloader.py:1645`) — i.e.
-  for every build old enough to still contain the filter — and enabling the
+  `_FFMPEG_MIN_SNAPSHOT_DATE = "2026-06-17"` (`astra_downloader.py:1645`) (i.e.
+  for every build old enough to still contain the filter) and enabling the
   setting calls `_run_setup()` (`gui.py:6999`), so the action that turns the
   feature on is the action that removes the capability it needs. The security
   floor and the feature are mutually exclusive under the configured URL. Nothing
   probes for the filter: `FfmpegCapabilitiesProbe` checks version and snapshot
   date only. Note when writing the probe that `ffmpeg -h filter=whisper` exits
-  **0 even for an unknown filter** (verified) — parse the output or use
+  **0 even for an unknown filter** (verified). Parse the output or use
   `-filters`, or the probe becomes another check that always passes. Preferred
   route in `RESEARCH.md` open question 1: a whisper.cpp sidecar
   (`whisper-bin-x64.zip`, ~8 MB, release-asset SHA-256 available) provisioned
@@ -1530,9 +1544,9 @@ short, self-contained fix; publishing unblocks everything downstream.
   proves the probe reports "missing" against a binary without the filter.
   Complexity: L
 
-- [ ] P0 — Escape the ffmpeg filtergraph at both levels, and retire the test that pins the bug
+- [ ] P0 (Escape the ffmpeg filtergraph at both levels, and retire the test that pins the bug
   Why: Every Windows path contains a drive-letter colon, so the filter graph
-  never parses and no SRT is ever produced — independent of the supply-chain
+  never parses and no SRT is ever produced) independent of the supply-chain
   defect above.
   Evidence: `escape_ffmpeg_filter_value` (`download.py:1626-1637`) writes one
   backslash; libavfilter strips one layer at the graph level before the option
@@ -1551,7 +1565,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   that real ffmpeg accepts.
   Complexity: S
 
-- [ ] P0 — Stop a failed transcription from reporting a complete download as failed
+- [ ] P0 (Stop a failed transcription from reporting a complete download as failed
   Why: The media file is downloaded, verified and on disk, but History files it
   under a terminal `failed`, and the remedy offered re-downloads the whole thing.
   Evidence: `_run_download` calls `_run_local_subtitles` only when
@@ -1560,7 +1574,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   `:3801`). `'transcription-failed'` is in `DOWNLOAD_RETRYABLE_ERROR_CODES`
   (`:102-103`), so Retry re-runs the entire job. The failure copy is already
   honest ("Local subtitle generation failed after the media downloaded",
-  `:239`) — only the status is wrong. Knock-on:
+  `:239`)) only the status is wrong. Knock-on:
   `_sweep_download_intermediates` is gated on `complete` (`:4432`), so the
   staging directory leaks for every affected download.
   Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`
@@ -1569,7 +1583,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   staging is still swept; a test covers the terminal state and the sweep.
   Complexity: S
 
-- [ ] P0 — Derive portable mode from where the executable lives, not from argv
+- [ ] P0 (Derive portable mode from where the executable lives, not from argv
   Why: One root cause produces three separate high-severity defects, two of them
   destructive, and it is also the blocker that keeps winget packaging out of
   reach.
@@ -1578,8 +1592,8 @@ short, self-contained fix; publishing unblocks everything downstream.
   not type the flag for. (a) The one-folder zip that README:146 recommends as
   the antivirus fallback, launched normally, reaches
   `ensure_installed_executable` (`:2872-2906`), which copies **only**
-  `AstraDownloader.exe` — verified as a 7,816,473-byte stub in a 289-entry
-  archive that needs its sibling `_internal/` — over the installed copy (the
+  `AstraDownloader.exe`) verified as a 7,816,473-byte stub in a 289-entry
+  archive that needs its sibling `_internal/`. Over the installed copy (the
   guard at `:2893` preserves only a *strictly newer* version) and then repoints
   the shortcuts, logon task and protocol handlers at the dead file. (b)
   `_run_companion_self_update` relaunches with a hardcoded `['--start-server']`
@@ -1591,7 +1605,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   history and sign-ins. Same flag also leaves the single-instance mutex
   `Local\AstraDownloader.SingleInstance` (`:4365`) and ports 9752/9753 shared, so
   a portable launch silently raises the installed window instead. (The stub's
-  *inability to start* is inferred from the PyInstaller layout, not observed —
+  *inability to start* is inferred from the PyInstaller layout, not observed.
   needs live validation; the copy, the version guard and the re-pointing are all
   verified from code and artifact.)
   Touches: `astra_downloader/astra_downloader.py`, `README.md`
@@ -1603,20 +1617,20 @@ short, self-contained fix; publishing unblocks everything downstream.
   flag. Tests cover each of the three symptoms.
   Complexity: M
 
-- [ ] P0 — Make the PO-token path real, or stop taking the branch that needs it
+- [ ] P0 (Make the PO-token path real, or stop taking the branch that needs it
   Why: The integration cannot work by construction, and the failure is
-  inverted — when the provider probe *succeeds*, YouTube downloads get worse.
+  inverted) when the provider probe *succeeds*, YouTube downloads get worse.
   Evidence: `build_youtube_extractor_args` (`health.py:285-296`) emits
   `--extractor-args youtubepot-bgutilhttp:base_url=http://127.0.0.1:{port}`.
   That namespace belongs to the bgutil-ytdlp-pot-provider **yt-dlp plugin**:
   `bgutil` appears nowhere in the pinned `yt_dlp` package, and
   `yt_dlp/extractor/youtube/pot/_builtin/` ships only cache providers
-  (`MemoryLRUPCP`, `WebPoPCSP`) — no token minter. Meanwhile
+  (`MemoryLRUPCP`, `WebPoPCSP`) (no token minter. Meanwhile
   `validate_ytdlp_spawn_args` injects `--no-plugin-dirs` into every spawn
   (`astra_downloader.py:564`, `:587-588`), so no provider plugin can ever load
   and yt-dlp silently ignores the unknown namespace. The `else` arm of that same
-  function — the one that restricts the client list to genuinely token-exempt
-  clients — is skipped whenever the probe succeeds, so a running bgutil server
+  function) the one that restricts the client list to genuinely token-exempt
+  clients. Is skipped whenever the probe succeeds, so a running bgutil server
   downgrades downloads to SABR-only formats and 403s while `/health` reports the
   provider healthy. `BGUTIL_POT_MIN_VERSION` (`health.py:47`) is also
   unsatisfiable in spirit: the newest released provider is 1.3.1 (2026-03-07) and
@@ -1636,8 +1650,8 @@ short, self-contained fix; publishing unblocks everything downstream.
   usable only when it can actually affect a download.
   Complexity: L
 
-- [ ] P0 — Free the forward-Tab focus chain
-  Why: Forward Tab does nothing on all six pages — a WCAG 2.1.2 keyboard trap in
+- [ ] P0 (Free the forward-Tab focus chain
+  Why: Forward Tab does nothing on all six pages) a WCAG 2.1.2 keyboard trap in
   an app that already invested in accessible names and focus rings.
   Evidence: `gui.py:1285-1288` hides the `QTabWidget` tab bar, which is the
   widget's focus **proxy**, so `setFocus()` forwards into a hidden widget and Qt
@@ -1646,7 +1660,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   `nav0, nav0, nav0, …`; hidden with `setFocusPolicy(Qt.FocusPolicy.NoFocus)` →
   `f0, f1, f2, nav0, …`. Zero tests touch keyboard navigation
   (`Key_Tab|focusNextPrevChild|tabChangesFocus` → 0 hits), which is why it
-  shipped. Tab traversal is baseline keyboard access, not a keyboard *shortcut* —
+  shipped. Tab traversal is baseline keyboard access, not a keyboard *shortcut*.
   the project's no-shortcuts convention does not cover it.
   Touches: `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
   Acceptance: Tab from the first nav button reaches every focusable control on
@@ -1654,7 +1668,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   and asserts the visited set per page.
   Complexity: S
 
-- [ ] P0 — Stop the Site-profiles editor trapping Tab and eating the keystroke
+- [ ] P0. Stop the Site-profiles editor trapping Tab and eating the keystroke
   Why: It is a second keyboard trap, and every trapped press silently corrupts
   the JSON the user is editing.
   Evidence: `cfg_site_profiles = QTextEdit()` (`gui.py:3836`) with
@@ -1670,9 +1684,9 @@ short, self-contained fix; publishing unblocks everything downstream.
   asserts both.
   Complexity: S
 
-- [ ] P0 — Show the subscription store's error instead of "you have none"
+- [ ] P0 (Show the subscription store's error instead of "you have none"
   Why: A user with an unreadable store is told their subscriptions do not exist
-  and invited to re-add them — the opposite of this project's stated invariant
+  and invited to re-add them) the opposite of this project's stated invariant
   that a failure names its cause and offers the fix.
   Evidence: `gui.py:2907` sets `Could not read subscriptions: {error}`; 44 lines
   later `gui.py:2952` unconditionally overwrites it with
@@ -1686,7 +1700,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   never the empty state; tests drive a raising store for both pages.
   Complexity: S
 
-- [ ] P0 — Keep proxy credentials out of the settings bundle, and name what an import changes
+- [ ] P0 (Keep proxy credentials out of the settings bundle, and name what an import changes
   Why: The bundle is designed to be shared between machines, and it currently
   carries credentials out and widens a filesystem write allow-list on the way in,
   behind a confirmation that reports only a count.
@@ -1695,8 +1709,8 @@ short, self-contained fix; publishing unblocks everything downstream.
   `normalize_proxy` (`:413-422`) returns the string verbatim, so
   `http://user:pass@host:3128` round-trips. The docstring at `:1276` excludes
   cookies precisely because "a bundle is … the kind of file that gets emailed
-  around". On import, `ExtraOutputRoots` — which extends `allowed_output_roots`
-  (`:1170-1180`), the allow-list gating where the loopback API may write — is
+  around". On import, `ExtraOutputRoots`) which extends `allowed_output_roots`
+  (`:1170-1180`), the allow-list gating where the loopback API may write. Is
   applied with no GUI surface anywhere, and `gui.py:6077` reports only
   `Imported N changed settings`; the key names from `describe_bundle_changes`
   go to the log panel on a different page.
@@ -1707,9 +1721,9 @@ short, self-contained fix; publishing unblocks everything downstream.
   exclusion set against `DEFAULT_CONFIG` so a new key cannot be added silently.
   Complexity: M
 
-- [ ] P0 — Publish the shipped versions, and fail the release gate when a version has no release
-  Why: Six versions of fixes — including three `security:` commits and the whole
-  v2.6.0 feature set — have never reached a user, and both delivery paths point
+- [ ] P0 (Publish the shipped versions, and fail the release gate when a version has no release
+  Why: Six versions of fixes) including three `security:` commits and the whole
+  v2.6.0 feature set. Have never reached a user, and both delivery paths point
   at the stale one.
   Evidence: `gh release list` returns a single release, `v2.0.0` (2026-08-06),
   and `git tag -l` returns a single tag; `APP_VERSION` is 2.6.0. The updater
@@ -1727,15 +1741,15 @@ short, self-contained fix; publishing unblocks everything downstream.
 
 ### P1
 
-- [ ] P1 — Make the license gate run the inspection it exists for
+- [ ] P1 (Make the license gate run the inspection it exists for
   Why: The gate that is supposed to enforce the license policy only asserts that
   the SBOM is non-empty, so 37 real policy issues ship green.
   Evidence: `scripts/check-companion-inventory.js:16-26` calls
   `buildCompanionInventory` and throws only when `components`/`dependencies` are
   empty. `inspectCompanionInventory`
-  (`scripts/companion-license-inventory.js:371-436`) — unresolved SPDX,
+  (`scripts/companion-license-inventory.js:371-436`)) unresolved SPDX,
   `decision !== 'approved'`, missing approval evidence, missing obligations,
-  moving `latest` download URLs, unresolved download SHA-256 — is referenced only
+  moving `latest` download URLs, unresolved download SHA-256. Is referenced only
   from `tests/companion-license-inventory.test.js`. Run against the real staged
   build it reports 37 issues, including PyQt6/PyQt6-Qt6 `decision=unresolved`,
   yt-dlp and Deno on moving `latest` targets, and an unresolved ffmpeg SHA-256.
@@ -1750,7 +1764,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   build; a test proves the gate fails on a planted unresolved component.
   Complexity: M
 
-- [ ] P1 — Preflight the volume the download actually writes to, and sweep staging on every terminal state
+- [ ] P1. Preflight the volume the download actually writes to, and sweep staging on every terminal state
   Why: The disk check passes while the system drive fills, and every non-complete
   download leaks a full-size staging directory that nothing ever removes.
   Evidence: staging defaults to `INSTALL_DIR/download-temp/<id>`
@@ -1769,7 +1783,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   behind.
   Complexity: M
 
-- [ ] P1 — Give the companion updater a backoff, a rate limit, and a startup sweep
+- [ ] P1 (Give the companion updater a backoff, a rate limit, and a startup sweep
   Why: Each call re-downloads ~47 MB before it can discover it was unnecessary,
   nothing bounds the repeat rate, the scratch files are never cleaned, and a
   failed schedule leaves a status marker stuck for the session.
@@ -1777,7 +1791,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   sibling routes do, and `d36bb69`'s backoff covers only the yt-dlp path
   (`should_check_ytdlp_update`, `astra_downloader.py:1793-1805`); the download at
   `:2620` precedes the digest-skew guard at `:2689`. The same anonymous
-  `api.github.com` endpoint the updater polls has a 60/hour ceiling — the bug
+  `api.github.com` endpoint the updater polls has a 60/hour ceiling) the bug
   ytdlp-interface #360 reports. Scratch files up to
   `HELPER_DOWNLOAD_MAX_BYTES` = 500 MB land in `INSTALL_DIR` (`:929`, `:2618`,
   `:2298`, `:2333`) and only `remove_portable_state` ever removes any, and its
@@ -1789,7 +1803,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   the staleness test at `:1707` diffs naive local wall-clock, so a backwards
   clock step keeps it fresh permanently.
   Touches: `astra_downloader/astra_downloader.py`, `astra_downloader/routes.py`
-  While in here: `os.replace` is not a durable rename on Windows — CPython calls
+  While in here: `os.replace` is not a durable rename on Windows. CPython calls
   `MoveFileExW(..., MOVEFILE_REPLACE_EXISTING)` with no `MOVEFILE_WRITE_THROUGH`,
   so the rename is atomic for visibility but unflushed. That is the right default
   for the 14 rebuildable-state sites, but the self-update stage
@@ -1802,7 +1816,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   sensitive replaces flush.
   Complexity: M
 
-- [ ] P1 — Make subscription scans visible to the "is yt-dlp busy" guard
+- [ ] P1 (Make subscription scans visible to the "is yt-dlp busy" guard
   Why: The auto-updater replaces a running executable and blames itself, and a
   self-update can orphan a scan whose cookie jar then survives on disk.
   Evidence: `active_count()` (`download.py:4738-4740`) returns
@@ -1814,7 +1828,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   reporting "the active copy was retained". Separately,
   `schedule_companion_process_exit` calls `os._exit(0)` (`:2541`), skipping the
   probe's `identity_cleanup()` (`:652-654`) and leaving
-  `.cookies.probe.<hex>.txt` — exported site sign-in cookies — which
+  `.cookies.probe.<hex>.txt`) exported site sign-in cookies. Which
   `cleanup_stale_cookie_jars` then skips because it ignores files younger than
   300 s (`download.py:1326`).
   Touches: `astra_downloader/download.py`,
@@ -1824,7 +1838,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   jars regardless of age; tests cover the scan-active case.
   Complexity: M
 
-- [ ] P1 — Make every setting signal "Unsaved changes"
+- [ ] P1 (Make every setting signal "Unsaved changes"
   Why: 19 of 68 controls change silently, so edits are discarded with no feedback
   at any point, and the test that is supposed to guard this asserts source text.
   Evidence: the dirty-signal list at `gui.py:4728-4739` is hand-maintained and
@@ -1836,14 +1850,14 @@ short, self-contained fix; publishing unblocks everything downstream.
   checkboxes (`gui.py:4106-4131`) produce no status change. The only guard,
   `test_astra_downloader.py:1491`, asserts that the string
   `self._show_settings_status("Unsaved changes", "warning")` appears in the
-  source — it passes regardless of wiring.
+  source) it passes regardless of wiring.
   Touches: `astra_downloader/gui.py`, `astra_downloader/test_astra_downloader.py`
   Acceptance: the dirty signal is derived from the form-field registry rather
   than a parallel list; a test toggles every registered control and asserts the
   status changes, so a new setting cannot be added without it.
   Complexity: M
 
-- [ ] P1 — Stop the settings search from un-hiding deliberately hidden widgets
+- [ ] P1. Stop the settings search from un-hiding deliberately hidden widgets
   Why: An "Undo import" button is visible from app start, before any import
   exists, and clicking it reports that there is nothing to undo.
   Evidence: `_build_settings` ends with `self._filter_settings("")`
@@ -1858,7 +1872,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   asserts the undo button is hidden at construction and after clearing a search.
   Complexity: S
 
-- [ ] P1 — Let a site profile satisfy a retry precondition
+- [ ] P1. Let a site profile satisfy a retry precondition
   Why: A profile that supplies exactly the workaround a refusal asks for cannot
   unblock the retry, so the user is told to set something in Settings that they
   already set in the profile.
@@ -1874,14 +1888,14 @@ short, self-contained fix; publishing unblocks everything downstream.
   test covers a profile-supplied `Xff` unblocking a geo refusal.
   Complexity: S
 
-- [ ] P1 — Make portable uninstall remove the state it claims to remove
+- [ ] P1 (Make portable uninstall remove the state it claims to remove
   Why: It prints "Portable Astra Downloader state was removed" while leaving live
   session cookies on what is typically a removable medium.
   Evidence: `remove_portable_state` (`astra_downloader.py:3798-3839`) deletes
   only paths in a hand-written `known_paths` set. Not listed, therefore
-  preserved: `site-logins/` (`SiteLoginStore`, `download.py:490`) — confirmed on
+  preserved: `site-logins/` (`SiteLoginStore`, `download.py:490`)) confirmed on
   this machine as `site-logins/index.json` plus a Netscape jar of live session
-  cookies — `download-temp/`, transient `.cookies.*.txt` jars, rotated
+  cookies. `download-temp/`, transient `.cookies.*.txt` jars, rotated
   `server.log.1`/`crash.log.1`, and `*.corrupt-*` quarantine copies. This is the
   gate-that-enumerates-what-it-guards shape the repo has been bitten by before.
   Touches: `astra_downloader/astra_downloader.py`
@@ -1890,7 +1904,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   and a staging folder and proves both are gone.
   Complexity: S
 
-- [ ] P1 — Tune the whisper invocation, and label the live-wait setting correctly
+- [ ] P1. Tune the whisper invocation, and label the live-wait setting correctly
   Why: The shipped `queue=3` is simultaneously the slowest and the lowest-quality
   setting available, and a live-stream setting says the opposite of what it does.
   Evidence (measured on a 104.47 s speech sample, `tiny-q5_1`, `use_gpu=0`, this
@@ -1898,7 +1912,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   span >20 s; `queue=10` → 9.99 s, 7 overlapping; `queue=20` → **6.72 s**, 3
   overlapping, none runaway; `queue=30` → 8.40 s, 1 overlapping. `max_len=42`
   works on the same binary and is the standard readability knob. Real-time factor
-  at `queue=20` is 0.064, so a one-hour video costs roughly 4 minutes of CPU —
+  at `queue=20` is 0.064, so a one-hour video costs roughly 4 minutes of CPU.
   the number the earlier roadmap left open. Do **not** set `use_gpu=1`: it logs
   `Unsupported GPU: NVIDIA GeForce RTX 4070 SUPER` and runs 2.3× slower (17.50 s
   vs 7.62 s). Separately, `--wait-for-video` is documented by the shipped yt-dlp
@@ -1910,7 +1924,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   Touches: `astra_downloader/download.py`, `astra_downloader/gui.py`
   Finally, renumber the produced SRT: FFmpeg's filter prints
   `WhisperContext.index`, which is never initialised to 1
-  (`libavfilter/af_whisper.c`), so **every cue list starts at 0** — observed in
+  (`libavfilter/af_whisper.c`), so **every cue list starts at 0**. Observed in
   every sample generated here. FFmpeg and VLC both ignore the counter entirely,
   but stricter validators and some web players key on 1-based numbering, and a
   one-pass renumber on the sidecar is cheaper than arguing with upstream.
@@ -1920,18 +1934,18 @@ short, self-contained fix; publishing unblocks everything downstream.
   slot is released.
   Complexity: S
 
-- [ ] P1 — Bound transcription cost and watch the process
+- [ ] P1 (Bound transcription cost and watch the process
   Why: Nothing limits how long transcription runs, how much CPU it takes, or how
   many run at once, and the stall watchdog is watching a process that has already
   exited.
   Evidence: `_run_local_subtitles` (`download.py:3681-3827`) spawns with only
-  `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` — no priority class, no thread
-  cap — and neither the stdout loop nor `proc.wait()` has a timeout. The stall
+  `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`) no priority class, no thread
+  cap (and neither the stdout loop nor `proc.wait()` has a timeout. The stall
   watchdog closure binds `watched_proc=proc`, the yt-dlp process
   (`download.py:4114`). `MaxConcurrentDownloads` clamps to 10
   (`config.py:1440`), so up to ten CPU-saturating whisper processes can run on an
   interactive desktop. Progress is reported as a fixed 1-99% because "the filter
-  does not expose the input duration"; it does not need to — the media duration
+  does not expose the input duration"; it does not need to) the media duration
   is already known and `out_time_ms` tracks media position exactly (verified:
   final value 104469438 for a 104.469 s input). Note that key is **microseconds**
   despite its name.
@@ -1941,7 +1955,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   independently of download concurrency; progress shows real percent.
   Complexity: M
 
-- [ ] P1 — Give the control borders a visible boundary
+- [ ] P1. Give the control borders a visible boundary
   Why: The prior pass measured this and it is unchanged; 28 controls currently
   have effectively no edge until hover or focus.
   Evidence: measured against the real `#0a0d12` background from `STYLESHEET`:
@@ -1958,7 +1972,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   the background.
   Complexity: S
 
-- [ ] P1 — Fix the minimum-size layout the harness already captures
+- [ ] P1. Fix the minimum-size layout the harness already captures
   Why: The app's own documented minimum window size renders overlapping,
   truncated controls, and the harness photographs it every run without asserting
   anything about it.
@@ -1977,7 +1991,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   size.
   Complexity: M
 
-- [ ] P1 — Make undo durable, or say that it is not
+- [ ] P1. Make undo durable, or say that it is not
   Why: Every undo in the app dies with the process and nothing tells the user, in
   a product whose stated convention is undo instead of confirmation.
   Evidence: clear-history (`gui.py:6297`/`6316`), remove-sign-in (`:3443`/`:3473`),
@@ -2002,7 +2016,7 @@ short, self-contained fix; publishing unblocks everything downstream.
 
 ### P2
 
-- [ ] P2 — Decide what the language picker is allowed to advertise
+- [ ] P2. Decide what the language picker is allowed to advertise
   Why: Eleven locales are offered and nine render as English, which is a worse
   experience than offering two, and the gap has more than doubled.
   Evidence: `py -3.12 scripts/build-companion-translations.py` on 2026-08-09:
@@ -2020,7 +2034,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   mere declaration.
   Complexity: S
 
-- [ ] P2 — Reach the strings the extractor cannot see
+- [ ] P2. Reach the strings the extractor cannot see
   Why: The project knows about three History column headers; it is 57 sites,
   including the entire tray menu and the only modal's title.
   Evidence: **32 bare literals** and **25 f-strings** reach user-visible setters
@@ -2040,16 +2054,16 @@ short, self-contained fix; publishing unblocks everything downstream.
   rises to include them; the gate fails when a new one is added.
   Complexity: M
 
-- [ ] P2 — Close the render harness's blind spots
+- [ ] P2 (Close the render harness's blind spots
   Why: The harness is the project's main UI safety net and it cannot see focus,
   scale, most locales, or several of the states this pass found broken.
   Evidence: 27 scenarios, exit 0. `select_page` calls `clearFocus()`
   (`render-companion-gui.py:192-193`), so **no capture ever contains a focus
-  ring** — the exact thing fixed twice for cascade bugs. `QT_SCALE_FACTOR=2` is
+  ring**) the exact thing fixed twice for cascade bugs. `QT_SCALE_FACTOR=2` is
   forced for every scenario (`:69`), so 1x and this machine's real 1.25x are
   never rendered. Only two window sizes and two locales (`de`, `ar`); eight
   locales never rendered and no CJK glyph-width check exists.
-  `subscriptions-empty` is misnamed — it asserts `{"Astra channel"}` (`:665`) and
+  `subscriptions-empty` is misnamed. It asserts `{"Astra channel"}` (`:665`) and
   the PNG shows one populated row, so the real empty state is never rendered.
   Uncovered: Sign-ins beyond one scenario, subscription error/filter-empty/
   disabled rows, History `No matching downloads` and pagination, the Download
@@ -2061,7 +2075,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   empty state added; the listed uncovered states are captured.
   Complexity: M
 
-- [ ] P2 — Make `py -3.12 -m pytest` able to report its own result
+- [ ] P2. Make `py -3.12 -m pytest` able to report its own result
   Why: The default invocation prints a traceback instead of a pass count while
   exiting 0, so a human or an agent reading the tail cannot tell green from red.
   Evidence: pytest's tmpdir teardown raises
@@ -2075,7 +2089,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   `README.md`'s test count is verifiable from a run.
   Complexity: S
 
-- [ ] P2 — Bring the winget manifest under the version gate
+- [ ] P2 (Bring the winget manifest under the version gate
   Why: The gate reports that every version source agrees while the manifest
   declares an older version and points at a URL that does not resolve.
   Evidence: `scripts/check-versions.js:33-41` enumerates package.json,
@@ -2088,14 +2102,14 @@ short, self-contained fix; publishing unblocks everything downstream.
   1.28.0 exists but the community-repo PR template still requires 1.12
   conformance, and the delta is only `DesiredStateConfiguration` plus
   pipeline-populated `Icons`. `InstallerType: portable` is unchanged in 2026, and
-  there is still no unsigned-app attestation mechanism — `SignatureSha256` is
+  there is still no unsigned-app attestation mechanism) `SignatureSha256` is
   MSIX-only.
   Touches: `scripts/check-versions.js`, `packaging/winget/manifests/`
   Acceptance: the manifest version and installer URL are gate-checked against
   `APP_VERSION`, and the directory is renamed on a bump.
   Complexity: S
 
-- [ ] P2 — Tie the two release artifacts together
+- [ ] P2 (Tie the two release artifacts together
   Why: A v2.6.0 exe can be staged and published beside a v2.5.0 fallback zip with
   every gate green, and the published SBOM can describe a build that was never
   shipped.
@@ -2104,7 +2118,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   only structurally, with no version or provenance comparison. `build.py` copies
   the one-file exe to the repo root at `:491`, then runs the onedir PyInstaller
   pass at `:493`, then writes metadata and the sidecar at `:497-498`, and
-  `clean()` (`:366-370`) never removes the root artifacts — so any failure in
+  `clean()` (`:366-370`) never removes the root artifacts) so any failure in
   between leaves a new exe beside the previous release's sidecar and zip.
   `write_build_metadata` reads `astra_downloader/build/AstraDownloader/
   Analysis-00.toc` (`:292`), which the onedir run (`--clean`) has already
@@ -2117,7 +2131,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   a build; the one-file metadata is captured from the one-file analysis.
   Complexity: M
 
-- [ ] P2 — Make History a record worth keeping
+- [ ] P2. Make History a record worth keeping
   Why: The download record is silently truncated at 500 entries, and "have I
   already got this?" is the one thing three of five commercial rivals paywall.
   Evidence: `HistoryStore` is constructed with `limit=500`
@@ -2134,7 +2148,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   URL" across downloads and the subscription archive.
   Complexity: L
 
-- [ ] P2 — Write media-server sidecars
+- [ ] P2 (Write media-server sidecars
   Why: The audience that wants this is currently unserved and no desktop GUI in
   the field does it, so it is available as a differentiator rather than parity.
   Evidence: six open Pinchflat issues ask for NFO customisation, plain-date NFO,
@@ -2143,8 +2157,8 @@ short, self-contained fix; publishing unblocks everything downstream.
   working reference for the Kodi/Jellyfin/Emby layout; Jellyfin documents the
   schema (`<filename>.nfo` per item, `tvshow.nfo`/`season.nfo` per folder,
   provider-id tags, local NFO wins over remote providers). **Plex now reads the
-  same format natively** — the Plex NFO Agent requires PMS ≥ 1.43.1 and is
-  described as compliant with the Kodi/XBMC NFO format — so one output layout is
+  same format natively**) the Plex NFO Agent requires PMS ≥ 1.43.1 and is
+  described as compliant with the Kodi/XBMC NFO format. So one output layout is
   consumable by Kodi, Jellyfin, Emby *and* Plex with no post-processing for the
   first time. Two details that decide whether it works: `<uniqueid type="…"
   default="true">` is what keeps watch state stable across rescans, and a
@@ -2162,11 +2176,11 @@ short, self-contained fix; publishing unblocks everything downstream.
   test.
   Complexity: L
 
-- [ ] P2 — Turn the failure taxonomy into a pre-flight
+- [ ] P2 (Turn the failure taxonomy into a pre-flight
   Why: The app's differentiator is naming a cause after a failure; the same
   knowledge would prevent most of them, and "it broke after an update" is the
   loudest complaint class in the entire field.
-  Evidence: Sonarr's Health Checks are the model — named, wiki-linked conditions
+  Evidence: Sonarr's Health Checks are the model) named, wiki-linked conditions
   surfaced before a job fails. Conditions this repo can already evaluate:
   yt-dlp older than N days, JS runtime missing or below floor, ffmpeg below the
   security floor or lacking a needed filter, a sign-in jar past expiry, the
@@ -2180,7 +2194,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   download is started; each condition has a test; `/health` exposes them.
   Complexity: L
 
-- [ ] P2 — Close the smaller correctness and coverage gaps
+- [ ] P2 (Close the smaller correctness and coverage gaps
   Why: Individually minor, each is a concrete wrong behaviour with a known fix.
   Evidence and scope, each verified this pass:
   (a) Six of eleven empty states have no recovery action, and the Browser
@@ -2191,7 +2205,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   read different roots and silently never bootstrap.
   (c) `parse_native_extension_ids` (`:3124-3142`) accepts any token and
   interpolates it into `allowed_origins`, while `normalize_extension_origin`
-  (`:3145-3154`) — an existing validator — is used only for the legacy HTTP
+  (`:3145-3154`)) an existing validator (is used only for the legacy HTTP
   allowlist.
   (d) The whisper model URL tracks HuggingFace's mutable `main`
   (`:369-375`); the repo head is `5359861c739e955e79d9a303bcbc70fb988958b1`,
@@ -2208,7 +2222,7 @@ short, self-contained fix; publishing unblocks everything downstream.
   called only from tests; production writes that field from the helper script.
   (i) `Wait-Process -Id` on an already-exited probe raises under
   `$ErrorActionPreference = 'Stop'`, so a probe that exited 0 is reported as a
-  failed health check (`:2342-2356`) — needs live validation for frequency.
+  failed health check (`:2342-2356`)) needs live validation for frequency.
   (j) SponsorBlock's database and API are **CC BY-NC-SA 4.0**, which requires
   visible attribution; the app exposes the feature as a bare checkbox
   (`gui.py:4083`) and the string "SponsorBlock" appears nowhere in `README.md` or
@@ -2226,10 +2240,10 @@ short, self-contained fix; publishing unblocks everything downstream.
 
 ### P3
 
-- [ ] P3 — Split `gui.py` along page boundaries
+- [ ] P3 (Split `gui.py` along page boundaries
   Why: At 7,743 lines it now has measurable failure modes, not just a smell.
   Evidence: this pass found three defects whose direct cause is the file's size
-  and its hand-maintained parallel lists — the dirty-signal list drifting from
+  and its hand-maintained parallel lists) the dirty-signal list drifting from
   the form-field registry (19 silent settings), `_build_settings` ending with a
   filter call that un-hides deliberately hidden widgets, and a minimum-size
   layout regression when a new combo joined an existing row. The module boundary

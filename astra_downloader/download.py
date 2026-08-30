@@ -41,6 +41,15 @@ except ImportError:  # Flat source-path compatibility.
     )
 
 try:
+    from .native_sources import (
+        NativeSourceError, native_source_argv, resolve_native_source,
+    )
+except ImportError:  # Flat source-path compatibility.
+    from native_sources import (
+        NativeSourceError, native_source_argv, resolve_native_source,
+    )
+
+try:
     from .sites import (
         build_site_cookie_filter, build_site_extractor_args,
         describe_site_auth, select_impersonate_target, site_display_name,
@@ -767,6 +776,14 @@ DOWNLOAD_FAILURE_RECOVERY = {
         'error': 'Astra Downloader could not create a protected YouTube cookie jar.',
         'advice': 'Retry from Astra Deck so fresh cookies can be supplied.',
         'next_action': 'sign-in-and-retry',
+    },
+    'source-unavailable': {
+        'error': 'The site would not hand over this video.',
+        'advice': (
+            'The video may be private, subscriber-only, deleted, or still '
+            'being processed. Check the link plays in a browser, then retry.'
+        ),
+        'next_action': 'check-link-and-retry',
     },
     'blocked-by-site': {
         'error': 'The site refused the request (HTTP 403).',
@@ -3206,6 +3223,8 @@ def format_redacted_command_args(args, download=None, secrets=None):
                     redacted.append('[redacted header]')
                     skip_next = True
             continue
+        if 'init=' in low and 'manifest' in low:
+            arg = re.sub(r'init=[^&\s]+', 'init=[redacted]', arg, flags=re.IGNORECASE)
         if 'po_token' in low or 'visitor_data' in low:
             arg = re.sub(r'po_token=[^:;,\s]+', 'po_token=[redacted]', arg, flags=re.IGNORECASE)
             arg = re.sub(r'visitor_data=[^:;,\s]+', 'visitor_data=[redacted]', arg, flags=re.IGNORECASE)
@@ -3712,6 +3731,7 @@ class DownloadQueueStore:
 
 
 _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
+    'resolve_native_source',
     'CREATE_NEW_PROCESS_GROUP',
     'CREATE_NO_WINDOW',
     'FFMPEG_PATH',
@@ -6118,8 +6138,11 @@ class DownloadManagerCore:
             explicit_referer=dl.referer,
         )
 
-        args.append(dl.url)
-        dl.command_args = format_redacted_command_args(args, dl)
+        # The page URL is what the record, the history and the log show;
+        # what yt-dlp is pointed at can differ. Until resolution runs the
+        # visible command names the page, which is also what it will name for
+        # every site that has no native resolver.
+        dl.command_args = format_redacted_command_args(args + [dl.url], dl)
 
         # Watchdog sentinels declared before the try so the finally can stop the
         # thread even if Popen() raises before the watchdog is created.
@@ -6129,6 +6152,21 @@ class DownloadManagerCore:
         last_lines = []
         last_error = None
         try:
+            # A site whose yt-dlp extractor is known to be broken is resolved
+            # here, immediately before the spawn, because the media URL it
+            # yields can carry a short-lived session token. Everything the
+            # resolver refuses is a final answer from the site; everything it
+            # cannot reach is a network condition, and both are classified
+            # rather than left to an extractor already known to 404.
+            native = self._dependencies['resolve_native_source'](dl.url)
+            target_url = dl.url
+            if native:
+                args += native_source_argv(native)
+                target_url = native['url']
+                if native.get('title') and dl.title in ('', 'Unknown'):
+                    dl.title = str(native['title'])[:500]
+            args.append(target_url)
+            dl.command_args = format_redacted_command_args(args, dl)
             env = self._dependencies['_build_subprocess_env']()
             proc = self._dependencies['spawn_ytdlp'](
                 args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -6504,6 +6542,12 @@ class DownloadManagerCore:
             if dl.status != "cancelled":
                 dl.status = "failed"
                 dl.error = "yt-dlp not found. Run setup first."
+        except NativeSourceError as error:
+            if dl.status != "cancelled":
+                dl.status = "failed"
+                apply_download_failure_classification(
+                    dl, error.code, error=str(error),
+                )
         except Exception as e:
             if dl.status != "cancelled":
                 dl.status = "failed"
@@ -7045,7 +7089,16 @@ class DownloadManagerCore:
         args += self._dependencies['build_javascript_runtime_args'](runtime)
         identity_args, identity_cleanup = self._build_probe_identity_args(url)
         args += identity_args
-        args.append(url)
+        try:
+            native = self._dependencies['resolve_native_source'](url)
+        except NativeSourceError as error:
+            identity_cleanup()
+            return None, str(error)[:240]
+        if native:
+            args += native_source_argv(native)
+            args.append(native['url'])
+        else:
+            args.append(url)
         try:
             env = self._dependencies['_build_subprocess_env']()
             proc = self._dependencies['spawn_ytdlp'](
@@ -7079,7 +7132,15 @@ class DownloadManagerCore:
         except Exception:  # noqa: BLE001
             # reason: the named message is the report; the yt-dlp stderr is already in the log
             return None, 'Could not parse yt-dlp output while listing formats.'
-        return summarize_ytdlp_formats(info), None
+        summary = summarize_ytdlp_formats(info)
+        if native:
+            # The manifest has no page around it, so yt-dlp names it after
+            # the file. The resolver knows the real title and length.
+            if native.get('title'):
+                summary['title'] = str(native['title'])[:300]
+            if native.get('duration') and not summary.get('duration'):
+                summary['duration'] = int(native['duration'])
+        return summary, None
 
     def import_site_login_from_browser(self, site, browser, profile=None,
                                        timeout=90):

@@ -153,6 +153,7 @@ try:
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
+    from .native_sources import resolve_native_source
     from .health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
@@ -304,6 +305,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
+    from native_sources import resolve_native_source
     from health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
@@ -366,7 +368,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.14.0"
+APP_VERSION = "2.15.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -5330,6 +5332,7 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'resolve_native_source': lambda *args, **kwargs: resolve_native_source(*args, **kwargs),
                 'probe_extractor_list': lambda *args, **kwargs: probe_extractor_list(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
@@ -5958,6 +5961,7 @@ class MainWindow(MainWindowCore):
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
+                'resolve_native_source': lambda *args, **kwargs: resolve_native_source(*args, **kwargs),
                 'probe_extractor_list': lambda *args, **kwargs: probe_extractor_list(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),

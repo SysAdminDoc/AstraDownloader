@@ -3927,6 +3927,18 @@
       <translation>Retry from Astra Deck so fresh cookies can be supplied.</translation>
     </message>
     <message>
+      <source>The site would not hand over this video.</source>
+      <translation>الموقع لا يسلّم هذا الفيديو.</translation>
+    </message>
+    <message>
+      <source>The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.</source>
+      <translation>قد يكون الفيديو خاصًا أو للمشتركين فقط أو محذوفًا أو لا يزال قيد المعالجة. تأكد من أن الرابط يعمل في المتصفح ثم أعد المحاولة.</translation>
+    </message>
+    <message>
+      <source>check-link-and-retry</source>
+      <translation>check-link-and-retry</translation>
+    </message>
+    <message>
       <source>The site refused the request (HTTP 403).</source>
       <translation>The site refused the request (HTTP 403).</translation>
     </message>
