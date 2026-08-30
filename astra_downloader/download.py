@@ -43,14 +43,16 @@ except ImportError:  # Flat source-path compatibility.
 try:
     from .sites import (
         build_site_cookie_filter, build_site_extractor_args,
-        describe_site_auth, site_display_name, site_impersonate_target,
-        site_referer_for_url, site_supports_credentials,
+        describe_site_auth, select_impersonate_target, site_display_name,
+        site_impersonate_target, site_referer_for_url,
+        site_supports_credentials,
     )
 except ImportError:  # Flat source-path compatibility.
     from sites import (
         build_site_cookie_filter, build_site_extractor_args,
-        describe_site_auth, site_display_name, site_impersonate_target,
-        site_referer_for_url, site_supports_credentials,
+        describe_site_auth, select_impersonate_target, site_display_name,
+        site_impersonate_target, site_referer_for_url,
+        site_supports_credentials,
     )
 
 
@@ -2302,8 +2304,13 @@ def build_site_default_args(url, *, configured_target='', available_targets=(),
             args += ['--referer', referer]
 
     if not str(configured_target or '').strip():
-        target = site_impersonate_target(url)
-        if target and target in {str(item) for item in (available_targets or ())}:
+        # The registry names a family ("chrome"); the binary reports versioned
+        # targets ("Chrome-136"). Comparing the two directly matched nothing,
+        # so the default silently never fired.
+        target = select_impersonate_target(
+            site_impersonate_target(url), available_targets
+        )
+        if target:
             args += ['--impersonate', target]
 
     return args

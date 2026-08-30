@@ -5853,12 +5853,28 @@ class SiteLoginDownloadTests(unittest.TestCase):
         # The unit builder is covered in test_sites; this proves the argv the
         # subprocess actually receives carries it, which is where the wiring
         # between the registry and the manager could silently be missing.
+        # Real target names, copied from the installed binary's own
+        # --list-impersonate-targets output. The first version of this test
+        # invented a bare "chrome" entry, which no yt-dlp build reports, and
+        # so it passed against a default that never fired in production.
         argv, _download, _body = self._run(
             "https://kick.com/somechannel/videos/abc",
-            impersonate_targets=["chrome-110", "chrome"],
+            impersonate_targets=["Chrome-99", "Chrome-133", "Chrome-136", "Safari-18.0"],
         )
         self.assertIn("--impersonate", argv)
-        self.assertEqual(argv[argv.index("--impersonate") + 1], "chrome")
+        self.assertEqual(
+            argv[argv.index("--impersonate") + 1], "Chrome-136",
+            "the newest target in the family wins, not the first or the oldest",
+        )
+
+    def test_impersonation_is_dropped_when_the_family_is_absent(self):
+        # Safari-only build: asking for the chrome family must emit nothing
+        # rather than a target the binary would raise on.
+        argv, _download, _body = self._run(
+            "https://kick.com/somechannel/videos/abc",
+            impersonate_targets=["Safari-18.0"],
+        )
+        self.assertNotIn("--impersonate", argv)
 
     def test_impersonation_is_dropped_when_the_binary_cannot_do_it(self):
         # An unknown --impersonate target raises inside yt-dlp and kills the

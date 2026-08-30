@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Browser impersonation now actually engages for the sites that need it.**
+  The site registry named a browser family while yt-dlp reports versioned
+  targets such as `Chrome-136`, so the two never matched and the setting did
+  nothing. Astra now resolves the family against whatever the installed build
+  reports and picks the newest one, and still sends nothing when that family
+  is missing, because an unknown target ends the download rather than warning.
+
 ## [2.14.0] - 2026-08-29
 
 ### Added

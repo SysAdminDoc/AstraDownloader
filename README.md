@@ -230,7 +230,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1238 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1239 tests across every core; scratch stays under build/pytest
 npm run check               # all eight gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
