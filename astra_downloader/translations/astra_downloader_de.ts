@@ -1255,6 +1255,10 @@
       <translation>Abspielen, im Ordner zeigen, löschen, Link oder Fehler kopieren oder erneut herunterladen.</translation>
     </message>
     <message>
+      <source>No failure details were recorded.</source>
+      <translation>Es wurden keine Fehlerdetails aufgezeichnet.</translation>
+    </message>
+    <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
       <translation>Ausstehende Downloads explizit fortsetzen. Elemente, die eine Anmeldung benötigen, bleiben pausiert.</translation>
     </message>
@@ -1813,6 +1817,14 @@
     <message>
       <source>Download complete</source>
       <translation>Download abgeschlossen</translation>
+    </message>
+    <message>
+      <source>Download failed</source>
+      <translation>Download fehlgeschlagen</translation>
+    </message>
+    <message>
+      <source>Download failed: {reason}</source>
+      <translation>Download fehlgeschlagen: {reason}</translation>
     </message>
     <message>
       <source>The through date needs to be YYYY-MM-DD, so it is not being used.</source>
@@ -2657,6 +2669,86 @@
     <message>
       <source>likely unreadable on Chromium 127+</source>
       <translation>unter Windows 127+ wahrscheinlich nicht lesbar</translation>
+    </message>
+    <message>
+      <source>{total} matching sites.</source>
+      <translation>{total} passende Websites.</translation>
+    </message>
+    <message>
+      <source>No sites match this search.</source>
+      <translation>Keine Website entspricht dieser Suche.</translation>
+    </message>
+    <message>
+      <source>Showing {shown} of {total} matching sites. Narrow the search to see the rest.</source>
+      <translation>{shown} von {total} passenden Websites werden angezeigt. Grenzen Sie die Suche ein, um den Rest zu sehen.</translation>
+    </message>
+    <message>
+      <source>1 matching site.</source>
+      <translation>1 passende Website.</translation>
+    </message>
+    <message>
+      <source>Sign-in needed</source>
+      <translation>Anmeldung erforderlich</translation>
+    </message>
+    <message>
+      <source>Sometimes</source>
+      <translation>Manchmal</translation>
+    </message>
+    <message>
+      <source>Sites</source>
+      <translation>Websites</translation>
+    </message>
+    <message>
+      <source>Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.</source>
+      <translation>Alles, was das installierte yt-dlp erreichen kann. Fügen Sie auf der Seite „Download“ einen Link von einer dieser Websites ein.</translation>
+    </message>
+    <message>
+      <source>Search supported sites</source>
+      <translation>Unterstützte Websites durchsuchen</translation>
+    </message>
+    <message>
+      <source>Search by site name or domain</source>
+      <translation>Nach Name oder Domain suchen</translation>
+    </message>
+    <message>
+      <source>Site category</source>
+      <translation>Website-Kategorie</translation>
+    </message>
+    <message>
+      <source>All categories</source>
+      <translation>Alle Kategorien</translation>
+    </message>
+    <message>
+      <source>Live streaming</source>
+      <translation>Livestreaming</translation>
+    </message>
+    <message>
+      <source>Social</source>
+      <translation>Soziale Netzwerke</translation>
+    </message>
+    <message>
+      <source>Music and audio</source>
+      <translation>Musik und Audio</translation>
+    </message>
+    <message>
+      <source>News and broadcast</source>
+      <translation>Nachrichten und Rundfunk</translation>
+    </message>
+    <message>
+      <source>Learning</source>
+      <translation>Lernen</translation>
+    </message>
+    <message>
+      <source>Anime</source>
+      <translation>Anime</translation>
+    </message>
+    <message>
+      <source>Sports</source>
+      <translation>Sport</translation>
+    </message>
+    <message>
+      <source>Adult</source>
+      <translation>Erwachsene</translation>
     </message>
     <message>
       <source>New subscription</source>
@@ -3525,6 +3617,10 @@
     <message>
       <source>Notify when a download finishes (while minimized)</source>
       <translation>Benachrichtigen, wenn ein Download fertig ist (wenn minimiert)</translation>
+    </message>
+    <message>
+      <source>Notify when a download fails (while minimized)</source>
+      <translation>Bei fehlgeschlagenem Download benachrichtigen (wenn minimiert)</translation>
     </message>
     <message>
       <source>Stage copied video links for review</source>

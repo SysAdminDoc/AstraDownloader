@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "astra-downloader",
-  "version": "2.13.1",
+  "version": "2.14.0",
   "description": "A desktop video downloader for Windows. Paste a link from almost any site. It also serves the Astra Deck browser extension over a local API.",
   "author": "SysAdminDoc",
   "license": "MIT",
@@ -18,6 +18,7 @@
     "check:companion-ports": "node scripts/check-companion-port-catalogue.js",
     "check:catch-reasons": "node scripts/check-python-catch-reasons.js",
     "check:companion-inventory": "node scripts/check-companion-inventory.js",
+    "check:site-registry": "py -3.13 scripts/check-site-registry.py",
     "check:translations": "py -3.13 scripts/check-companion-translations.py",
     "check:versions": "node scripts/check-versions.js",
     "audit:python": "node scripts/audit-python-deps.js",

@@ -12,6 +12,22 @@ repository's git log.
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-08-29
+
+### Added
+
+- **A Sites page that lists what you can actually download from.** Search the
+  full extractor list of the installed yt-dlp, filter it by category, and see
+  which sites expect a sign-in before a download fails and tells you. The
+  count comes from yt-dlp itself, so it stays honest as yt-dlp is updated.
+
+- **A site registry behind the queue.** Sites that need a referer, a browser
+  impersonation target, or specific extractor arguments now get them without
+  anyone having to configure it. Everything the registry supplies yields to a
+  setting you chose yourself, and an impersonation target the installed yt-dlp
+  does not have is dropped rather than passed through, because an unknown
+  target kills the download instead of warning about it.
+
 ### Changed
 
 - **Release staging is now one transaction.** `npm run release:stage` resolves
@@ -25,6 +41,30 @@ repository's git log.
   package-manager installs.
 
 ### Fixed
+
+- **A sign-in from the browser extension now works on sites other than
+  YouTube.** The cookie bridge filtered every jar through a YouTube and Google
+  allowlist and labelled it `youtube`, so cookies sent for any other site were
+  discarded on the way in and the jar was refused on the way out. The download
+  then ran signed out without saying so. Cookies are now scoped to the site of
+  the download they belong to, which is the tighter rule: a Twitch download
+  takes Twitch cookies and nothing else, a YouTube download still takes the
+  Google account cookies its session actually needs, and anything off-site is
+  dropped before it reaches disk.
+
+- **The format probe now sees what the download will see.** A site that needs
+  a TLS fingerprint or a referer refused the probe too, so it could report a
+  working site as broken.
+
+- **The clipboard link grabber recognises far more sites.** Its host list is
+  derived from the site registry instead of being maintained separately, which
+  is what let the two drift apart.
+
+- **A failed background download now tells you.** A separate setting controls
+  failure notifications and defaults on for existing installs, even when
+  completion alerts are off. Hidden or minimized failures show one warning
+  with a bounded reason. Clicking it restores Astra Downloader and focuses
+  the failed queue card; a later retry can notify again.
 
 - **The local API now describes and enforces its real routes.** Flask accepts
   only canonical loopback Host headers with valid ports. Empty or malformed

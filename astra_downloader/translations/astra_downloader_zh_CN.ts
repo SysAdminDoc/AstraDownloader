@@ -1255,6 +1255,10 @@
       <translation>Play, reveal, delete, copy the link or error, or download this again.</translation>
     </message>
     <message>
+      <source>No failure details were recorded.</source>
+      <translation>No failure details were recorded.</translation>
+    </message>
+    <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
       <translation>Resume pending downloads explicitly. Items needing sign-in remain paused.</translation>
     </message>
@@ -1813,6 +1817,14 @@
     <message>
       <source>Download complete</source>
       <translation>Download complete</translation>
+    </message>
+    <message>
+      <source>Download failed</source>
+      <translation>Download failed</translation>
+    </message>
+    <message>
+      <source>Download failed: {reason}</source>
+      <translation>Download failed: {reason}</translation>
     </message>
     <message>
       <source>The through date needs to be YYYY-MM-DD, so it is not being used.</source>
@@ -2657,6 +2669,86 @@
     <message>
       <source>likely unreadable on Chromium 127+</source>
       <translation>likely unreadable on Chromium 127+</translation>
+    </message>
+    <message>
+      <source>{total} matching sites.</source>
+      <translation>匹配到 {total} 个站点。</translation>
+    </message>
+    <message>
+      <source>No sites match this search.</source>
+      <translation>没有与此搜索匹配的站点。</translation>
+    </message>
+    <message>
+      <source>Showing {shown} of {total} matching sites. Narrow the search to see the rest.</source>
+      <translation>已显示 {total} 个匹配站点中的 {shown} 个。缩小搜索范围可查看其余站点。</translation>
+    </message>
+    <message>
+      <source>1 matching site.</source>
+      <translation>匹配到 1 个站点。</translation>
+    </message>
+    <message>
+      <source>Sign-in needed</source>
+      <translation>需要登录</translation>
+    </message>
+    <message>
+      <source>Sometimes</source>
+      <translation>有时需要</translation>
+    </message>
+    <message>
+      <source>Sites</source>
+      <translation>站点</translation>
+    </message>
+    <message>
+      <source>Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.</source>
+      <translation>已安装的 yt-dlp 能够访问的全部站点。请在下载页面粘贴其中任意站点的链接。</translation>
+    </message>
+    <message>
+      <source>Search supported sites</source>
+      <translation>搜索支持的站点</translation>
+    </message>
+    <message>
+      <source>Search by site name or domain</source>
+      <translation>按名称或域名搜索</translation>
+    </message>
+    <message>
+      <source>Site category</source>
+      <translation>站点分类</translation>
+    </message>
+    <message>
+      <source>All categories</source>
+      <translation>全部分类</translation>
+    </message>
+    <message>
+      <source>Live streaming</source>
+      <translation>直播</translation>
+    </message>
+    <message>
+      <source>Social</source>
+      <translation>社交</translation>
+    </message>
+    <message>
+      <source>Music and audio</source>
+      <translation>音乐与音频</translation>
+    </message>
+    <message>
+      <source>News and broadcast</source>
+      <translation>新闻与广播</translation>
+    </message>
+    <message>
+      <source>Learning</source>
+      <translation>学习</translation>
+    </message>
+    <message>
+      <source>Anime</source>
+      <translation>动画</translation>
+    </message>
+    <message>
+      <source>Sports</source>
+      <translation>体育</translation>
+    </message>
+    <message>
+      <source>Adult</source>
+      <translation>成人</translation>
     </message>
     <message>
       <source>New subscription</source>
@@ -3525,6 +3617,10 @@
     <message>
       <source>Notify when a download finishes (while minimized)</source>
       <translation>Notify when a download finishes (while minimized)</translation>
+    </message>
+    <message>
+      <source>Notify when a download fails (while minimized)</source>
+      <translation>Notify when a download fails (while minimized)</translation>
     </message>
     <message>
       <source>Stage copied video links for review</source>

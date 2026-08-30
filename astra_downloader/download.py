@@ -40,6 +40,19 @@ except ImportError:  # Flat source-path compatibility.
         normalize_sublangs,
     )
 
+try:
+    from .sites import (
+        build_site_cookie_filter, build_site_extractor_args,
+        describe_site_auth, site_display_name, site_impersonate_target,
+        site_referer_for_url, site_supports_credentials,
+    )
+except ImportError:  # Flat source-path compatibility.
+    from sites import (
+        build_site_cookie_filter, build_site_extractor_args,
+        describe_site_auth, site_display_name, site_impersonate_target,
+        site_referer_for_url, site_supports_credentials,
+    )
+
 
 __all__ = (
     "Download", "DownloadManager", "DownloadManagerCore", "build_video_format_args",
@@ -59,6 +72,7 @@ __all__ = (
     "HOST_CIRCUIT_COOLDOWN_SECONDS",
     "build_impersonate_args",
     "build_network_workaround_args",
+    "build_site_default_args",
     "build_subtitle_args", "build_download_section_args",
     "build_local_subtitle_args",
     "build_whisper_audio_args", "build_whisper_transcription_args",
@@ -2260,6 +2274,41 @@ def build_impersonate_args(config, available_targets):
     return ['--impersonate', target]
 
 
+def build_site_default_args(url, *, configured_target='', available_targets=(),
+                            explicit_referer=''):
+    """Compile the per-site argv a URL needs on top of the global settings.
+
+    Three contributions, each of which yields to anything the user or the
+    extension set explicitly:
+
+    * the site's verified extractor arguments, which most sites do not have,
+    * a referer for hosts that only release embeds to a request that looks
+      like it came from a page allowed to play them, skipped when the request
+      already carried one,
+    * an impersonation target for hosts that refuse a plain request on its TLS
+      fingerprint, skipped when the user configured a target of their own.
+
+    The impersonation default is gated on what the installed binary really
+    reports, for the same reason `build_impersonate_args` is: an unknown
+    ``--impersonate`` target is not a warning, it raises and the download dies.
+    A site that wants a target the binary does not have simply goes without it
+    and fails the way it would have anyway.
+    """
+    args = list(build_site_extractor_args(url))
+
+    if not str(explicit_referer or '').strip():
+        referer = site_referer_for_url(url)
+        if referer:
+            args += ['--referer', referer]
+
+    if not str(configured_target or '').strip():
+        target = site_impersonate_target(url)
+        if target and target in {str(item) for item in (available_targets or ())}:
+            args += ['--impersonate', target]
+
+    return args
+
+
 def build_network_workaround_args(config):
     """Compile the opt-in IP and geo workarounds, dropping unsafe values.
 
@@ -4243,11 +4292,21 @@ class DownloadManagerCore:
                     site_login_used = bool(dl._credentials)
             if not subtitle_retry and cookies:
                 jar_path = self._dependencies['INSTALL_DIR']() / f".cookies.{dl.id}.txt"
+                # The bridge used to write through the YouTube/Google
+                # allowlist and stamp every jar `youtube`, so cookies handed
+                # over for any other site were dropped on the way in and the
+                # jar that survived was refused on the way out. The filter is
+                # now the download's own site: a Twitch download accepts
+                # Twitch cookies and nothing else, and a YouTube download
+                # still accepts the Google account domains its session
+                # actually lives on.
+                site_scope = site_login_key(dl.url)
                 dl.cookies_file = write_cookies_netscape(
                     cookies, jar_path,
                     logger=self._dependencies['write_persistent_log'],
+                    domain_filter=build_site_cookie_filter(dl.url),
                 )
-                dl.cookies_scope = 'youtube' if dl.cookies_file else ''
+                dl.cookies_scope = site_scope if dl.cookies_file else ''
             if not subtitle_retry and (cookies or site_login_used):
                 cancelled_during_prep = False
                 with self._lock:
@@ -6036,11 +6095,21 @@ class DownloadManagerCore:
         configured_target = str(
             effective_config.get('ImpersonateTarget', '') or ''
         ).strip()
+        # The probe spawns a subprocess, so it runs only when its answer can
+        # change the argv: the user configured a target, or this site asks for
+        # one. Every other download pays nothing for the site registry.
+        wants_site_target = bool(site_impersonate_target(dl.url))
         available_targets = (
             self._dependencies['probe_impersonate_targets']()
-            if configured_target else []
+            if configured_target or wants_site_target else []
         )
         args += build_impersonate_args(effective_config, available_targets)
+        args += build_site_default_args(
+            dl.url,
+            configured_target=configured_target,
+            available_targets=available_targets,
+            explicit_referer=dl.referer,
+        )
 
         args.append(dl.url)
         dl.command_args = format_redacted_command_args(args, dl)
@@ -7215,11 +7284,21 @@ class DownloadManagerCore:
         configured_target = str(
             effective_config.get('ImpersonateTarget', '') or ''
         ).strip()
+        wants_site_target = bool(site_impersonate_target(url))
         available_targets = (
             self._dependencies['probe_impersonate_targets']()
-            if configured_target else []
+            if configured_target or wants_site_target else []
         )
         args += build_impersonate_args(effective_config, available_targets)
+        # The probe has to see what the download will see. A site that needs a
+        # TLS fingerprint or a referer refuses the probe too, and a probe that
+        # fails where the download would have succeeded reports a site as
+        # broken while it works.
+        args += build_site_default_args(
+            url,
+            configured_target=configured_target,
+            available_targets=available_targets,
+        )
 
         def cleanup():
             if cookie_path:

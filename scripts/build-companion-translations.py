@@ -27,6 +27,46 @@ SOURCE_STRINGS = tuple(extract_all())
 
 CATALOGS = {
     "ar": {
+        "Sites":
+            "المواقع",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "كل ما يمكن لبرنامج yt-dlp المثبَّت الوصول إليه. الصق رابطًا من أي من هذه المواقع في صفحة التنزيل.",
+        "Search supported sites":
+            "البحث في المواقع المدعومة",
+        "Search by site name or domain":
+            "البحث بالاسم أو النطاق",
+        "Site category":
+            "فئة الموقع",
+        "All categories":
+            "كل الفئات",
+        "Sign-in needed":
+            "يلزم تسجيل الدخول",
+        "Sometimes":
+            "أحيانًا",
+        "1 matching site.":
+            "موقع واحد مطابق.",
+        "{total} matching sites.":
+            "{total} موقعًا مطابقًا.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "عرض {shown} من {total} موقع مطابق. ضيّق نطاق البحث لعرض الباقي.",
+        "No sites match this search.":
+            "لا توجد مواقع مطابقة لهذا البحث.",
+        "Live streaming":
+            "البث المباشر",
+        "Social":
+            "التواصل الاجتماعي",
+        "Music and audio":
+            "الموسيقى والصوت",
+        "News and broadcast":
+            "الأخبار والبث",
+        "Learning":
+            "التعلّم",
+        "Anime":
+            "أنمي",
+        "Sports":
+            "الرياضة",
+        "Adult":
+            "للبالغين",
         "Sign-ins": "تسجيلات الدخول",
         "Browser extension": "امتداد المتصفح",
         "Download": "تنزيل",
@@ -34,6 +74,46 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "Sites":
+            "Websites",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "Alles, was das installierte yt-dlp erreichen kann. Fügen Sie auf der Seite „Download“ einen Link von einer dieser Websites ein.",
+        "Search supported sites":
+            "Unterstützte Websites durchsuchen",
+        "Search by site name or domain":
+            "Nach Name oder Domain suchen",
+        "Site category":
+            "Website-Kategorie",
+        "All categories":
+            "Alle Kategorien",
+        "Sign-in needed":
+            "Anmeldung erforderlich",
+        "Sometimes":
+            "Manchmal",
+        "1 matching site.":
+            "1 passende Website.",
+        "{total} matching sites.":
+            "{total} passende Websites.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "{shown} von {total} passenden Websites werden angezeigt. Grenzen Sie die Suche ein, um den Rest zu sehen.",
+        "No sites match this search.":
+            "Keine Website entspricht dieser Suche.",
+        "Live streaming":
+            "Livestreaming",
+        "Social":
+            "Soziale Netzwerke",
+        "Music and audio":
+            "Musik und Audio",
+        "News and broadcast":
+            "Nachrichten und Rundfunk",
+        "Learning":
+            "Lernen",
+        "Anime":
+            "Anime",
+        "Sports":
+            "Sport",
+        "Adult":
+            "Erwachsene",
         "Extension server":
             "Erweiterungsserver",
         "Stopped":
@@ -642,6 +722,8 @@ CATALOGS = {
             "Minimiert im Infobereich starten",
         "Notify when a download finishes (while minimized)":
             "Benachrichtigen, wenn ein Download fertig ist (wenn minimiert)",
+        "Notify when a download fails (while minimized)":
+            "Bei fehlgeschlagenem Download benachrichtigen (wenn minimiert)",
         "Stage copied video links for review":
             "Kopierte Videolinks zur Prüfung vormerken",
         "Installed tools":
@@ -1350,6 +1432,46 @@ CATALOGS = {
     },
     "en": {},
     "es": {
+        "Sites":
+            "Sitios",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "Todo lo que puede alcanzar el yt-dlp instalado. Pegue un enlace de cualquiera de estos sitios en la página de descargas.",
+        "Search supported sites":
+            "Buscar sitios compatibles",
+        "Search by site name or domain":
+            "Buscar por nombre o dominio",
+        "Site category":
+            "Categoría del sitio",
+        "All categories":
+            "Todas las categorías",
+        "Sign-in needed":
+            "Requiere iniciar sesión",
+        "Sometimes":
+            "A veces",
+        "1 matching site.":
+            "1 sitio coincidente.",
+        "{total} matching sites.":
+            "{total} sitios coincidentes.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "Mostrando {shown} de {total} sitios coincidentes. Acote la búsqueda para ver el resto.",
+        "No sites match this search.":
+            "Ningún sitio coincide con esta búsqueda.",
+        "Live streaming":
+            "Transmisión en directo",
+        "Social":
+            "Redes sociales",
+        "Music and audio":
+            "Música y audio",
+        "News and broadcast":
+            "Noticias y radiodifusión",
+        "Learning":
+            "Aprendizaje",
+        "Anime":
+            "Anime",
+        "Sports":
+            "Deportes",
+        "Adult":
+            "Adultos",
         "Sign-ins": "Inicios de sesión",
         "Browser extension": "Extensión del navegador",
         "Download": "Descargar",
@@ -1357,6 +1479,46 @@ CATALOGS = {
         "Settings": "Configuración",
     },
     "fr": {
+        "Sites":
+            "Sites",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "Tout ce que le yt-dlp installé peut atteindre. Collez un lien de l'un de ces sites sur la page de téléchargement.",
+        "Search supported sites":
+            "Rechercher les sites pris en charge",
+        "Search by site name or domain":
+            "Rechercher par nom ou domaine",
+        "Site category":
+            "Catégorie de site",
+        "All categories":
+            "Toutes les catégories",
+        "Sign-in needed":
+            "Connexion requise",
+        "Sometimes":
+            "Parfois",
+        "1 matching site.":
+            "1 site correspondant.",
+        "{total} matching sites.":
+            "{total} sites correspondants.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "Affichage de {shown} sites sur {total}. Affinez la recherche pour voir le reste.",
+        "No sites match this search.":
+            "Aucun site ne correspond à cette recherche.",
+        "Live streaming":
+            "Diffusion en direct",
+        "Social":
+            "Réseaux sociaux",
+        "Music and audio":
+            "Musique et audio",
+        "News and broadcast":
+            "Actualités et radiodiffusion",
+        "Learning":
+            "Apprentissage",
+        "Anime":
+            "Animation",
+        "Sports":
+            "Sports",
+        "Adult":
+            "Adulte",
         "Sign-ins": "Connexions",
         "Browser extension": "Extension du navigateur",
         "Download": "Télécharger",
@@ -1364,6 +1526,46 @@ CATALOGS = {
         "Settings": "Paramètres",
     },
     "it": {
+        "Sites":
+            "Siti",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "Tutto ciò che il yt-dlp installato riesce a raggiungere. Incolla un link da uno di questi siti nella pagina Download.",
+        "Search supported sites":
+            "Cerca tra i siti supportati",
+        "Search by site name or domain":
+            "Cerca per nome o dominio",
+        "Site category":
+            "Categoria del sito",
+        "All categories":
+            "Tutte le categorie",
+        "Sign-in needed":
+            "Accesso richiesto",
+        "Sometimes":
+            "A volte",
+        "1 matching site.":
+            "1 sito corrispondente.",
+        "{total} matching sites.":
+            "{total} siti corrispondenti.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "Vengono mostrati {shown} di {total} siti corrispondenti. Restringi la ricerca per vedere il resto.",
+        "No sites match this search.":
+            "Nessun sito corrisponde a questa ricerca.",
+        "Live streaming":
+            "Dirette streaming",
+        "Social":
+            "Social",
+        "Music and audio":
+            "Musica e audio",
+        "News and broadcast":
+            "Notizie e radiotelevisione",
+        "Learning":
+            "Formazione",
+        "Anime":
+            "Anime",
+        "Sports":
+            "Sport",
+        "Adult":
+            "Adulti",
         "Sign-ins": "Accessi",
         "Browser extension": "Estensione del browser",
         "Download": "Scarica",
@@ -1371,6 +1573,46 @@ CATALOGS = {
         "Settings": "Impostazioni",
     },
     "ja": {
+        "Sites":
+            "サイト",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "インストール済みの yt-dlp が対応するすべてのサイトです。これらのサイトのリンクをダウンロードページに貼り付けてください。",
+        "Search supported sites":
+            "対応サイトを検索",
+        "Search by site name or domain":
+            "名前またはドメインで検索",
+        "Site category":
+            "サイトのカテゴリ",
+        "All categories":
+            "すべてのカテゴリ",
+        "Sign-in needed":
+            "サインインが必要",
+        "Sometimes":
+            "場合による",
+        "1 matching site.":
+            "一致するサイト: 1 件",
+        "{total} matching sites.":
+            "一致するサイト: {total} 件",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "一致する {total} 件のうち {shown} 件を表示しています。検索条件を絞り込むと残りを表示できます。",
+        "No sites match this search.":
+            "この検索に一致するサイトはありません。",
+        "Live streaming":
+            "ライブ配信",
+        "Social":
+            "ソーシャル",
+        "Music and audio":
+            "音楽・オーディオ",
+        "News and broadcast":
+            "ニュース・放送",
+        "Learning":
+            "学習",
+        "Anime":
+            "アニメ",
+        "Sports":
+            "スポーツ",
+        "Adult":
+            "アダルト",
         "Sign-ins": "サインイン",
         "Browser extension": "ブラウザー拡張機能",
         "Download": "ダウンロード",
@@ -1378,6 +1620,46 @@ CATALOGS = {
         "Settings": "設定",
     },
     "ko": {
+        "Sites":
+            "사이트",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "설치된 yt-dlp가 지원하는 모든 사이트입니다. 이 중 아무 사이트의 링크나 다운로드 페이지에 붙여 넣으세요.",
+        "Search supported sites":
+            "지원 사이트 검색",
+        "Search by site name or domain":
+            "이름 또는 도메인으로 검색",
+        "Site category":
+            "사이트 분류",
+        "All categories":
+            "모든 분류",
+        "Sign-in needed":
+            "로그인 필요",
+        "Sometimes":
+            "경우에 따라",
+        "1 matching site.":
+            "일치하는 사이트 1개.",
+        "{total} matching sites.":
+            "일치하는 사이트 {total}개.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "일치하는 {total}개 중 {shown}개를 표시하고 있습니다. 검색어를 좁히면 나머지를 볼 수 있습니다.",
+        "No sites match this search.":
+            "이 검색과 일치하는 사이트가 없습니다.",
+        "Live streaming":
+            "라이브 스트리밍",
+        "Social":
+            "소셜",
+        "Music and audio":
+            "음악 및 오디오",
+        "News and broadcast":
+            "뉴스 및 방송",
+        "Learning":
+            "학습",
+        "Anime":
+            "애니메이션",
+        "Sports":
+            "스포츠",
+        "Adult":
+            "성인",
         "Sign-ins": "로그인",
         "Browser extension": "브라우저 확장 프로그램",
         "Download": "다운로드",
@@ -1385,6 +1667,46 @@ CATALOGS = {
         "Settings": "설정",
     },
     "pt_BR": {
+        "Sites":
+            "Sites",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "Tudo o que o yt-dlp instalado consegue acessar. Cole um link de qualquer um desses sites na página de download.",
+        "Search supported sites":
+            "Pesquisar sites compatíveis",
+        "Search by site name or domain":
+            "Pesquisar por nome ou domínio",
+        "Site category":
+            "Categoria do site",
+        "All categories":
+            "Todas as categorias",
+        "Sign-in needed":
+            "Requer login",
+        "Sometimes":
+            "Às vezes",
+        "1 matching site.":
+            "1 site correspondente.",
+        "{total} matching sites.":
+            "{total} sites correspondentes.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "Exibindo {shown} de {total} sites correspondentes. Refine a busca para ver o restante.",
+        "No sites match this search.":
+            "Nenhum site corresponde a esta busca.",
+        "Live streaming":
+            "Transmissão ao vivo",
+        "Social":
+            "Redes sociais",
+        "Music and audio":
+            "Música e áudio",
+        "News and broadcast":
+            "Notícias e radiodifusão",
+        "Learning":
+            "Aprendizagem",
+        "Anime":
+            "Anime",
+        "Sports":
+            "Esportes",
+        "Adult":
+            "Adulto",
         "Sign-ins": "Logins",
         "Browser extension": "Extensão do navegador",
         "Download": "Baixar",
@@ -1392,6 +1714,46 @@ CATALOGS = {
         "Settings": "Configurações",
     },
     "ru": {
+        "Sites":
+            "Сайты",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "Всё, к чему может обратиться установленный yt-dlp. Вставьте ссылку с любого из этих сайтов на странице загрузки.",
+        "Search supported sites":
+            "Поиск поддерживаемых сайтов",
+        "Search by site name or domain":
+            "Поиск по названию или домену",
+        "Site category":
+            "Категория сайта",
+        "All categories":
+            "Все категории",
+        "Sign-in needed":
+            "Требуется вход",
+        "Sometimes":
+            "Иногда",
+        "1 matching site.":
+            "1 подходящий сайт.",
+        "{total} matching sites.":
+            "Подходящих сайтов: {total}.",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "Показано {shown} из {total} подходящих сайтов. Уточните поиск, чтобы увидеть остальные.",
+        "No sites match this search.":
+            "Нет сайтов, соответствующих этому запросу.",
+        "Live streaming":
+            "Прямые трансляции",
+        "Social":
+            "Соцсети",
+        "Music and audio":
+            "Музыка и аудио",
+        "News and broadcast":
+            "Новости и вещание",
+        "Learning":
+            "Обучение",
+        "Anime":
+            "Аниме",
+        "Sports":
+            "Спорт",
+        "Adult":
+            "Для взрослых",
         "Sign-ins": "Входы",
         "Browser extension": "Расширение браузера",
         "Download": "Скачать",
@@ -1399,6 +1761,46 @@ CATALOGS = {
         "Settings": "Настройки",
     },
     "zh_CN": {
+        "Sites":
+            "站点",
+        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
+            "已安装的 yt-dlp 能够访问的全部站点。请在下载页面粘贴其中任意站点的链接。",
+        "Search supported sites":
+            "搜索支持的站点",
+        "Search by site name or domain":
+            "按名称或域名搜索",
+        "Site category":
+            "站点分类",
+        "All categories":
+            "全部分类",
+        "Sign-in needed":
+            "需要登录",
+        "Sometimes":
+            "有时需要",
+        "1 matching site.":
+            "匹配到 1 个站点。",
+        "{total} matching sites.":
+            "匹配到 {total} 个站点。",
+        "Showing {shown} of {total} matching sites. Narrow the search to see the rest.":
+            "已显示 {total} 个匹配站点中的 {shown} 个。缩小搜索范围可查看其余站点。",
+        "No sites match this search.":
+            "没有与此搜索匹配的站点。",
+        "Live streaming":
+            "直播",
+        "Social":
+            "社交",
+        "Music and audio":
+            "音乐与音频",
+        "News and broadcast":
+            "新闻与广播",
+        "Learning":
+            "学习",
+        "Anime":
+            "动画",
+        "Sports":
+            "体育",
+        "Adult":
+            "成人",
         "Sign-ins": "登录",
         "Browser extension": "浏览器扩展",
         "Download": "下载",
@@ -1667,6 +2069,10 @@ CATALOGS["de"].update({
     "Could not read that file: {error}": "Datei konnte nicht gelesen werden: {error}",
     "{removed} {site}.": "{removed} {site}.",
     "Download complete": "Download abgeschlossen",
+    "Download failed": "Download fehlgeschlagen",
+    "Download failed: {reason}": "Download fehlgeschlagen: {reason}",
+    "No failure details were recorded.":
+        "Es wurden keine Fehlerdetails aufgezeichnet.",
     "Could not write the bundle: {error}":
         "Das Paket konnte nicht geschrieben werden: {error}",
     "Could not read that bundle: {error}":

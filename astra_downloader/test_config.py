@@ -222,6 +222,19 @@ class NormalizationTests(unittest.TestCase):
         )
         self.assertIn("FirstRunComplete", ad.BUNDLE_EXCLUDED_SETTINGS)
 
+    def test_failure_notifications_default_on_and_migrate_independently(self):
+        self.assertTrue(ad.DEFAULT_CONFIG["NotifyOnFailure"])
+        completion_off = ad.sanitize_config({"NotifyOnComplete": False})
+        self.assertFalse(completion_off["NotifyOnComplete"])
+        self.assertTrue(completion_off["NotifyOnFailure"])
+
+        failure_off = ad.sanitize_config({
+            "NotifyOnComplete": True,
+            "NotifyOnFailure": "false",
+        })
+        self.assertTrue(failure_off["NotifyOnComplete"])
+        self.assertFalse(failure_off["NotifyOnFailure"])
+
     def test_network_workaround_settings_are_opt_in_and_shape_checked(self):
         defaults = ad.sanitize_config({})
         self.assertEqual(defaults["ForceIPVersion"], "")

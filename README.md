@@ -1,6 +1,6 @@
 # Astra Downloader
 
-[![version](https://img.shields.io/badge/version-2.13.1-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
+[![version](https://img.shields.io/badge/version-2.14.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 [![python](https://img.shields.io/badge/python-3.13-3776ab)](astra_downloader/requirements.txt)
@@ -18,8 +18,13 @@ pasting a link never needs it.
 
 ## What it does
 
-- **Any site.** Anything yt-dlp can reach. Paste one link or a whole
-  whitespace-separated batch at once.
+- **Any site.** Anything yt-dlp can reach, which is over 1,700 sites. Paste
+  one link or a whole whitespace-separated batch at once.
+- **A Sites page that tells you what those are.** Search the extractor list
+  of the yt-dlp you actually have installed, filter it by category, and see
+  which sites want a sign-in before a download finds out for you. Sites that
+  need a referer, a browser fingerprint, or particular extractor arguments
+  get them without any configuring.
 - **Pick your output.** MP4 / MKV / WebM up to 2160p, or extract audio as
   MP3 / M4A / Opus / FLAC / WAV. MP4 prefers H.264 + AAC so editors import it
   without transcoding, and codec and frame-rate preferences order whatever
@@ -34,8 +39,9 @@ pasting a link never needs it.
   section, or use **From link** for a pasted `?t=` timestamp and **Last 30 s**
   for a yt-dlp-native tail clip.
 - **Sign in to sites.** Private and members-only videos work: import a
-  `cookies.txt`, or read a browser profile. One jar per site, filtered to
-  that site's registrable domain and attached to that site alone. A one-time
+  `cookies.txt`, read a browser profile, or let the browser extension hand
+  over the session for whichever site you are on. One jar per site, filtered
+  to that site's registrable domain and attached to that site alone. A one-time
   YouTube warning appears whether the sign-in is stored in the app or through
   the local API. It explains the account-ban and public-video risks, with a
   link to [yt-dlp's guidance](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies).
@@ -110,8 +116,9 @@ pasting a link never needs it.
   download root. An import reports the setting names it changed.
 - **Stays out of the way.** Tray icon, optional logon start, Start Menu and
   desktop entries, and a clipboard watcher that can stage copied links.
-  Queue progress shows on the taskbar button, and a completion notification
-  can be clicked to reveal the file.
+Queue progress shows on the taskbar button. Completion and failure
+notifications are separate choices; clicking a failure returns to its queue
+card, while clicking a completion reveals the file.
 
 ## Install
 
@@ -223,8 +230,8 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1190 tests across every core; scratch stays under build/pytest
-npm run check               # all seven gates, PASS/FAIL printed per gate
+py -3.13 -m pytest          # 1238 tests across every core; scratch stays under build/pytest
+npm run check               # all eight gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
 ```
@@ -236,10 +243,10 @@ by domain: download, GUI, routes, subscriptions, health, config and build.
 `astra_downloader/testing_support.py` holds what they share.
 
 `npm run check` runs the unit tests, the companion port catalogue, the
-Python catch-reason gate, the licence inventory, the translation catalogues,
-the version/tag agreement and the Python dependency audit. It prints a result
-line per gate rather than stopping at the first failure, so a red gate does
-not hide the state of the other six.
+Python catch-reason gate, the licence inventory, the site registry, the
+translation catalogues, the version/tag agreement and the Python dependency
+audit. It prints a result line per gate rather than stopping at the first
+failure, so a red gate does not hide the state of the other seven.
 
 The test count above is the number `py -3.13 -m pytest --collect-only -q`
 reports; re-run it rather than trusting the figure if the two disagree.

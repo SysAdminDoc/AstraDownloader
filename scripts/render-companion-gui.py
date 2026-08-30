@@ -64,6 +64,11 @@ CAPTURE_NAMES = (
     "subscriptions-disabled",
     "subscriptions-german",
     "subscriptions-arabic-rtl",
+    "sites-catalogue",
+    "sites-filtered",
+    "sites-filter-empty",
+    "sites-light-theme",
+    "sites-german",
     "site-logins-empty",
     "site-logins-stored",
     "site-logins-youtube-warning",
@@ -114,6 +119,7 @@ PAGE_LOCALE_SCENARIOS = {
     "history-arabic-rtl": "ar",
     "subscriptions-german": "de",
     "subscriptions-arabic-rtl": "ar",
+    "sites-german": "de",
     "site-logins-german": "de",
     "site-logins-arabic-rtl": "ar",
     "settings-german": "de",
@@ -291,12 +297,13 @@ def main():
 
         def select_page(window, page_name):
             expected_index = (
-                "Download", "History", "Sign-ins", "Subscriptions",
+                "Download", "History", "Sites", "Sign-ins", "Subscriptions",
                 "Browser extension", "Settings",
             ).index(page_name)
             focus_targets = {
                 "Download": window.quick_download_url,
                 "History": window.history_search,
+                "Sites": window.site_catalog_search,
                 "Sign-ins": window.site_login_url,
                 "Subscriptions": window.subscription_search,
                 "Browser extension": window.btn_startstop,
@@ -628,7 +635,7 @@ def main():
                 assert_visible_text(window, {"Browser-Erweiterung"})
                 nav_text = [button.text() for button in window.nav_buttons]
                 if nav_text != [
-                    "Herunterladen", "Verlauf", "Anmeldungen",
+                    "Herunterladen", "Verlauf", "Websites", "Anmeldungen",
                     "Abonnements", "Browser-Erweiterung", "Einstellungen",
                 ]:
                     raise RuntimeError(
@@ -649,6 +656,8 @@ def main():
                                   "Download-Ordner", "Systemuhr",
                                   "Aktualität von yt-dlp"}),
                     ("History", {"Verlauf", "Datei", "Gespeichert ab"}),
+                    ("Sites", {"Websites", "Anmeldung erforderlich",
+                               "Livestreaming", "Musik und Audio"}),
                     ("Sign-ins", {"Anmeldungen", "Website-Anmeldung hinzufügen",
                                   "Lesen aus"}),
                     ("Subscriptions", {"Abonnements", "Neues Abonnement"}),
@@ -688,7 +697,7 @@ def main():
                 select_page(window, "Browser extension")
             elif scenario in LOCALE_SCENARIOS:
                 source_nav = [
-                    "Download", "History", "Sign-ins", "Subscriptions",
+                    "Download", "History", "Sites", "Sign-ins", "Subscriptions",
                     "Browser extension", "Settings",
                 ]
                 nav_text = [button.text() for button in window.nav_buttons]
@@ -705,7 +714,7 @@ def main():
                                 f"CJK navigation text is clipped: {button.text()!r}"
                             )
                 for page in (
-                    "Download", "History", "Sign-ins", "Subscriptions",
+                    "Download", "History", "Sites", "Sign-ins", "Subscriptions",
                     "Browser extension", "Settings",
                 ):
                     select_page(window, page)
@@ -1208,6 +1217,40 @@ def main():
                 raise RuntimeError(f"Unhandled subscription fixture: {scenario}")
             if scenario in PAGE_LOCALE_SCENARIOS:
                 assert_locale_page_layout(window, "Subscriptions")
+            capture_window(window, scenario)
+
+        def capture_sites_state(window):
+            select_page(window, "Sites")
+            if scenario == "sites-filtered":
+                # The category combo, not the search box: this is the only
+                # scenario that proves the filter narrows the list at all.
+                window.site_catalog_category.setCurrentIndex(
+                    max(0, window.site_catalog_category.findData("live"))
+                )
+            elif scenario == "sites-filter-empty":
+                window.site_catalog_search.setText("no-such-site-anywhere")
+            app.processEvents()
+            QTest.qWait(60)
+            app.processEvents()
+            if scenario == "sites-filter-empty":
+                assert_visible_text(window, {"No sites match this search."})
+            elif scenario == "sites-filtered":
+                # Twitch is a live site and survives the filter; YouTube is
+                # not, so its absence is what proves the filter did something.
+                assert_visible_text(window, {"Twitch"})
+                if "YouTube" in visible_text(window):
+                    raise RuntimeError(
+                        "the live category filter still shows video-only sites"
+                    )
+            elif scenario == "sites-german":
+                assert_visible_text(window, {"Websites", "Anmeldung erforderlich"})
+            else:
+                # The curated rows render without the extractor probe having
+                # returned, which is the property that keeps the page usable
+                # while yt-dlp is still being read.
+                assert_visible_text(window, {"YouTube", "Kick"})
+            if scenario in PAGE_LOCALE_SCENARIOS:
+                assert_locale_page_layout(window, "Sites")
             capture_window(window, scenario)
 
         def capture_site_login_state(window):
@@ -1800,6 +1843,8 @@ def main():
                     capture_history_state(window, history)
                 elif scenario.startswith("subscriptions-"):
                     capture_subscription_state(window)
+                elif scenario.startswith("sites-"):
+                    capture_sites_state(window)
                 elif scenario.startswith("site-logins-"):
                     capture_site_login_state(window)
                 elif scenario.startswith("settings-"):

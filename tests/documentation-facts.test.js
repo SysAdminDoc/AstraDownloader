@@ -86,11 +86,11 @@ test('the README describes the gate set npm run check actually runs', () => {
     assert.ok(declared >= 5, 'the gate table must be readable from run-checks.js');
     assert.match(
         readme,
-        /all seven gates/,
+        /all eight gates/,
         'the README must name how many gates npm run check runs',
     );
     assert.equal(
-        declared, 7,
-        `the README says seven gates; run-checks.js declares ${declared}`,
+        declared, 8,
+        `the README says eight gates; run-checks.js declares ${declared}`,
     );
 });

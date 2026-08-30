@@ -584,6 +584,7 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_closetotray = CheckField()
         window.cfg_startmin = CheckField()
         window.cfg_notify = CheckField()
+        window.cfg_notify_failure = CheckField()
         window.btn_save = Button()
         window.statuses = []
         window.logs = []
@@ -1857,36 +1858,53 @@ class GuiSmokeTests(unittest.TestCase):
 
 
 class TrayCompletionNotifyTests(unittest.TestCase):
-    """Download-complete tray notification: one-shot, out-of-sight-only,
-    toggleable. 'Out of sight' = hidden to tray OR minimized to taskbar —
-    both states where the user can't see the queue (the settings label says
-    'while minimized')."""
+    """Terminal tray notifications are one-shot and out-of-sight-only."""
 
-    def _window(self, hidden=True, notify=True, minimized=False):
+    def _window(self, hidden=True, notify=True, notify_failure=True,
+                minimized=False):
         msgs = []
+        statuses = []
         tray = types.SimpleNamespace(showMessage=lambda *a: msgs.append(a))
         win = types.SimpleNamespace(
-            config=FakeConfig({"NotifyOnComplete": notify}),
+            config=FakeConfig({
+                "NotifyOnComplete": notify,
+                "NotifyOnFailure": notify_failure,
+            }),
             _seen_complete=set(),
+            _seen_failures={},
             tray=tray,
             isHidden=lambda: hidden,
             isMinimized=lambda: minimized,
+            _set_quick_download_status=(
+                lambda message, tone: statuses.append((message, tone))
+            ),
         )
-        return win, msgs
+        return win, msgs, statuses
 
     @staticmethod
-    def _dl(dl_id, status, title="T"):
-        return types.SimpleNamespace(id=dl_id, status=status, title=title)
+    def _dl(dl_id, status, title="T", error="", start_time=1.0,
+            finished_time=2.0):
+        return types.SimpleNamespace(
+            id=dl_id,
+            status=status,
+            title=title,
+            error=error,
+            error_advice="",
+            error_code="",
+            filename="",
+            start_time=start_time,
+            finished_time=finished_time,
+        )
 
     def test_notifies_once_per_completion_when_hidden(self):
-        win, msgs = self._window(hidden=True)
+        win, msgs, _statuses = self._window(hidden=True)
         dls = [self._dl("a", "complete"), self._dl("b", "downloading")]
         ad.MainWindow._notify_completed_downloads(win, dls)
         ad.MainWindow._notify_completed_downloads(win, dls)  # second tick
         self.assertEqual(len(msgs), 1, "notifies exactly once, not every tick")
 
     def test_completion_seen_while_visible_never_notifies_later(self):
-        win, msgs = self._window(hidden=False)
+        win, msgs, _statuses = self._window(hidden=False)
         dls = [self._dl("a", "complete")]
         ad.MainWindow._notify_completed_downloads(win, dls)
         self.assertEqual(len(msgs), 0)
@@ -1895,7 +1913,7 @@ class TrayCompletionNotifyTests(unittest.TestCase):
         self.assertEqual(len(msgs), 0, "a completion seen while visible must not fire a stale toast")
 
     def test_toggle_off_suppresses_notification(self):
-        win, msgs = self._window(hidden=True, notify=False)
+        win, msgs, _statuses = self._window(hidden=True, notify=False)
         ad.MainWindow._notify_completed_downloads(win, [self._dl("a", "complete")])
         self.assertEqual(len(msgs), 0)
 
@@ -1903,16 +1921,95 @@ class TrayCompletionNotifyTests(unittest.TestCase):
         # A minimized-but-not-hidden window (title-bar minimize, no
         # close-to-tray) is the most common "while minimized" state — the
         # user can't see the queue, so the toast must fire.
-        win, msgs = self._window(hidden=False, minimized=True)
+        win, msgs, _statuses = self._window(hidden=False, minimized=True)
         ad.MainWindow._notify_completed_downloads(win, [self._dl("a", "complete")])
         self.assertEqual(len(msgs), 1)
 
     def test_seen_set_is_pruned_to_present_downloads(self):
-        win, _ = self._window(hidden=True)
+        win, _msgs, _statuses = self._window(hidden=True)
         ad.MainWindow._notify_completed_downloads(win, [self._dl("a", "complete")])
         self.assertIn("a", win._seen_complete)
         ad.MainWindow._notify_completed_downloads(win, [self._dl("b", "downloading")])
         self.assertNotIn("a", win._seen_complete, "reclaimed ids are pruned so the set can't grow")
+
+    def test_hidden_failure_warns_once_with_a_bounded_reason_and_alert(self):
+        win, msgs, statuses = self._window(hidden=True)
+        failure = self._dl(
+            "failed-a",
+            "failed",
+            error="Network\nrequest " + ("x" * 400),
+        )
+
+        ad.MainWindow._notify_completed_downloads(win, [failure])
+        ad.MainWindow._notify_completed_downloads(win, [failure])
+
+        self.assertEqual(len(msgs), 1)
+        heading, body, icon, _timeout = msgs[0]
+        self.assertEqual(heading, "Download failed")
+        self.assertNotIn("\n", body)
+        self.assertLessEqual(len(body), 240)
+        self.assertEqual(icon, ad.QSystemTrayIcon.MessageIcon.Warning)
+        self.assertEqual(statuses, [(f"Download failed: {body}", "error")])
+
+    def test_failure_seen_with_its_card_visible_never_notifies_later(self):
+        win, msgs, statuses = self._window(hidden=False, minimized=False)
+        failure = self._dl("failed-visible", "failed", error="Access denied")
+
+        ad.MainWindow._notify_completed_downloads(win, [failure])
+        win.isHidden = lambda: True
+        ad.MainWindow._notify_completed_downloads(win, [failure])
+
+        self.assertEqual(msgs, [])
+        self.assertEqual(statuses, [])
+
+    def test_failure_toggle_is_independent_from_completion_toggle(self):
+        win, msgs, _statuses = self._window(
+            hidden=True,
+            notify=False,
+            notify_failure=True,
+        )
+        ad.MainWindow._notify_completed_downloads(win, [
+            self._dl("complete-off", "complete"),
+            self._dl("failure-on", "failed", error="Disk full"),
+        ])
+        self.assertEqual([message[0] for message in msgs], ["Download failed"])
+
+    def test_failure_toggle_off_suppresses_warning(self):
+        win, msgs, statuses = self._window(hidden=True, notify_failure=False)
+        ad.MainWindow._notify_completed_downloads(
+            win,
+            [self._dl("failure-off", "failed", error="Disk full")],
+        )
+        self.assertEqual(msgs, [])
+        self.assertEqual(statuses, [])
+
+    def test_taskbar_minimized_window_warns_for_failure(self):
+        win, msgs, _statuses = self._window(
+            hidden=False,
+            minimized=True,
+        )
+        ad.MainWindow._notify_completed_downloads(
+            win,
+            [self._dl("failure-minimized", "failed", error="Network lost")],
+        )
+        self.assertEqual([message[0] for message in msgs], ["Download failed"])
+
+    def test_retry_attempt_can_create_a_new_failure_warning(self):
+        win, msgs, _statuses = self._window(hidden=True)
+        first = self._dl(
+            "retry-id", "failed", error="First failure",
+            start_time=1.0, finished_time=2.0,
+        )
+        retry = self._dl(
+            "retry-id", "failed", error="Second failure",
+            start_time=3.0, finished_time=4.0,
+        )
+
+        ad.MainWindow._notify_completed_downloads(win, [first])
+        ad.MainWindow._notify_completed_downloads(win, [retry])
+
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[-1][1], "Second failure")
 
 
 class ClipboardLinkGrabberTests(unittest.TestCase):
@@ -2357,6 +2454,7 @@ class TranslationCoverageTests(unittest.TestCase):
                 "gui_download_page.py",
                 "gui_history_page.py",
                 "gui_site_logins_page.py",
+                "gui_sites_page.py",
                 "gui_subscriptions_page.py",
                 "gui_extension_page.py",
                 "gui_settings_page.py",
@@ -4419,7 +4517,7 @@ class SettingsNavigationTests(unittest.TestCase):
 
 
 class CompletionNotificationTests(unittest.TestCase):
-    """A completion toast can be clicked, and it leads to the file."""
+    """A clicked terminal toast leads to the result it announced."""
 
     def _window(self, notified=""):
         gui = gui_module_for_tests()
@@ -4442,6 +4540,54 @@ class CompletionNotificationTests(unittest.TestCase):
         self.assertFalse(window._notification_clicked())
         self.assertEqual(window.revealed, [])
         self.assertEqual(window.shown, ["shown"])
+
+    def test_clicking_a_failure_toast_focuses_its_download_card(self):
+        window = self._window("")
+        focused = []
+        window._last_notification_kind = "failure"
+        window._last_notified_download_id = "dl_failed"
+        window._focus_download_card = lambda dl_id: focused.append(dl_id) or True
+
+        self.assertTrue(window._notification_clicked())
+        self.assertEqual(window.shown, ["shown"])
+        self.assertEqual(focused, ["dl_failed"])
+        self.assertEqual(window.revealed, [])
+
+    def test_focus_download_card_navigates_scrolls_and_focuses_an_action(self):
+        gui = gui_module_for_tests()
+
+        class Button:
+            def __init__(self):
+                self.focused = False
+
+            def setFocus(self, _reason):
+                self.focused = True
+
+        class Card:
+            def __init__(self, button):
+                self.button = button
+
+            def findChildren(self, _widget_type):
+                return [self.button]
+
+        button = Button()
+        card = Card(button)
+        scrolled = []
+        navigated = []
+        window = types.SimpleNamespace(
+            _download_widgets={("download", "dl_failed"): card},
+            downloads_scroll=types.SimpleNamespace(
+                ensureWidgetVisible=lambda *args: scrolled.append(args)
+            ),
+            _nav_click=navigated.append,
+        )
+
+        self.assertTrue(gui.MainWindowCore._focus_download_card(
+            window, "dl_failed"
+        ))
+        self.assertEqual(navigated, ["Download"])
+        self.assertEqual(scrolled[0][0], card)
+        self.assertTrue(button.focused)
 
     def test_the_signal_is_connected(self):
         from PySide6.QtWidgets import QApplication

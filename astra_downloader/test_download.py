@@ -4065,7 +4065,7 @@ class DownloadWorkerRaceGuardTests(unittest.TestCase):
         manager._worker_entry = lambda _dl: started.set()
 
         with tempfile.TemporaryDirectory() as tmp:
-            def fake_write(cookies, jar_path, logger=None):
+            def fake_write(cookies, jar_path, logger=None, domain_filter=None):
                 Path(jar_path).write_text("jar", encoding="utf-8")
                 # cancel() lands while the jar is being written; it cannot
                 # unlink a jar it doesn't know about yet.
@@ -5653,8 +5653,10 @@ class SiteLoginDownloadTests(unittest.TestCase):
             return ('', '')
 
     def _run(self, url, *, seed_site=None, seed_credentials=None,
-             request_cookies=None, video_password=None):
+             request_cookies=None, video_password=None,
+             impersonate_targets=None):
         captured = []
+        live_jar = []
         # The cookie jar's owner-only ACL is applied by shelling out to
         # icacls through this very Popen, so a fake that swallows every
         # command silently breaks jar creation and the test then "proves"
@@ -5667,11 +5669,25 @@ class SiteLoginDownloadTests(unittest.TestCase):
             if '--ignore-config' not in args:
                 return self._FakeProc([], 0)
             captured.append(list(args))
+            # Read the jar here, while yt-dlp is notionally running. The
+            # download's finally block unlinks it on exit, so a reader that
+            # waits for the run to finish can only ever see "(cleaned)" and
+            # cannot tell an empty jar from a correct one.
+            if '--cookies' in args:
+                jar = Path(args[list(args).index('--cookies') + 1])
+                if jar.exists():
+                    live_jar.append(jar.read_text(encoding='utf-8'))
             return self._FakeProc(['[download] Destination: clip.mp4'], 0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = FakeConfig({"DownloadPath": tmpdir, "AudioDownloadPath": tmpdir})
             manager = ad.DownloadManager(config, FakeHistory())
+            if impersonate_targets is not None:
+                # The real probe shells out to yt-dlp; the registry default is
+                # gated on what it reports, so the test has to own the answer.
+                manager._dependencies['probe_impersonate_targets'] = (
+                    lambda *_a, **_k: list(impersonate_targets)
+                )
             if seed_site:
                 manager.site_logins.import_netscape_text(
                     seed_site,
@@ -5697,9 +5713,9 @@ class SiteLoginDownloadTests(unittest.TestCase):
                 deadline = time.time() + 10
                 while download.status not in ad.DOWNLOAD_TERMINAL_STATES and time.time() < deadline:
                     time.sleep(0.05)
-            jar_body = ''
             argv = captured[-1] if captured else []
-            if '--cookies' in argv:
+            jar_body = live_jar[-1] if live_jar else ''
+            if not jar_body and '--cookies' in argv:
                 jar_path = Path(argv[argv.index('--cookies') + 1])
                 jar_body = jar_path.read_text(encoding='utf-8') if jar_path.exists() else '(cleaned)'
             return argv, download, jar_body
@@ -5758,7 +5774,10 @@ class SiteLoginDownloadTests(unittest.TestCase):
 
     def test_youtube_request_cookies_never_follow_a_url_off_site(self):
         # A token holder posting a non-YouTube URL with YouTube cookies must
-        # not cause those cookies to be sent anywhere.
+        # not cause those cookies to be sent anywhere. The bridge is scoped to
+        # the download's own site now, so the mismatch is caught one step
+        # earlier than it used to be: the cookies are dropped before a jar is
+        # written, rather than written into a jar that argv then refuses.
         argv, download, _body = self._run(
             "https://vimeo.com/123",
             request_cookies=[{
@@ -5766,8 +5785,100 @@ class SiteLoginDownloadTests(unittest.TestCase):
                 "path": "/", "secure": True, "expirationDate": 2_000_000_000,
             }],
         )
-        self.assertEqual(download.cookies_scope, 'youtube')
         self.assertNotIn('--cookies', argv)
+        self.assertEqual(download.cookies_scope, '')
+        self.assertIsNone(
+            download.cookies_file,
+            "an off-site cookie must not reach disk at all",
+        )
+
+    def test_request_cookies_are_attached_for_a_site_that_is_not_youtube(self):
+        # The whole point of the widened bridge. Before it, cookies posted for
+        # any site other than YouTube were filtered out on the way in, so the
+        # jar came back empty and the download ran signed out with nothing
+        # said about it.
+        argv, download, body = self._run(
+            "https://www.twitch.tv/videos/123",
+            request_cookies=[{
+                "name": "auth-token", "value": "TWITCH-SECRET",
+                "domain": ".twitch.tv", "path": "/", "secure": True,
+                "expirationDate": 2_000_000_000,
+            }],
+        )
+        self.assertIn('--cookies', argv)
+        self.assertEqual(download.cookies_scope, 'twitch.tv')
+        self.assertIn('TWITCH-SECRET', body)
+
+    def test_request_cookies_are_filtered_to_the_download_site(self):
+        # A jar for one site must not become a general cookie dump because the
+        # caller sent more than it needed.
+        argv, download, body = self._run(
+            "https://www.twitch.tv/videos/123",
+            request_cookies=[
+                {"name": "auth-token", "value": "TWITCH-SECRET",
+                 "domain": ".twitch.tv", "path": "/", "secure": True,
+                 "expirationDate": 2_000_000_000},
+                {"name": "SID", "value": "YT-SECRET", "domain": ".youtube.com",
+                 "path": "/", "secure": True, "expirationDate": 2_000_000_000},
+            ],
+        )
+        self.assertIn('--cookies', argv)
+        self.assertEqual(download.cookies_scope, 'twitch.tv')
+        self.assertIn('TWITCH-SECRET', body)
+        self.assertNotIn(
+            'YT-SECRET', body,
+            "a Twitch jar must not carry a YouTube session",
+        )
+
+    def test_youtube_request_cookies_keep_the_google_account_session(self):
+        # YouTube's session lives on Google's account domains as well as its
+        # own. Scoping the jar to the registrable domain alone would silently
+        # sign the user out, which is the regression this pins.
+        argv, download, body = self._run(
+            "https://www.youtube.com/watch?v=scoped",
+            request_cookies=[
+                {"name": "SID", "value": "YT-SECRET", "domain": ".youtube.com",
+                 "path": "/", "secure": True, "expirationDate": 2_000_000_000},
+                {"name": "SAPISID", "value": "GOOGLE-SECRET",
+                 "domain": ".google.com", "path": "/", "secure": True,
+                 "expirationDate": 2_000_000_000},
+            ],
+        )
+        self.assertIn('--cookies', argv)
+        self.assertEqual(download.cookies_scope, 'youtube.com')
+        self.assertIn('YT-SECRET', body)
+        self.assertIn('GOOGLE-SECRET', body)
+
+    def test_a_fingerprint_checked_site_gets_impersonation_in_the_real_argv(self):
+        # The unit builder is covered in test_sites; this proves the argv the
+        # subprocess actually receives carries it, which is where the wiring
+        # between the registry and the manager could silently be missing.
+        argv, _download, _body = self._run(
+            "https://kick.com/somechannel/videos/abc",
+            impersonate_targets=["chrome-110", "chrome"],
+        )
+        self.assertIn("--impersonate", argv)
+        self.assertEqual(argv[argv.index("--impersonate") + 1], "chrome")
+
+    def test_impersonation_is_dropped_when_the_binary_cannot_do_it(self):
+        # An unknown --impersonate target raises inside yt-dlp and kills the
+        # download, so a site asking for one the binary lacks must go without.
+        argv, _download, _body = self._run(
+            "https://kick.com/somechannel/videos/abc",
+            impersonate_targets=[],
+        )
+        self.assertNotIn("--impersonate", argv)
+
+    def test_a_site_that_needs_a_referer_gets_its_own_origin(self):
+        argv, _download, _body = self._run("https://vimeo.com/123")
+        self.assertIn("--referer", argv)
+        self.assertEqual(argv[argv.index("--referer") + 1], "https://vimeo.com/")
+
+    def test_a_site_with_no_registry_row_gets_no_extra_argv(self):
+        argv, _download, _body = self._run("https://example.com/watch/1")
+        for flag in ("--impersonate", "--referer", "--extractor-args"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, argv)
 
     def test_stored_sign_in_probe_is_scoped_bounded_and_cleaned(self):
         captured = {}

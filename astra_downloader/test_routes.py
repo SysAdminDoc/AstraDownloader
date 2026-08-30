@@ -3642,7 +3642,13 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # decides who gets a 426, and it stays where it was.
         self.assertEqual(ad.SERVICE_API_MINIMUM_CLIENT, 1)
 
-    def test_app_version_bumped_to_2_13_1(self):
+    def test_app_version_bumped_to_2_14_0(self):
+        # v2.14.0: the downloader reaches the rest of the web. The extension
+        # cookie bridge is scoped to the site being downloaded from instead of
+        # to YouTube, so a sign-in works anywhere the extension can read one; a
+        # site registry supplies the referer, browser impersonation and
+        # extractor arguments the handful of sites that need them ask for; and
+        # a Sites page lists what the installed yt-dlp can actually reach.
         # v2.13.1: windowed CLI probes tolerate PyInstaller's invalid stdout
         # stream and write the version through the inherited Windows handle.
         # v2.13.0: Astra Deck can reach this companion again. A paired
@@ -3686,7 +3692,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.13.1")
+        self.assertEqual(ad.APP_VERSION, "2.14.0")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a
