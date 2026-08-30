@@ -35,6 +35,7 @@ __all__ = (
     "cookie_domains_for_site", "build_site_cookie_filter",
     "cookie_domain_belongs_to_site",
     "build_site_extractor_args", "site_impersonate_target",
+    "select_impersonate_target",
     "site_referer_for_url", "site_auth_expectation", "describe_site_auth",
     "site_expects_sign_in", "site_supports_credentials",
     "site_catalog", "merge_extractor_names", "search_site_catalog",
@@ -648,15 +649,50 @@ def build_site_extractor_args(url):
 
 
 def site_impersonate_target(url):
-    """Return the browser target this site needs impersonated, or "".
+    """Return the browser *family* this site needs impersonated, or "".
 
-    Only sites that refuse a plain request on its TLS fingerprint carry one.
-    The caller still has to check the target against what the installed yt-dlp
-    reports, because an unknown `--impersonate` target is a hard error that
-    kills the download rather than a warning.
+    A family, not a target: yt-dlp reports targets as `Chrome-133`,
+    `Chrome-136`, `Safari-18.0`, and those version numbers move with every
+    curl_cffi release. Pinning `Chrome-136` here would silently stop matching
+    the day it changed, which is the same dead-configuration failure the
+    registry gate exists to prevent. `select_impersonate_target` resolves the
+    family against whatever the installed binary actually reports.
     """
     profile = resolve_site_profile(url)
     return profile["impersonate"] if profile else ""
+
+
+def _target_sort_key(name):
+    """Order targets so the newest version of a family sorts last.
+
+    `Chrome-99` must not beat `Chrome-136`, so the version segment is compared
+    numerically per component rather than as text.
+    """
+    _, _, version = str(name).partition("-")
+    parts = []
+    for chunk in version.split("."):
+        parts.append((0, int(chunk)) if chunk.isdigit() else (1, 0))
+    return (len(parts), parts)
+
+
+def select_impersonate_target(family, available_targets):
+    """Return the newest available target in `family`, or "".
+
+    Matching is on the name before the version and is case-insensitive, so a
+    registry entry of `chrome` finds `Chrome-136`. Returns "" when the family
+    is absent, because an `--impersonate` target the binary does not have is
+    not a warning: yt-dlp raises and the download dies.
+    """
+    wanted = str(family or "").strip().casefold()
+    if not wanted:
+        return ""
+    matches = [
+        str(name) for name in (available_targets or ())
+        if str(name).partition("-")[0].casefold() == wanted
+    ]
+    if not matches:
+        return ""
+    return max(matches, key=_target_sort_key)
 
 
 def site_referer_for_url(url):
