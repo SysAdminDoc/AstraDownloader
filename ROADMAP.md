@@ -21,12 +21,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 
 
-- [ ] P2 | AD-122 | The Settings proxy hint prints a detected proxy verbatim
-  Why: the resolved-address preview renders the value parse_wininet_proxy_server returned, and normalize_proxy preserves userinfo, so a WinINET ProxyServer entry carrying credentials is shown in full on the Settings page. Not persisted and visible only to the user who configured it, which is why it is here rather than above, but it contradicts the rule AD-101 established that a proxy is named by scheme, host and port only.
-  Evidence: astra_downloader/gui.py the Windows-reports proxy hint; astra_downloader/config.py normalize_proxy preserving userinfo; astra_downloader/config.py redact_proxy_url.
-  Touches: astra_downloader/gui.py, astra_downloader/test_gui.py.
-  Acceptance: Every place that shows a proxy to a user routes through redact_proxy_url. A test scans the GUI for a proxy value rendered without it.
-  Complexity: S
 
 - [ ] P2 | AD-123 | The extension shows a green yt-dlp pill on a below-floor build
   Why: Astra Deck's health normalizer whitelists thirteen keys and preflight is not among them, and its yt-dlp pill is rendered unconditionally ok while the ffmpeg and JavaScript-runtime pills tone on state. A user driving downloads from the extension on a yt-dlp below the security floor sees no signal at all, so the AD-108 clause about reporting it whatever the auto-update setting holds only for the desktop window.

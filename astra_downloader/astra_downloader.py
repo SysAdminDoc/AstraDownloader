@@ -6329,6 +6329,7 @@ class MainWindow(MainWindowCore):
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
+                'redact_proxy_url': lambda *args, **kwargs: redact_proxy_url(*args, **kwargs),
                 'set_first_party_network_policy': lambda *args, **kwargs: set_first_party_network_policy(*args, **kwargs),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),

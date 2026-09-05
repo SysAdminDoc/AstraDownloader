@@ -857,6 +857,7 @@ SetupWorker = SetupWorkerCore
 
 _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'build_reveal_command',
+    'redact_proxy_url',
     'set_first_party_network_policy',
     'spawn_detached',
     'summarize_taskbar_progress',
@@ -2996,7 +2997,12 @@ class MainWindowCore(
         if not checkbox.isChecked():
             hint.setText(tr("Downloads connect directly."))
             return
-        detected = self._dependencies['detect_system_proxy']()
+        # Redacted like every other place a proxy is named: a WinINET
+        # ProxyServer entry may carry userinfo, and normalize_proxy preserves
+        # it, so the raw value would put a password on the Settings page.
+        detected = self._dependencies['redact_proxy_url'](
+            self._dependencies['detect_system_proxy']()
+        )
         hint.setText(
             tr_format("Windows reports {proxy}.", proxy=detected) if detected
             else tr("Windows reports no proxy, so downloads connect directly.")

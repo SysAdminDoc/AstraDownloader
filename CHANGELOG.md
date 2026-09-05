@@ -56,6 +56,9 @@ repository's git log.
 - Settings now marks a managed tool whose installed version is below its
   security floor, naming the floor beside the version, on the same page that
   offers Pin and Rollback. The readiness panel already reported it.
+- The Settings page no longer prints a detected system proxy's password. A
+  Windows proxy entry can carry credentials, and the resolved-address preview
+  showed the value verbatim.
 - A proxy shown or recorded with an IPv6 address keeps its brackets, so the
   address and its port stay readable.
 - A geo-blocked video is no longer reported as permanently gone. YouTube's
