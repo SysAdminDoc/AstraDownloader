@@ -8,23 +8,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
-
-
-
-
-
-
 ### P1
-
-
-
-
-- [ ] P1 | AD-110 | A failure notification can focus a card that is no longer rendered
-  Why: _focus_download_card looks up a widget keyed by download id, but the Download page renders only the first eight terminal jobs, so an overnight failure with nine or more later terminal jobs finds no card. Activation restores the window and silently focuses nothing, which is exactly the case the notification exists for.
-  Evidence: astra_downloader/gui.py _focus_download_card and the slice that builds the terminal section of _download_widgets.
-  Touches: astra_downloader/gui.py, astra_downloader/test_gui.py.
-  Acceptance: Activating a failure notification for a job outside the rendered window still lands the user somewhere that names it, by widening the section to include the notified id or by opening History filtered to it. A test covers a failed job pushed past the render limit by later jobs.
-  Complexity: S
 
 ### P2
 

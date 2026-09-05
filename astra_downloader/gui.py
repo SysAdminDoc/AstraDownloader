@@ -1819,6 +1819,7 @@ class MainWindowCore(
         self._taskbar_progress = self._dependencies['TaskbarProgress']()
         self._last_notified_file = ""
         self._last_notified_download_id = ""
+        self._pinned_download_id = ""
         self._last_notification_kind = ""
         self.tray.setToolTip(
             tr_format(
@@ -5085,6 +5086,25 @@ class MainWindowCore(
         self._update_download_card(card, dl)
         return card
 
+    RECENT_DOWNLOAD_CARD_LIMIT = 8
+
+    def _visible_recent_downloads(self, recent):
+        """The terminal jobs the Download page actually renders.
+
+        A failure notification points at one card by id, and the page shows
+        only the newest few terminal jobs. An overnight failure with later
+        jobs stacked on top of it therefore had no card to focus: activating
+        the notification restored the window and landed on nothing, which is
+        precisely the case the notification exists for. The notified job is
+        kept in view until it drops out of the terminal list altogether.
+        """
+        visible = list(recent[:self.RECENT_DOWNLOAD_CARD_LIMIT])
+        pinned = getattr(self, "_pinned_download_id", "")
+        if not pinned or any(d.id == pinned for d in visible):
+            return visible
+        held = next((d for d in recent if d.id == pinned), None)
+        return visible + [held] if held is not None else visible
+
     def _reconcile_download_list(self, active, pending, recent):
         """Key the queue layout by download id and retain unchanged widgets."""
         layout = self.downloads_list_layout
@@ -5123,7 +5143,7 @@ class MainWindowCore(
         for section_key, section_title, downloads, is_recent in (
             ("active", "In progress", active, False),
             ("pending", "Pending", pending, False),
-            ("recent", "Recent activity", recent[:8], True),
+            ("recent", "Recent activity", self._visible_recent_downloads(recent), True),
         ):
             if not downloads:
                 continue
@@ -5372,7 +5392,7 @@ class MainWindowCore(
              d.title, d.error, d.error_code, d.error_advice, d.error_action,
              d.filename, d.format, d.quality, d.url,
              self._download_host_backoff_seconds(d))
-            for d in active + pending + recent[:8]
+            for d in active + pending + self._visible_recent_downloads(recent)
         ) + ((capacity['intakePaused'], capacity['total']),)
         if signature == self._downloads_signature:
             return
@@ -6540,7 +6560,14 @@ class MainWindowCore(
 
     def _focus_download_card(self, download_id):
         """Open Download, reveal one card, and focus its first useful action."""
+        # Pin before rebuilding: the page renders only the newest few terminal
+        # jobs, so a job this old has no card until the pin puts it back in the
+        # visible set. The pin changes the list signature, so the refresh below
+        # rebuilds rather than short-circuiting.
+        self._pinned_download_id = download_id
         self._nav_click("Download")
+        if ("download", download_id) not in self._download_widgets:
+            self._update_ui()
         card = self._download_widgets.get(("download", download_id))
         if card is None:
             return False

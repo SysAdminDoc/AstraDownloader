@@ -4187,6 +4187,59 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.log_empty_state.isHidden())
         self.assertTrue(window.log_text.isHidden())
 
+    def test_a_notified_failure_is_reachable_after_later_jobs_bury_it(self):
+        # The Download page renders only the newest few terminal jobs, so an
+        # overnight failure with later jobs stacked on top of it had no card:
+        # activating the notification restored the window and focused nothing,
+        # which is exactly the case the notification exists for.
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        try:
+            limit = type(window).RECENT_DOWNLOAD_CARD_LIMIT
+            buried = types.SimpleNamespace(id="buried", start_time=0.0)
+            later = [
+                types.SimpleNamespace(id=f"later-{index}", start_time=float(index + 1))
+                for index in range(limit + 2)
+            ]
+            # Newest first, which is how the page orders them.
+            recent = sorted(
+                later + [buried], key=lambda d: d.start_time, reverse=True
+            )
+
+            visible = window._visible_recent_downloads(recent)
+            self.assertEqual(len(visible), limit)
+            self.assertNotIn(
+                "buried", [d.id for d in visible],
+                "the fixture must actually bury the job past the render limit",
+            )
+
+            window._pinned_download_id = "buried"
+            pinned = window._visible_recent_downloads(recent)
+            self.assertIn("buried", [d.id for d in pinned])
+            self.assertEqual(
+                len(pinned), limit + 1,
+                "the pin adds the notified job without evicting a newer one",
+            )
+            # The newest jobs are all still there.
+            for job in recent[:limit]:
+                self.assertIn(job.id, [d.id for d in pinned])
+
+            # A pin for a job that has left the terminal list adds nothing.
+            window._pinned_download_id = "gone"
+            self.assertEqual(
+                len(window._visible_recent_downloads(recent)), limit
+            )
+            # And no pin is the ordinary case.
+            window._pinned_download_id = ""
+            self.assertEqual(
+                len(window._visible_recent_downloads(recent)), limit
+            )
+            QApplication.processEvents()
+        finally:
+            _retire_test_window(window)
+
     def test_the_empty_log_card_follows_whether_the_server_is_running(self):
         # The card told the user to start the API while the page beside it
         # said Server online, Running, and offered Stop server.
