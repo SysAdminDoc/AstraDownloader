@@ -12,6 +12,15 @@ repository's git log.
 
 ## [Unreleased]
 
+### Security
+
+- yt-dlp can no longer be pinned to a release older than the one that fixed
+  CVE-2026-55404. Pinning a managed binary is a setting, and it was the one
+  place an older yt-dlp could still be asked for by name; the packaged binary
+  has carried the fix since it shipped. FFmpeg, Deno and QuickJS already had
+  floors. A stored pin below the floor is dropped on load, so the binary
+  follows the published release rather than freezing at a version nobody chose.
+
 ### Fixed
 
 - The proxy and network identity now apply to what Astra fetches for itself.

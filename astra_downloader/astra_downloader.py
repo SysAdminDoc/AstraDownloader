@@ -2350,12 +2350,23 @@ def reset_ffmpeg_capabilities_cache():
         _ffmpeg_filter_probe_checked_at = 0.0
 
 
-# health.py declares the floors it knows about; ffmpeg's lives here beside
-# the capability probe that also uses it. One merged table so a pin and a
+# The yt-dlp release that fixed CVE-2026-55404, downstream command injection
+# through unsanitized `--write-link` output. `requirements.txt` has named this
+# release since it shipped and the packaged binary has carried the fix ever
+# since; the number was only ever missing from the *pin* path, which is a
+# user-writable setting and so the one place an older build could be asked for
+# by name. yt-dlp versions are dates, and `_compare_semver` reads them
+# correctly in both the padded (`2026.08.19`) and unpadded (`2026.7.4`) forms
+# the project publishes.
+YTDLP_SECURITY_MIN_VERSION = '2026.07.04'
+
+# health.py declares the floors it knows about; ffmpeg's and yt-dlp's live here
+# beside the probes that also use them. One merged table so a pin and a
 # capability check can never disagree about what "too old" means.
 MANAGED_BINARY_FLOORS = {
     **MANAGED_BINARY_SECURITY_FLOORS,
     'ffmpeg': _FFMPEG_MIN_VERSION,
+    'yt-dlp': YTDLP_SECURITY_MIN_VERSION,
 }
 # FFmpeg-Builds ships master snapshots with no semver, so the pin is measured
 # against the same dated floor the capability probe uses.
