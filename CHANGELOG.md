@@ -29,6 +29,14 @@ repository's git log.
   produce a file, that note appears on the failure too. A private video is
   also recognised: yt-dlp's "Sign in if you've been granted access" wording
   had never matched, so it fell through unclassified.
+- The Scoop package no longer throws your data away when it updates. It
+  installs the portable layout, which keeps state beside the executable, but
+  the manifest persisted nothing, so `scoop update` started from an empty
+  state root: settings, history, queue, subscriptions and stored sign-ins were
+  gone and the managed yt-dlp, FFmpeg and JavaScript runtime were downloaded
+  again. All of it is persisted now, a test derives the list from the paths the
+  app actually writes so it cannot drift, and the README documents the install
+  command, which it had never mentioned.
 - A SOCKS proxy no longer breaks Astra's own requests. yt-dlp speaks SOCKS
   natively so downloads always worked, but the library behind the setup,
   update and Kick fetches needs a package this build does not ship, and the
