@@ -31,8 +31,13 @@ if (!TEST_FILES.length) {
     process.exit(2);
 }
 
+// Both suites, named separately. "unit tests" used to mean only the Node
+// files, which is how a red 1,262-test Python suite sat behind an "all gates
+// passed" line: nothing in this command, `release:stage` or `build.py` ever
+// ran pytest, and `documentation-facts` only ever collected it to count.
 const GATES = [
-    ['unit tests', process.execPath, ['--test', ...TEST_FILES]],
+    ['node tests', process.execPath, ['--test', ...TEST_FILES]],
+    ['python suite', 'py', ['-3.13', '-m', 'pytest', '-q']],
     ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
     ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
     ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],
@@ -47,22 +52,40 @@ function main() {
     for (const [label, command, args] of GATES) {
         process.stdout.write(`\n──── ${label} ────\n`);
         const run = spawnSync(command, args, { cwd: ROOT, stdio: 'inherit', shell: false });
-        // A gate that could not be spawned at all (missing interpreter) is a
-        // failure, not a skip — otherwise an uninstalled toolchain reads as a
-        // pass.
+        // A gate that could not be spawned at all is never a pass — an
+        // uninstalled toolchain must not read as a green gate. A missing
+        // interpreter is reported as SKIP with the reason named rather than a
+        // bare exit 127, because "no CPython 3.13 on PATH" and "the suite
+        // failed" want different responses. It still fails the command.
+        const missingTool = Boolean(run.error) && run.error.code === 'ENOENT';
         const code = run.error ? 127 : (run.status === null ? 1 : run.status);
-        if (run.error) process.stdout.write(`could not run ${command}: ${run.error.message}\n`);
-        results.push({ label, code });
+        const reason = missingTool ? `${command} is not on PATH` : '';
+        if (run.error && !missingTool) {
+            process.stdout.write(`could not run ${command}: ${run.error.message}\n`);
+        }
+        if (missingTool) process.stdout.write(`skipped: ${reason}\n`);
+        results.push({ label, code, skipped: missingTool, reason });
     }
 
     const failed = results.filter((result) => result.code !== 0);
     process.stdout.write('\n──── summary ────\n');
-    for (const { label, code } of results) {
-        process.stdout.write(`${code === 0 ? 'PASS' : 'FAIL'}  ${label}${code === 0 ? '' : ` (exit ${code})`}\n`);
+    for (const { label, code, skipped, reason } of results) {
+        if (code === 0) {
+            process.stdout.write(`PASS  ${label}\n`);
+        } else if (skipped) {
+            process.stdout.write(`SKIP  ${label} (${reason})\n`);
+        } else {
+            process.stdout.write(`FAIL  ${label} (exit ${code})\n`);
+        }
     }
+    const broken = failed.filter((result) => !result.skipped);
+    const unrun = failed.filter((result) => result.skipped);
+    const parts = [];
+    if (broken.length) parts.push(`${broken.length} failed: ${broken.map((r) => r.label).join(', ')}`);
+    if (unrun.length) parts.push(`${unrun.length} could not run: ${unrun.map((r) => r.label).join(', ')}`);
     process.stdout.write(
         failed.length
-            ? `\n${failed.length} of ${results.length} gates failed: ${failed.map((r) => r.label).join(', ')}\n`
+            ? `\n${failed.length} of ${results.length} gates did not pass. ${parts.join('; ')}\n`
             : `\nall ${results.length} gates passed\n`
     );
     process.exitCode = failed.length ? 1 : 0;

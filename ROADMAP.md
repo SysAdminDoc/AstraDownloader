@@ -8,13 +8,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
-- [ ] P0 | AD-87 | Make the gate command run the suite it says it runs
-  Why: run-checks.js declares its first gate as `['unit tests', process.execPath, ['--test', ...TEST_FILES]]` where TEST_FILES is tests/*.test.js, six Node files. Nothing in npm run check, npm run release:stage or build.py executes pytest; documentation-facts.test.js only invokes it with --collect-only to count. On 2026-09-04 the gate set printed "all 8 gates passed" while the Python suite was red, and README.md says npm run check "runs the unit tests" four lines under the pytest command.
-  Evidence: scripts/run-checks.js:20-43; tests/documentation-facts.test.js:29; README.md "Tests and gates"; the AD-86 failure surviving a green npm run check.
-  Touches: scripts/run-checks.js, README.md, CLAUDE.md commands table, tests/documentation-facts.test.js.
-  Acceptance: The gate table carries a distinct Python-suite gate that runs pytest and fails the command when the suite fails, alongside the renamed Node gate. npm run check is red on the AD-86 failure and green once it is fixed, and the printed gate count and README wording name both suites separately. A missing Python interpreter reports a skipped gate with a named reason rather than a pass. documentation-facts.test.js asserts that a gate exists whose command invokes pytest without --collect-only.
-  Complexity: S
-
 ### P1
 
 - [ ] P1 | AD-88 | Route Astra's own HTTP through the network settings it advertises
@@ -205,3 +198,10 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: astra_downloader/astra_downloader.py, astra_downloader/config.py updater state, scripts/write-release-provenance.js, release documentation, Python dependencies, update tests.
   Acceptance: The application bundles a trusted TUF root and accepts targets only through signed, versioned, expiring targets, snapshot, and timestamp metadata with expected lengths and hashes. Trusted metadata persists across runs to reject rollback, freeze, and mix-and-match attacks. Tests cover expired metadata, older versions, swapped EXE and sidecar, interrupted updates, root rotation, and recovery. Documentation states that this protects installed updates but not the first installer or SmartScreen reputation.
   Complexity: XL
+
+- [ ] P3 | AD-97 | The README count check calls a missing interpreter a hard failure
+  Why: documentation-facts.test.js skips its pytest collect-count check only when spawn returns ENOENT. On Windows without CPython on PATH the `python` App Execution Alias still spawns, exits 9009 and prints the Microsoft Store notice, so `result.error` is null, `collected` stays null and the test asserts its way to a failure that says "pytest ran but reported no collected count". Observed 2026-09-04 while verifying the AD-87 SKIP path with the Python entries stripped from PATH.
+  Evidence: tests/documentation-facts.test.js pythonCandidates and the ENOENT branch; the `node tests (exit 1)` line in the PATH-scrubbed `node scripts/run-checks.js` run of 2026-09-04, beside the three gates that correctly reported SKIP.
+  Touches: tests/documentation-facts.test.js.
+  Acceptance: A candidate interpreter that exits non-zero without producing a collected count and whose output carries the Store-alias notice is treated the same as ENOENT: the loop moves to the next candidate, and exhausting them logs the skip rather than asserting. A candidate that runs pytest and genuinely fails collection still fails the test, pinned by a fixture for each of the two cases.
+  Complexity: S
