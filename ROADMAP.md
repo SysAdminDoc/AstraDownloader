@@ -10,13 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-76 | Notify hidden users when a download fails
-  Why: _notify_completed_downloads handles complete and skipped jobs only, so an overnight failure is silent until the user reopens the window.
-  Evidence: astra_downloader/gui.py _notify_completed_downloads; durable failure recording in astra_downloader/download.py _record_history; the YT-DLP Studio README advertises both finish and failure alerts. AD-63 remains the accessibility half of this work.
-  Touches: astra_downloader/config.py, astra_downloader/gui.py, astra_downloader/gui_settings_page.py, astra_downloader/gui_support.py, astra_downloader/test_gui.py, translation catalogues.
-  Acceptance: A separate NotifyOnFailure setting defaults on and migrates independently from NotifyOnComplete. A terminal failed job produces one warning notification when the window is hidden or minimized, never when the failed card is visible. Its text names the bounded failure reason, activation restores the window and focuses that card, a retry can create a new terminal notification, and the event also uses the accessible announcement path from AD-63.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 — AD-72 — The GUI smoke names dialogs by their window title, and nothing pins the two together
