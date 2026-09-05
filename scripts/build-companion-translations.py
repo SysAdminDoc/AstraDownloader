@@ -462,6 +462,10 @@ CATALOGS = {
             "Serverprotokoll",
         "No server events yet":
             "Noch keine Serverereignisse",
+        "No events yet":
+            "Noch keine Ereignisse",
+        "The local API is running. Pair the browser extension or send a download to see activity here.":
+            "Die lokale API läuft. Koppeln Sie die Browsererweiterung oder senden Sie einen Download, um hier Aktivitäten zu sehen.",
         "Start the local API or pair the browser extension to see recent activity here.":
             "Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.",
         "Download a video":

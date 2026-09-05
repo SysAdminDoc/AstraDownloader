@@ -1891,6 +1891,22 @@
       <translation>Cleared. This copy registers no browser hosts.</translation>
     </message>
     <message>
+      <source>No events yet</source>
+      <translation>No events yet</translation>
+    </message>
+    <message>
+      <source>No server events yet</source>
+      <translation>No server events yet</translation>
+    </message>
+    <message>
+      <source>The local API is running. Pair the browser extension or send a download to see activity here.</source>
+      <translation>The local API is running. Pair the browser extension or send a download to see activity here.</translation>
+    </message>
+    <message>
+      <source>Start the local API or pair the browser extension to see recent activity here.</source>
+      <translation>Start the local API or pair the browser extension to see recent activity here.</translation>
+    </message>
+    <message>
       <source>Copy a video link, then choose Paste and download.</source>
       <translation>Copy a video link, then choose Paste and download.</translation>
     </message>
@@ -2901,14 +2917,6 @@
     <message>
       <source>Open the persisted server log in File Explorer.</source>
       <translation>Open the persisted server log in File Explorer.</translation>
-    </message>
-    <message>
-      <source>No server events yet</source>
-      <translation>No server events yet</translation>
-    </message>
-    <message>
-      <source>Start the local API or pair the browser extension to see recent activity here.</source>
-      <translation>Start the local API or pair the browser extension to see recent activity here.</translation>
     </message>
     <message>
       <source>Recent local companion events. Use Clear to remove visible entries.</source>

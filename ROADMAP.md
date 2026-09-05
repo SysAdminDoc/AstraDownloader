@@ -75,13 +75,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: Only the visible History page is checked off the GUI thread. FileNotFoundError marks a row Missing and disables or relabels Show; other OSError results show Unavailable and do not claim deletion. The stored row, search, and export remain intact, and a later refresh restores Show when the file returns.
   Complexity: M
 
-- [ ] P2 | AD-82 | Make the server-log empty state follow server state
-  Why: The extension page can show Server online, Running, and Stop server while the empty log card simultaneously says to start the API and offers Start server.
-  Evidence: build/companion-ui-smoke/dashboard-online.png; astra_downloader/gui_extension_page.py log_empty_state; astra_downloader/gui.py _restore_log_view and _set_server_running.
-  Touches: astra_downloader/gui_extension_page.py, astra_downloader/gui.py, astra_downloader/test_gui.py, scripts/render-companion-gui.py.
-  Acceptance: Running with no log lines shows No events yet without a Start action. Stopped with no lines offers Start server. State changes, clear-log, and restored persisted entries keep the correct variant, and both states are pinned by GUI tests plus the online smoke capture.
-  Complexity: S
-
 - [ ] P2 | AD-83 | Add explicit audio-language selection
   Why: Active Seal, Parabolic, and YTDLnis reports show that automatic format ranking can select the wrong dub or ignore a requested audio track, while Astra only applies a soft generic lang sort.
   Evidence: yt-dlp format-selection documentation; Seal issue 2592; Parabolic issues 1901 and 1938; YTDLnis issue 946; astra_downloader/download.py build_format_sort_args.

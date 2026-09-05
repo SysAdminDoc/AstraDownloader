@@ -29,6 +29,9 @@ repository's git log.
   produce a file, that note appears on the failure too. A private video is
   also recognised: yt-dlp's "Sign in if you've been granted access" wording
   had never matched, so it fell through unclassified.
+- The empty server-log card no longer tells you to start a server that is
+  already running. With the API up it says there are no events yet and offers
+  nothing to start; with it stopped it still offers Start server.
 - The Scoop package no longer throws your data away when it updates. It
   installs the portable layout, which keeps state beside the executable, but
   the manifest persisted nothing, so `scoop update` started from an empty

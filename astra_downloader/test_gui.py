@@ -4187,6 +4187,59 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.log_empty_state.isHidden())
         self.assertTrue(window.log_text.isHidden())
 
+    def test_the_empty_log_card_follows_whether_the_server_is_running(self):
+        # The card told the user to start the API while the page beside it
+        # said Server online, Running, and offered Stop server.
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        try:
+            def card():
+                empty = window.log_empty_state
+                return (
+                    empty.empty_title.text(),
+                    empty.empty_body.text(),
+                    not empty.empty_action.isHidden(),
+                )
+
+            window.server_running = False
+            window._clear_log()
+            QApplication.processEvents()
+            stopped_title, stopped_body, stopped_action = card()
+            self.assertIn("server", stopped_title.lower())
+            self.assertIn("Start the local API", stopped_body)
+            self.assertTrue(
+                stopped_action, "a stopped server must still offer Start server"
+            )
+
+            window.server_running = True
+            window._update_server_ui()
+            QApplication.processEvents()
+            running_title, running_body, running_action = card()
+            self.assertEqual(running_title, "No events yet")
+            self.assertIn("running", running_body)
+            self.assertNotIn("Start the local API", running_body)
+            self.assertFalse(
+                running_action,
+                "a running server must not offer to start the server",
+            )
+
+            # Clearing the log while running keeps the running variant.
+            window._clear_log()
+            QApplication.processEvents()
+            self.assertEqual(card()[0], "No events yet")
+            self.assertFalse(card()[2])
+
+            # And restoring persisted entries after a stop restores the other.
+            window.server_running = False
+            window._update_server_ui()
+            QApplication.processEvents()
+            self.assertEqual(card()[0], stopped_title)
+            self.assertTrue(card()[2])
+        finally:
+            _retire_test_window(window)
+
     def test_live_wait_setting_is_labeled_as_a_retry_interval(self):
         from PySide6.QtWidgets import QApplication, QLabel
 
