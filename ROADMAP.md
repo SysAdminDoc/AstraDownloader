@@ -8,9 +8,62 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
+- [ ] P0 | AD-113 | An existing Scoop install loses everything on the first update to the data layout
+  Why: AD-102 changed the persist array to a single data directory. scoop update extracts the new version and links only what the new manifest names, so config.json, history.json, download-queue.json, subscriptions.json and site-logins are not linked into the new app directory, portable_state_dir finds no legacy marker at the root and returns the empty data junction, and the real files are stranded in the old version directory the app never looks at. site-logins used to be the one entry that survived, because it was a junctioned directory, so for stored sign-ins this is a strict regression rather than a wash. The legacy-marker fallback only rescues a hand-unzipped folder, where the files are physically still beside the executable; it cannot rescue a Scoop install, which is the only population the change exists for.
+  Evidence: packaging/scoop/astra-downloader.json persist; astra_downloader/astra_downloader.py portable_state_dir and _LEGACY_PORTABLE_STATE_MARKERS; the AD-102 measurement recording that site-logins survived under the previous list.
+  Touches: astra_downloader/astra_downloader.py, packaging/scoop/astra-downloader.json, tests/scoop-manifest.test.js, astra_downloader/test_build.py.
+  Acceptance: A first launch that finds legacy state beside the executable and an empty data directory moves that state into data once, and reports what it moved. The move is atomic per file and leaves the original in place if any part fails, so an interrupted migration never loses a queue or a sign-in. A launch with no legacy state, a launch already migrated, and a launch with both present are each covered by a test.
+  Complexity: M
+
 ### P1
 
+
+
+
+- [ ] P1 | AD-119 | The Settings panel never shows the security floor it now enforces
+  Why: managed_binary_inventory already publishes a floor field for every managed binary, and _apply_managed_binaries renders the installed version, the pin, the digest tooltip and the Pin and Rollback buttons without ever reading it. The AD-108 acceptance asked for the floor beside the installed version, and the value reaches the GUI layer and dies there, so a user running a below-floor binary sees the preflight error with no matching detail on the page that offers the pin and rollback controls.
+  Evidence: astra_downloader/astra_downloader.py managed_binary_inventory emitting floor; astra_downloader/gui.py _apply_managed_binaries not reading it; no occurrence of securityFloor or belowSecurityFloor in gui.py.
+  Touches: astra_downloader/gui.py, astra_downloader/test_gui.py, translation catalogues.
+  Acceptance: A binary whose installed version is below its declared floor is marked as such beside the version, naming the floor. A binary at or above its floor, and one with no declared floor, read as they do today. A test covers all three.
+  Complexity: S
+
 ### P2
+
+- [ ] P2 | AD-120 | A site failure note no longer reaches the API or the extension
+  Why: AD-105 moved the note out of error_advice, which to_dict publishes as advice, and into a GUI-only render path. The translation defect it fixed was real, but every non-Qt consumer now loses the note: Astra Deck used to receive it inside the advice string and now receives nothing.
+  Evidence: astra_downloader/download.py to_dict publishing advice; astra_downloader/gui.py _download_recovery_text rendering the note through a GUI dependency.
+  Touches: astra_downloader/download.py, astra_downloader/gui.py, astra_downloader/routes.py, astra_downloader/test_download.py.
+  Acceptance: The note is a field of its own on the payload beside advice, so the extension and the strict API can render it, and the advice string still matches its catalogue entry exactly. A test asserts both properties at once.
+  Complexity: S
+
+- [ ] P2 | AD-121 | Bilibili's region-lock note is a failure note and is now dropped
+  Why: AD-105 flagged Spotify, Crunchyroll and OnlyFans as carrying failure-explaining notes. Bilibili's note says region-locked titles need an exit inside mainland China, which explains why the site cannot produce a file and commonly surfaces as an unavailable message, so it did reach the failure before and was the most useful sentence on the card.
+  Evidence: astra_downloader/sites.py the bilibili.com profile note; astra_downloader/download.py TERMINAL_SITE_NOTE_ERROR_CODES.
+  Touches: astra_downloader/sites.py, astra_downloader/test_download.py.
+  Acceptance: Bilibili's note reaches a terminal failure for that site. Every other profile's note is reviewed once against the same rule and either flagged or left, with the outcome pinned by a test that lists the flagged set.
+  Complexity: S
+
+- [ ] P2 | AD-122 | The Settings proxy hint prints a detected proxy verbatim
+  Why: the resolved-address preview renders the value parse_wininet_proxy_server returned, and normalize_proxy preserves userinfo, so a WinINET ProxyServer entry carrying credentials is shown in full on the Settings page. Not persisted and visible only to the user who configured it, which is why it is here rather than above, but it contradicts the rule AD-101 established that a proxy is named by scheme, host and port only.
+  Evidence: astra_downloader/gui.py the Windows-reports proxy hint; astra_downloader/config.py normalize_proxy preserving userinfo; astra_downloader/config.py redact_proxy_url.
+  Touches: astra_downloader/gui.py, astra_downloader/test_gui.py.
+  Acceptance: Every place that shows a proxy to a user routes through redact_proxy_url. A test scans the GUI for a proxy value rendered without it.
+  Complexity: S
+
+- [ ] P2 | AD-123 | The extension shows a green yt-dlp pill on a below-floor build
+  Why: Astra Deck's health normalizer whitelists thirteen keys and preflight is not among them, and its yt-dlp pill is rendered unconditionally ok while the ffmpeg and JavaScript-runtime pills tone on state. A user driving downloads from the extension on a yt-dlp below the security floor sees no signal at all, so the AD-108 clause about reporting it whatever the auto-update setting holds only for the desktop window.
+  Evidence: the health normalizer key whitelist and the unconditional yt-dlp pill in the Astra-Deck repository download-ui feature; astra_downloader/health.py emitting securityFloor and belowSecurityFloor on the ytdlp-freshness check.
+  Touches: the Astra-Deck repository, and astra_downloader/routes.py only if the health payload needs a narrower field for it.
+  Acceptance: The extension tones its yt-dlp pill from the same check the desktop preflight uses and names the floor when the installed build is below it. Requires a change in the Astra-Deck repository, so it ships there and is verified against a running Astra Downloader reporting a below-floor version.
+  Complexity: M
+
+- [ ] P2 | AD-124 | preflight blocking is not a usable signal
+  Why: ffmpeg-capabilities lands in blocking on ordinary working installs, so preflight status reads blocked for many users and nothing consumes it. Confirmed 2026-09-05: with a below-floor yt-dlp the health route reported status blocked and blocking naming both ytdlp-freshness and ffmpeg-capabilities, while POST /download accepted the request and start_download ran. That is the correct behaviour today, since a security floor should not silently stop a queue, but it means anything that later starts honouring blocking would refuse work on healthy installs.
+  Evidence: astra_downloader/health.py assembling blocking and the blocked summary; astra_downloader/routes.py never calling evaluate_preflight_checks outside the health closure; the /health and POST /download responses captured on 2026-09-05.
+  Touches: astra_downloader/health.py, astra_downloader/test_health.py.
+  Acceptance: Either ffmpeg-capabilities stops reporting error on an install that can actually download, or blocking is renamed and documented as advisory so no future consumer reads it as a gate. Whichever is chosen, a test pins the meaning.
+  Complexity: M
+
 
 - [ ] P2 — AD-62 — A rejected link's reason is translated around, not translated
   Why: `describe_rejected_links` wraps `{reason}` in a translated frame, but the reason itself comes from the URL policy untranslated. A German build shows a German sentence containing an English clause.
@@ -90,6 +143,13 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: astra_downloader/astra_downloader.py, astra_downloader/config.py, astra_downloader/health.py, astra_downloader/gui_settings_page.py, astra_downloader/download.py, astra_downloader/test_health.py, translation catalogues.
   Acceptance: The Settings row and the readiness row name the model and its on-disk size. A model choice covering at least tiny and one larger quantized build is offered, each pinned by repository revision, filename and SHA-256 the same way the current one is, with the download deferred until the choice is saved and setup is run. Switching models verifies the new file before the old one is removed, a failed fetch leaves the previous model usable, and the readiness probe reports which model is present rather than a bare ready.
   Complexity: M
+
+- [ ] P2 | AD-125 | The progress-coalescing test is timing-flaky under xdist
+  Why: test_a_burst_of_progress_signals_causes_one_refresh intermittently fails in a parallel run and passes every time in isolation. Observed 2026-09-05 failing twice in `npm run check` runs, once with 1.14 GB free and once with 5.8 GB free, and passing twice in a row in isolation each time, so it is a Qt timer raced against an assertion rather than memory pressure. Same shape as AD-112, which covers the instance-control listener. A test that fails on load is a test nobody trusts, and this one has now cost two investigations.
+  Evidence: astra_downloader/test_download.py UiRefreshCoalescingTests; astra_downloader/gui.py _request_ui_refresh and the coalescing QTimer it starts.
+  Touches: astra_downloader/test_download.py, astra_downloader/gui.py if the coalescer needs a deterministic hook.
+  Acceptance: The test drives the coalescing timer deterministically rather than waiting on elapsed time, so a busy machine cannot change the outcome. Running the class 20 times in a row under `-n auto` passes 20 times, and the assertion still fails when the coalescing is removed from _request_ui_refresh.
+  Complexity: S
 
 ### P3
 

@@ -3356,13 +3356,19 @@ def classify_download_failure(message='', lines=None):
     text_parts = [str(message or '')]
     if lines:
         text_parts.extend(str(line or '') for line in lines)
-    # `aggregated`: the tail is many lines about many items joined into one
-    # blob, so a note about a single playlist entry must not outrank the
-    # transport failure that actually ended the run. A playlist carrying one
-    # private or removed entry alongside an HTTP 429 was classifying as
-    # sign-in-required, which is not retryable and opens a host cooldown.
-    return _classify_failure_text(
-        ' '.join(text_parts).lower(), aggregated=True
+    # The tail is many lines about many items joined into one blob, so it is
+    # ranked rather than filtered. Session-level causes go first: a note about
+    # one playlist entry must not outrank the transport failure that ended the
+    # run, which is how a private or removed entry beside an HTTP 429 came to
+    # classify as sign-in-required and open a host cooldown. Excluding the
+    # per-item buckets from this pass instead was worse — it made them
+    # unreachable from the tail for every download, so a single video whose
+    # only reported cause was a removed-video line classified as nothing at
+    # all and lost its advice, its next action and its site note.
+    tail = ' '.join(text_parts).lower()
+    return (
+        _classify_failure_text(tail, aggregated=True)
+        or _classify_failure_text(tail)
     )
 
 
@@ -3461,13 +3467,20 @@ def _classify_failure_text(text, aggregated=False):
         'geoblocked', 'geographical restriction', 'country restriction',
         'outside your region', 'available only in your',
         'available only for viewers in', 'only available in your',
-        # YouTube's copyright block reads "Video unavailable. This video
-        # contains content from SME, who has blocked it in your country on
-        # copyright grounds". It says unavailable first, so without this it
-        # was classified as permanently gone and offered no retry, for a
-        # video the proxy and geo settings already handle.
-        'blocked it in your country', 'blocked it on copyright grounds',
-        'blocked it in your region', 'has blocked it',
+        # YouTube's country-scoped copyright block reads "Video unavailable.
+        # This video contains content from SME, who has blocked it in your
+        # country on copyright grounds". It says unavailable first, so without
+        # this it was classified as permanently gone and offered no retry, for
+        # a video the proxy and geo settings already handle.
+        #
+        # Only wording that names a country or a region belongs here. A bare
+        # "has blocked it" also matched the *worldwide* form of that same
+        # message, and embed and playback blocks, and told the user to
+        # configure an XFF country code for a video no proxy will ever reach —
+        # the same wrong-advice defect this bucket exists to prevent, pointed
+        # the other way. Those fall through to media-unavailable, which is
+        # true of them and offers no retry.
+        'blocked it in your country', 'blocked it in your region',
     )):
         return 'geo-restricted'
     # Before the network bucket: a 403 is a refusal, not a broken connection,

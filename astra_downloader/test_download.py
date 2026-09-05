@@ -1644,6 +1644,21 @@ class DownloadFailureClassifierTests(unittest.TestCase):
         for shape in ("socks5://u:p@host:1080", "https://u:p@host"):
             with self.subTest(shape=shape):
                 self.assertNotIn("p@", config.redact_proxy_url(shape))
+        # An IPv6 literal keeps its brackets. Without them the result is not a
+        # parseable URL and the port reads as a final hextet.
+        self.assertEqual(
+            config.redact_proxy_url("http://u:p@[::1]:8080"),
+            "http://[::1]:8080",
+        )
+        self.assertEqual(
+            config.redact_proxy_url("http://[2001:db8::1]:3128"),
+            "http://[2001:db8::1]:3128",
+        )
+        # And a hostname or IPv4 form is left alone.
+        self.assertEqual(
+            config.redact_proxy_url("http://192.0.2.7:3128"),
+            "http://192.0.2.7:3128",
+        )
         # A value this app would never have accepted says nothing at all,
         # rather than guessing which half was the password.
         self.assertEqual(config.redact_proxy_url("not a url"), "[redacted proxy]")
@@ -1706,6 +1721,58 @@ class DownloadFailureClassifierTests(unittest.TestCase):
         for message, expected in cases:
             with self.subTest(expected=expected, message=message):
                 self.assertEqual(ad.classify_download_failure(message), expected)
+
+    def test_a_per_item_cause_alone_in_the_tail_still_classifies(self):
+        # Ranking, not filtering. Excluding the per-item buckets from the tail
+        # pass made them unreachable for every download: a single video whose
+        # only reported cause was a removed-video line classified as nothing,
+        # which drops the advice, the next action and the site note.
+        cases = [
+            ("ERROR: Video unavailable. This video has been removed by the "
+             "uploader", "media-unavailable"),
+            ("ERROR: This video is DRM protected", "drm-protected"),
+            ("ERROR: Private video. Sign in if you have been granted access",
+             "sign-in-required"),
+            ("ERROR: The account associated with this video has been "
+             "terminated", "media-unavailable"),
+            ("ERROR: This live event has ended.", "media-unavailable"),
+        ]
+        for line, expected in cases:
+            with self.subTest(expected=expected, line=line):
+                # Unrecognized final message, cause only in the tail. This is
+                # the shape _run_download produces when no output line carried
+                # ERROR, or when the cause fell outside its 240-character
+                # message window.
+                self.assertEqual(
+                    ad.classify_download_failure("exit code 1", lines=[line]),
+                    expected,
+                )
+
+    def test_a_worldwide_block_is_not_offered_a_geo_retry(self):
+        # The bare marker matched the worldwide form of YouTube's copyright
+        # block and told the user to configure an XFF country code for a video
+        # no proxy will ever reach.
+        import download
+
+        worldwide = (
+            "ERROR: [youtube] aB1: Video unavailable. This video contains "
+            "content from SME, who has blocked it on copyright grounds"
+        )
+        code = ad.classify_download_failure(worldwide)
+        self.assertEqual(code, "media-unavailable")
+        self.assertNotIn(code, download.DOWNLOAD_RETRYABLE_ERROR_CODES)
+        self.assertNotIn(
+            "geo", download.DOWNLOAD_FAILURE_RECOVERY[code]["next_action"]
+        )
+        # An embed or playback block is not a country block either.
+        for message in (
+            "ERROR: The uploader has blocked it from being embedded on other sites",
+            "ERROR: The channel owner has blocked it from playback on external players",
+        ):
+            with self.subTest(message=message):
+                self.assertNotEqual(
+                    ad.classify_download_failure(message), "geo-restricted"
+                )
 
     def test_a_country_block_is_geo_restricted_not_permanently_gone(self):
         # YouTube's real copyright block leads with "Video unavailable", so the

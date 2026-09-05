@@ -529,7 +529,12 @@ def redact_proxy_url(value):
         # Not a shape this app would have accepted; say nothing about it
         # rather than guess which half was the password.
         return "[redacted proxy]"
-    authority = parsed.hostname
+    # `hostname` lowercases and strips the brackets an IPv6 literal needs, so
+    # putting them back is not cosmetic: without them the result is not a
+    # parseable URL and the port reads as a final hextet, in a string that
+    # lands on the download card and in a diagnostics bundle.
+    host = parsed.hostname
+    authority = f"[{host}]" if ":" in host else host
     if parsed.port:
         authority = f"{authority}:{parsed.port}"
     scheme = parsed.scheme.lower()

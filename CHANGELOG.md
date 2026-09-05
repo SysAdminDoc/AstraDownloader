@@ -40,6 +40,21 @@ repository's git log.
   Download page now brings its card back into view when you click it. The page
   shows only the newest few finished jobs, so an overnight failure with enough
   activity after it restored the window and highlighted nothing.
+- A download whose only reported cause sits in the yt-dlp output rather than
+  its final error line is named again. Excluding those causes to stop a
+  playlist's private or removed entry from outranking a connection failure
+  went too far and left some single-video failures with no reason at all.
+- A worldwide copyright block is no longer described as a regional one. It was
+  being read as something a proxy could reach, which offered a retry that
+  could never work.
+- A stale REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE path now falls back to the
+  bundled certificates on every route, not only when a proxy is configured.
+  First-run setup has no proxy, which was the one place it still failed.
+- Rolling back a managed binary is refused for any reason the pin would have
+  been refused for, not only a version below the security floor. A retained
+  copy that cannot report a readable version no longer goes live first.
+- A proxy shown or recorded with an IPv6 address keeps its brackets, so the
+  address and its port stay readable.
 - A geo-blocked video is no longer reported as permanently gone. YouTube's
   copyright block opens with "Video unavailable", so it was being read as a
   removed video and offered no retry, for a video the proxy and geo settings
