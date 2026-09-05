@@ -2560,20 +2560,23 @@ def rollback_managed_binary(config, name):
     # running, and the result still reported ok, which the Settings page paints
     # green. A floor that blocks naming an old release but not installing one
     # is not a floor.
+    # Any refusal, not one reason string. `pin-version-unreadable` reaches the
+    # same place: the retained copy reports a version the shape rule rejects,
+    # the rollback proceeds, the binary goes live, and only the pin is refused
+    # at the end — which is the exact shape this guard exists to prevent.
     decision = evaluate_binary_pin(name, retained_version)
-    if not decision['ok'] and decision['reason'] == 'pin-below-security-floor':
+    if not decision['ok']:
         write_persistent_log(
-            f'{name} rollback refused: retained {retained_version} is below '
-            f"the {decision['floor']} security floor."
+            f'{name} rollback refused ({decision["reason"]}): '
+            f'{decision["message"]}'
         )
         return {
             'ok': False, 'name': name, 'version': retained_version,
-            'floor': decision['floor'],
-            'reason': 'rollback-below-security-floor',
+            'floor': decision.get('floor', ''),
+            'reason': 'rollback-refused',
             'message': (
-                f'The retained {name} {retained_version} is below the '
-                f"{decision['floor']} security floor, so it was not restored. "
-                f'The installed {name} is unchanged.'
+                f'The retained {name} {retained_version} was not restored: '
+                f'{decision["message"]} The installed {name} is unchanged.'
             ),
         }
     try:
@@ -4174,6 +4177,39 @@ class _BoundSourceAdapter(http_requests.adapters.HTTPAdapter):
         return super().proxy_manager_for(proxy, **kwargs)
 
 
+_FIRST_PARTY_CA_BUNDLE_LOCK = threading.Lock()
+_FIRST_PARTY_CA_BUNDLE_REPORTED = set()
+
+
+def _first_party_ca_bundle():
+    """Return the CA bundle these requests should verify against.
+
+    An environment bundle is honoured only when the path exists; an unusable
+    value falls back to the certificates shipped with requests. The complaint
+    is logged once per distinct value rather than once per request, because a
+    session is built for every fetch.
+    """
+    for variable in ('REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE'):
+        candidate = str(os.environ.get(variable) or '').strip()
+        if not candidate:
+            continue
+        try:
+            usable = Path(candidate).exists()
+        except OSError:
+            usable = False
+        if usable:
+            return candidate
+        with _FIRST_PARTY_CA_BUNDLE_LOCK:
+            seen = (variable, candidate) in _FIRST_PARTY_CA_BUNDLE_REPORTED
+            _FIRST_PARTY_CA_BUNDLE_REPORTED.add((variable, candidate))
+        if not seen:
+            write_persistent_log(
+                f'{variable} names a path that does not exist ({candidate}); '
+                'using the bundled certificates instead.'
+            )
+    return http_requests.certs.where()
+
+
 def build_first_party_session(policy=None):
     """Return a `requests.Session` carrying the resolved network policy.
 
@@ -4184,40 +4220,20 @@ def build_first_party_session(policy=None):
     resolved = policy if policy is not None else first_party_network_policy()
     session = http_requests.Session()
     proxy = str(resolved.get('proxy') or '')
-    # Read what the environment would have contributed *before* switching
-    # trust_env off. requests reads REQUESTS_CA_BUNDLE and CURL_CA_BUNDLE
-    # inside `if self.trust_env`, so clearing the flag to pin the route would
-    # otherwise also throw away the corporate CA bundle — on a TLS-intercepting
-    # proxy, which is exactly the network this policy exists for, that turns a
-    # working fetch into CERTIFICATE_VERIFY_FAILED.
-    # Only a bundle that exists. requests raises "Could not find a suitable TLS
-    # CA certificate bundle" for a path it cannot open, so a leftover variable
-    # pointing at a deleted file would fail every fetch — worse than the
-    # certifi fallback this replaced, and on the bootstrap path there is no
-    # download to explain it.
-    environment_ca_bundle = ''
-    for variable in ('REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE'):
-        candidate = str(os.environ.get(variable) or '').strip()
-        if not candidate:
-            continue
-        try:
-            usable = Path(candidate).exists()
-        except OSError:
-            usable = False
-        if usable:
-            environment_ca_bundle = candidate
-            break
-        write_persistent_log(
-            f'{variable} names a path that does not exist ({candidate}); '
-            'using the bundled certificates instead.'
-        )
+    # `verify` is resolved here on every path, not only the proxied one.
+    # requests reads REQUESTS_CA_BUNDLE and CURL_CA_BUNDLE itself, but only
+    # while `trust_env` is on and only when `verify` is still True or None, so
+    # setting it explicitly serves both cases at once: it keeps a corporate
+    # bundle that clearing `trust_env` would have discarded, and it stops a
+    # leftover variable naming a deleted file from raising "Could not find a
+    # suitable TLS CA certificate bundle" on a route with no proxy at all —
+    # which is the bootstrap, the one path with no download to explain it.
+    session.verify = _first_party_ca_bundle()
     if proxy:
         session.proxies.update({'http': proxy, 'https': proxy})
         # A configured proxy is the route, not a suggestion. Without this an
         # environment NO_PROXY entry could still send a host direct.
         session.trust_env = False
-        if environment_ca_bundle:
-            session.verify = environment_ca_bundle
     bind = resolved.get('bind')
     if bind:
         adapter = _BoundSourceAdapter(bind)

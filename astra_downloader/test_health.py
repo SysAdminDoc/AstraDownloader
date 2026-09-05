@@ -2263,9 +2263,39 @@ class YtDlpPinFloorTests(unittest.TestCase):
                 )
 
             self.assertFalse(result["ok"])
-            self.assertEqual(result["reason"], "rollback-below-security-floor")
+            self.assertEqual(result["reason"], "rollback-refused")
             self.assertEqual(result["floor"], ad.YTDLP_SECURITY_MIN_VERSION)
             self.assertIn(ad.YTDLP_SECURITY_MIN_VERSION, result["message"])
+            self.assertEqual(copied, [], "nothing may be copied over the active binary")
+            self.assertEqual(active.read_bytes(), before)
+
+    def test_an_unreadable_retained_version_also_refuses_before_copying(self):
+        # The guard used to match one reason string, so a retained copy whose
+        # reported version fails the shape rule went live and only the pin was
+        # refused, which is the shape the guard exists to prevent.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            active = Path(tmpdir) / "yt-dlp.exe"
+            backup = Path(tmpdir) / "yt-dlp.rollback.exe"
+            active.write_bytes(b"current" + b"\0" * (2 * 1024 * 1024))
+            backup.write_bytes(b"retained" + b"\0" * (2 * 1024 * 1024))
+            before = active.read_bytes()
+            versions = {str(active): "2026.08.19", str(backup): "not a version"}
+            copied = []
+
+            with mock.patch.object(ad, "managed_binary_paths",
+                                   return_value={"yt-dlp": active}),                     mock.patch.object(ad, "managed_binary_rollback_path",
+                                      return_value=backup),                     mock.patch.object(
+                        ad, "probe_managed_binary_version",
+                        side_effect=lambda _name, p=None: versions.get(
+                            str(p or active), ""
+                        )),                     mock.patch.object(ad, "atomic_copy_verified",
+                                      side_effect=lambda *a: copied.append(a)):
+                result = ad.rollback_managed_binary(
+                    FakeConfig({"ManagedBinaryPins": {}}), "yt-dlp"
+                )
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["reason"], "rollback-refused")
             self.assertEqual(copied, [], "nothing may be copied over the active binary")
             self.assertEqual(active.read_bytes(), before)
 
@@ -2633,8 +2663,13 @@ class FirstPartyNetworkPolicyTests(unittest.TestCase):
                 session_verify({'REQUESTS_CA_BUNDLE': str(present)}),
                 str(present),
             )
-            # A missing path is ignored rather than failing the request.
-            self.assertIs(session_verify({'REQUESTS_CA_BUNDLE': missing}), True)
+            # A missing path is ignored rather than failing the request, and
+            # verify is pinned to the bundled certificates so requests cannot
+            # read the stale variable itself.
+            self.assertEqual(
+                session_verify({'REQUESTS_CA_BUNDLE': missing}),
+                ad.http_requests.certs.where(),
+            )
             # The second variable is consulted when the first is unusable.
             self.assertEqual(
                 session_verify({
@@ -2643,8 +2678,38 @@ class FirstPartyNetworkPolicyTests(unittest.TestCase):
                 }),
                 str(present),
             )
-            # And no variable at all leaves verification at its default.
-            self.assertIs(session_verify({}), True)
+            # And no variable at all uses the bundled certificates.
+            self.assertEqual(session_verify({}), ad.http_requests.certs.where())
+
+            # The whole point: this holds with no proxy configured too. That
+            # is the bootstrap route, and a stale variable used to raise a TLS
+            # CA bundle error on every first-party fetch there.
+            def unproxied_verify(environment):
+                with mock.patch.dict(ad.os.environ, environment, clear=False):
+                    for stale in ('REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE'):
+                        if stale not in environment:
+                            ad.os.environ.pop(stale, None)
+                    ad.set_first_party_network_policy(
+                        self._config(), detected='',
+                    )
+                    session = ad.build_first_party_session()
+                    try:
+                        self.assertTrue(
+                            session.trust_env,
+                            'an unproxied session still honours env proxies',
+                        )
+                        return session.verify
+                    finally:
+                        session.close()
+
+            self.assertEqual(
+                unproxied_verify({'REQUESTS_CA_BUNDLE': missing}),
+                ad.http_requests.certs.where(),
+            )
+            self.assertEqual(
+                unproxied_verify({'REQUESTS_CA_BUNDLE': str(present)}),
+                str(present),
+            )
 
     def test_both_transports_agree_about_an_environment_proxy(self):
         # With nothing configured the requests path honours HTTP_PROXY, so the
