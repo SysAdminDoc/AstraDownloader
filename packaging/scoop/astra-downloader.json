@@ -25,6 +25,24 @@
     "persist": [
         "data"
     ],
+    "pre_install": [
+        "# Carry an install made by the previous manifest onto the data layout.",
+        "# Runs before Scoop links the persist entries, and skips anything already",
+        "# moved, so it is a no-op on a fresh install and on every later update.",
+        "$legacy = @('config.json', 'history.json', 'download-queue.json', 'subscriptions.json', 'site-logins', 'server.log', 'crash.log', 'yt-dlp-update-state.json', 'companion-update-state.json', 'yt-dlp.exe', 'ffmpeg.exe', 'deno', 'quickjs', 'whisper', 'native-hosts')",
+        "$data = Join-Path $persist_dir 'data'",
+        "if (-not (Test-Path $data)) {",
+        "    New-Item -ItemType Directory -Path $data -Force | Out-Null",
+        "}",
+        "foreach ($name in $legacy) {",
+        "    $old = Join-Path $persist_dir $name",
+        "    $new = Join-Path $data $name",
+        "    if ((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $new)) {",
+        "        Move-Item -LiteralPath $old -Destination $new -Force",
+        "        Write-Host \"Moved $name into the data folder.\"",
+        "    }",
+        "}"
+    ],
     "checkver": {
         "github": "https://github.com/SysAdminDoc/AstraDownloader"
     },
