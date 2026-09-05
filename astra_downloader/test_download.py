@@ -970,6 +970,59 @@ class DownloadManagerTests(unittest.TestCase):
             payload = manager.queue_payload()
             self.assertEqual(payload["downloads"][0]["profileName"], "Archive")
 
+    def test_a_profile_download_type_fills_in_only_where_none_was_stated(self):
+        # DownloadType was stored, validated, and read by nothing outside the
+        # GUI paste box, so an API or subscription download for a profiled
+        # domain ignored the audio-only choice set for that site.
+        def manager_for(kind):
+            config = FakeConfig({
+                "DownloadPath": tempfile.gettempdir(),
+                "SiteProfiles": [{
+                    "Name": "Archive",
+                    "Domain": "youtube.com",
+                    "DownloadType": kind,
+                }],
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            manager.pause_intake()
+            return manager
+
+        # Unstated: the profile decides.
+        for kind, expected in (
+            ("audio", ("audio_only", True)),
+            ("subtitles", ("subtitles_only", True)),
+        ):
+            with self.subTest(kind=kind):
+                manager = manager_for(kind)
+                dl_id, error = manager.start_download(
+                    "https://www.youtube.com/watch?v=profile",
+                    profile_name="Archive",
+                )
+                self.assertIsNone(error)
+                download = manager.downloads[dl_id]
+                self.assertTrue(getattr(download, expected[0]))
+
+        # Stated: the caller wins, and a profile never rewrites an explicit
+        # choice into something the requester did not ask for.
+        manager = manager_for("audio")
+        dl_id, error = manager.start_download(
+            "https://www.youtube.com/watch?v=explicit",
+            profile_name="Archive",
+            audio_only=False,
+        )
+        self.assertIsNone(error)
+        self.assertFalse(manager.downloads[dl_id].audio_only)
+
+        # And a profile that names no type leaves the default alone.
+        manager = manager_for("")
+        dl_id, error = manager.start_download(
+            "https://www.youtube.com/watch?v=none",
+            profile_name="Archive",
+        )
+        self.assertIsNone(error)
+        self.assertFalse(manager.downloads[dl_id].audio_only)
+        self.assertFalse(manager.downloads[dl_id].subtitles_only)
+
     def test_fourth_download_is_retained_pending_while_three_run(self):
         manager = ad.DownloadManager(FakeConfig(), FakeHistory())
         release = threading.Event()

@@ -718,7 +718,7 @@ def _register_download_routes(api, context, dependencies):
             cookies_truncated = True
         dl_id, err = dl_manager.start_download(
             url=url,
-            audio_only=body.get('audioOnly', False),
+            audio_only=body.get('audioOnly'),
             fmt=body.get('format'),
             quality=body.get('quality', 'best'),
             output_dir=body.get('outputDir'),

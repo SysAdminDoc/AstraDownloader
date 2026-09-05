@@ -326,8 +326,8 @@ CATALOGS = {
             "Benannte Site-Profile",
         'Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]':
             'Beispiel: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]',
-        "One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.":
-            "Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Format, Qualität, Proxy, Impersonation und Anfragepausen; speichern Sie hier keine Cookies oder Passwörter.",
+        "One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.":
+            "Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Downloadtyp, Format, Qualität, Proxy, Impersonation und Anfragepausen. Eine Vorgabe greift, wenn die Anfrage das Feld nicht selbst setzt, sodass auch ein Download über die Browsererweiterung oder ein Abonnement sie verwendet; speichern Sie hier keine Cookies oder Passwörter.",
         "Automatic matching is on; no profile matches this link.":
             "Die automatische Zuordnung ist aktiv; kein Profil passt zu diesem Link.",
         "Using site profile: {name}.":
