@@ -1313,6 +1313,16 @@ CATALOGS = {
             "Der Proof-of-Origin-Tokenpfad von YouTube ist für dieses Video nicht verfügbar.",
         "The plugin-based provider path is disabled. Retry with a stored site sign-in or later.":
             "Der pluginbasierte Anbieterpfad ist deaktiviert. Versuchen Sie es mit einer gespeicherten Website-Anmeldung oder später erneut.",
+        "This video is encrypted with DRM, so no downloader can produce a file from it.":
+            "Dieses Video ist mit DRM verschlüsselt, daher kann kein Downloader daraus eine Datei erzeugen.",
+        "This is not a fault to retry or a sign-in to fix. The Sites page marks which services serve DRM-protected media.":
+            "Das ist kein Fehler zum Wiederholen und keine Anmeldung, die das behebt. Die Seite „Websites“ kennzeichnet, welche Dienste DRM-geschützte Medien ausliefern.",
+        "nothing-to-retry":
+            "nothing-to-retry",
+        "The source no longer has this video. It may have been removed, made private, or the live event may have ended.":
+            "Die Quelle hat dieses Video nicht mehr. Es wurde möglicherweise entfernt, auf privat gestellt, oder das Live-Ereignis ist beendet.",
+        "Check the link in a browser. If the page is gone, there is nothing left to download.":
+            "Prüfen Sie den Link im Browser. Wenn die Seite nicht mehr existiert, gibt es nichts mehr herunterzuladen.",
         "This video only exposes SABR-limited formats that this yt-dlp path cannot download yet.":
             "Dieses Video bietet nur SABR-beschränkte Formate, die dieser yt-dlp-Pfad noch nicht herunterladen kann.",
         "Clip ranges, the bandwidth cap and concurrent fragments do not apply to SABR streams and were ignored. Update yt-dlp when SABR support lands, or retry after YouTube exposes standard formats.":

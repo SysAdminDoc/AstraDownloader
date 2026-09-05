@@ -3759,6 +3759,30 @@
       <translation>Untertitelsprache</translation>
     </message>
     <message>
+      <source>This video is encrypted with DRM, so no downloader can produce a file from it.</source>
+      <translation>Dieses Video ist mit DRM verschlüsselt, daher kann kein Downloader daraus eine Datei erzeugen.</translation>
+    </message>
+    <message>
+      <source>This is not a fault to retry or a sign-in to fix. The Sites page marks which services serve DRM-protected media.</source>
+      <translation>Das ist kein Fehler zum Wiederholen und keine Anmeldung, die das behebt. Die Seite „Websites“ kennzeichnet, welche Dienste DRM-geschützte Medien ausliefern.</translation>
+    </message>
+    <message>
+      <source>nothing-to-retry</source>
+      <translation>nothing-to-retry</translation>
+    </message>
+    <message>
+      <source>The source no longer has this video. It may have been removed, made private, or the live event may have ended.</source>
+      <translation>Die Quelle hat dieses Video nicht mehr. Es wurde möglicherweise entfernt, auf privat gestellt, oder das Live-Ereignis ist beendet.</translation>
+    </message>
+    <message>
+      <source>Check the link in a browser. If the page is gone, there is nothing left to download.</source>
+      <translation>Prüfen Sie den Link im Browser. Wenn die Seite nicht mehr existiert, gibt es nichts mehr herunterzuladen.</translation>
+    </message>
+    <message>
+      <source>check-link-and-retry</source>
+      <translation>check-link-and-retry</translation>
+    </message>
+    <message>
       <source>YouTube requires a proof-of-origin token for this video, and the plugin-free client chain cannot supply one.</source>
       <translation>YouTube benötigt für dieses Video ein Proof-of-Origin-Token, das die pluginfreie Clientkette nicht bereitstellen kann.</translation>
     </message>
@@ -3933,10 +3957,6 @@
     <message>
       <source>The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.</source>
       <translation>Das Video ist möglicherweise privat, nur für Abonnenten, gelöscht oder wird noch verarbeitet. Prüfen Sie, ob der Link im Browser abspielt, und versuchen Sie es dann erneut.</translation>
-    </message>
-    <message>
-      <source>check-link-and-retry</source>
-      <translation>check-link-and-retry</translation>
     </message>
     <message>
       <source>The site refused the request (HTTP 403).</source>

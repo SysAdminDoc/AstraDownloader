@@ -1575,6 +1575,95 @@ class DownloadFailureClassifierTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertEqual(ad.classify_download_failure(message), expected)
 
+    def test_drm_and_gone_media_are_named_rather_than_left_generic(self):
+        cases = [
+            ('ERROR: This video is DRM protected', 'drm-protected'),
+            ('ERROR: The requested stream is protected by DRM', 'drm-protected'),
+            ('ERROR: Video unavailable', 'media-unavailable'),
+            ('ERROR: This video has been removed by the uploader',
+             'media-unavailable'),
+            ('ERROR: This video is no longer available', 'media-unavailable'),
+            ('ERROR: This live event has ended', 'media-unavailable'),
+            ('ERROR: The account associated with this video has been terminated',
+             'media-unavailable'),
+        ]
+        for message, expected in cases:
+            with self.subTest(expected=expected, message=message):
+                self.assertEqual(ad.classify_download_failure(message), expected)
+
+    def test_drm_outranks_a_sign_in_phrase_in_the_same_message(self):
+        # Signing in has never produced a file from an encrypted stream, so
+        # offering the sign-in recovery for a DRM failure sends the user
+        # somewhere that cannot work.
+        self.assertEqual(
+            ad.classify_download_failure(
+                'ERROR: This video is DRM protected. Please sign in to continue.'
+            ),
+            'drm-protected',
+        )
+
+    def test_gone_media_does_not_fall_into_the_network_bucket(self):
+        # "check your firewall and retry" is wrong advice for a retry that can
+        # never succeed.
+        for message in (
+            'ERROR: Video unavailable',
+            'ERROR: This video has been removed',
+        ):
+            with self.subTest(message=message):
+                self.assertNotEqual(
+                    ad.classify_download_failure(message), 'network-unreachable'
+                )
+
+    def test_a_reason_for_being_unavailable_keeps_the_specific_answer(self):
+        # These all contain an unavailable phrase and all have a better answer.
+        cases = [
+            ('ERROR: This video is not available in your country', 'geo-restricted'),
+            ('ERROR: Private video. Sign in if you have been granted access',
+             'sign-in-required'),
+            ('ERROR: HTTP Error 403: Forbidden', 'blocked-by-site'),
+        ]
+        for message, expected in cases:
+            with self.subTest(expected=expected):
+                self.assertEqual(ad.classify_download_failure(message), expected)
+
+    def test_both_new_codes_are_terminal_and_carry_recovery_text(self):
+        import download
+
+        for code in ('drm-protected', 'media-unavailable'):
+            with self.subTest(code=code):
+                meta = download.DOWNLOAD_FAILURE_RECOVERY[code]
+                self.assertTrue(meta['error'])
+                self.assertTrue(meta['advice'])
+                self.assertTrue(meta['next_action'])
+                self.assertNotIn(
+                    code, download.DOWNLOAD_RETRYABLE_ERROR_CODES,
+                    'a retry for this can never succeed',
+                )
+
+    def test_a_terminal_failure_carries_the_registry_note_for_its_site(self):
+        import download
+
+        advice = download.append_site_note_advice(
+            'Base advice.', 'drm-protected', 'https://open.spotify.com/track/x',
+        )
+        self.assertIn('Base advice.', advice)
+        self.assertIn('DRM-protected', advice)
+        # A site with no note is left exactly as it was.
+        self.assertEqual(
+            download.append_site_note_advice(
+                'Base advice.', 'drm-protected', 'https://example.invalid/x',
+            ),
+            'Base advice.',
+        )
+        # A retryable code never picks up the note.
+        self.assertEqual(
+            download.append_site_note_advice(
+                'Base advice.', 'network-unreachable',
+                'https://open.spotify.com/track/x',
+            ),
+            'Base advice.',
+        )
+
     def test_message_borne_cause_outranks_benign_warning_lines(self):
         # yt-dlp routinely emits a benign "PO Token which was not provided"
         # WARNING during extraction; it must never shadow the real failure

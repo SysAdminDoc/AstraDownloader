@@ -38,6 +38,7 @@ __all__ = (
     "select_impersonate_target",
     "site_referer_for_url", "site_auth_expectation", "describe_site_auth",
     "site_expects_sign_in", "site_supports_credentials",
+    "site_note_for_url",
     "site_catalog", "merge_extractor_names", "search_site_catalog",
     "CATALOG_SOURCE_CURATED", "CATALOG_SOURCE_EXTRACTOR",
 )
@@ -537,6 +538,21 @@ def resolve_site_profile(url):
     resolved["key"] = canonical
     resolved["matched"] = key
     return resolved
+
+
+def site_note_for_url(url):
+    """Return the registry's standing note about a site, or "".
+
+    The catalogue already records why some sites cannot produce a file at all
+    — Spotify music and Crunchyroll premium titles are DRM-protected, OnlyFans
+    has no extractor. A failure on one of those is not a mystery to be
+    retried, so the note belongs in the failure the user is looking at and not
+    only on the Sites page they would have to think to visit.
+    """
+    profile = resolve_site_profile(url)
+    if not profile:
+        return ""
+    return str(profile.get("notes") or "").strip()
 
 
 def site_display_name(url):
