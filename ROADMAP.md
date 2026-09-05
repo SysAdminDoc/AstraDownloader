@@ -8,7 +8,47 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
+
+- [ ] P0 | AD-102 | Scoop persist does not survive an atomic write, so state is still lost
+  Why: Scoop persists a single file as a hard link and a directory as a junction. Every persisted JSON and exe is written through config.atomic_write_json or atomic_copy_verified, both of which os.replace the directory entry and sever the link. Measured 2026-09-05: after the persist link the app-directory and persist-directory inodes matched at nlink 2; after one atomic write the app directory held the settings and the persist file was empty at nlink 1, and a simulated update relinked the empty file back. site-logins survives because it is a junctioned directory; config.json, history.json, download-queue.json and subscriptions.json do not. AD-89 shipped the list but the mechanism defeats it.
+  Evidence: packaging/scoop/astra-downloader.json persist; astra_downloader/config.py atomic_write_json and its replace helper; astra_downloader/astra_downloader.py atomic_copy_verified; the Scoop persistent-data wiki page.
+  Touches: packaging/scoop/astra-downloader.json, tests/scoop-manifest.test.js, README.md, and whichever of astra_downloader/astra_downloader.py runtime_state_dir or astra_downloader/build.py the chosen layout needs.
+  Acceptance: State survives an update in fact, not only on the manifest. Persist entries are directories rather than atomically replaced files, which means either the portable state root moves into one subdirectory the manifest persists whole, or the Scoop package stops using the portable layout. A test asserts no persist entry names a path the app replaces atomically, and README describes the resulting state location. Existing portable installs keep reading their current state or are migrated on first run.
+  Complexity: M
+
+
+
+
+
 ### P1
+
+- [ ] P1 | AD-107 | Rolling back a managed binary installs a below-floor build and calls it success
+  Why: rollback_managed_binary copies the retained binary into place before asking set_managed_binary_pin to record it, so when the retained copy is below the security floor the vulnerable binary is already live and only the pin is refused. The function still returns ok true, and gui.py paints that green and treats it as a successful rollback. AD-90 blocked naming an old yt-dlp but not installing one.
+  Evidence: astra_downloader/astra_downloader.py rollback_managed_binary, its atomic_copy_verified call preceding set_managed_binary_pin; astra_downloader/gui.py the rollback result handler keying success off the ok field; reproduced 2026-09-05 returning ok true with reason pin-below-security-floor.
+  Touches: astra_downloader/astra_downloader.py, astra_downloader/gui.py, astra_downloader/test_health.py, translation catalogues.
+  Acceptance: A rollback target below a declared floor is refused before anything is copied, the active binary is untouched, and the result reports failure with the floor named. A rollback to a version at or above the floor still succeeds and pins.
+  Complexity: S
+
+- [ ] P1 | AD-108 | Nothing checks the installed yt-dlp against its security floor
+  Why: YTDLP_SECURITY_MIN_VERSION is read only by the pin table, so dropping a below-floor pin does not raise the binary. With auto-update off, a supported setting, maybe_auto_update_ytdlp returns early and a below-floor yt-dlp stays in use with no signal anywhere. Deno has exactly this check and yt-dlp does not. filter_managed_binary_pins also drops silently and leaves the stale entry in config.json, and _apply_managed_binaries never reads the floor field managed_binary_inventory already publishes.
+  Evidence: astra_downloader/astra_downloader.py YTDLP_SECURITY_MIN_VERSION referenced only by MANAGED_BINARY_FLOORS, the maybe_auto_update_ytdlp early return, managed_binary_inventory floor field; astra_downloader/gui.py _apply_managed_binaries; astra_downloader/health.py filter_managed_binary_pins and the MANAGED_BINARY_SECURITY_FLOORS comment still claiming yt-dlp has no floor.
+  Touches: astra_downloader/health.py, astra_downloader/astra_downloader.py, astra_downloader/gui.py, astra_downloader/test_health.py, translation catalogues.
+  Acceptance: An installed yt-dlp below the floor is reported by the preflight surface with a refresh action whatever the auto-update setting. A dropped pin is logged with the floor that dropped it, the Settings panel shows the floor beside the installed version, and the stale comment is corrected.
+  Complexity: M
+
+- [ ] P1 | AD-109 | The Scoop persist list misses four state paths
+  Why: tests/scoop-manifest.test.js derives the expected set from INSTALL_DIR joined with a literal in the composition root only, so four real state paths are invisible to it and to the manifest: the download-temp intermediates directory named in download.py, the pinned Whisper model whose path is built from a constant, and the two last-known-good rollback copies at the state root. An update destroys in-flight intermediates while the queue that references them is persisted, re-downloads the Whisper model, and silently empties the rollback feature.
+  Evidence: tests/scoop-manifest.test.js statePathsNamedInSource; astra_downloader/download.py DOWNLOAD_INTERMEDIATE_DIRNAME; astra_downloader/astra_downloader.py WHISPER_MODEL_PATH and the last-known-good paths.
+  Touches: tests/scoop-manifest.test.js, packaging/scoop/astra-downloader.json.
+  Acceptance: The derived set covers a path named through a constant and a path named in another module, so all four appear. Each is either persisted or listed as deliberately not persisted with its reason. Depends on AD-102, which decides the shape of the list.
+  Complexity: S
+
+- [ ] P1 | AD-110 | A failure notification can focus a card that is no longer rendered
+  Why: _focus_download_card looks up a widget keyed by download id, but the Download page renders only the first eight terminal jobs, so an overnight failure with nine or more later terminal jobs finds no card. Activation restores the window and silently focuses nothing, which is exactly the case the notification exists for.
+  Evidence: astra_downloader/gui.py _focus_download_card and the slice that builds the terminal section of _download_widgets.
+  Touches: astra_downloader/gui.py, astra_downloader/test_gui.py.
+  Acceptance: Activating a failure notification for a job outside the rendered window still lands the user somewhere that names it, by widening the section to include the notified id or by opening History filtered to it. A test covers a failed job pushed past the render limit by later jobs.
+  Complexity: S
 
 ### P2
 
@@ -171,4 +211,18 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Evidence: tests/documentation-facts.test.js, the pytest-gate test; conftest.py MIN_FULL_SUITE_EXECUTED_TESTS, which already solves this problem for a direct pytest run and is not consulted by the gate assertion.
   Touches: tests/documentation-facts.test.js.
   Acceptance: The assertion rejects a python-suite gate carrying any selection-narrowing flag (-k, -m, --ignore, --deselect, --lf, --ff, -x), naming the flag it found. A test plants each flag and confirms the assertion fails, so the check cannot pass by finding nothing.
+  Complexity: S
+
+- [ ] P3 | AD-111 | Site registry notes never reach the translation catalogues
+  Why: the Sites page renders auth_note and notes through make_label, which calls tr, and a failure now renders the failure note the same way, but scripts/extract_companion_strings.py does not scan astra_downloader/sites.py. Every note is therefore a tr call whose string is in no catalogue, so it renders English in all eleven locales while the text around it is translated. Pre-existing rather than introduced by AD-105, which only made a second surface show one.
+  Evidence: scripts/extract_companion_strings.py SOURCE_FILES, which lists the gui modules plus download.py and health.py but not sites.py; astra_downloader/gui_sites_page.py rendering auth_note and notes through make_label; astra_downloader/gui.py _download_recovery_text rendering the failure note through tr.
+  Touches: scripts/extract_companion_strings.py, scripts/build-companion-translations.py, astra_downloader/sites.py, translation catalogues.
+  Acceptance: The extractor reaches the auth_note and notes literals in the site registry, by whichever shape suits its existing runtime-literal handling, and the translation gate counts them. German carries all of them. A note added to a profile without a German entry fails the gate rather than silently rendering English.
+  Complexity: M
+
+- [ ] P2 | AD-112 | The instance-control listener test is timing-flaky
+  Why: test_instance_control_listener_rejects_an_untokened_command intermittently sees the untokened `show` command arrive, failing with the received list carrying an extra 'show'. Observed 2026-09-05 failing twice in full-suite runs, once in a class-scoped run, then passing three times in a row on the same tree, and passing on a clean tree in between. It is a socket handshake raced against an assertion, not a policy defect: the token check itself is covered by the sibling assertions that pass every time. A test that fails on load is a test nobody trusts, and this one has already cost two investigations.
+  Evidence: astra_downloader/test_routes.py InstanceCommandTests, the received-commands assertion; the listener under test in astra_downloader/astra_downloader.py instance control.
+  Touches: astra_downloader/test_routes.py, astra_downloader/astra_downloader.py instance control listener if it needs a readiness signal.
+  Acceptance: The test waits on a deterministic signal that the listener has processed the untokened command rather than on elapsed time, so a slow machine cannot change the outcome. Running the class 20 times in a row passes 20 times, and the assertion still fails when the token check is removed from the listener.
   Complexity: S

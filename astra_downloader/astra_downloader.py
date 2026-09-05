@@ -81,7 +81,7 @@ try:
         media_url_block_reason,
         normalize_download_section, normalize_playlist_items, normalize_output_dir,
         normalize_output_name, MAX_OUTPUT_NAME_LENGTH,
-        parse_wininet_proxy_server, resolve_effective_proxy,
+        parse_wininet_proxy_server, redact_proxy_url, resolve_effective_proxy,
         is_valid_native_extension_id, normalize_output_template, normalize_proxy,
         parse_native_extension_ids,
         output_template_preview,
@@ -150,13 +150,14 @@ try:
         build_subprocess_env as _owned_build_subprocess_env,
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
         cleanup_stale_cookie_jars as _owned_cleanup_stale_cookie_jars,
-        download_error_payload, is_playlist_url,
+        download_error_payload, is_playlist_url, TERMINAL_SITE_NOTE_ERROR_CODES,
         QUALITY_LADDER, probed_video_heights, quality_choices_for_heights,
         SABR_LIMITED_NOTICE, describe_sabr_voided_options, sabr_only_formats,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
+    from .sites import site_failure_note_for_url
     from .native_sources import NATIVE_SOURCE_MAX_BYTES, resolve_native_source
     from .health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
@@ -233,7 +234,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         media_url_block_reason,
         normalize_download_section, normalize_playlist_items, normalize_output_dir,
         normalize_output_name, MAX_OUTPUT_NAME_LENGTH,
-        parse_wininet_proxy_server, resolve_effective_proxy,
+        parse_wininet_proxy_server, redact_proxy_url, resolve_effective_proxy,
         is_valid_native_extension_id, normalize_output_template, normalize_proxy,
         parse_native_extension_ids,
         output_template_preview,
@@ -302,13 +303,14 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_subprocess_env as _owned_build_subprocess_env,
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
         cleanup_stale_cookie_jars as _owned_cleanup_stale_cookie_jars,
-        download_error_payload, is_playlist_url,
+        download_error_payload, is_playlist_url, TERMINAL_SITE_NOTE_ERROR_CODES,
         QUALITY_LADDER, probed_video_heights, quality_choices_for_heights,
         SABR_LIMITED_NOTICE, describe_sabr_voided_options, sabr_only_formats,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
+    from sites import site_failure_note_for_url
     from native_sources import NATIVE_SOURCE_MAX_BYTES, resolve_native_source
     from health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
@@ -4142,9 +4144,27 @@ def build_first_party_session(policy=None):
     # otherwise also throw away the corporate CA bundle — on a TLS-intercepting
     # proxy, which is exactly the network this policy exists for, that turns a
     # working fetch into CERTIFICATE_VERIFY_FAILED.
-    environment_ca_bundle = (
-        os.environ.get('REQUESTS_CA_BUNDLE') or os.environ.get('CURL_CA_BUNDLE') or ''
-    )
+    # Only a bundle that exists. requests raises "Could not find a suitable TLS
+    # CA certificate bundle" for a path it cannot open, so a leftover variable
+    # pointing at a deleted file would fail every fetch — worse than the
+    # certifi fallback this replaced, and on the bootstrap path there is no
+    # download to explain it.
+    environment_ca_bundle = ''
+    for variable in ('REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE'):
+        candidate = str(os.environ.get(variable) or '').strip()
+        if not candidate:
+            continue
+        try:
+            usable = Path(candidate).exists()
+        except OSError:
+            usable = False
+        if usable:
+            environment_ca_bundle = candidate
+            break
+        write_persistent_log(
+            f'{variable} names a path that does not exist ({candidate}); '
+            'using the bundled certificates instead.'
+        )
     if proxy:
         session.proxies.update({'http': proxy, 'https': proxy})
         # A configured proxy is the route, not a suggestion. Without this an
@@ -4251,8 +4271,12 @@ def first_party_native_fetch(url, *, data=None, headers=None, timeout=20):
         # is the wrong cause: the site may be fine and the route is not. Name
         # the route so the failure points where the fix is.
         if proxy:
+            # Never the raw value: this message becomes dl.error, which is
+            # written into the queue and history files and returned over the
+            # local API, and a configured proxy may carry userinfo.
             raise urllib.error.URLError(
-                f'{error.reason} (through the configured proxy {proxy})'
+                f'{error.reason} (through the configured proxy '
+                f'{redact_proxy_url(proxy)})'
             ) from error
         raise
 
@@ -6228,6 +6252,10 @@ class MainWindow(MainWindowCore):
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
                 'set_first_party_network_policy': lambda *args, **kwargs: set_first_party_network_policy(*args, **kwargs),
+                'site_failure_note_for_download': lambda error_code, url: (
+                    site_failure_note_for_url(url)
+                    if error_code in TERMINAL_SITE_NOTE_ERROR_CODES else ''
+                ),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'output_template_preview': lambda *args, **kwargs: output_template_preview(*args, **kwargs),

@@ -14,6 +14,10 @@ repository's git log.
 
 ### Security
 
+- A proxy password no longer reaches the download card, the queue and history
+  files, the browser extension, or a diagnostics payload. A failure through a
+  configured proxy names it by scheme, host and port only, and the same
+  redaction now covers the proxy arguments in a copied command.
 - yt-dlp can no longer be pinned to a release older than the one that fixed
   CVE-2026-55404. Pinning a managed binary is a setting, and it was the one
   place an older yt-dlp could still be asked for by name; the packaged binary
@@ -23,6 +27,20 @@ repository's git log.
 
 ### Fixed
 
+- A geo-blocked video is no longer reported as permanently gone. YouTube's
+  copyright block opens with "Video unavailable", so it was being read as a
+  removed video and offered no retry, for a video the proxy and geo settings
+  already handle.
+- A note about one entry in a playlist no longer decides why the whole
+  download failed. A private or removed entry sitting in the output alongside
+  a rate limit or a connection error was taken as the cause, which cost the
+  download its retry and could pause the whole site for fifteen minutes.
+- A failure no longer quotes an unrelated note about the site it came from.
+  Only a note that explains why a site cannot produce a file is shown, and it
+  is now a line of its own, so the advice above it stays translated.
+- A stale REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE path pointing at a file that no
+  longer exists no longer breaks every request through a proxy. The bundle is
+  used when it is there and ignored, with a line in the log, when it is not.
 - A DRM-protected video and one the source no longer has are now named as
   themselves instead of producing a generic failure with a retry that can
   never succeed. Where the Sites page already records why a service cannot

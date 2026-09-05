@@ -52,7 +52,7 @@ __all__ = (
     "normalize_url", "normalize_output_dir", "normalize_download_section",
     "normalize_playlist_items", "normalize_output_name",
     "MAX_OUTPUT_NAME_LENGTH",
-    "parse_wininet_proxy_server", "resolve_effective_proxy",
+    "parse_wininet_proxy_server", "resolve_effective_proxy", "redact_proxy_url",
     "media_url_block_reason", "is_supported_media_url",
     "describe_media_url_block", "looks_like_media_link",
     "MEDIA_URL_BLOCK_MESSAGES", "MEDIA_HOST_HINTS",
@@ -103,7 +103,7 @@ _OWNED_EXPORTS = {
     "bound_output_template_fields",
     "normalize_output_template", "normalize_output_name",
     "MAX_OUTPUT_NAME_LENGTH",
-    "parse_wininet_proxy_server", "resolve_effective_proxy",
+    "parse_wininet_proxy_server", "resolve_effective_proxy", "redact_proxy_url",
     "normalize_url", "normalize_download_section", "normalize_playlist_items",
     "media_url_block_reason", "is_supported_media_url",
     "describe_media_url_block", "looks_like_media_link",
@@ -506,6 +506,34 @@ def normalize_proxy(value):
         return ""
     schemes = {"http", "https", "socks", "socks4", "socks4a", "socks5", "socks5h"}
     return cleaned if parsed.scheme.lower() in schemes and parsed.netloc else ""
+
+
+def redact_proxy_url(value):
+    """Return a proxy URL safe to show, log, persist or hand to the extension.
+
+    `normalize_proxy` accepts userinfo, so `http://user:secret@host:3128` is a
+    valid setting. Anything that names the proxy back to the user therefore has
+    to drop the credentials first: a failure message reaches `dl.error`, which
+    is written into the queue and history files and returned over the local
+    API. Scheme, host and port are what makes the message useful, and none of
+    them is a secret.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return "[redacted proxy]"
+    if not parsed.hostname:
+        # Not a shape this app would have accepted; say nothing about it
+        # rather than guess which half was the password.
+        return "[redacted proxy]"
+    authority = parsed.hostname
+    if parsed.port:
+        authority = f"{authority}:{parsed.port}"
+    scheme = parsed.scheme.lower()
+    return f"{scheme}://{authority}" if scheme else authority
 
 
 def normalize_force_ip_version(value):

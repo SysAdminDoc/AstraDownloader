@@ -31,12 +31,14 @@ except ImportError:  # Flat source-path compatibility.
 
 try:
     from .config import (
-        DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS,
+        DurableUndoStore, default_download_path, redact_proxy_url,
+        SITE_PROFILE_OVERRIDE_KEYS,
         normalize_sublangs,
     )
 except ImportError:  # Flat source-path compatibility.
     from config import (
-        DurableUndoStore, default_download_path, SITE_PROFILE_OVERRIDE_KEYS,
+        DurableUndoStore, default_download_path, redact_proxy_url,
+        SITE_PROFILE_OVERRIDE_KEYS,
         normalize_sublangs,
     )
 
@@ -54,14 +56,14 @@ try:
         build_site_cookie_filter, build_site_extractor_args,
         describe_site_auth, select_impersonate_target, site_display_name,
         site_impersonate_target, site_referer_for_url,
-        site_note_for_url, site_supports_credentials,
+        site_supports_credentials,
     )
 except ImportError:  # Flat source-path compatibility.
     from sites import (
         build_site_cookie_filter, build_site_extractor_args,
         describe_site_auth, select_impersonate_target, site_display_name,
         site_impersonate_target, site_referer_for_url,
-        site_note_for_url, site_supports_credentials,
+        site_supports_credentials,
     )
 
 
@@ -103,7 +105,7 @@ __all__ = (
     "write_media_server_nfo", "write_media_server_sidecars",
     "NFO_MAX_TEXT_CHARS",
     "download_error_payload", "classify_download_failure",
-    "apply_download_failure_classification", "append_site_note_advice",
+    "apply_download_failure_classification",
     "TERMINAL_SITE_NOTE_ERROR_CODES", "DOWNLOAD_FAILURE_RECOVERY",
     "estimate_download_bytes", "check_download_disk_space",
     "po_provider_nudge_advice", "PO_PROVIDER_NUDGE_CODES", "PO_PROVIDER_NUDGE",
@@ -3207,6 +3209,10 @@ def format_redacted_command_args(args, download=None, secrets=None):
         '--cookies',
         '--cookies-from-browser',
     }
+    # A proxy is not blanked: scheme, host and port are what make a diagnostics
+    # payload worth reading, and none of them is a secret. Only the userinfo
+    # `normalize_proxy` allows is removed.
+    proxy_flags = {'--proxy', '--geo-verification-proxy'}
     extracted_secrets = set(secrets or ())
     if download is not None:
         creds = getattr(download, '_credentials', None)
@@ -3236,6 +3242,16 @@ def format_redacted_command_args(args, download=None, secrets=None):
         if any(low.startswith(f"{flag}=") for flag in sensitive_flags):
             prefix = arg.split('=', 1)[0]
             redacted.append(f"{prefix}=[redacted]")
+            continue
+        if low in proxy_flags:
+            redacted.append(arg)
+            if i + 1 < len(args):
+                redacted.append(redact_proxy_url(args[i + 1]))
+                skip_next = True
+            continue
+        if any(low.startswith(f"{flag}=") for flag in proxy_flags):
+            prefix, _, value = arg.partition('=')
+            redacted.append(f"{prefix}={redact_proxy_url(value)}")
             continue
         if low.startswith('--add-header') or low == '--header':
             if '=' in arg:
@@ -3340,7 +3356,14 @@ def classify_download_failure(message='', lines=None):
     text_parts = [str(message or '')]
     if lines:
         text_parts.extend(str(line or '') for line in lines)
-    return _classify_failure_text(' '.join(text_parts).lower())
+    # `aggregated`: the tail is many lines about many items joined into one
+    # blob, so a note about a single playlist entry must not outrank the
+    # transport failure that actually ended the run. A playlist carrying one
+    # private or removed entry alongside an HTTP 429 was classifying as
+    # sign-in-required, which is not retryable and opens a host cooldown.
+    return _classify_failure_text(
+        ' '.join(text_parts).lower(), aggregated=True
+    )
 
 
 def _line_shows_sabr_capped_stream(line):
@@ -3356,7 +3379,16 @@ def _line_shows_sabr_capped_stream(line):
     return 'missing a url' in text or 'formats skipped' in text
 
 
-def _classify_failure_text(text):
+def _classify_failure_text(text, aggregated=False):
+    """Name the cause behind one failure text.
+
+    `aggregated` marks the output-tail pass, where many lines about many
+    playlist entries are joined into one blob. A cause that describes a single
+    item — DRM on one entry, one removed video, one private video — is true of
+    that entry and says nothing about why the run ended, so those buckets are
+    skipped there. A session-level cause such as the bot check or a missing
+    runtime still applies to the whole run and is matched in both passes.
+    """
     if not text.strip():
         return None
     if (
@@ -3377,20 +3409,23 @@ def _classify_failure_text(text):
     # Before sign-in: a DRM message can mention signing in, and signing in has
     # never once produced a file from an encrypted stream. Offering the
     # sign-in path there sends the user somewhere that cannot work.
-    if any(marker in text for marker in (
+    if not aggregated and any(marker in text for marker in (
         'drm protected', 'drm-protected', 'protected by drm',
         'this video is drm', 'encrypted with drm',
     )):
         return 'drm-protected'
+    # yt-dlp's private-video message is "Private video. Sign in if you've been
+    # granted access to this video". Matched on 'sign in if' rather than the
+    # full phrase so the apostrophe, straight or curly, is never part of the
+    # rule. Per-item, so it is not read out of a playlist's tail.
+    if not aggregated and any(marker in text for marker in (
+        'private video', 'sign in if',
+    )):
+        return 'sign-in-required'
     if any(marker in text for marker in (
         'sign in to confirm', 'please sign in', 'login required', 'not logged in',
         'confirm you are not a bot', 'cookies are required', 'use cookies',
         'authentication required',
-        # yt-dlp's private-video message is "Private video. Sign in if you've
-        # been granted access to this video". Matched on 'sign in if' rather
-        # than the full phrase so the apostrophe, straight or curly, is never
-        # part of the rule.
-        'private video', 'sign in if',
         # The token-exempt client chain surfaces the age gate as a bare
         # LOGIN_REQUIRED/UNPLAYABLE playability status rather than prose.
         'login_required', 'age-restricted', 'age restricted',
@@ -3426,6 +3461,13 @@ def _classify_failure_text(text):
         'geoblocked', 'geographical restriction', 'country restriction',
         'outside your region', 'available only in your',
         'available only for viewers in', 'only available in your',
+        # YouTube's copyright block reads "Video unavailable. This video
+        # contains content from SME, who has blocked it in your country on
+        # copyright grounds". It says unavailable first, so without this it
+        # was classified as permanently gone and offered no retry, for a
+        # video the proxy and geo settings already handle.
+        'blocked it in your country', 'blocked it on copyright grounds',
+        'blocked it in your region', 'has blocked it',
     )):
         return 'geo-restricted'
     # Before the network bucket: a 403 is a refusal, not a broken connection,
@@ -3438,7 +3480,7 @@ def _classify_failure_text(text):
     # connection, and "check your firewall and retry" is wrong advice for a
     # retry that can never succeed. After geo and 403, so a message that says
     # why it is unavailable keeps the more specific answer.
-    if any(marker in text for marker in (
+    if not aggregated and any(marker in text for marker in (
         'video unavailable', 'video is unavailable', 'no longer available',
         'has been removed', 'has been deleted', 'this live event has ended',
         'account associated with this video has been terminated',
@@ -3476,24 +3518,12 @@ def po_provider_nudge_advice(advice, error_code, provider_running):
     return f'{advice} {PO_PROVIDER_NUDGE}'.strip()
 
 
+# Failures where the registry's note about a site explains the outcome, so the
+# interface shows it beside the advice. The note is rendered as its own line
+# rather than concatenated into the advice: the GUI translates the advice as a
+# whole string, and appending anything to it makes it match no catalogue entry,
+# which left a German user reading English advice for exactly these two codes.
 TERMINAL_SITE_NOTE_ERROR_CODES = frozenset({'drm-protected', 'media-unavailable'})
-
-
-def append_site_note_advice(advice, error_code, url):
-    """Add the registry's standing note to a failure that can never be retried.
-
-    The catalogue already records that Spotify music and Crunchyroll premium
-    titles are DRM-protected. That is the sentence the user needs while they
-    are looking at the failure, not one they would have to visit the Sites
-    page to find.
-    """
-    if error_code not in TERMINAL_SITE_NOTE_ERROR_CODES:
-        return advice
-    note = site_note_for_url(url)
-    text = str(advice or '').strip()
-    if not note or note in text:
-        return text
-    return f'{text} {note}'.strip()
 
 
 def apply_download_failure_classification(
@@ -3502,9 +3532,6 @@ def apply_download_failure_classification(
     if not error_code:
         return
     payload = download_error_payload(error_code, error=error, advice=advice)
-    payload['advice'] = append_site_note_advice(
-        payload['advice'], payload['error_code'], getattr(download, 'url', ''),
-    )
     download.error_code = payload['error_code']
     download.error_advice = po_provider_nudge_advice(
         payload['advice'], payload['error_code'], provider_running,
@@ -7930,7 +7957,7 @@ _OWNED_EXPORTS = {
     "is_playlist_url",
     "build_network_workaround_args",
     "download_error_payload", "classify_download_failure",
-    "apply_download_failure_classification", "append_site_note_advice",
+    "apply_download_failure_classification",
     "TERMINAL_SITE_NOTE_ERROR_CODES", "DOWNLOAD_FAILURE_RECOVERY",
     "po_provider_nudge_advice", "PO_PROVIDER_NUDGE_CODES", "PO_PROVIDER_NUDGE",
     "summarize_ytdlp_formats", "summarize_ytdlp_playlist",
