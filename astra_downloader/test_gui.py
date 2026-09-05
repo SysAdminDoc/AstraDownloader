@@ -4187,6 +4187,60 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.log_empty_state.isHidden())
         self.assertTrue(window.log_text.isHidden())
 
+    def test_a_detected_proxy_is_shown_without_its_credentials(self):
+        # A WinINET ProxyServer entry may carry userinfo and normalize_proxy
+        # preserves it, so the raw value put a password on the Settings page.
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig({"UseSystemProxy": True}))
+        try:
+            window._dependencies["detect_system_proxy"] = (
+                lambda: "http://corpuser:Sup3rSecret@proxy.example:3128"
+            )
+            window.cfg_proxy.setText("")
+            window.cfg_use_system_proxy.setChecked(True)
+            window._sync_system_proxy_hint()
+            QApplication.processEvents()
+            hint = window.cfg_system_proxy_hint.text()
+            self.assertNotIn("Sup3rSecret", hint)
+            self.assertNotIn("corpuser", hint)
+            self.assertIn("proxy.example:3128", hint)
+        finally:
+            _retire_test_window(window)
+
+    def test_no_gui_surface_renders_a_proxy_without_redacting_it(self):
+        # The next one of these should fail here rather than on a screenshot.
+        source = (
+            Path(ad.__file__).resolve().parent / "gui.py"
+        ).read_text(encoding="utf-8")
+        # Scoped to the enclosing function, not the call: the redaction is
+        # normally a separate statement that binds the value first.
+        tree = ast.parse(source)
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = ast.get_source_segment(source, node) or ""
+            templates = [
+                call.args[0].value
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call)
+                and getattr(call.func, "id", None) == "tr_format"
+                and call.args
+                and isinstance(call.args[0], ast.Constant)
+                and isinstance(call.args[0].value, str)
+                and "{proxy}" in call.args[0].value
+            ]
+            if templates and "redact_proxy_url" not in body:
+                offenders.extend(templates)
+        self.assertEqual(
+            offenders, [],
+            "these render a proxy value straight into the interface; a "
+            "configured proxy may carry userinfo, so route it through "
+            "redact_proxy_url",
+        )
+
     def test_a_below_floor_binary_says_so_beside_its_installed_version(self):
         from PySide6.QtWidgets import QApplication
 
