@@ -2262,6 +2262,8 @@ CATALOGS["de"].update({
     "Not pinned. {version} installed": "Nicht fixiert. {version} installiert",
     "Not installed": "Nicht installiert",
     "Installed {version}": "Installiert {version}",
+    "Installed {version}, below the {floor} security floor":
+        "Installiert {version}, unterhalb der Sicherheitsuntergrenze {floor}",
     "Pinned version for {tool}": "Fixierte Version für {tool}",
     "Put {version} back and pin there.": "{version} wiederherstellen und dort fixieren.",
     "Nothing has been replaced yet, so there is nothing to go back to.":

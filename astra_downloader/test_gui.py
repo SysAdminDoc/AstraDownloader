@@ -4187,6 +4187,47 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertFalse(window.log_empty_state.isHidden())
         self.assertTrue(window.log_text.isHidden())
 
+    def test_a_below_floor_binary_says_so_beside_its_installed_version(self):
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        try:
+            rows = getattr(window, "managed_pin_rows", None)
+            self.assertTrue(rows, "the Settings page must build the pin rows")
+
+            def label_for(entry):
+                window._apply_managed_binaries([entry])
+                QApplication.processEvents()
+                return rows[entry["name"]]["installed"].text()
+
+            below = label_for({
+                "name": "yt-dlp", "installed": "2026.06.09", "pinned": "",
+                "rollback": "", "sha256": "", "floor": "2026.07.04",
+                "belowFloor": True,
+            })
+            self.assertIn("2026.06.09", below)
+            self.assertIn("2026.07.04", below)
+            self.assertIn("security floor", below)
+
+            # At or above the floor reads exactly as it did before.
+            fine = label_for({
+                "name": "yt-dlp", "installed": "2026.08.19", "pinned": "",
+                "rollback": "", "sha256": "", "floor": "2026.07.04",
+                "belowFloor": False,
+            })
+            self.assertEqual(fine, "Installed 2026.08.19")
+
+            # And a binary with no declared floor is untouched.
+            no_floor = label_for({
+                "name": "whisper", "installed": "1.9.2", "pinned": "",
+                "rollback": "", "sha256": "", "floor": "",
+                "belowFloor": False,
+            })
+            self.assertEqual(no_floor, "Installed 1.9.2")
+        finally:
+            _retire_test_window(window)
+
     def test_a_notified_failure_is_reachable_after_later_jobs_bury_it(self):
         # The Download page renders only the newest few terminal jobs, so an
         # overnight failure with later jobs stacked on top of it had no card:

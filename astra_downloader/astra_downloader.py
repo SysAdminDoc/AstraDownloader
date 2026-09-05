@@ -2618,6 +2618,20 @@ def rollback_managed_binary(config, name):
     }
 
 
+def _managed_binary_below_floor(name, installed):
+    """Whether an installed managed binary sits under its declared floor.
+
+    Reuses the pin decision rather than comparing here, so the page that
+    reports it and the setter that refuses it can never disagree about what
+    "too old" means, including for a snapshot-shaped ffmpeg version that
+    carries no semver at all.
+    """
+    if not installed or not MANAGED_BINARY_FLOORS.get(name):
+        return False
+    decision = evaluate_binary_pin(name, installed)
+    return not decision['ok'] and decision['reason'] == 'pin-below-security-floor'
+
+
 def managed_binary_inventory(config):
     """Report every managed binary's installed version, pin and rollback.
 
@@ -2652,6 +2666,10 @@ def managed_binary_inventory(config):
                 else ''
             ),
             'floor': MANAGED_BINARY_FLOORS.get(name, ''),
+            # Decided here rather than in the interface: this is the module
+            # that owns the floors and the comparison, and a snapshot-shaped
+            # ffmpeg version has no semver for the caller to compare.
+            'belowFloor': _managed_binary_below_floor(name, installed),
             'rollback': (
                 probe_managed_binary_version(name, backup)
                 if backup is not None and managed_binary_usable(backup) else ''

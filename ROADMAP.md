@@ -17,16 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-
-
-
-- [ ] P1 | AD-119 | The Settings panel never shows the security floor it now enforces
-  Why: managed_binary_inventory already publishes a floor field for every managed binary, and _apply_managed_binaries renders the installed version, the pin, the digest tooltip and the Pin and Rollback buttons without ever reading it. The AD-108 acceptance asked for the floor beside the installed version, and the value reaches the GUI layer and dies there, so a user running a below-floor binary sees the preflight error with no matching detail on the page that offers the pin and rollback controls.
-  Evidence: astra_downloader/astra_downloader.py managed_binary_inventory emitting floor; astra_downloader/gui.py _apply_managed_binaries not reading it; no occurrence of securityFloor or belowSecurityFloor in gui.py.
-  Touches: astra_downloader/gui.py, astra_downloader/test_gui.py, translation catalogues.
-  Acceptance: A binary whose installed version is below its declared floor is marked as such beside the version, naming the floor. A binary at or above its floor, and one with no declared floor, read as they do today. A test covers all three.
-  Complexity: S
-
 ### P2
 
 - [ ] P2 | AD-120 | A site failure note no longer reaches the API or the extension

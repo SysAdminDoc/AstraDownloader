@@ -1587,12 +1587,8 @@
       <translation>{target} (nicht verfügbar)</translation>
     </message>
     <message>
-      <source>Installed {version}</source>
-      <translation>Installiert {version}</translation>
-    </message>
-    <message>
-      <source>Not installed</source>
-      <translation>Nicht installiert</translation>
+      <source>Installed {version}, below the {floor} security floor</source>
+      <translation>Installiert {version}, unterhalb der Sicherheitsuntergrenze {floor}</translation>
     </message>
     <message>
       <source>Not pinned. {version} installed</source>
@@ -1933,6 +1929,14 @@
     <message>
       <source>Settings, queue and history live at {path}. Copy that folder before replacing this build.</source>
       <translation>Einstellungen, Warteschlange und Verlauf liegen unter {path}. Kopieren Sie diesen Ordner, bevor Sie diese Version ersetzen.</translation>
+    </message>
+    <message>
+      <source>Installed {version}</source>
+      <translation>Installiert {version}</translation>
+    </message>
+    <message>
+      <source>Not installed</source>
+      <translation>Nicht installiert</translation>
     </message>
     <message>
       <source>Runtime floor</source>
