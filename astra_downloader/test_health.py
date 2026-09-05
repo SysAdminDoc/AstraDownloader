@@ -2189,6 +2189,70 @@ class ProbeRestartsRatherThanAnsweringAboutAGoneBinaryTests(unittest.TestCase):
         )
 
 
+class YtDlpPinFloorTests(unittest.TestCase):
+    """A pin is a user-writable setting, so it needs the floor the fetch has.
+
+    yt-dlp and ffmpeg do every byte of network and media parsing this program
+    performs. ffmpeg was already floored through MANAGED_BINARY_FLOORS;
+    yt-dlp was pinnable to any release the version shape accepted, including
+    ones before CVE-2026-55404 was fixed.
+    """
+
+    def test_a_pin_below_the_cve_fix_is_refused_by_name(self):
+        for version in ('2026.06.09', '2025.12.31', '2024.01.01'):
+            with self.subTest(version=version):
+                decision = ad.evaluate_binary_pin('yt-dlp', version)
+                self.assertFalse(decision['ok'])
+                self.assertEqual(decision['reason'], 'pin-below-security-floor')
+                self.assertEqual(decision['floor'], ad.YTDLP_SECURITY_MIN_VERSION)
+                self.assertIn(ad.YTDLP_SECURITY_MIN_VERSION, decision['message'])
+
+    def test_the_floor_itself_and_later_releases_are_accepted(self):
+        for version in (ad.YTDLP_SECURITY_MIN_VERSION, '2026.7.4', '2026.08.19',
+                        '2027.01.01'):
+            with self.subTest(version=version):
+                decision = ad.evaluate_binary_pin('yt-dlp', version)
+                self.assertTrue(decision['ok'], decision['message'])
+
+    def test_the_floor_is_the_release_requirements_names_for_the_cve(self):
+        # The number is not invented here. requirements.txt has recorded which
+        # yt-dlp release carries the CVE-2026-55404 fix since it shipped; this
+        # keeps the pin path from disagreeing with it.
+        requirements = (
+            Path(ad.__file__).resolve().parent / 'requirements.txt'
+        ).read_text(encoding='utf-8')
+        self.assertIn('CVE-2026-55404', requirements)
+        self.assertRegex(
+            requirements,
+            r'2026\.7\.4 fixed CVE-2026-55404',
+            'requirements.txt must keep naming the release the floor is set to',
+        )
+        self.assertEqual(
+            ad._compare_semver(ad.YTDLP_SECURITY_MIN_VERSION, '2026.7.4'), 0
+        )
+
+    def test_a_stored_pin_below_the_floor_is_dropped_on_load(self):
+        # Dropping rather than raising to the floor: an unpinned binary follows
+        # the published release, which is at or above the floor by definition,
+        # while raising would freeze it at a version nobody chose.
+        config = FakeConfig({'ManagedBinaryPins': {
+            'yt-dlp': '2026.06.09', 'ffmpeg': '8.1.2',
+        }})
+        active = ad.active_managed_binary_pins(config)
+        self.assertNotIn('yt-dlp', active)
+        self.assertEqual(active.get('ffmpeg'), '8.1.2')
+        self.assertEqual(ad.managed_binary_pin_for(config, 'yt-dlp'), '')
+
+    def test_every_pinnable_binary_that_touches_the_network_has_a_floor(self):
+        for name in ('yt-dlp', 'ffmpeg', 'deno', 'quickjs'):
+            with self.subTest(name=name):
+                self.assertTrue(
+                    ad.MANAGED_BINARY_FLOORS.get(name),
+                    f"{name} parses untrusted input and must not be pinnable "
+                    "to an arbitrarily old build",
+                )
+
+
 class FirstPartyNetworkPolicyTests(unittest.TestCase):
     """What this program fetches for itself takes the route the user configured.
 
