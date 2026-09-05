@@ -36,6 +36,10 @@ repository's git log.
 
 ### Fixed
 
+- A failure notification for a download that later jobs have pushed off the
+  Download page now brings its card back into view when you click it. The page
+  shows only the newest few finished jobs, so an overnight failure with enough
+  activity after it restored the window and highlighted nothing.
 - A geo-blocked video is no longer reported as permanently gone. YouTube's
   copyright block opens with "Video unavailable", so it was being read as a
   removed video and offered no retry, for a video the proxy and geo settings
