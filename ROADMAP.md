@@ -10,13 +10,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-89 | Stop the Scoop package from discarding user state on update
-  Why: packaging/scoop/astra-downloader.json sets "persist": [] and installs the one-folder zip, which carries .astradownloader-portable, so runtime_state_dir() puts config.json, history.json, download-queue.json, subscriptions.json, site-logins/, server.log and the managed yt-dlp/ffmpeg/deno/quickjs/whisper trees inside scoop\apps\astra-downloader\<version>\. Scoop links only persist entries out of the versioned directory, so an update starts from an empty state root, loses stored sign-ins and re-provisions the whole managed binary set. The manifest is also in no bucket and README.md never mentions Scoop, so today it reaches nobody.
-  Evidence: packaging/scoop/astra-downloader.json; astra_downloader/astra_downloader.py:372 PORTABLE_MARKER_NAME, runtime_state_dir, and the INSTALL_DIR paths at :511-593; astra_downloader/build.py:233 writing the marker into the zip; https://github.com/ScoopInstaller/Scoop/wiki/Persistent-data. Open question 1 in RESEARCH.md decides between persisting the portable layout and switching Scoop to the managed install.
-  Touches: packaging/scoop/astra-downloader.json, README.md, scripts/check-versions.js or a new manifest gate, tests/documentation-facts.test.js.
-  Acceptance: Whichever layout is chosen, an install followed by a version bump followed by scoop update and scoop cleanup leaves settings, history, queue, subscriptions and stored sign-ins readable, and does not re-download the managed binaries. A gate fails when a state path named in astra_downloader.py has no counterpart in the manifest's persist list under the portable layout. README.md documents the Scoop install command actually supported.
-  Complexity: M
-
 - [ ] P1 | AD-76 | Notify hidden users when a download fails
   Why: _notify_completed_downloads handles complete and skipped jobs only, so an overnight failure is silent until the user reopens the window.
   Evidence: astra_downloader/gui.py _notify_completed_downloads; durable failure recording in astra_downloader/download.py _record_history; the YT-DLP Studio README advertises both finish and failure alerts. AD-63 remains the accessibility half of this work.

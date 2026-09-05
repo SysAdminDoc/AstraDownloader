@@ -154,6 +154,18 @@ managed yt-dlp/ffmpeg/runtime files beside the executable. It does not create
 Start Menu, desktop, protocol, logon-task, or browser native-messaging
 registrations.
 
+There is also a [Scoop](https://scoop.sh) manifest, which installs the
+one-folder layout and keeps its state beside the executable:
+
+```powershell
+scoop install https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/main/packaging/scoop/astra-downloader.json
+```
+
+Your settings, history, queue, subscriptions and stored sign-ins are persisted,
+so `scoop update astra-downloader` keeps them, and so are the managed yt-dlp,
+FFmpeg and JavaScript runtime files, so an update does not fetch them again.
+`scoop uninstall -p astra-downloader` removes that state along with the app.
+
 The one-file executable is the installable layout: running it normally copies
 the executable to `%LOCALAPPDATA%\AstraDownloader` and registers integrations.
 If you deliberately keep a one-file copy elsewhere, pass `--portable`; the
