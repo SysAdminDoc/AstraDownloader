@@ -8,13 +8,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
-- [ ] P0 | AD-86 | Stop pinning an absolute yt-dlp version against a relative freshness window
-  Why: test_health_exposes_preflight_without_network_or_site_metadata patches get_ytdlp_version to the literal '2026.08.01' and asserts preflight status 'ready', while YTDLP_STALE_AFTER_DAYS is 30. The fixture expired on 2026-08-31 and the suite has been red on a clean checkout every run since; on 2026-09-04 pytest reported 1 failed, 1257 passed, 1 skipped.
-  Evidence: astra_downloader/test_routes.py:3513 and its assertion at :3529; astra_downloader/health.py:80 YTDLP_STALE_AFTER_DAYS; nine literal-version patch sites at test_download.py:2204, test_health.py:864/894/919, test_routes.py:3513/3551/3862/3934/3962.
-  Touches: astra_downloader/test_routes.py, astra_downloader/test_health.py, astra_downloader/test_download.py, astra_downloader/testing_support.py.
-  Acceptance: No test derives a freshness outcome from a hardcoded calendar date. Fixtures that need a fresh yt-dlp build the version from the same clock the check reads (or freeze that clock), and fixtures that need a stale one keep an absolute date because it can only get staler. The full suite passes with the system clock set to 2026-09-04, to one year later, and to one day after a fixture's nominal release date. A helper in testing_support.py is the single place a "fresh enough" version is produced.
-  Complexity: S
-
 - [ ] P0 | AD-87 | Make the gate command run the suite it says it runs
   Why: run-checks.js declares its first gate as `['unit tests', process.execPath, ['--test', ...TEST_FILES]]` where TEST_FILES is tests/*.test.js, six Node files. Nothing in npm run check, npm run release:stage or build.py executes pytest; documentation-facts.test.js only invokes it with --collect-only to count. On 2026-09-04 the gate set printed "all 8 gates passed" while the Python suite was red, and README.md says npm run check "runs the unit tests" four lines under the pytest command.
   Evidence: scripts/run-checks.js:20-43; tests/documentation-facts.test.js:29; README.md "Tests and gates"; the AD-86 failure surviving a green npm run check.

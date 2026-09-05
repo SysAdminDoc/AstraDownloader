@@ -12,6 +12,17 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- The test suite no longer expires on its own. A preflight test pinned the
+  yt-dlp version to the literal `2026.08.01` and asserted the `/health`
+  readiness was `ready`, while the freshness window it is measured against is
+  30 days wide and reads the real clock. The fixture went stale on 2026-08-31
+  and failed every run after that with `'attention' != 'ready'`, having
+  changed nothing. Fresh-outcome fixtures now derive the version from the same
+  clock the check reads, and a guard scans every test module for the same
+  shape so the next one is caught when it is written rather than a month later.
+
 ## [2.15.0] - 2026-08-30
 
 ### Added

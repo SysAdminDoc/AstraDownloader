@@ -23,7 +23,7 @@ import time
 import types
 import unittest
 import zipfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest import mock
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -33,6 +33,7 @@ import astra_downloader as ad
 __all__ = (
     "FakeConfig",
     "FakeHistory",
+    "fresh_ytdlp_version",
     "ytdlp_invocations",
     "_retire_test_window",
     "_get_qapp_or_skip",
@@ -100,6 +101,29 @@ _RETAINED_TEST_WINDOWS = []
 
 
 _qapp_singleton = None
+
+
+def fresh_ytdlp_version(reference=None):
+    """Return a yt-dlp version string the freshness check calls current.
+
+    `evaluate_preflight_checks` measures a dated yt-dlp release against
+    `date.today()` through a relative window (`YTDLP_STALE_AFTER_DAYS`), so a
+    literal version written into a fixture that asserts a fresh outcome is a
+    fuse: it passes on the day it is written and fails, weeks later, a run
+    that changed nothing. Derive the version from the same clock the check
+    reads instead.
+
+    The opposite case needs no helper. A fixture that asserts a *stale* or
+    error outcome may keep an absolute version, because an absolute date can
+    only get staler.
+    """
+    if reference is None:
+        today = date.today()
+    elif isinstance(reference, datetime):
+        today = reference.date()
+    else:
+        today = reference
+    return f"{today.year}.{today.month:02d}.{today.day:02d}"
 
 
 def ytdlp_invocations(captured):
