@@ -171,12 +171,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: A candidate interpreter that exits non-zero without producing a collected count and whose output carries the Store-alias notice is treated the same as ENOENT: the loop moves to the next candidate, and exhausting them logs the skip rather than asserting. A candidate that runs pytest and genuinely fails collection still fails the test, pinned by a fixture for each of the two cases.
   Complexity: S
 
-- [ ] P2 | AD-98 | DenoProvisionTests point DENO_PATH at a real filesystem root
-  Why: three tests set `ad.DENO_PATH = Path('/nonexistent/deno.exe')`, which on Windows resolves to `C:\nonexistent\deno.exe`. That is a writable location outside any tmpdir, so the moment a network patch misses, provision_deno performs a real download into it. Observed 2026-09-04 during AD-88: repointing the HTTP seam left one fixture patching the old name for a single run and a 97 MB Deno binary landed at `C:\nonexistent\deno.exe`, after which `test_provision_deno_returns_none_on_network_failure` and `test_probe_includes_source_field` failed on every later run because `DENO_PATH.exists()` was then true. The path was removed by hand.
-  Evidence: astra_downloader/test_health.py DenoProvisionTests, the three `Path('/nonexistent/deno.exe')` assignments; astra_downloader/astra_downloader.py provision_deno, whose first branch returns early when DENO_PATH exists.
-  Touches: astra_downloader/test_health.py, astra_downloader/conftest.py.
-  Acceptance: No test assigns a managed-binary path outside a TemporaryDirectory it owns. A test that means "this binary is absent" points at a path inside its own tmpdir, so a missed patch writes there and is discarded with the fixture. conftest already redirects INSTALL_DIR and its derived paths; the same redirection covers DENO_PATH, QUICKJS_DIR, WHISPER_BIN_PATH and WHISPER_MODEL_PATH, and a test asserts that none of the managed paths resolve outside the redirected root during a run.
-  Complexity: S
 
 - [ ] P3 | AD-99 | npm run check collects the Python suite twice
   Why: tests/documentation-facts.test.js spawns `pytest --collect-only -q` to read the count the README states, and that runs inside the `node tests` gate while the `python suite` gate then runs the full suite, which collects again. Measured at roughly 8 s of the command's runtime on 2026-09-04. Cost, not correctness.
