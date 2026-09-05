@@ -80,17 +80,46 @@ test('the commands the README shows are commands the project defines', () => {
     }
 });
 
+const GATE_COUNT_WORDS = [
+    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+    'nine', 'ten', 'eleven', 'twelve',
+];
+
 test('the README describes the gate set npm run check actually runs', () => {
-    const gates = fs.readFileSync(path.join(repoRoot, 'scripts', 'run-checks.js'), 'utf8');
-    const declared = (gates.match(/^\s*\['([a-z][\w -]*)',/gm) || []).length;
-    assert.ok(declared >= 5, 'the gate table must be readable from run-checks.js');
+    const { GATES } = require(path.join(repoRoot, 'scripts', 'run-checks.js'));
+    assert.ok(GATES.length >= 5, 'the gate table must be readable from run-checks.js');
+    const word = GATE_COUNT_WORDS[GATES.length];
+    assert.ok(word, `no spelled form for ${GATES.length} gates`);
+    // Derived rather than hardcoded: the count used to be the literal 8 in
+    // both this test and the README, so adding a gate meant editing the
+    // assertion that was supposed to catch the drift.
     assert.match(
         readme,
-        /all eight gates/,
-        'the README must name how many gates npm run check runs',
+        new RegExp(`all ${word} gates`),
+        `run-checks.js declares ${GATES.length} gates; the README must say "all ${word} gates"`,
+    );
+});
+
+// The gate named for a suite has to run it. "unit tests" once meant only the
+// six Node files, so a red Python suite of 1,262 tests sat behind an "all
+// gates passed" line for as long as nobody ran pytest by hand.
+test('npm run check actually executes the Python suite', () => {
+    const { GATES } = require(path.join(repoRoot, 'scripts', 'run-checks.js'));
+    const pytestGates = GATES.filter(
+        ([, , args]) => args.includes('pytest') || args.includes('-m') && args.includes('pytest'),
     );
     assert.equal(
-        declared, 8,
-        `the README says eight gates; run-checks.js declares ${declared}`,
+        pytestGates.length, 1,
+        'exactly one gate must run pytest; found ' +
+        JSON.stringify(GATES.map(([label]) => label)),
+    );
+    const [label, , args] = pytestGates[0];
+    assert.ok(
+        !args.includes('--collect-only'),
+        `the ${label} gate collects the suite instead of running it`,
+    );
+    assert.ok(
+        !GATES.some(([name]) => name === 'unit tests'),
+        'a gate called "unit tests" hides which suite it runs; name the suite',
     );
 });

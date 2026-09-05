@@ -235,7 +235,7 @@ Release dependencies are pinned in
 
 ```powershell
 py -3.13 -m pytest          # 1262 tests across every core; scratch stays under build/pytest
-npm run check               # all eight gates, PASS/FAIL printed per gate
+npm run check               # all nine gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp
 ```
@@ -246,11 +246,14 @@ run when you are debugging how one test affects another. The tests are split
 by domain: download, GUI, routes, subscriptions, health, config and build.
 `astra_downloader/testing_support.py` holds what they share.
 
-`npm run check` runs the unit tests, the companion port catalogue, the
+`npm run check` runs both test suites and the seven static gates: the Node
+tests, the full Python suite named above, the companion port catalogue, the
 Python catch-reason gate, the licence inventory, the site registry, the
 translation catalogues, the version/tag agreement and the Python dependency
 audit. It prints a result line per gate rather than stopping at the first
-failure, so a red gate does not hide the state of the other seven.
+failure, so a red gate does not hide the state of the other eight. A gate
+whose interpreter is missing prints SKIP with the reason and still fails the
+command, because a toolchain nobody installed must never read as a pass.
 
 The test count above is the number `py -3.13 -m pytest --collect-only -q`
 reports; re-run it rather than trusting the figure if the two disagree.

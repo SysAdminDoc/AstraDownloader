@@ -12,6 +12,16 @@ repository's git log.
 
 ## [Unreleased]
 
+### Changed
+
+- `npm run check` runs the Python suite. Its first gate was called "unit
+  tests" and ran only the six Node files, so a red 1,262-test Python suite sat
+  behind an "all gates passed" line: nothing in the check command, release
+  staging or the build ever executed pytest. There are now nine gates, with
+  `node tests` and `python suite` named separately, and a gate whose
+  interpreter is missing prints SKIP with the reason instead of a bare exit
+  code while still failing the command.
+
 ### Fixed
 
 - The test suite no longer expires on its own. A preflight test pinned the
