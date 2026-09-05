@@ -858,7 +858,6 @@ SetupWorker = SetupWorkerCore
 _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'build_reveal_command',
     'set_first_party_network_policy',
-    'site_failure_note_for_download',
     'spawn_detached',
     'summarize_taskbar_progress',
     'build_settings_bundle',
@@ -4825,11 +4824,9 @@ class MainWindowCore(
         # Its own line, translated on its own. Concatenating it into the advice
         # made the advice match no catalogue entry, so the whole sentence fell
         # back to English for the two codes that carry a note.
-        site_note = self._dependencies.get('site_failure_note_for_download')
-        if callable(site_note):
-            note = site_note(dl.error_code, dl.url)
-            if note:
-                recovery_text = recovery_text + "\n" + tr(note)
+        note = getattr(dl, "error_site_note", "")
+        if note:
+            recovery_text = recovery_text + "\n" + tr(note)
         if dl.error_code in {
             "rate-limited", "sign-in-required", "blocked-by-site",
         }:

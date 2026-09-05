@@ -66,6 +66,11 @@ repository's git log.
   download failed. A private or removed entry sitting in the output alongside
   a rate limit or a connection error was taken as the cause, which cost the
   download its retry and could pause the whole site for fifteen minutes.
+- The browser extension and the local API get the site note again, as a field
+  of their own beside the advice. Moving it out of the advice text fixed the
+  translation but left every non-desktop consumer with nothing.
+- Bilibili's note about region-locked titles is treated as a failure note, so
+  it appears on a failure for that site the way the DRM notes do.
 - A failure no longer quotes an unrelated note about the site it came from.
   Only a note that explains why a site cannot produce a file is shown, and it
   is now a line of its own, so the advice above it stays translated.

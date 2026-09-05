@@ -19,19 +19,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P2
 
-- [ ] P2 | AD-120 | A site failure note no longer reaches the API or the extension
-  Why: AD-105 moved the note out of error_advice, which to_dict publishes as advice, and into a GUI-only render path. The translation defect it fixed was real, but every non-Qt consumer now loses the note: Astra Deck used to receive it inside the advice string and now receives nothing.
-  Evidence: astra_downloader/download.py to_dict publishing advice; astra_downloader/gui.py _download_recovery_text rendering the note through a GUI dependency.
-  Touches: astra_downloader/download.py, astra_downloader/gui.py, astra_downloader/routes.py, astra_downloader/test_download.py.
-  Acceptance: The note is a field of its own on the payload beside advice, so the extension and the strict API can render it, and the advice string still matches its catalogue entry exactly. A test asserts both properties at once.
-  Complexity: S
 
-- [ ] P2 | AD-121 | Bilibili's region-lock note is a failure note and is now dropped
-  Why: AD-105 flagged Spotify, Crunchyroll and OnlyFans as carrying failure-explaining notes. Bilibili's note says region-locked titles need an exit inside mainland China, which explains why the site cannot produce a file and commonly surfaces as an unavailable message, so it did reach the failure before and was the most useful sentence on the card.
-  Evidence: astra_downloader/sites.py the bilibili.com profile note; astra_downloader/download.py TERMINAL_SITE_NOTE_ERROR_CODES.
-  Touches: astra_downloader/sites.py, astra_downloader/test_download.py.
-  Acceptance: Bilibili's note reaches a terminal failure for that site. Every other profile's note is reviewed once against the same rule and either flagged or left, with the outcome pinned by a test that lists the flagged set.
-  Complexity: S
 
 - [ ] P2 | AD-122 | The Settings proxy hint prints a detected proxy verbatim
   Why: the resolved-address preview renders the value parse_wininet_proxy_server returned, and normalize_proxy preserves userinfo, so a WinINET ProxyServer entry carrying credentials is shown in full on the Settings page. Not persisted and visible only to the user who configured it, which is why it is here rather than above, but it contradicts the rule AD-101 established that a proxy is named by scheme, host and port only.

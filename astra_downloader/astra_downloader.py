@@ -150,14 +150,13 @@ try:
         build_subprocess_env as _owned_build_subprocess_env,
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
         cleanup_stale_cookie_jars as _owned_cleanup_stale_cookie_jars,
-        download_error_payload, is_playlist_url, TERMINAL_SITE_NOTE_ERROR_CODES,
+        download_error_payload, is_playlist_url,
         QUALITY_LADDER, probed_video_heights, quality_choices_for_heights,
         SABR_LIMITED_NOTICE, describe_sabr_voided_options, sabr_only_formats,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
-    from .sites import site_failure_note_for_url
     from .native_sources import NATIVE_SOURCE_MAX_BYTES, resolve_native_source
     from .health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
@@ -304,14 +303,13 @@ except ImportError:  # Direct script / flat source-path compatibility.
         build_subprocess_env as _owned_build_subprocess_env,
         classify_download_failure, summarize_ytdlp_formats, summarize_ytdlp_playlist,
         cleanup_stale_cookie_jars as _owned_cleanup_stale_cookie_jars,
-        download_error_payload, is_playlist_url, TERMINAL_SITE_NOTE_ERROR_CODES,
+        download_error_payload, is_playlist_url,
         QUALITY_LADDER, probed_video_heights, quality_choices_for_heights,
         SABR_LIMITED_NOTICE, describe_sabr_voided_options, sabr_only_formats,
         terminate_process_tree as _owned_terminate_process_tree,
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
-    from sites import site_failure_note_for_url
     from native_sources import NATIVE_SOURCE_MAX_BYTES, resolve_native_source
     from health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
@@ -6332,10 +6330,6 @@ class MainWindow(MainWindowCore):
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
                 'set_first_party_network_policy': lambda *args, **kwargs: set_first_party_network_policy(*args, **kwargs),
-                'site_failure_note_for_download': lambda error_code, url: (
-                    site_failure_note_for_url(url)
-                    if error_code in TERMINAL_SITE_NOTE_ERROR_CODES else ''
-                ),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'output_template_preview': lambda *args, **kwargs: output_template_preview(*args, **kwargs),

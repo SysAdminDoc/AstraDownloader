@@ -227,6 +227,7 @@ SITE_PROFILES = {
         auth=SITE_AUTH_OPTIONAL,
         auth_note="1080p and above are only offered to signed-in accounts.",
         notes="Region-locked titles also need an exit inside mainland China.",
+        note_explains_failure=True,
     ),
     "youku.com": _profile("Youku", "video"),
     "iqiyi.com": _profile("iQIYI", "video", auth=SITE_AUTH_OPTIONAL),
