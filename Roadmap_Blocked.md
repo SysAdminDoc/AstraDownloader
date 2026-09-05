@@ -111,3 +111,24 @@ each actually needs:
 **To unblock:** each area separately. This is not one item and should not be
 picked up as one. When an area gets a live check or a named test, strike it
 from this list rather than closing the whole entry.
+
+## AD-123 — The extension shows a green yt-dlp pill on a below-floor build
+
+**State:** the downloader half is done. `evaluate_preflight_checks` reports
+`securityFloor` and `belowSecurityFloor` on the `ytdlp-freshness` check, and
+`/health` serves them, so everything the extension needs is already on the
+wire.
+
+**What is blocked:** the fix itself lives in the
+[Astra Deck](https://github.com/SysAdminDoc/Astra-Deck) repository, not this
+one. Its health normalizer whitelists thirteen keys and `preflight` is not
+among them, and its yt-dlp pill is rendered unconditionally `ok` while the
+ffmpeg and JavaScript-runtime pills tone on state. Nothing in this repository
+can change that, and a downloader-side change would be inventing a second
+health surface for one consumer.
+
+**To unblock:** ship it in Astra Deck — add `preflight` to the normalizer's
+allowed keys and tone the yt-dlp pill from the `ytdlp-freshness` check,
+naming the floor when `belowSecurityFloor` is set. Verify against a running
+Astra Downloader reporting a below-floor version, which
+`ManagedBinaryPins` makes reproducible without waiting for a real old build.

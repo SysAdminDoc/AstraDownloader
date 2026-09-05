@@ -8,13 +8,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
-- [ ] P0 | AD-113 | An existing Scoop install loses everything on the first update to the data layout
-  Why: AD-102 changed the persist array to a single data directory. scoop update extracts the new version and links only what the new manifest names, so config.json, history.json, download-queue.json, subscriptions.json and site-logins are not linked into the new app directory, portable_state_dir finds no legacy marker at the root and returns the empty data junction, and the real files are stranded in the old version directory the app never looks at. site-logins used to be the one entry that survived, because it was a junctioned directory, so for stored sign-ins this is a strict regression rather than a wash. The legacy-marker fallback only rescues a hand-unzipped folder, where the files are physically still beside the executable; it cannot rescue a Scoop install, which is the only population the change exists for.
-  Evidence: packaging/scoop/astra-downloader.json persist; astra_downloader/astra_downloader.py portable_state_dir and _LEGACY_PORTABLE_STATE_MARKERS; the AD-102 measurement recording that site-logins survived under the previous list.
-  Touches: astra_downloader/astra_downloader.py, packaging/scoop/astra-downloader.json, tests/scoop-manifest.test.js, astra_downloader/test_build.py.
-  Acceptance: A first launch that finds legacy state beside the executable and an empty data directory moves that state into data once, and reports what it moved. The move is atomic per file and leaves the original in place if any part fails, so an interrupted migration never loses a queue or a sign-in. A launch with no legacy state, a launch already migrated, and a launch with both present are each covered by a test.
-  Complexity: M
-
 ### P1
 
 ### P2
@@ -22,12 +15,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 
 
-- [ ] P2 | AD-123 | The extension shows a green yt-dlp pill on a below-floor build
-  Why: Astra Deck's health normalizer whitelists thirteen keys and preflight is not among them, and its yt-dlp pill is rendered unconditionally ok while the ffmpeg and JavaScript-runtime pills tone on state. A user driving downloads from the extension on a yt-dlp below the security floor sees no signal at all, so the AD-108 clause about reporting it whatever the auto-update setting holds only for the desktop window.
-  Evidence: the health normalizer key whitelist and the unconditional yt-dlp pill in the Astra-Deck repository download-ui feature; astra_downloader/health.py emitting securityFloor and belowSecurityFloor on the ytdlp-freshness check.
-  Touches: the Astra-Deck repository, and astra_downloader/routes.py only if the health payload needs a narrower field for it.
-  Acceptance: The extension tones its yt-dlp pill from the same check the desktop preflight uses and names the floor when the installed build is below it. Requires a change in the Astra-Deck repository, so it ships there and is verified against a running Astra Downloader reporting a below-floor version.
-  Complexity: M
 
 - [ ] P2 | AD-124 | preflight blocking is not a usable signal
   Why: ffmpeg-capabilities lands in blocking on ordinary working installs, so preflight status reads blocked for many users and nothing consumes it. Confirmed 2026-09-05: with a below-floor yt-dlp the health route reported status blocked and blocking naming both ytdlp-freshness and ffmpeg-capabilities, while POST /download accepted the request and start_download ran. That is the correct behaviour today, since a security floor should not silently stop a queue, but it means anything that later starts honouring blocking would refuse work on healthy installs.

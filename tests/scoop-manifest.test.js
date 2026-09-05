@@ -52,6 +52,39 @@ test('nothing persisted is a file the app replaces atomically', () => {
     );
 });
 
+// Scoop keeps its persist directory across updates and never removes an entry
+// a new manifest stops naming, so an install made by the previous manifest
+// still holds its state there under the old per-file names. Without a move it
+// would be linked nowhere, and the app would start from an empty `data`.
+const PREVIOUSLY_PERSISTED = [
+    'config.json', 'history.json', 'download-queue.json', 'subscriptions.json',
+    'site-logins', 'server.log', 'crash.log', 'yt-dlp-update-state.json',
+    'companion-update-state.json', 'yt-dlp.exe', 'ffmpeg.exe', 'deno',
+    'quickjs', 'whisper', 'native-hosts',
+];
+
+test('an install made by the previous manifest is carried onto the new layout', () => {
+    const script = (manifest.pre_install || []).join('\n');
+    assert.ok(script, 'the manifest must carry a migration');
+    const missing = PREVIOUSLY_PERSISTED.filter(
+        (name) => !script.includes(`'${name}'`),
+    );
+    assert.deepEqual(
+        missing, [],
+        'these were persisted by the previous manifest and would be stranded',
+    );
+    // The move has to skip a name the new layout already holds, or a rerun
+    // would overwrite current state with whatever the old entry still had.
+    assert.match(
+        script, /-not \(Test-Path -LiteralPath \$new\)/,
+        'the migration must not overwrite state the new layout already has',
+    );
+    assert.match(
+        script, /Join-Path \$persist_dir 'data'/,
+        'the migration must target the persisted directory',
+    );
+});
+
 test('the portable marker is not persisted', () => {
     // It ships inside the zip and identifies the layout. A persisted copy
     // would survive a switch to a different package shape and keep claiming
