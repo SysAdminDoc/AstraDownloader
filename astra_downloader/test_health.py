@@ -20,6 +20,8 @@ import time
 import types
 import unittest
 import zipfile
+import weakref
+import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta
 from unittest import mock
@@ -2416,6 +2418,121 @@ class FirstPartyNetworkPolicyTests(unittest.TestCase):
             ad.first_party_http_get('http://unresolvable.invalid/binary', timeout=15)
         self.assertIn(str(port), str(caught.exception))
 
+    def test_a_socks_proxy_falls_back_to_direct_instead_of_breaking_setup(self):
+        # config.py accepts socks/socks4/socks5 and parse_wininet_proxy_server
+        # will synthesise one out of the registry, but requests needs PySocks
+        # (not a dependency) and urllib's ProxyHandler would speak HTTP into a
+        # SOCKS socket. yt-dlp handles SOCKS natively, so downloads keep using
+        # it; these fetches take the direct route they used before the policy.
+        logged = []
+        for scheme in ('socks5', 'socks5h', 'socks4', 'socks'):
+            with self.subTest(scheme=scheme):
+                self.assertEqual(
+                    ad.first_party_proxy_or_direct(
+                        f'{scheme}://127.0.0.1:1080', logger=logged.append,
+                    ),
+                    '',
+                )
+        self.assertEqual(len(logged), 4)
+        self.assertIn('go direct', logged[0])
+        for scheme in ('http', 'https'):
+            with self.subTest(scheme=scheme):
+                url = f'{scheme}://proxy.example:3128'
+                self.assertEqual(ad.first_party_proxy_or_direct(url), url)
+
+        resolved = ad.set_first_party_network_policy(
+            self._config(Proxy='socks5://127.0.0.1:1080'), detected='',
+        )
+        self.assertEqual(resolved['proxy'], '')
+        session = ad.build_first_party_session()
+        try:
+            self.assertEqual(session.proxies, {})
+        finally:
+            session.close()
+
+    def test_a_pinned_route_keeps_the_environment_ca_bundle(self):
+        # requests reads REQUESTS_CA_BUNDLE inside `if self.trust_env`, so
+        # clearing trust_env to pin the route would also discard the corporate
+        # CA bundle. On a TLS-intercepting proxy, the network this policy is
+        # for, that turns a working fetch into CERTIFICATE_VERIFY_FAILED.
+        bundle = str(Path(tempfile.gettempdir()) / 'astra-test-ca.pem')
+        with mock.patch.dict(ad.os.environ, {'REQUESTS_CA_BUNDLE': bundle}):
+            ad.set_first_party_network_policy(
+                self._config(Proxy='http://proxy.example:3128'), detected='',
+            )
+            session = ad.build_first_party_session()
+            try:
+                self.assertFalse(session.trust_env)
+                self.assertEqual(session.verify, bundle)
+            finally:
+                session.close()
+
+    def test_both_transports_agree_about_an_environment_proxy(self):
+        # With nothing configured the requests path honours HTTP_PROXY, so the
+        # native path must not install an empty ProxyHandler that disables it.
+        ad.set_first_party_network_policy(self._config(), detected='')
+        installed = {}
+
+        def _fake_build_opener(*handlers):
+            installed['proxy_handlers'] = [
+                h for h in handlers
+                if isinstance(h, urllib.request.ProxyHandler)
+            ]
+            raise AssertionError('stop before opening')
+
+        with mock.patch.object(
+            ad.urllib.request, 'build_opener', side_effect=_fake_build_opener
+        ):
+            with self.assertRaises(AssertionError):
+                ad.first_party_native_fetch('https://example.invalid/x')
+        self.assertEqual(
+            installed['proxy_handlers'], [],
+            'with no configured proxy the native path must leave urllib to its '
+            'own environment handling, as the requests path does',
+        )
+
+    def test_a_native_failure_through_a_proxy_names_the_route(self):
+        # The resolver turns every transport failure into "could not be
+        # reached", and urllib's own message names no host, so a blocked proxy
+        # read as a broken internet.
+        with socket.socket() as probe:
+            probe.bind(('127.0.0.1', 0))
+            dead_port = probe.getsockname()[1]
+        ad.set_first_party_network_policy(
+            self._config(Proxy=f'http://127.0.0.1:{dead_port}'), detected='',
+        )
+        with self.assertRaises(urllib.error.URLError) as caught:
+            ad.first_party_native_fetch('http://unresolvable.invalid/playback')
+        self.assertIn(str(dead_port), str(caught.exception))
+        self.assertIn('proxy', str(caught.exception).lower())
+
+    def test_a_response_nobody_closes_does_not_hold_its_session(self):
+        # first_party_http_get is injected as the generic http_get dependency,
+        # so a caller that does not use `with` is reachable. The close override
+        # must not capture the response, or the cycle keeps both alive until a
+        # cyclic GC pass.
+        closed = []
+
+        class _Session:
+            proxies = {}
+            trust_env = True
+
+            def get(self, *_args, **_kwargs):
+                return ad.http_requests.models.Response()
+
+            def close(self):
+                closed.append(True)
+
+            def mount(self, *_args):
+                pass
+
+        with mock.patch.object(ad, 'build_first_party_session', _Session):
+            response = ad.first_party_http_get('https://example.invalid/x')
+            tracker = weakref.ref(response)
+            del response
+        self.assertIsNone(tracker(), 'the response outlived its only reference')
+        self.assertEqual(closed, [True], 'the session was never closed')
+
     def test_the_native_fetch_sends_through_the_configured_proxy(self):
         ad.set_first_party_network_policy(
             self._config(Proxy='http://proxy.example:3128'), detected='',
@@ -2454,9 +2571,15 @@ class DatedFixtureShelfLifeTests(unittest.TestCase):
     pinned `2026.08.01` and went red on 2026-08-31.
     """
 
-    _VERSION_PATCH_RE = re.compile(
-        r"""get_ytdlp_version['"]\s*,\s*return_value\s*=\s*['"](\d{4}\.\d{1,2}\.\d{1,2})['"]"""
-    )
+    # Any dated literal in a qualifying test, not one mock spelling. The first
+    # version of this scan matched `get_ytdlp_version', return_value='...'` and
+    # so missed direct assignment (`ad.get_ytdlp_version = lambda ...`), which
+    # is the dominant fixture style in this very file, plus `side_effect=`,
+    # `new=`, and a dependency-dict lambda. The rule that survives all of them
+    # is: a test that stubs the version and asserts a fresh outcome must not
+    # name a date.
+    _VERSION_STUB_MARKER = 'get_ytdlp_version'
+    _DATED_LITERAL_RE = re.compile(r"""['"](\d{4}\.\d{1,2}\.\d{1,2})['"]""")
     # A literal version is only a fuse where the outcome under assertion is
     # measured against the clock. The same literal feeding a pin comparison
     # (`ManagedBinaryPins`) is a plain string equality and never expires, so
@@ -2476,18 +2599,33 @@ class DatedFixtureShelfLifeTests(unittest.TestCase):
 
     @classmethod
     def _dated_literals_in_freshness_tests(cls, text):
-        """Yield (test name, version literal) for clock-sensitive fixtures."""
-        for node in ast.walk(ast.parse(text)):
+        """Yield (test name, version literal) for clock-sensitive fixtures.
+
+        This class is skipped when scanning the tree: its own control tests
+        carry the defect as a string on purpose, and a scanner that reports
+        its own fixtures reports nothing useful about the suite.
+        """
+        tree = ast.parse(text)
+        exempt = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == cls.__name__:
+                exempt.update(
+                    child.name for child in ast.walk(node)
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                )
+        for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if not node.name.startswith("test_"):
+            if not node.name.startswith("test_") or node.name in exempt:
                 continue
             body = ast.get_source_segment(text, node) or ""
             if not any(marker in body for marker in cls._FRESHNESS_MARKERS):
                 continue
+            if cls._VERSION_STUB_MARKER not in body:
+                continue
             if not cls._FRESH_OUTCOME_RE.search(body):
                 continue
-            for literal in cls._VERSION_PATCH_RE.findall(body):
+            for literal in cls._DATED_LITERAL_RE.findall(body):
                 yield node.name, literal
 
     def test_helper_reads_fresh_at_any_point_on_the_clock(self):
@@ -2549,6 +2687,38 @@ class DatedFixtureShelfLifeTests(unittest.TestCase):
         self.assertEqual(
             list(self._dated_literals_in_freshness_tests(stale_direction)), []
         )
+
+    def test_the_scan_sees_every_way_a_fixture_stubs_the_version(self):
+        # The first version of this scan matched one mock spelling and missed
+        # the style this file mostly uses. Each of these is the same defect
+        # written differently, and all of them have to be caught.
+        shapes = {
+            'direct assignment':
+                "    ad.get_ytdlp_version = lambda force=False: '2026.08.01'\n",
+            'side_effect':
+                "    with mock.patch.object(ad, 'get_ytdlp_version',"
+                " side_effect=['2026.08.01']):\n        pass\n",
+            'dependency lambda':
+                "    deps = {'get_ytdlp_version': lambda: '2026.08.01'}\n",
+            'new keyword':
+                "    with mock.patch.object(ad, 'get_ytdlp_version',"
+                " new=lambda: '2026.08.01'):\n        pass\n",
+            'module constant':
+                "    version = '2026.08.01'\n"
+                "    ad.get_ytdlp_version = lambda: version\n",
+        }
+        for label, stub in shapes.items():
+            with self.subTest(shape=label):
+                planted = (
+                    "def test_planted(self):\n"
+                    + stub
+                    + "    self.assertEqual(body['preflight']['status'], 'ready')\n"
+                )
+                self.assertEqual(
+                    [literal for _name, literal
+                     in self._dated_literals_in_freshness_tests(planted)],
+                    ['2026.08.01'],
+                )
 
     def test_no_freshness_fixture_pins_a_version_that_can_expire(self):
         offenders = [

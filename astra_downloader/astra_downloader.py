@@ -11,6 +11,7 @@ import queue
 import http.client
 import urllib.error
 import urllib.request
+import weakref
 from pathlib import Path, PureWindowsPath
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
@@ -4048,6 +4049,32 @@ def resolve_first_party_bind_address(force_ip_version='', source_address=''):
     return None
 
 
+# Proxy schemes the first-party transports can actually speak. `requests`
+# needs PySocks for a SOCKS proxy and raises InvalidSchema without it, and
+# `urllib.request.ProxyHandler` treats every scheme as an HTTP proxy, so a
+# SOCKS URL there sends a plaintext HTTP request into a SOCKS socket. yt-dlp
+# handles SOCKS natively, so the setting stays valid for downloads; only these
+# fetches fall back to the direct route they used before the policy existed.
+FIRST_PARTY_PROXY_SCHEMES = frozenset({'http', 'https'})
+
+
+def first_party_proxy_or_direct(proxy, logger=None):
+    """Return the proxy these transports can use, or "" to go direct."""
+    text = str(proxy or '').strip()
+    if not text:
+        return ''
+    scheme = urlparse(text).scheme.lower()
+    if scheme in FIRST_PARTY_PROXY_SCHEMES:
+        return text
+    if logger:
+        logger(
+            f'{scheme or "that"} proxies are not supported for Astra\'s own '
+            'requests; setup and update traffic will go direct. Downloads '
+            'still use the configured proxy.'
+        )
+    return ''
+
+
 def set_first_party_network_policy(config_get, detected=None):
     """Resolve the network policy every first-party request will use.
 
@@ -4056,9 +4083,12 @@ def set_first_party_network_policy(config_get, detected=None):
     the six call sites that used to pass nothing at all.
     """
     try:
-        proxy = resolve_effective_proxy(
-            config_get,
-            detect_system_proxy() if detected is None else detected,
+        proxy = first_party_proxy_or_direct(
+            resolve_effective_proxy(
+                config_get,
+                detect_system_proxy() if detected is None else detected,
+            ),
+            logger=write_persistent_log,
         )
         bind = resolve_first_party_bind_address(
             config_get('ForceIPVersion', ''), config_get('SourceAddress', ''),
@@ -4106,11 +4136,22 @@ def build_first_party_session(policy=None):
     resolved = policy if policy is not None else first_party_network_policy()
     session = http_requests.Session()
     proxy = str(resolved.get('proxy') or '')
+    # Read what the environment would have contributed *before* switching
+    # trust_env off. requests reads REQUESTS_CA_BUNDLE and CURL_CA_BUNDLE
+    # inside `if self.trust_env`, so clearing the flag to pin the route would
+    # otherwise also throw away the corporate CA bundle — on a TLS-intercepting
+    # proxy, which is exactly the network this policy exists for, that turns a
+    # working fetch into CERTIFICATE_VERIFY_FAILED.
+    environment_ca_bundle = (
+        os.environ.get('REQUESTS_CA_BUNDLE') or os.environ.get('CURL_CA_BUNDLE') or ''
+    )
     if proxy:
         session.proxies.update({'http': proxy, 'https': proxy})
         # A configured proxy is the route, not a suggestion. Without this an
         # environment NO_PROXY entry could still send a host direct.
         session.trust_env = False
+        if environment_ca_bundle:
+            session.verify = environment_ca_bundle
     bind = resolved.get('bind')
     if bind:
         adapter = _BoundSourceAdapter(bind)
@@ -4132,15 +4173,21 @@ def first_party_http_get(url, **kwargs):
     except BaseException:
         session.close()
         raise
-    original_close = response.close
+    # The override must not capture `response`, or the closure the response
+    # holds would hold the response back and refcounting would never reclaim
+    # either — a leak that only a cyclic GC pass clears. A weak reference
+    # closes the loop, and the finalizer covers a caller that never closes at
+    # all, which the injected `http_get` dependency makes possible.
+    reference = weakref.ref(response)
 
     def _close_both():
-        try:
-            original_close()
-        finally:
-            session.close()
+        held = reference()
+        if held is not None:
+            http_requests.Response.close(held)
+        session.close()
 
     response.close = _close_both
+    weakref.finalize(response, session.close)
     return response
 
 
@@ -4154,10 +4201,17 @@ def first_party_native_fetch(url, *, data=None, headers=None, timeout=20):
     policy = first_party_network_policy()
     handlers = []
     proxy = str(policy.get('proxy') or '')
-    handlers.append(
-        urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
-        if proxy else urllib.request.ProxyHandler({})
-    )
+    if proxy:
+        # Pin the route, exactly as the requests path does by clearing
+        # trust_env.
+        handlers.append(
+            urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
+        )
+    # With no configured proxy, install nothing: urllib's default handler
+    # reads the environment, which is what the requests path does too when
+    # trust_env is left on. An empty ProxyHandler here would have disabled
+    # environment proxies on this transport alone, so the two disagreed about
+    # the route out whenever HTTP_PROXY was set and Settings was not.
     bind = policy.get('bind')
     if bind:
         class _BoundHTTPConnection(http.client.HTTPConnection):
@@ -4191,6 +4245,16 @@ def first_party_native_fetch(url, *, data=None, headers=None, timeout=20):
             # reason: the status is the answer; an unreadable body adds nothing
             body = b""
         return error.code, body
+    except urllib.error.URLError as error:
+        # The resolver turns every transport failure into "could not be
+        # reached", and urllib's message names no host. Through a proxy that
+        # is the wrong cause: the site may be fine and the route is not. Name
+        # the route so the failure points where the fix is.
+        if proxy:
+            raise urllib.error.URLError(
+                f'{error.reason} (through the configured proxy {proxy})'
+            ) from error
+        raise
 
 
 def _get_integrations_stamp():
@@ -5527,7 +5591,6 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
-                'set_first_party_network_policy': lambda *args, **kwargs: set_first_party_network_policy(*args, **kwargs),
                 'resolve_effective_proxy': lambda *args, **kwargs: resolve_effective_proxy(*args, **kwargs),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),

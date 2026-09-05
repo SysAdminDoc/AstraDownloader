@@ -191,3 +191,17 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Touches: astra_downloader/test_health.py, astra_downloader/conftest.py.
   Acceptance: No test assigns a managed-binary path outside a TemporaryDirectory it owns. A test that means "this binary is absent" points at a path inside its own tmpdir, so a missed patch writes there and is discarded with the fixture. conftest already redirects INSTALL_DIR and its derived paths; the same redirection covers DENO_PATH, QUICKJS_DIR, WHISPER_BIN_PATH and WHISPER_MODEL_PATH, and a test asserts that none of the managed paths resolve outside the redirected root during a run.
   Complexity: S
+
+- [ ] P3 | AD-99 | npm run check collects the Python suite twice
+  Why: tests/documentation-facts.test.js spawns `pytest --collect-only -q` to read the count the README states, and that runs inside the `node tests` gate while the `python suite` gate then runs the full suite, which collects again. Measured at roughly 8 s of the command's runtime on 2026-09-04. Cost, not correctness.
+  Evidence: tests/documentation-facts.test.js:22-61; scripts/run-checks.js GATES.
+  Touches: tests/documentation-facts.test.js, scripts/run-checks.js.
+  Acceptance: The count the README states is verified once per `npm run check`. Either the python-suite gate emits the collected count for the documentation test to read, or the documentation test reads a count the suite gate wrote, and neither path lets the README go stale without a gate failing. Running `node --test tests/documentation-facts.test.js` on its own still verifies the count.
+  Complexity: S
+
+- [ ] P3 | AD-100 | The pytest gate assertion cannot tell a narrowed run from a full one
+  Why: documentation-facts.test.js asserts exactly one gate's args contain `pytest` and not `--collect-only`. A gate narrowed with `-k`, `--ignore` or `--deselect` satisfies every assertion while running almost nothing, which is the same class of green-but-empty gate the Python-suite gate was added to close.
+  Evidence: tests/documentation-facts.test.js, the pytest-gate test; conftest.py MIN_FULL_SUITE_EXECUTED_TESTS, which already solves this problem for a direct pytest run and is not consulted by the gate assertion.
+  Touches: tests/documentation-facts.test.js.
+  Acceptance: The assertion rejects a python-suite gate carrying any selection-narrowing flag (-k, -m, --ignore, --deselect, --lf, --ff, -x), naming the flag it found. A test plants each flag and confirms the assertion fails, so the check cannot pass by finding nothing.
+  Complexity: S

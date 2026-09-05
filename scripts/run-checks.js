@@ -57,14 +57,24 @@ function main() {
         // interpreter is reported as SKIP with the reason named rather than a
         // bare exit 127, because "no CPython 3.13 on PATH" and "the suite
         // failed" want different responses. It still fails the command.
-        const missingTool = Boolean(run.error) && run.error.code === 'ENOENT';
         const code = run.error ? 127 : (run.status === null ? 1 : run.status);
-        const reason = missingTool ? `${command} is not on PATH` : '';
+        // ENOENT is the rare case on Windows: the `py` launcher ships with any
+        // Python install, so "no CPython 3.13" almost always surfaces as the
+        // launcher's own exit 103, "No suitable Python runtime found". Reading
+        // that as a plain FAIL makes a missing toolchain indistinguishable
+        // from a failing suite, which is the distinction these gates exist to
+        // draw. Either way it is never a pass.
+        const missingTool = Boolean(run.error) && run.error.code === 'ENOENT';
+        const noInterpreter = !run.error && code === 103 && command === 'py';
+        const reason = missingTool
+            ? `${command} is not on PATH`
+            : (noInterpreter ? `${command} found no suitable Python runtime` : '');
         if (run.error && !missingTool) {
             process.stdout.write(`could not run ${command}: ${run.error.message}\n`);
         }
-        if (missingTool) process.stdout.write(`skipped: ${reason}\n`);
-        results.push({ label, code, skipped: missingTool, reason });
+        const skipped = missingTool || noInterpreter;
+        if (skipped) process.stdout.write(`skipped: ${reason}\n`);
+        results.push({ label, code, skipped, reason });
     }
 
     const failed = results.filter((result) => result.code !== 0);

@@ -29,6 +29,15 @@ repository's git log.
   produce a file, that note appears on the failure too. A private video is
   also recognised: yt-dlp's "Sign in if you've been granted access" wording
   had never matched, so it fell through unclassified.
+- A SOCKS proxy no longer breaks Astra's own requests. yt-dlp speaks SOCKS
+  natively so downloads always worked, but the library behind the setup,
+  update and Kick fetches needs a package this build does not ship, and the
+  fallback for those requests is now the direct route they used before, with
+  a line in the log saying so.
+- A pinned proxy route no longer discards the CA bundle named by
+  `REQUESTS_CA_BUNDLE` or `CURL_CA_BUNDLE`. On a proxy that inspects TLS,
+  which is the setup this option exists for, that had turned a working fetch
+  into a certificate error.
 - The proxy and network identity now apply to what Astra fetches for itself.
   Downloads always honoured them because they reach yt-dlp as command-line
   arguments, but the first-run binary setup, the checksum sidecars, the Deno
