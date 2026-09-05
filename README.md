@@ -95,7 +95,9 @@ pasting a link never needs it.
   the targets your yt-dlp actually ships, for sites that answer 403.
 - **Inherit the system proxy.** Turn one Settings option on and downloads use
   the proxy Windows already knows about; the resolved address is shown before
-  you save.
+  you save. The proxy and the network identity apply to what the program
+  fetches for itself too, so on a network where the proxy is the only way out
+  the first-run setup, the updater and the Kick resolver take it as well.
 - **Work around network geography.** Force IPv4 or IPv6, bind a source address,
   send a geo X-Forwarded-For value, or use a verification-only proxy when a
   site or route needs more than a whole-session proxy.
@@ -234,7 +236,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1262 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1271 tests across every core; scratch stays under build/pytest
 npm run check               # all nine gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp

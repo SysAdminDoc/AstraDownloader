@@ -855,6 +855,7 @@ SetupWorker = SetupWorkerCore
 
 _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'build_reveal_command',
+    'set_first_party_network_policy',
     'spawn_detached',
     'summarize_taskbar_progress',
     'build_settings_bundle',
@@ -7439,6 +7440,14 @@ class MainWindowCore(
                 )
                 self._run_setup()
 
+        # The proxy and network identity the app uses for its own fetches are
+        # resolved once and cached, so a saved change has to re-resolve them or
+        # the updater and the native resolvers keep the previous route.
+        refresh_network_policy = self._dependencies.get(
+            'set_first_party_network_policy'
+        )
+        if callable(refresh_network_policy):
+            refresh_network_policy(self.config.get)
         self._sync_connection_ui()
         language_changed = (
             hasattr(self, "cfg_language")

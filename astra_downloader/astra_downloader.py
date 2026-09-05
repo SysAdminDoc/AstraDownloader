@@ -8,6 +8,9 @@ First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 
 import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, hashlib, struct, math, stat
 import queue
+import http.client
+import urllib.error
+import urllib.request
 from pathlib import Path, PureWindowsPath
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
@@ -153,7 +156,7 @@ try:
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
-    from .native_sources import resolve_native_source
+    from .native_sources import NATIVE_SOURCE_MAX_BYTES, resolve_native_source
     from .health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
@@ -305,7 +308,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         write_cookies_netscape as _owned_write_cookies_netscape,
         format_redacted_command_args, DOWNLOAD_PIPELINE_STEPS,
     )
-    from native_sources import resolve_native_source
+    from native_sources import NATIVE_SOURCE_MAX_BYTES, resolve_native_source
     from health import (
         DENO_MIN_VERSION, DENO_SECURITY_MIN_VERSION, NODE_MIN_VERSION,
         QUICKJS_MIN_VERSION, JS_RUNTIMES,
@@ -1300,7 +1303,7 @@ def download_file_atomic(url, path, timeout=60, chunk_size=65536, progress_cb=No
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.download")
     try:
-        with http_requests.get(url, stream=True, timeout=timeout) as r:
+        with first_party_http_get(url, stream=True, timeout=timeout) as r:
             r.raise_for_status()
             total = None
             try:
@@ -1608,7 +1611,7 @@ def fetch_expected_sha256(sidecar_url, target_asset=None, timeout=15):
     """Best-effort checksum fetch. Returns None when the sidecar is missing,
     malformed, or the request fails — caller decides whether to hard-fail."""
     try:
-        with http_requests.get(sidecar_url, stream=True, timeout=timeout) as r:
+        with first_party_http_get(sidecar_url, stream=True, timeout=timeout) as r:
             if r.status_code != 200:
                 return None
             try:
@@ -1923,7 +1926,7 @@ def provision_deno(config=None):
                 'deno-sha256-sidecar-missing',
                 'Deno checksum sidecar was missing or malformed; refusing to extract an unverified runtime.',
             )
-        with http_requests.get(DENO_ZIP_URL, stream=True, timeout=120) as r:
+        with first_party_http_get(DENO_ZIP_URL, stream=True, timeout=120) as r:
             r.raise_for_status()
             total_bytes = 0
             with open(tmp_zip, 'wb') as f:
@@ -3204,17 +3207,17 @@ def get_preflight_state_location():
 
 def fetch_latest_companion_release_tag(timeout=15):
     """Resolve the newest published Release tag for this repository."""
-    response = http_requests.get(
+    with first_party_http_get(
         COMPANION_UPDATE_RELEASE_API_URL,
         timeout=timeout,
         headers={'Accept': 'application/vnd.github+json'},
-    )
-    observe_github_api_budget(response)
-    response.raise_for_status()
-    try:
-        payload = response.json()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError('Could not read the latest Astra Downloader release.') from exc
+    ) as response:
+        observe_github_api_budget(response)
+        response.raise_for_status()
+        try:
+            payload = response.json()
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError('Could not read the latest Astra Downloader release.') from exc
     tag = parse_companion_release_tag(payload)
     if not tag:
         raise RuntimeError('No published Astra Downloader release is available.')
@@ -3228,7 +3231,7 @@ def fetch_latest_companion_version(timeout=15):
     Release asset, so a bump that has not been released must not advertise one.
     """
     tag = fetch_latest_companion_release_tag(timeout=timeout)
-    with http_requests.get(
+    with first_party_http_get(
         COMPANION_UPDATE_VERSION_URL_TEMPLATE.format(tag=tag), stream=True, timeout=timeout,
     ) as response:
         response.raise_for_status()
@@ -3989,6 +3992,194 @@ def detect_system_proxy():
     except (TypeError, ValueError):
         return ""
     return parse_wininet_proxy_server(server)
+
+
+# ── first-party network policy ───────────────────────────────────────────────
+#
+# Downloads have always honoured the configured proxy and network identity,
+# because those reach yt-dlp as argv. Everything this program fetches for
+# itself did not: the managed binary downloads, their checksum sidecars, the
+# Deno archive, the GitHub release API, the version source and the Kick
+# resolver all went out on the default route. On a network where the proxy is
+# the only way out, that is a silent half-outage — the downloads work and the
+# bootstrap, the updater and Kick do not, and Kick reports
+# `network-unreachable`, which names the wrong cause.
+#
+# `requests` reads only HTTP_PROXY/HTTPS_PROXY from the environment. It never
+# sees the WinINET value `detect_system_proxy` parses, nor the Proxy field the
+# user typed into Settings, which is why turning either on changed nothing
+# here.
+_FIRST_PARTY_NETWORK_LOCK = threading.Lock()
+_FIRST_PARTY_NETWORK_POLICY = {'proxy': '', 'bind': None}
+
+
+def resolve_first_party_bind_address(force_ip_version='', source_address=''):
+    """Return the local `(address, port)` a first-party socket must bind to.
+
+    A bound source address forces the address family with it: `create_connection`
+    walks the `getaddrinfo` candidates and a bind of the wrong family fails on
+    that candidate and moves to the next. Binding the wildcard of one family is
+    therefore how "force IPv4" is expressed to a socket, and it needs no
+    monkeypatching of the resolver, which would be process-wide and would not
+    stay put across threads.
+
+    An explicit source address already carries its own family, so it wins over
+    the version toggle rather than being combined with it.
+    """
+    address = str(source_address or '').strip()
+    if address:
+        return (address, 0)
+    version = str(force_ip_version or '').strip().lower()
+    if version == 'ipv4':
+        return ('0.0.0.0', 0)
+    if version == 'ipv6':
+        return ('::', 0)
+    return None
+
+
+def set_first_party_network_policy(config_get, detected=None):
+    """Resolve the network policy every first-party request will use.
+
+    Called once at startup and again whenever settings are saved, so the
+    resolution rules stay in one place instead of being re-derived at each of
+    the six call sites that used to pass nothing at all.
+    """
+    try:
+        proxy = resolve_effective_proxy(
+            config_get,
+            detect_system_proxy() if detected is None else detected,
+        )
+        bind = resolve_first_party_bind_address(
+            config_get('ForceIPVersion', ''), config_get('SourceAddress', ''),
+        )
+    except Exception as error:  # noqa: BLE001
+        # reason: an unreadable setting must not stop the app from starting;
+        # the default route is the same answer the app gave before this existed
+        write_persistent_log(f'Could not resolve the network policy: {error}')
+        proxy, bind = '', None
+    with _FIRST_PARTY_NETWORK_LOCK:
+        _FIRST_PARTY_NETWORK_POLICY['proxy'] = proxy
+        _FIRST_PARTY_NETWORK_POLICY['bind'] = bind
+    return {'proxy': proxy, 'bind': bind}
+
+
+def first_party_network_policy():
+    """Return a snapshot of the resolved policy."""
+    with _FIRST_PARTY_NETWORK_LOCK:
+        return dict(_FIRST_PARTY_NETWORK_POLICY)
+
+
+class _BoundSourceAdapter(http_requests.adapters.HTTPAdapter):
+    """An adapter that binds every connection it opens to one local address."""
+
+    def __init__(self, bind, *args, **kwargs):
+        self._bind = bind
+        super().__init__(*args, **kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['source_address'] = self._bind
+        return super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, proxy, **kwargs):
+        kwargs['source_address'] = self._bind
+        return super().proxy_manager_for(proxy, **kwargs)
+
+
+def build_first_party_session(policy=None):
+    """Return a `requests.Session` carrying the resolved network policy.
+
+    A session per call rather than one shared object: these fetches run on
+    setup and update worker threads, `requests.Session` is not documented as
+    thread-safe, and the traffic is a handful of requests per launch.
+    """
+    resolved = policy if policy is not None else first_party_network_policy()
+    session = http_requests.Session()
+    proxy = str(resolved.get('proxy') or '')
+    if proxy:
+        session.proxies.update({'http': proxy, 'https': proxy})
+        # A configured proxy is the route, not a suggestion. Without this an
+        # environment NO_PROXY entry could still send a host direct.
+        session.trust_env = False
+    bind = resolved.get('bind')
+    if bind:
+        adapter = _BoundSourceAdapter(bind)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+    return session
+
+
+def first_party_http_get(url, **kwargs):
+    """GET on this program's own behalf, through the configured network.
+
+    Returns the response with its session attached so `with ... as r` still
+    closes both. Every managed-binary fetch, checksum read, release-API call
+    and version probe goes through here.
+    """
+    session = build_first_party_session()
+    try:
+        response = session.get(url, **kwargs)
+    except BaseException:
+        session.close()
+        raise
+    original_close = response.close
+
+    def _close_both():
+        try:
+            original_close()
+        finally:
+            session.close()
+
+    response.close = _close_both
+    return response
+
+
+def first_party_native_fetch(url, *, data=None, headers=None, timeout=20):
+    """The `fetch` a native source resolver runs on, policy included.
+
+    `native_sources` is a stdlib-only leaf module and stays that way: it
+    receives this opener through the same dependency injection that hands it
+    to `download.py`, rather than learning what a proxy is.
+    """
+    policy = first_party_network_policy()
+    handlers = []
+    proxy = str(policy.get('proxy') or '')
+    handlers.append(
+        urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
+        if proxy else urllib.request.ProxyHandler({})
+    )
+    bind = policy.get('bind')
+    if bind:
+        class _BoundHTTPConnection(http.client.HTTPConnection):
+            def __init__(self, *args, **kwargs):
+                kwargs['source_address'] = bind
+                super().__init__(*args, **kwargs)
+
+        class _BoundHTTPSConnection(http.client.HTTPSConnection):
+            def __init__(self, *args, **kwargs):
+                kwargs['source_address'] = bind
+                super().__init__(*args, **kwargs)
+
+        class _BoundHTTPHandler(urllib.request.HTTPHandler):
+            def http_open(self, req):
+                return self.do_open(_BoundHTTPConnection, req)
+
+        class _BoundHTTPSHandler(urllib.request.HTTPSHandler):
+            def https_open(self, req):
+                return self.do_open(_BoundHTTPSConnection, req)
+
+        handlers += [_BoundHTTPHandler(), _BoundHTTPSHandler()]
+    opener = urllib.request.build_opener(*handlers)
+    request = urllib.request.Request(url, data=data, headers=dict(headers or {}))
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            return response.status, response.read(NATIVE_SOURCE_MAX_BYTES)
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read(NATIVE_SOURCE_MAX_BYTES)
+        except Exception:  # noqa: BLE001
+            # reason: the status is the answer; an unreadable body adds nothing
+            body = b""
+        return error.code, body
 
 
 def _get_integrations_stamp():
@@ -5325,6 +5516,7 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
+                'set_first_party_network_policy': lambda *args, **kwargs: set_first_party_network_policy(*args, **kwargs),
                 'resolve_effective_proxy': lambda *args, **kwargs: resolve_effective_proxy(*args, **kwargs),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
@@ -5332,7 +5524,9 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
-                'resolve_native_source': lambda *args, **kwargs: resolve_native_source(*args, **kwargs),
+                'resolve_native_source': lambda *args, **kwargs: resolve_native_source(
+                    *args, fetch=first_party_native_fetch, **kwargs
+                ),
                 'probe_extractor_list': lambda *args, **kwargs: probe_extractor_list(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
@@ -5550,7 +5744,7 @@ class SetupWorker(SetupWorkerCore):
                 'get_ytdlp_version': lambda *args, **kwargs: get_ytdlp_version(*args, **kwargs),
                 'managed_binary_pin_for': lambda *args, **kwargs: managed_binary_pin_for(*args, **kwargs),
                 'retain_managed_binary_rollback': lambda *args, **kwargs: retain_managed_binary_rollback(*args, **kwargs),
-                'http_get': lambda *args, **kwargs: http_requests.get(*args, **kwargs),
+                'http_get': lambda *args, **kwargs: first_party_http_get(*args, **kwargs),
                 'launch_command_parts': lambda *args, **kwargs: launch_command_parts(*args, **kwargs),
                 'log_crash': lambda *args, **kwargs: log_crash(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
@@ -5955,13 +6149,16 @@ class MainWindow(MainWindowCore):
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
+                'set_first_party_network_policy': lambda *args, **kwargs: set_first_party_network_policy(*args, **kwargs),
                 'normalize_output_name': lambda *args, **kwargs: normalize_output_name(*args, **kwargs),
                 'normalize_output_template': lambda *args, **kwargs: normalize_output_template(*args, **kwargs),
                 'output_template_preview': lambda *args, **kwargs: output_template_preview(*args, **kwargs),
                 'normalize_playlist_date': lambda *args, **kwargs: normalize_playlist_date(*args, **kwargs),
                 'normalize_impersonate_target': lambda *args, **kwargs: normalize_impersonate_target(*args, **kwargs),
                 'probe_impersonate_targets': lambda *args, **kwargs: probe_impersonate_targets(*args, **kwargs),
-                'resolve_native_source': lambda *args, **kwargs: resolve_native_source(*args, **kwargs),
+                'resolve_native_source': lambda *args, **kwargs: resolve_native_source(
+                    *args, fetch=first_party_native_fetch, **kwargs
+                ),
                 'probe_extractor_list': lambda *args, **kwargs: probe_extractor_list(*args, **kwargs),
                 'probe_output_folder': lambda *args, **kwargs: probe_output_folder(*args, **kwargs),
                 'group_playlist_selection': lambda *args, **kwargs: group_playlist_selection(*args, **kwargs),
@@ -7109,6 +7306,9 @@ def main():
         write_persistent_log(
             "Could not persist the first-run marker; onboarding will remain visible this session."
         )
+    # Resolve before anything fetches on the program's own behalf: the setup
+    # worker, the updater and the Kick resolver all read this.
+    set_first_party_network_policy(config.get)
     apply_application_theme(config.get("Theme", "system"))
     first_run = first_launch or not bool(
         config.get("FirstRunComplete", True)

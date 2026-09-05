@@ -2002,7 +2002,7 @@ class Sha256VerifyTests(unittest.TestCase):
     def test_checksum_sidecar_fetch_is_streamed_and_bounded(self):
         digest = b"e" * 64
         valid = self._SidecarResponse([digest[:20], digest[20:] + b"  yt-dlp.exe\n"])
-        with mock.patch.object(ad.http_requests, 'get', return_value=valid) as get:
+        with mock.patch.object(ad, 'first_party_http_get', return_value=valid) as get:
             result = ad.fetch_expected_sha256(
                 "https://example.invalid/SHA2-256SUMS", target_asset="yt-dlp.exe",
             )
@@ -2012,7 +2012,7 @@ class Sha256VerifyTests(unittest.TestCase):
         oversized = self._SidecarResponse(
             [b"x" * (ad.CHECKSUM_SIDECAR_MAX_BYTES + 1)],
         )
-        with mock.patch.object(ad.http_requests, 'get', return_value=oversized):
+        with mock.patch.object(ad, 'first_party_http_get', return_value=oversized):
             self.assertIsNone(ad.fetch_expected_sha256("https://example.invalid/sums"))
 
     def test_checksum_sidecar_rejects_oversized_content_length_before_reading(self):
@@ -2020,19 +2020,19 @@ class Sha256VerifyTests(unittest.TestCase):
             [b"f" * 64],
             headers={'content-length': str(ad.CHECKSUM_SIDECAR_MAX_BYTES + 1)},
         )
-        with mock.patch.object(ad.http_requests, 'get', return_value=response):
+        with mock.patch.object(ad, 'first_party_http_get', return_value=response):
             self.assertIsNone(ad.fetch_expected_sha256("https://example.invalid/sums"))
 
     def test_bare_sidecar_must_name_the_requested_asset(self):
         response = self._SidecarResponse([b"f" * 64])
-        with mock.patch.object(ad.http_requests, 'get', return_value=response):
+        with mock.patch.object(ad, 'first_party_http_get', return_value=response):
             self.assertIsNone(ad.fetch_expected_sha256(
                 "https://example.invalid/other.exe.sha256",
                 target_asset="yt-dlp.exe",
             ))
 
         response = self._SidecarResponse([b"f" * 64])
-        with mock.patch.object(ad.http_requests, 'get', return_value=response):
+        with mock.patch.object(ad, 'first_party_http_get', return_value=response):
             self.assertEqual(ad.fetch_expected_sha256(
                 "https://example.invalid/yt-dlp.exe.sha256",
                 target_asset="yt-dlp.exe",
@@ -2059,7 +2059,7 @@ class SetupChecksumTests(unittest.TestCase):
             ad.FFMPEG_PATH.write_bytes(b"known working ffmpeg")
             worker = ad.SetupWorker(force_ffmpeg=True)
             try:
-                with mock.patch.object(ad.http_requests, 'get', side_effect=RuntimeError('offline')), \
+                with mock.patch.object(ad, 'first_party_http_get', side_effect=RuntimeError('offline')), \
                         mock.patch.object(ad, 'log_crash'):
                     worker.run()
                 self.assertEqual(ad.FFMPEG_PATH.read_bytes(), b"known working ffmpeg")
@@ -3801,7 +3801,7 @@ class DownloadSizeCeilingTests(unittest.TestCase):
         resp = self._FakeResponse([b"x" * 4], headers={"content-length": "1000"})
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "asset.bin"
-            with mock.patch.object(ad.http_requests, 'get', return_value=resp):
+            with mock.patch.object(ad, 'first_party_http_get', return_value=resp):
                 with self.assertRaises(RuntimeError):
                     ad.download_file_atomic(
                         "https://example.invalid/asset", target, max_bytes=10,
@@ -3816,7 +3816,7 @@ class DownloadSizeCeilingTests(unittest.TestCase):
         resp = self._FakeResponse([b"x" * 8, b"y" * 8])
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "asset.bin"
-            with mock.patch.object(ad.http_requests, 'get', return_value=resp):
+            with mock.patch.object(ad, 'first_party_http_get', return_value=resp):
                 with self.assertRaises(RuntimeError):
                     ad.download_file_atomic(
                         "https://example.invalid/asset", target, max_bytes=10,
@@ -3830,7 +3830,7 @@ class DownloadSizeCeilingTests(unittest.TestCase):
                                   headers={"content-length": "10"})
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "asset.bin"
-            with mock.patch.object(ad.http_requests, 'get', return_value=resp):
+            with mock.patch.object(ad, 'first_party_http_get', return_value=resp):
                 ad.download_file_atomic(
                     "https://example.invalid/asset", target, max_bytes=10,
                 )

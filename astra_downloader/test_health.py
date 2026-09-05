@@ -9,6 +9,7 @@ import json
 import os
 import queue
 import shutil
+import socketserver
 import socket
 import struct
 import subprocess
@@ -19,6 +20,7 @@ import time
 import types
 import unittest
 import zipfile
+import urllib.request
 from datetime import date, datetime, timedelta
 from unittest import mock
 from pathlib import Path
@@ -948,15 +950,15 @@ class DenoProvisionTests(unittest.TestCase):
             yield self.payload
 
     def test_provision_deno_returns_none_on_network_failure(self):
-        original_get = ad.http_requests.get
-        ad.http_requests.get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
+        original_get = ad.first_party_http_get
+        ad.first_party_http_get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
         original_path = ad.DENO_PATH
         ad.DENO_PATH = Path('/nonexistent/deno.exe')
         try:
             result = ad.provision_deno()
             self.assertIsNone(result)
         finally:
-            ad.http_requests.get = original_get
+            ad.first_party_http_get = original_get
             ad.DENO_PATH = original_path
 
     def test_provision_deno_endpoint_requires_token(self):
@@ -996,7 +998,7 @@ class DenoProvisionTests(unittest.TestCase):
             ad.DENO_DIR = Path(tmp)
             ad.DENO_PATH = ad.DENO_DIR / 'deno.exe'
             with mock.patch.object(ad, 'fetch_expected_sha256', return_value=None), \
-                    mock.patch.object(ad.http_requests, 'get') as get_mock:
+                    mock.patch.object(ad, 'first_party_http_get') as get_mock:
                 result = ad.provision_deno()
             self.assertIsNone(result)
             get_mock.assert_not_called()
@@ -1017,7 +1019,7 @@ class DenoProvisionTests(unittest.TestCase):
                 zf.writestr('deno.exe', b'MZ fake deno')
             payload = zip_path.read_bytes()
             with mock.patch.object(ad, 'fetch_expected_sha256', return_value='0' * 64), \
-                    mock.patch.object(ad.http_requests, 'get', return_value=self._FakeResponse(payload)):
+                    mock.patch.object(ad, 'first_party_http_get', return_value=self._FakeResponse(payload)):
                 result = ad.provision_deno()
             self.assertIsNone(result)
             error = ad.get_last_deno_provision_error()
@@ -2184,6 +2186,196 @@ class ProbeRestartsRatherThanAnsweringAboutAGoneBinaryTests(unittest.TestCase):
         self.assertTrue(
             result["got"]["current"],
             "the replaced ffmpeg was reported for a whole TTL",
+        )
+
+
+class FirstPartyNetworkPolicyTests(unittest.TestCase):
+    """What this program fetches for itself takes the route the user configured.
+
+    Downloads always honoured the proxy because it reaches yt-dlp as argv. The
+    managed binary fetches, their checksum sidecars, the Deno archive, the
+    release API, the version source and the Kick resolver went out on the
+    default route, so on a proxy-only network the downloads worked and the
+    bootstrap, the updater and Kick silently did not.
+    """
+
+    def setUp(self):
+        self._saved = ad.first_party_network_policy()
+
+    def tearDown(self):
+        ad.set_first_party_network_policy(
+            lambda key, default=None: {
+                'Proxy': self._saved.get('proxy', ''), 'UseSystemProxy': False,
+            }.get(key, default),
+            detected='',
+        )
+
+    @staticmethod
+    def _config(**values):
+        return lambda key, default=None: values.get(key, default)
+
+    def test_a_typed_proxy_beats_the_detected_one(self):
+        resolved = ad.set_first_party_network_policy(
+            self._config(Proxy='http://typed.example:3128', UseSystemProxy=True),
+            detected='http://detected.example:8080',
+        )
+        self.assertEqual(resolved['proxy'], 'http://typed.example:3128')
+
+    def test_the_system_proxy_is_used_only_when_the_option_is_on(self):
+        off = ad.set_first_party_network_policy(
+            self._config(UseSystemProxy=False), detected='http://detected.example:8080',
+        )
+        self.assertEqual(off['proxy'], '')
+        on = ad.set_first_party_network_policy(
+            self._config(UseSystemProxy=True), detected='http://detected.example:8080',
+        )
+        self.assertEqual(on['proxy'], 'http://detected.example:8080')
+
+    def test_the_bind_address_carries_the_forced_address_family(self):
+        # Binding the wildcard of one family is how a socket is told to use it:
+        # create_connection skips every getaddrinfo candidate whose family the
+        # bind rejects. No resolver monkeypatching, which would be process-wide.
+        self.assertEqual(ad.resolve_first_party_bind_address('ipv4', ''), ('0.0.0.0', 0))
+        self.assertEqual(ad.resolve_first_party_bind_address('ipv6', ''), ('::', 0))
+        self.assertIsNone(ad.resolve_first_party_bind_address('', ''))
+        # An explicit source address already names its family and wins.
+        self.assertEqual(
+            ad.resolve_first_party_bind_address('ipv6', '192.0.2.7'), ('192.0.2.7', 0)
+        )
+
+    def test_the_session_carries_the_proxy_and_ignores_the_environment(self):
+        ad.set_first_party_network_policy(
+            self._config(Proxy='http://proxy.example:3128'), detected='',
+        )
+        session = ad.build_first_party_session()
+        try:
+            self.assertEqual(session.proxies.get('https'), 'http://proxy.example:3128')
+            self.assertEqual(session.proxies.get('http'), 'http://proxy.example:3128')
+            # A configured proxy is the route, not a suggestion: an env NO_PROXY
+            # must not put a host back on the direct path.
+            self.assertFalse(session.trust_env)
+        finally:
+            session.close()
+
+    def test_the_session_binds_when_a_source_address_is_configured(self):
+        ad.set_first_party_network_policy(
+            self._config(ForceIPVersion='ipv4'), detected='',
+        )
+        session = ad.build_first_party_session()
+        try:
+            adapter = session.get_adapter('https://example.invalid/')
+            self.assertEqual(
+                adapter.poolmanager.connection_pool_kw.get('source_address'),
+                ('0.0.0.0', 0),
+            )
+        finally:
+            session.close()
+        ad.set_first_party_network_policy(self._config(), detected='')
+        plain = ad.build_first_party_session()
+        try:
+            adapter = plain.get_adapter('https://example.invalid/')
+            self.assertIsNone(
+                adapter.poolmanager.connection_pool_kw.get('source_address')
+            )
+        finally:
+            plain.close()
+
+    def test_every_first_party_fetch_goes_through_the_policy(self):
+        source = inspect.getsource(ad)
+        stray = re.findall(r"\bhttp_requests\.get\(", source)
+        self.assertEqual(
+            stray, [],
+            "a first-party fetch calls requests.get directly and so ignores the "
+            "configured proxy; route it through first_party_http_get",
+        )
+
+    def test_the_native_resolver_is_handed_the_policy_aware_opener(self):
+        source = inspect.getsource(ad)
+        self.assertIn(
+            "fetch=first_party_native_fetch", source,
+            "resolve_native_source must be injected with the policy-aware fetch, "
+            "or the Kick resolver keeps using a bare urlopen on the default route",
+        )
+
+    def test_a_fetch_really_traverses_the_proxy_and_fails_when_it_refuses(self):
+        # Attribute checks prove the session was configured. This proves the
+        # bytes went that way: the target host does not resolve, so a request
+        # that reaches a 200 can only have been forwarded by the proxy, and one
+        # that reports a proxy error can only have tried to.
+        served = []
+
+        class _Proxy(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        class _Handler(socketserver.StreamRequestHandler):
+            def handle(self):
+                request_line = self.rfile.readline(65536).decode('latin-1')
+                served.append(request_line.split(' ')[1] if ' ' in request_line else '')
+                while True:
+                    line = self.rfile.readline(65536)
+                    if line in (b'\r\n', b'\n', b''):
+                        break
+                self.wfile.write(
+                    b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n'
+                    b'Connection: close\r\n\r\nok'
+                )
+
+        server = _Proxy(('127.0.0.1', 0), _Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            ad.set_first_party_network_policy(
+                self._config(Proxy=f'http://127.0.0.1:{port}'), detected='',
+            )
+            with ad.first_party_http_get(
+                'http://unresolvable.invalid/binary', timeout=15,
+            ) as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.content, b'ok')
+            self.assertEqual(
+                served, ['http://unresolvable.invalid/binary'],
+                'the proxy must have been handed the absolute URI',
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(10)
+
+        # Same fixture, now refusing: the port is closed and the failure must
+        # name the proxy rather than looking like a broken internet.
+        ad.set_first_party_network_policy(
+            self._config(Proxy=f'http://127.0.0.1:{port}'), detected='',
+        )
+        with self.assertRaises(ad.http_requests.exceptions.ProxyError) as caught:
+            ad.first_party_http_get('http://unresolvable.invalid/binary', timeout=15)
+        self.assertIn(str(port), str(caught.exception))
+
+    def test_the_native_fetch_sends_through_the_configured_proxy(self):
+        ad.set_first_party_network_policy(
+            self._config(Proxy='http://proxy.example:3128'), detected='',
+        )
+        seen = {}
+
+        class _Opener:
+            def open(self, request, timeout=None):
+                raise AssertionError('the fixture opener must not be reached')
+
+        def _fake_build_opener(*handlers):
+            for handler in handlers:
+                if isinstance(handler, urllib.request.ProxyHandler):
+                    seen['proxies'] = dict(handler.proxies)
+            return _Opener()
+
+        with mock.patch.object(
+            ad.urllib.request, 'build_opener', side_effect=_fake_build_opener
+        ):
+            with self.assertRaises(AssertionError):
+                ad.first_party_native_fetch('https://web.kick.example/playback')
+        self.assertEqual(
+            seen.get('proxies'),
+            {'http': 'http://proxy.example:3128', 'https': 'http://proxy.example:3128'},
         )
 
 
