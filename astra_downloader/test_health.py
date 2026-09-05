@@ -952,16 +952,23 @@ class DenoProvisionTests(unittest.TestCase):
             yield self.payload
 
     def test_provision_deno_returns_none_on_network_failure(self):
+        # DENO_PATH points inside a directory this test owns. `/nonexistent`
+        # resolves to `C:\nonexistent` on Windows, which is writable, so when
+        # the network patch below missed its seam provision_deno performed a
+        # real 97 MB download into the filesystem root — and then poisoned
+        # every later run, because provision_deno returns early once the file
+        # exists.
         original_get = ad.first_party_http_get
         ad.first_party_http_get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
         original_path = ad.DENO_PATH
-        ad.DENO_PATH = Path('/nonexistent/deno.exe')
-        try:
-            result = ad.provision_deno()
-            self.assertIsNone(result)
-        finally:
-            ad.first_party_http_get = original_get
-            ad.DENO_PATH = original_path
+        with tempfile.TemporaryDirectory() as tmp:
+            ad.DENO_PATH = Path(tmp) / 'absent' / 'deno.exe'
+            try:
+                result = ad.provision_deno()
+                self.assertIsNone(result)
+            finally:
+                ad.first_party_http_get = original_get
+                ad.DENO_PATH = original_path
 
     def test_provision_deno_endpoint_requires_token(self):
         config = FakeConfig({"ServerToken": "f" * 32})
@@ -1059,17 +1066,18 @@ class DenoProvisionTests(unittest.TestCase):
         ad._run_captured_orig = ad._run_captured
         ad._run_captured = lambda args, timeout=5: f'deno {ad.DENO_SECURITY_MIN_VERSION}\n'
         original_deno_path = ad.DENO_PATH
-        ad.DENO_PATH = Path('/nonexistent/deno.exe')
-        try:
-            result = ad.probe_deno_runtime(force=True)
-            self.assertIn('source', result)
-            self.assertEqual(result['source'], 'system')
-        finally:
-            ad.shutil.which = original_which
-            ad.get_ytdlp_version = original_get_version
-            ad._run_captured = ad._run_captured_orig
-            ad.DENO_PATH = original_deno_path
-            ad.reset_deno_runtime_cache()
+        with tempfile.TemporaryDirectory() as tmp:
+            ad.DENO_PATH = Path(tmp) / 'absent' / 'deno.exe'
+            try:
+                result = ad.probe_deno_runtime(force=True)
+                self.assertIn('source', result)
+                self.assertEqual(result['source'], 'system')
+            finally:
+                ad.shutil.which = original_which
+                ad.get_ytdlp_version = original_get_version
+                ad._run_captured = ad._run_captured_orig
+                ad.DENO_PATH = original_deno_path
+                ad.reset_deno_runtime_cache()
 
 
 class SabrReadinessTests(unittest.TestCase):
@@ -2429,6 +2437,36 @@ class YtDlpPinFloorTests(unittest.TestCase):
         )
         self.assertTrue(
             ad._managed_binary_below_floor("ffmpeg", "N-100000-gaaaaaaaaa-20200101")
+        )
+
+    def test_no_fixture_points_a_managed_path_at_the_filesystem_root(self):
+        # `/nonexistent/deno.exe` is not a nonexistent path on Windows, it is
+        # `C:\\nonexistent\\deno.exe`, which is writable. A network patch that
+        # missed its seam therefore downloaded 97 MB into the drive root, and
+        # then poisoned every later run because provision_deno returns early
+        # once the file is there. A fixture must write where its own tmpdir
+        # will discard it.
+        root = Path(ad.__file__).resolve().parent
+        offenders = []
+        for source in sorted(root.glob("test_*.py")):
+            text = source.read_text(encoding="utf-8")
+            for node in ast.walk(ast.parse(text)):
+                if not isinstance(node, ast.Call):
+                    continue
+                if getattr(node.func, "id", None) != "Path" or not node.args:
+                    continue
+                first = node.args[0]
+                if not (isinstance(first, ast.Constant)
+                        and isinstance(first.value, str)):
+                    continue
+                value = first.value
+                if value.startswith("/") or value.startswith("\\"):
+                    offenders.append(f"{source.name}: Path({value!r})")
+        self.assertEqual(
+            offenders, [],
+            "an absolute POSIX-looking path resolves to the current drive root "
+            "on Windows and is writable there; build the path from a "
+            "TemporaryDirectory the test owns",
         )
 
     def test_every_pinnable_binary_that_touches_the_network_has_a_floor(self):
