@@ -23,6 +23,12 @@ repository's git log.
 
 ### Fixed
 
+- A DRM-protected video and one the source no longer has are now named as
+  themselves instead of producing a generic failure with a retry that can
+  never succeed. Where the Sites page already records why a service cannot
+  produce a file, that note appears on the failure too. A private video is
+  also recognised: yt-dlp's "Sign in if you've been granted access" wording
+  had never matched, so it fell through unclassified.
 - The proxy and network identity now apply to what Astra fetches for itself.
   Downloads always honoured them because they reach yt-dlp as command-line
   arguments, but the first-run binary setup, the checksum sidecars, the Deno

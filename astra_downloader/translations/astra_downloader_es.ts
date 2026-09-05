@@ -3759,6 +3759,30 @@
       <translation>Subtitle language</translation>
     </message>
     <message>
+      <source>This video is encrypted with DRM, so no downloader can produce a file from it.</source>
+      <translation>This video is encrypted with DRM, so no downloader can produce a file from it.</translation>
+    </message>
+    <message>
+      <source>This is not a fault to retry or a sign-in to fix. The Sites page marks which services serve DRM-protected media.</source>
+      <translation>This is not a fault to retry or a sign-in to fix. The Sites page marks which services serve DRM-protected media.</translation>
+    </message>
+    <message>
+      <source>nothing-to-retry</source>
+      <translation>nothing-to-retry</translation>
+    </message>
+    <message>
+      <source>The source no longer has this video. It may have been removed, made private, or the live event may have ended.</source>
+      <translation>The source no longer has this video. It may have been removed, made private, or the live event may have ended.</translation>
+    </message>
+    <message>
+      <source>Check the link in a browser. If the page is gone, there is nothing left to download.</source>
+      <translation>Check the link in a browser. If the page is gone, there is nothing left to download.</translation>
+    </message>
+    <message>
+      <source>check-link-and-retry</source>
+      <translation>check-link-and-retry</translation>
+    </message>
+    <message>
       <source>YouTube requires a proof-of-origin token for this video, and the plugin-free client chain cannot supply one.</source>
       <translation>YouTube requires a proof-of-origin token for this video, and the plugin-free client chain cannot supply one.</translation>
     </message>
@@ -3933,10 +3957,6 @@
     <message>
       <source>The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.</source>
       <translation>El vídeo puede ser privado, solo para suscriptores, estar eliminado o aún en proceso. Compruebe que el enlace se reproduce en un navegador y vuelva a intentarlo.</translation>
-    </message>
-    <message>
-      <source>check-link-and-retry</source>
-      <translation>check-link-and-retry</translation>
     </message>
     <message>
       <source>The site refused the request (HTTP 403).</source>

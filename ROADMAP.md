@@ -17,13 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: Whichever layout is chosen, an install followed by a version bump followed by scoop update and scoop cleanup leaves settings, history, queue, subscriptions and stored sign-ins readable, and does not re-download the managed binaries. A gate fails when a state path named in astra_downloader.py has no counterpart in the manifest's persist list under the portable layout. README.md documents the Scoop install command actually supported.
   Complexity: M
 
-- [ ] P1 | AD-91 | Classify DRM and permanently unavailable media as their own failures
-  Why: _classify_failure_text covers PO tokens, sign-in, SABR, rate limits, geo blocks, 403s, FFmpeg and network, and returns None for yt-dlp's "This video is DRM protected", "Video unavailable", "This video has been removed" and "This live event has ended". The Download page then shows a generic failure with a retry that can never succeed, in an app whose README promises it tells you why before it fails. sites.py already carries honest DRM notes for Spotify and Crunchyroll, so the vocabulary exists and the runtime does not use it.
-  Evidence: astra_downloader/download.py:3336 _classify_failure_text and the DOWNLOAD_FAILURE_RECOVERY table at :661; astra_downloader/sites.py:338 and :414 DRM notes; ytDownloader issue 561 shows the cost of a mute failure on gated media.
-  Touches: astra_downloader/download.py, astra_downloader/gui.py, astra_downloader/health.py recovery preconditions, astra_downloader/test_download.py, translation catalogues.
-  Acceptance: New error codes drm-protected and media-unavailable carry error text, advice and a next_action. Both are terminal: is_retryable returns False and the card offers no retry, offering the site note where sites.py has one. Ordering is pinned by tests so a DRM message containing "sign in" still classifies as DRM, and a removed-video message does not fall into the network bucket. Every new string reaches the catalogues and the catch-reason gate stays green.
-  Complexity: M
-
 - [ ] P1 | AD-76 | Notify hidden users when a download fails
   Why: _notify_completed_downloads handles complete and skipped jobs only, so an overnight failure is silent until the user reopens the window.
   Evidence: astra_downloader/gui.py _notify_completed_downloads; durable failure recording in astra_downloader/download.py _record_history; the YT-DLP Studio README advertises both finish and failure alerts. AD-63 remains the accessibility half of this work.
