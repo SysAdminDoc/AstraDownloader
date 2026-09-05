@@ -14,6 +14,15 @@ repository's git log.
 
 ### Security
 
+- Rolling back yt-dlp to a retained copy older than the CVE-2026-55404 fix is
+  refused before anything is copied, and the installed yt-dlp is left alone.
+  The check used to run after the restore, so it blocked only the pin: the old
+  build was already live and the result still reported success.
+- The readiness panel now reports an installed yt-dlp that is older than that
+  fix, whatever the auto-update setting. The floor previously only stopped you
+  naming an old release, so one already on disk stayed in use with no signal.
+  A stored pin dropped for being below a floor now says so in the log instead
+  of disappearing.
 - A proxy password no longer reaches the download card, the queue and history
   files, the browser extension, or a diagnostics payload. A failure through a
   configured proxy names it by scheme, host and port only, and the same

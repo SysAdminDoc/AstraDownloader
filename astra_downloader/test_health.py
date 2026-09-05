@@ -2233,6 +2233,76 @@ class YtDlpPinFloorTests(unittest.TestCase):
             ad._compare_semver(ad.YTDLP_SECURITY_MIN_VERSION, '2026.7.4'), 0
         )
 
+    def test_a_rollback_below_the_floor_is_refused_before_anything_is_copied(self):
+        # The floor blocked naming an old yt-dlp but not installing one:
+        # rollback copied the retained binary into place and only then asked
+        # for the pin, so a refused pin left the vulnerable build live while
+        # the result still reported ok, which the Settings page paints green.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            active = Path(tmpdir) / "yt-dlp.exe"
+            backup = Path(tmpdir) / "yt-dlp.rollback.exe"
+            active.write_bytes(b"current" + b"\0" * (2 * 1024 * 1024))
+            backup.write_bytes(b"retained" + b"\0" * (2 * 1024 * 1024))
+            before = active.read_bytes()
+            versions = {str(active): "2026.08.19", str(backup): "2026.06.09"}
+            copied = []
+
+            with mock.patch.object(ad, "managed_binary_paths",
+                                   return_value={"yt-dlp": active}), \
+                    mock.patch.object(ad, "managed_binary_rollback_path",
+                                      return_value=backup), \
+                    mock.patch.object(
+                        ad, "probe_managed_binary_version",
+                        side_effect=lambda _name, p=None: versions.get(
+                            str(p or active), ""
+                        )), \
+                    mock.patch.object(ad, "atomic_copy_verified",
+                                      side_effect=lambda *a: copied.append(a)):
+                result = ad.rollback_managed_binary(
+                    FakeConfig({"ManagedBinaryPins": {}}), "yt-dlp"
+                )
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["reason"], "rollback-below-security-floor")
+            self.assertEqual(result["floor"], ad.YTDLP_SECURITY_MIN_VERSION)
+            self.assertIn(ad.YTDLP_SECURITY_MIN_VERSION, result["message"])
+            self.assertEqual(copied, [], "nothing may be copied over the active binary")
+            self.assertEqual(active.read_bytes(), before)
+
+    def test_a_rollback_at_or_above_the_floor_still_restores_and_pins(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            active = Path(tmpdir) / "yt-dlp.exe"
+            backup = Path(tmpdir) / "yt-dlp.rollback.exe"
+            active.write_bytes(b"current" + b"\0" * (2 * 1024 * 1024))
+            backup.write_bytes(b"retained" + b"\0" * (2 * 1024 * 1024))
+            retained = "2026.08.19"
+            stored = {}
+
+            class PinConfig(FakeConfig):
+                def update(self, mapping):
+                    stored.update(mapping)
+                    self.data.update(mapping)
+                    return True
+
+            with mock.patch.object(ad, "managed_binary_paths",
+                                   return_value={"yt-dlp": active}), \
+                    mock.patch.object(ad, "managed_binary_rollback_path",
+                                      return_value=backup), \
+                    mock.patch.object(
+                        ad, "probe_managed_binary_version",
+                        return_value=retained), \
+                    mock.patch.object(ad, "atomic_copy_verified",
+                                      return_value=str(active)):
+                result = ad.rollback_managed_binary(
+                    PinConfig({"ManagedBinaryPins": {}}), "yt-dlp"
+                )
+
+            self.assertTrue(result["ok"], result["message"])
+            self.assertEqual(result["version"], retained)
+            self.assertEqual(
+                stored.get("ManagedBinaryPins", {}).get("yt-dlp"), retained
+            )
+
     def test_a_stored_pin_below_the_floor_is_dropped_on_load(self):
         # Dropping rather than raising to the floor: an unpinned binary follows
         # the published release, which is at or above the floor by definition,
@@ -2244,6 +2314,69 @@ class YtDlpPinFloorTests(unittest.TestCase):
         self.assertNotIn('yt-dlp', active)
         self.assertEqual(active.get('ffmpeg'), '8.1.2')
         self.assertEqual(ad.managed_binary_pin_for(config, 'yt-dlp'), '')
+
+    def test_an_installed_below_floor_ytdlp_blocks_the_preflight(self):
+        # The pin path refused an old release by name, but with auto-update off
+        # nothing raised one already on disk, so a below-floor yt-dlp stayed in
+        # use with no signal anywhere.
+        import health
+
+        def freshness(version, now):
+            return next(
+                item
+                for item in health.evaluate_preflight_checks(
+                    ytdlp_version=version,
+                    ffmpeg_capabilities={
+                        "current": True, "filterCheck": True, "missingFilters": [],
+                    },
+                    javascript_runtime={"ytdlpNeedsRuntime": False},
+                    sign_in_entries=[],
+                    github_api_budget={"remaining": 20, "limit": 60},
+                    po_token_provider=None,
+                    now=now,
+                )["checks"]
+                if item["id"] == "ytdlp-freshness"
+            )
+
+        # Below the floor is an error even when it is one day old, because age
+        # is not the problem.
+        check = freshness("2026.06.09", date(2026, 6, 10))
+        self.assertEqual(check["status"], "error")
+        self.assertTrue(check["details"]["belowSecurityFloor"])
+        self.assertEqual(
+            check["details"]["securityFloor"], health.YTDLP_SECURITY_MIN_VERSION
+        )
+        self.assertIn(health.YTDLP_SECURITY_MIN_VERSION, check["message"])
+
+        # At the floor and fresh is ok; at the floor and old is the ordinary
+        # staleness warning, not an error.
+        at_floor = freshness(health.YTDLP_SECURITY_MIN_VERSION, date(2026, 7, 5))
+        self.assertEqual(at_floor["status"], "ok")
+        self.assertFalse(at_floor["details"]["belowSecurityFloor"])
+        stale = freshness(health.YTDLP_SECURITY_MIN_VERSION, date(2026, 9, 5))
+        self.assertEqual(stale["status"], "warning")
+        self.assertFalse(stale["details"]["belowSecurityFloor"])
+
+    def test_a_dropped_pin_says_why_instead_of_vanishing(self):
+        import health
+
+        logged = []
+        pins = health.filter_managed_binary_pins(
+            {"yt-dlp": "2026.06.09", "deno": "9.9.9"},
+            floors=health.MANAGED_BINARY_SECURITY_FLOORS,
+            logger=logged.append,
+        )
+        self.assertNotIn("yt-dlp", pins)
+        self.assertEqual(pins.get("deno"), "9.9.9")
+        self.assertEqual(len(logged), 1)
+        self.assertIn("2026.06.09", logged[0])
+        self.assertIn(health.YTDLP_SECURITY_MIN_VERSION, logged[0])
+        # A pin that was never set says nothing at all.
+        quiet = []
+        health.filter_managed_binary_pins(
+            {}, floors=health.MANAGED_BINARY_SECURITY_FLOORS, logger=quiet.append
+        )
+        self.assertEqual(quiet, [])
 
     def test_every_pinnable_binary_that_touches_the_network_has_a_floor(self):
         for name in ('yt-dlp', 'ffmpeg', 'deno', 'quickjs'):

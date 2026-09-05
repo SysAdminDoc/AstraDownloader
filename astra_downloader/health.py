@@ -31,6 +31,7 @@ __all__ = (
     "reset_deno_runtime_cache", "provision_deno", "_parse_ytdlp_release_date",
     "ytdlp_needs_external_runtime", "YTDLP_EXTERNAL_RUNTIME_CUTOFF",
     "DENO_MIN_VERSION", "DENO_SECURITY_MIN_VERSION", "NODE_MIN_VERSION", "parse_ffmpeg_major",
+    "YTDLP_SECURITY_MIN_VERSION",
     "parse_ffmpeg_snapshot_date", "probe_whisper_runtime",
     "check_ffmpeg_capabilities", "reset_ffmpeg_capabilities_cache",
     "build_youtube_extractor_args", "is_youtube_url", "should_check_ytdlp_update",
@@ -223,11 +224,20 @@ def _compare_semver(a, b):
 # and pins to it.
 MANAGED_BINARY_NAMES = ("yt-dlp", "ffmpeg", "deno", "quickjs", "whisper")
 
-# Only the binaries with a *declared* security floor can refuse a pin, and
-# these are the declarations that already exist. yt-dlp and whisper have no
-# version floor in this project, so a pin there is accepted — inventing one
-# to make the refusal path uniform would be a number nobody measured.
+# The yt-dlp release that fixed CVE-2026-55404, downstream command injection
+# through unsanitized `--write-link` output. `requirements.txt` has named this
+# release since it shipped. yt-dlp versions are dates, and `_compare_semver`
+# reads them in both the padded (`2026.08.19`) and unpadded (`2026.7.4`) forms
+# the project publishes.
+YTDLP_SECURITY_MIN_VERSION = "2026.07.04"
+
+# Only the binaries with a *declared* security floor can refuse a pin. whisper
+# still has none: it parses audio this program handed it, offline, and
+# inventing a number nobody measured to make the refusal path uniform would be
+# worse than the gap. ffmpeg's floor is declared in the composition root beside
+# the capability probe that shares it.
 MANAGED_BINARY_SECURITY_FLOORS = {
+    "yt-dlp": YTDLP_SECURITY_MIN_VERSION,
     "deno": DENO_SECURITY_MIN_VERSION,
     "quickjs": QUICKJS_MIN_VERSION,
 }
@@ -315,12 +325,17 @@ def _numeric_release_parts(value):
     return False
 
 
-def filter_managed_binary_pins(raw, floors=None, snapshot_floors=None):
+def filter_managed_binary_pins(raw, floors=None, snapshot_floors=None,
+                               logger=None):
     """Keep only the pins that would be accepted if they were set today.
 
     A floor can rise between releases, which would otherwise leave a stored
     pin quietly holding a binary below it. Dropping the pin on load is the
     behaviour that fails safe: the binary goes back to the published release.
+
+    `logger` names the drop. Silently discarding a setting the user chose
+    leaves them reading a Settings panel that says "Not pinned" with no idea
+    why, and the raw entry is still sitting in their config file.
     """
     pins = {}
     if not isinstance(raw, dict):
@@ -331,6 +346,11 @@ def filter_managed_binary_pins(raw, floors=None, snapshot_floors=None):
         )
         if decision["ok"] and decision["version"]:
             pins[name] = decision["version"]
+        elif logger and decision["version"] and not decision["ok"]:
+            logger(
+                f"Ignoring the stored {name} pin {decision['version']}: "
+                f"{decision['message']}"
+            )
     return pins
 
 
@@ -572,16 +592,34 @@ def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
         except ValueError:
             age_days = YTDLP_STALE_AFTER_DAYS + 1
         stale = age_days > YTDLP_STALE_AFTER_DAYS
-        checks.append(_preflight_check(
-            "ytdlp-freshness", "yt-dlp freshness",
-            "warning" if stale else "ok", "refresh-ytdlp",
-            (
+        # A floor is only worth declaring if something checks the binary that
+        # is actually running. The pin path refused an old release by name, but
+        # with auto-update off nothing raised one already on disk, so a
+        # below-floor yt-dlp stayed in use with no signal anywhere. Deno has
+        # had this check all along.
+        below_floor = _compare_semver(
+            str(ytdlp_version), YTDLP_SECURITY_MIN_VERSION
+        ) < 0
+        if below_floor:
+            status, message = "error", (
+                f"Installed yt-dlp {ytdlp_version} is below the "
+                f"{YTDLP_SECURITY_MIN_VERSION} security floor; refresh it "
+                "before starting a download."
+            )
+        elif stale:
+            status, message = "warning", (
                 f"Installed yt-dlp is {age_days} days old; refresh it before "
                 "starting a download."
-                if stale else "Installed yt-dlp is within the freshness window."
-            ),
+            )
+        else:
+            status, message = "ok", "Installed yt-dlp is within the freshness window."
+        checks.append(_preflight_check(
+            "ytdlp-freshness", "yt-dlp freshness", status, "refresh-ytdlp",
+            message,
             version=str(ytdlp_version), ageDays=age_days,
             maxAgeDays=YTDLP_STALE_AFTER_DAYS,
+            securityFloor=YTDLP_SECURITY_MIN_VERSION,
+            belowSecurityFloor=below_floor,
         ))
 
     runtime = javascript_runtime if isinstance(javascript_runtime, dict) else {}
