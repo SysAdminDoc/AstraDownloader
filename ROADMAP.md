@@ -8,7 +8,49 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P0
 
+- [ ] P0 | AD-86 | Stop pinning an absolute yt-dlp version against a relative freshness window
+  Why: test_health_exposes_preflight_without_network_or_site_metadata patches get_ytdlp_version to the literal '2026.08.01' and asserts preflight status 'ready', while YTDLP_STALE_AFTER_DAYS is 30. The fixture expired on 2026-08-31 and the suite has been red on a clean checkout every run since; on 2026-09-04 pytest reported 1 failed, 1257 passed, 1 skipped.
+  Evidence: astra_downloader/test_routes.py:3513 and its assertion at :3529; astra_downloader/health.py:80 YTDLP_STALE_AFTER_DAYS; nine literal-version patch sites at test_download.py:2204, test_health.py:864/894/919, test_routes.py:3513/3551/3862/3934/3962.
+  Touches: astra_downloader/test_routes.py, astra_downloader/test_health.py, astra_downloader/test_download.py, astra_downloader/testing_support.py.
+  Acceptance: No test derives a freshness outcome from a hardcoded calendar date. Fixtures that need a fresh yt-dlp build the version from the same clock the check reads (or freeze that clock), and fixtures that need a stale one keep an absolute date because it can only get staler. The full suite passes with the system clock set to 2026-09-04, to one year later, and to one day after a fixture's nominal release date. A helper in testing_support.py is the single place a "fresh enough" version is produced.
+  Complexity: S
+
+- [ ] P0 | AD-87 | Make the gate command run the suite it says it runs
+  Why: run-checks.js declares its first gate as `['unit tests', process.execPath, ['--test', ...TEST_FILES]]` where TEST_FILES is tests/*.test.js, six Node files. Nothing in npm run check, npm run release:stage or build.py executes pytest; documentation-facts.test.js only invokes it with --collect-only to count. On 2026-09-04 the gate set printed "all 8 gates passed" while the Python suite was red, and README.md says npm run check "runs the unit tests" four lines under the pytest command.
+  Evidence: scripts/run-checks.js:20-43; tests/documentation-facts.test.js:29; README.md "Tests and gates"; the AD-86 failure surviving a green npm run check.
+  Touches: scripts/run-checks.js, README.md, CLAUDE.md commands table, tests/documentation-facts.test.js.
+  Acceptance: The gate table carries a distinct Python-suite gate that runs pytest and fails the command when the suite fails, alongside the renamed Node gate. npm run check is red on the AD-86 failure and green once it is fixed, and the printed gate count and README wording name both suites separately. A missing Python interpreter reports a skipped gate with a named reason rather than a pass. documentation-facts.test.js asserts that a gate exists whose command invokes pytest without --collect-only.
+  Complexity: S
+
 ### P1
+
+- [ ] P1 | AD-88 | Route Astra's own HTTP through the network settings it advertises
+  Why: Every first-party request passes no proxy and no network identity. On a network where the configured proxy is the only route out, downloads work and the bootstrap, the self-update, the GitHub release API and the Kick resolver silently do not, and the Kick failure is reported as network-unreachable, which names the wrong cause. requests honours HTTP_PROXY/HTTPS_PROXY only and never reads the WinINET value detect_system_proxy already parses.
+  Evidence: astra_downloader/astra_downloader.py:1303, :1611, :1926, :3207, :3231 (no proxies= argument); astra_downloader/native_sources.py:90 bare urllib.request.urlopen; astra_downloader/astra_downloader.py:3949 detect_system_proxy; Parabolic issue 1948 reports the same class of bug.
+  Touches: astra_downloader/astra_downloader.py (the http_get dependency and every managed-fetch call site), astra_downloader/native_sources.py (_default_fetch and the resolve_native_source signature), astra_downloader/download.py (the resolve_native_source injection), astra_downloader/test_native_sources.py, astra_downloader/test_health.py.
+  Acceptance: One resolved network policy (proxy, forced IP version, source address) is computed once and applied to every first-party request, including the native resolver, which receives an opener rather than importing anything new. A fixture proxy that refuses all traffic makes the managed-binary fetch, the update check and the Kick resolve fail with a proxy-named reason; the same fixture accepting traffic makes them succeed. Enabling the system-proxy option changes the address the first-party requests use, and the Settings page's resolved-address preview names the same value the requests will send through.
+  Complexity: M
+
+- [ ] P1 | AD-89 | Stop the Scoop package from discarding user state on update
+  Why: packaging/scoop/astra-downloader.json sets "persist": [] and installs the one-folder zip, which carries .astradownloader-portable, so runtime_state_dir() puts config.json, history.json, download-queue.json, subscriptions.json, site-logins/, server.log and the managed yt-dlp/ffmpeg/deno/quickjs/whisper trees inside scoop\apps\astra-downloader\<version>\. Scoop links only persist entries out of the versioned directory, so an update starts from an empty state root, loses stored sign-ins and re-provisions the whole managed binary set. The manifest is also in no bucket and README.md never mentions Scoop, so today it reaches nobody.
+  Evidence: packaging/scoop/astra-downloader.json; astra_downloader/astra_downloader.py:372 PORTABLE_MARKER_NAME, runtime_state_dir, and the INSTALL_DIR paths at :511-593; astra_downloader/build.py:233 writing the marker into the zip; https://github.com/ScoopInstaller/Scoop/wiki/Persistent-data. Open question 1 in RESEARCH.md decides between persisting the portable layout and switching Scoop to the managed install.
+  Touches: packaging/scoop/astra-downloader.json, README.md, scripts/check-versions.js or a new manifest gate, tests/documentation-facts.test.js.
+  Acceptance: Whichever layout is chosen, an install followed by a version bump followed by scoop update and scoop cleanup leaves settings, history, queue, subscriptions and stored sign-ins readable, and does not re-download the managed binaries. A gate fails when a state path named in astra_downloader.py has no counterpart in the manifest's persist list under the portable layout. README.md documents the Scoop install command actually supported.
+  Complexity: M
+
+- [ ] P1 | AD-90 | Refuse managed-binary pins below the floors this repo already measured
+  Why: MANAGED_BINARY_PIN_NAMES covers yt-dlp, ffmpeg, deno, quickjs and whisper, but MANAGED_BINARY_SECURITY_FLOORS declares only deno and quickjs, so a config file can pin the two binaries that do all the network and media parsing to a version below a known fix. The comment says the missing numbers were never measured; both are written down elsewhere in this tree.
+  Evidence: astra_downloader/health.py:229 MANAGED_BINARY_SECURITY_FLOORS and the comment above it; astra_downloader/config.py MANAGED_BINARY_PIN_NAMES; astra_downloader/requirements.txt naming 2026.7.4 as the yt-dlp release that fixed CVE-2026-55404; astra_downloader/astra_downloader.py:2267 _FFMPEG_MIN_VERSION = "8.1.2", the release that fixed CVE-2026-8461 (https://www.cve.org/CVERecord?id=CVE-2026-8461).
+  Touches: astra_downloader/health.py, astra_downloader/astra_downloader.py, astra_downloader/gui_settings_page.py, astra_downloader/test_health.py, astra_downloader/test_config.py.
+  Acceptance: yt-dlp and ffmpeg carry declared floors sourced from the constants that already exist, with a comment naming the CVE each floor answers. evaluate_managed_binary_pin refuses a pin below a floor with a message naming the floor and the reason, the Settings field shows that refusal instead of saving, and an existing stored pin below a floor is raised to the floor on load rather than silently honoured. Snapshot-shaped FFmpeg versions keep their current handling.
+  Complexity: S
+
+- [ ] P1 | AD-91 | Classify DRM and permanently unavailable media as their own failures
+  Why: _classify_failure_text covers PO tokens, sign-in, SABR, rate limits, geo blocks, 403s, FFmpeg and network, and returns None for yt-dlp's "This video is DRM protected", "Video unavailable", "This video has been removed" and "This live event has ended". The Download page then shows a generic failure with a retry that can never succeed, in an app whose README promises it tells you why before it fails. sites.py already carries honest DRM notes for Spotify and Crunchyroll, so the vocabulary exists and the runtime does not use it.
+  Evidence: astra_downloader/download.py:3336 _classify_failure_text and the DOWNLOAD_FAILURE_RECOVERY table at :661; astra_downloader/sites.py:338 and :414 DRM notes; ytDownloader issue 561 shows the cost of a mute failure on gated media.
+  Touches: astra_downloader/download.py, astra_downloader/gui.py, astra_downloader/health.py recovery preconditions, astra_downloader/test_download.py, translation catalogues.
+  Acceptance: New error codes drm-protected and media-unavailable carry error text, advice and a next_action. Both are terminal: is_retryable returns False and the card offers no retry, offering the site note where sites.py has one. Ordering is pinned by tests so a DRM message containing "sign in" still classifies as DRM, and a removed-video message does not fall into the network bucket. Every new string reaches the catalogues and the catch-reason gate stays green.
+  Complexity: M
 
 - [ ] P1 | AD-76 | Notify hidden users when a download fails
   Why: _notify_completed_downloads handles complete and skipped jobs only, so an overnight failure is silent until the user reopens the window.
@@ -96,7 +138,42 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: Format discovery returns bounded available audio-language codes and an original-language marker. Quick downloads offer Automatic, Original, and discovered languages; the strict API, profiles, subscriptions, queue persistence, and settings bundles carry the same field. An explicit choice compiles to a tested yt-dlp selection rule, a missing choice falls back with a visible explanation, and History records the requested language plus the resolved language when yt-dlp reports it.
   Complexity: L
 
+- [ ] P2 | AD-92 | Give a site profile a destination folder and a concurrency cap
+  Why: validate_site_profiles accepts sixteen fields covering format, quality, impersonation, proxy, rate limits, network identity and pacing, and none of them answers "put this site's files here" or "one at a time for this site, four for everything else". Subscriptions already carry per-item folders, so the storage precedent exists; ordinary and API downloads have only the single global root and the single global concurrency number.
+  Evidence: astra_downloader/config.py:672 validate_site_profiles and the field lists at :718-753; astra_downloader/download.py _max_concurrent and _effective_config_for_url; YTPTube documents presets carrying paths and global plus per-extractor concurrency limits (https://github.com/arabcoders/ytptube).
+  Touches: astra_downloader/config.py, astra_downloader/download.py, astra_downloader/gui_settings_page.py, astra_downloader/gui.py, astra_downloader/routes.py, astra_downloader/test_config.py, astra_downloader/test_download.py, translation catalogues.
+  Acceptance: A profile can carry DownloadFolder and MaxConcurrent. The folder is validated by the same preflight the global root uses (existence, writability, free space, Windows path length) and is rejected on save when it fails, per Open question 2 in RESEARCH.md on whether it may sit outside the download root. The scheduler counts running downloads per matched profile and does not start one past its cap while still filling the remaining global slots with other sites. Quick downloads, the strict API and subscriptions all honour both fields, and the settings bundle carries them.
+  Complexity: M
+
+- [ ] P2 | AD-93 | Widen the output-template allowlist and admit yt-dlp's fallback syntax
+  Why: _SAFE_OUTPUT_FIELDS holds 26 fields with no artist, album, track, release_year, series, episode or extractor, so an extracted-audio library cannot be named the way a music library is named. The charset rule also excludes "|", so yt-dlp's `%(field|fallback)s` is unavailable and a template using %(playlist_index)s on a single video renders the literal NA into the filename.
+  Evidence: astra_downloader/config.py:874 _SAFE_OUTPUT_FIELDS, :953 normalize_output_template and its charset regex; Parabolic issue 767 (advanced file naming) is among that project's most-reacted open requests.
+  Touches: astra_downloader/config.py, astra_downloader/gui_settings_page.py output-path preview, astra_downloader/test_config.py, translation catalogues.
+  Acceptance: The allowlist gains the music and series fields plus extractor, each classified as long-text or short so the existing _OUTPUT_TEXT_BUDGET still bounds the rendered path. The template grammar accepts one fallback per token and the printf-residue check still rejects an unclosed token, a stray percent, a path separator escape, an absolute path and traversal. The Settings preview renders a fallback correctly for both a present and an absent field, and a template that previously produced NA produces the fallback instead. A yt-dlp smoke run proves the accepted grammar is the grammar yt-dlp parses.
+  Complexity: M
+
+- [ ] P2 | AD-94 | Name the transcription model and let its size be chosen
+  Why: Local subtitle generation is pinned to ggml-tiny-q5_1, the least accurate build whisper.cpp ships, and no string in the interface says so. The eleven English transcription strings say only "the bundled multilingual Whisper model", so a user who enables the option and gets poor captions cannot tell whether the feature is broken or the model is small, and cannot trade disk for accuracy.
+  Evidence: astra_downloader/astra_downloader.py:519 WHISPER_MODEL_NAME = 'ggml-tiny-q5_1.bin' with its pinned revision and SHA-256 at :529-535; the transcription strings in astra_downloader/translations/astra_downloader_en.ts; MANAGED_BINARY_PIN_NAMES already carries a whisper entry.
+  Touches: astra_downloader/astra_downloader.py, astra_downloader/config.py, astra_downloader/health.py, astra_downloader/gui_settings_page.py, astra_downloader/download.py, astra_downloader/test_health.py, translation catalogues.
+  Acceptance: The Settings row and the readiness row name the model and its on-disk size. A model choice covering at least tiny and one larger quantized build is offered, each pinned by repository revision, filename and SHA-256 the same way the current one is, with the download deferred until the choice is saved and setup is run. Switching models verifies the new file before the old one is removed, a failed fetch leaves the previous model usable, and the readiness probe reports which model is present rather than a bare ready.
+  Complexity: M
+
 ### P3
+
+- [ ] P3 | AD-95 | Report terminal download events to a configured webhook
+  Why: Completion and failure are reported only through tray balloons and the window, so a subscription archive left running overnight on a machine nobody is watching reports nothing anywhere durable. Astra already runs an HTTP stack and already builds redacted download descriptions, so the outbound half is small. This is the unattended-archivist counterpart to AD-76, which covers the interactive case.
+  Evidence: astra_downloader/gui.py _notify_completed_downloads and the five QSystemTrayIcon.showMessage sites; astra_downloader/download.py _record_terminal_download and format_redacted_command_args; YTPTube ships Apprise and direct HTTP webhook notifications (https://github.com/arabcoders/ytptube).
+  Touches: astra_downloader/config.py, astra_downloader/download.py, astra_downloader/gui_settings_page.py, astra_downloader/test_download.py, translation catalogues.
+  Acceptance: One optional webhook URL is stored, validated by the same URL policy that governs download targets so it cannot address loopback or private ranges, and is never written to the log, diagnostics or the settings bundle if it carries credentials. Completion, failure and subscription-archive events POST a bounded JSON body carrying the same redacted fields History already exposes, never a cookie, credential, token or raw command line. Delivery is off the download thread, is attempted a bounded number of times, and a failing endpoint never delays or fails the download itself. The feature is off by default.
+  Complexity: M
+
+- [ ] P3 | AD-96 | Re-check whether a native resolver is still needed
+  Why: is_native_source_url short-circuits yt-dlp entirely for Kick VODs with no fallback, which is deliberate, but nothing notices when the reason expires. check-site-registry.py re-derives extractor arguments from the installed yt-dlp; there is no equivalent for the resolvers, so if Kick restores its v1 endpoint or yt-dlp fixes kick:vod, Astra keeps using its own path indefinitely. The hardcoded Chrome/136 user agent in the same module has the same shape of problem: a frozen fingerprint in a module whose whole premise is imitating the site's own player.
+  Evidence: astra_downloader/native_sources.py module docstring citing yt-dlp issue 17284, NATIVE_SOURCE_USER_AGENT at :43, is_native_source_url at :100 and resolve_native_source at :233; scripts/check-site-registry.py as the precedent for re-deriving a claim from the installed yt-dlp.
+  Touches: scripts/check-site-registry.py or a new gate script, scripts/run-checks.js, astra_downloader/native_sources.py, astra_downloader/test_native_sources.py.
+  Acceptance: Each resolver declares the upstream reason it exists, as an extractor name plus the issue it answers. A gate reports when the installed yt-dlp's extractor for that site changes shape from the recorded state, so the claim is re-examined rather than assumed. The user agent is derived from the same source the impersonation targets come from, or is a named constant with a recorded review date that the gate flags once it is a year old.
+  Complexity: S
 
 - [ ] P3 — AD-66 — `read_settings_bundle` and `ConfigStore` disagree about a boolean schema version
   Why: `read_settings_bundle` accepts `"schemaVersion": true` because `int(True) == 1`, while `ConfigStore._load_and_sanitize` rejects a bool for the same field on purpose. One of the two is wrong about what a version marker is.
