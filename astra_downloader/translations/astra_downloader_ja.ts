@@ -3147,8 +3147,8 @@
       <translation>Named site profiles</translation>
     </message>
     <message>
-      <source>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.</source>
-      <translation>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include format, quality, proxy, impersonation and request pacing; do not put cookies or passwords here.</translation>
+      <source>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.</source>
+      <translation>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.</translation>
     </message>
     <message>
       <source>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</source>

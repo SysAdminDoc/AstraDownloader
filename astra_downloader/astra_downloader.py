@@ -5666,7 +5666,11 @@ def build_subscription_manager(config, dl_manager):
         # A subscription's own delivery choices, where it has any. An empty
         # value means "use the global setting", so passing None keeps the
         # historical behaviour for every record written before schema 2.
-        audio_only = bool(subscription.get('audioOnly'))
+        # Absent means "use the global setting", which is what the comment
+        # above has always said. `bool()` turned that into an explicit False,
+        # which then blocked a matching site profile's DownloadType from
+        # filling it in. Pass the raw value so unset stays unset.
+        audio_only = subscription.get('audioOnly')
         return dl_manager.start_download(
             url=candidate['url'],
             title=candidate.get('title'),

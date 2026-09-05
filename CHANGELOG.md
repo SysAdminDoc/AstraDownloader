@@ -29,6 +29,12 @@ repository's git log.
   produce a file, that note appears on the failure too. A private video is
   also recognised: yt-dlp's "Sign in if you've been granted access" wording
   had never matched, so it fell through unclassified.
+- A site profile's download type now applies to downloads that do not state
+  one, so a browser-extension or subscription download for a profiled domain
+  uses the audio-only or subtitles-only choice set for that site. It was
+  stored and validated but read only by the paste box. A request that does
+  state a type still wins, and the Settings help text now says which fields
+  work this way.
 - The empty server-log card no longer tells you to start a server that is
   already running. With the API up it says there are no events yet and offers
   nothing to start; with it stopped it still offers Start server.

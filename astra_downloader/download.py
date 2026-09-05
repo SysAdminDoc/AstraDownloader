@@ -4855,10 +4855,10 @@ class DownloadManagerCore:
             removed += 1
         return removed
 
-    def start_download(self, url, audio_only=False, fmt=None, quality=None,
+    def start_download(self, url, audio_only=None, fmt=None, quality=None,
                        output_dir=None, title=None, referer=None, cookies=None,
                        section=None, playlist_items=None, subscription_id=None,
-                       archive_key=None, subtitles_only=False, video_password=None,
+                       archive_key=None, subtitles_only=None, video_password=None,
                        profile_name=None, output_name=None,
                        output_template=None, format_summary=None,
                        probe_size=False):
@@ -4893,6 +4893,20 @@ class DownloadManagerCore:
         selected_profile = select_site_profile(
             url, self.config.get('SiteProfiles', []), profile_name
         )
+        # A profile's DownloadType fills in only where the caller did not say,
+        # which is the rule `fmt` and `quality` already follow above. It was
+        # stored and validated but read by nothing outside the GUI paste box,
+        # so an API or subscription download for a profiled domain ignored the
+        # audio-only or subtitles-only choice the user had set for that site.
+        # Overriding a stated type instead would silently change what the
+        # caller asked for, and a subscription carries its own audio mode.
+        unstated = audio_only in (None, '') and subtitles_only in (None, '')
+        if unstated and selected_profile:
+            kind = str(selected_profile.get('DownloadType') or '').strip().lower()
+            if kind == 'audio':
+                audio_only = True
+            elif kind == 'subtitles':
+                subtitles_only = True
         audio_only = self._dependencies['coerce_bool'](audio_only, False)
         subtitles_only = self._dependencies['coerce_bool'](subtitles_only, False)
         section, section_error = self._dependencies['normalize_download_section'](section)
