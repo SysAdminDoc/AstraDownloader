@@ -9,12 +9,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 ### P0
 
 
-- [ ] P0 | AD-102 | Scoop persist does not survive an atomic write, so state is still lost
-  Why: Scoop persists a single file as a hard link and a directory as a junction. Every persisted JSON and exe is written through config.atomic_write_json or atomic_copy_verified, both of which os.replace the directory entry and sever the link. Measured 2026-09-05: after the persist link the app-directory and persist-directory inodes matched at nlink 2; after one atomic write the app directory held the settings and the persist file was empty at nlink 1, and a simulated update relinked the empty file back. site-logins survives because it is a junctioned directory; config.json, history.json, download-queue.json and subscriptions.json do not. AD-89 shipped the list but the mechanism defeats it.
-  Evidence: packaging/scoop/astra-downloader.json persist; astra_downloader/config.py atomic_write_json and its replace helper; astra_downloader/astra_downloader.py atomic_copy_verified; the Scoop persistent-data wiki page.
-  Touches: packaging/scoop/astra-downloader.json, tests/scoop-manifest.test.js, README.md, and whichever of astra_downloader/astra_downloader.py runtime_state_dir or astra_downloader/build.py the chosen layout needs.
-  Acceptance: State survives an update in fact, not only on the manifest. Persist entries are directories rather than atomically replaced files, which means either the portable state root moves into one subdirectory the manifest persists whole, or the Scoop package stops using the portable layout. A test asserts no persist entry names a path the app replaces atomically, and README describes the resulting state location. Existing portable installs keep reading their current state or are migrated on first run.
-  Complexity: M
 
 
 
@@ -36,12 +30,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: An installed yt-dlp below the floor is reported by the preflight surface with a refresh action whatever the auto-update setting. A dropped pin is logged with the floor that dropped it, the Settings panel shows the floor beside the installed version, and the stale comment is corrected.
   Complexity: M
 
-- [ ] P1 | AD-109 | The Scoop persist list misses four state paths
-  Why: tests/scoop-manifest.test.js derives the expected set from INSTALL_DIR joined with a literal in the composition root only, so four real state paths are invisible to it and to the manifest: the download-temp intermediates directory named in download.py, the pinned Whisper model whose path is built from a constant, and the two last-known-good rollback copies at the state root. An update destroys in-flight intermediates while the queue that references them is persisted, re-downloads the Whisper model, and silently empties the rollback feature.
-  Evidence: tests/scoop-manifest.test.js statePathsNamedInSource; astra_downloader/download.py DOWNLOAD_INTERMEDIATE_DIRNAME; astra_downloader/astra_downloader.py WHISPER_MODEL_PATH and the last-known-good paths.
-  Touches: tests/scoop-manifest.test.js, packaging/scoop/astra-downloader.json.
-  Acceptance: The derived set covers a path named through a constant and a path named in another module, so all four appear. Each is either persisted or listed as deliberately not persisted with its reason. Depends on AD-102, which decides the shape of the list.
-  Complexity: S
 
 - [ ] P1 | AD-110 | A failure notification can focus a card that is no longer rendered
   Why: _focus_download_card looks up a widget keyed by download id, but the Download page renders only the first eight terminal jobs, so an overnight failure with nine or more later terminal jobs finds no card. Activation restores the window and silently focuses nothing, which is exactly the case the notification exists for.

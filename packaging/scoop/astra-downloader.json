@@ -4,9 +4,9 @@
     "homepage": "https://github.com/SysAdminDoc/AstraDownloader",
     "license": "MIT",
     "notes": [
-        "This package installs the portable one-folder layout, so Astra Downloader keeps its state beside the executable rather than in %LOCALAPPDATA%. Everything below is persisted, so an update keeps your settings, history, queue, subscriptions and stored sign-ins.",
-        "yt-dlp, FFmpeg and a JavaScript runtime are fetched and checksum-verified on first run, then persisted so an update does not download them again.",
-        "Stored sign-ins live in site-logins. 'scoop uninstall -p astra-downloader' removes them along with the rest of the state."
+        "This package installs the portable one-folder layout, so Astra Downloader keeps its state in the data folder beside the executable rather than in %LOCALAPPDATA%.",
+        "That whole folder is persisted, so an update keeps your settings, history, queue, subscriptions and stored sign-ins, and does not download yt-dlp, FFmpeg or the JavaScript runtime again.",
+        "'scoop uninstall -p astra-downloader' removes that folder along with the app."
     ],
     "architecture": {
         "64bit": {
@@ -23,21 +23,7 @@
         ]
     ],
     "persist": [
-        "config.json",
-        "history.json",
-        "download-queue.json",
-        "subscriptions.json",
-        "site-logins",
-        "server.log",
-        "crash.log",
-        "yt-dlp-update-state.json",
-        "companion-update-state.json",
-        "yt-dlp.exe",
-        "ffmpeg.exe",
-        "deno",
-        "quickjs",
-        "whisper",
-        "native-hosts"
+        "data"
     ],
     "checkver": {
         "github": "https://github.com/SysAdminDoc/AstraDownloader"

@@ -553,6 +553,40 @@ class PortableModeTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ASTRA_PORTABLE": "yes"}, clear=False):
             self.assertTrue(ad.portable_mode_requested([]))
 
+    def test_a_fresh_portable_install_keeps_state_in_one_directory(self):
+        # Scoop persists a directory as a junction and a file as a hard link,
+        # and every state file here is written by replacing it, which severs a
+        # hard link and leaves the persisted copy empty. One directory is the
+        # only shape that survives an update.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(
+                ad.portable_state_dir(root), root / ad.PORTABLE_STATE_DIRNAME
+            )
+            # An empty directory beside the executable is still a fresh
+            # install; only real state counts.
+            (root / "AstraDownloader.exe").write_bytes(b"exe")
+            (root / ad.PORTABLE_MARKER_NAME).write_text("p\n", encoding="utf-8")
+            self.assertEqual(
+                ad.portable_state_dir(root), root / ad.PORTABLE_STATE_DIRNAME
+            )
+
+    def test_an_existing_portable_install_keeps_reading_where_it_wrote(self):
+        # Moving a user's queue and sign-ins on an update risks losing them and
+        # buys nothing: the layout only matters to a package manager, and an
+        # install with loose state was not made by one.
+        for marker in ("config.json", "history.json", "download-queue.json",
+                       "subscriptions.json", "site-logins"):
+            with self.subTest(marker=marker):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    target = root / marker
+                    if marker == "site-logins":
+                        target.mkdir()
+                    else:
+                        target.write_text("{}", encoding="utf-8")
+                    self.assertEqual(ad.portable_state_dir(root), root)
+
     def test_portable_marker_selects_a_frozen_copy_outside_managed_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -683,12 +717,23 @@ class PortableModeTests(unittest.TestCase):
                     archive.namelist(),
                 )
 
-    def test_portable_state_root_is_the_executable_directory(self):
+    def test_portable_state_root_stays_with_the_executable_never_appdata(self):
+        # The contract this pins changed deliberately: a fresh portable install
+        # now keeps its state in a `data` subdirectory rather than loose beside
+        # the executable, because loose files cannot be persisted by a package
+        # manager that hard-links them while the app replaces them. What has
+        # not changed, and is what this test is really for, is that a portable
+        # launch never reaches AppData.
         with tempfile.TemporaryDirectory() as tmp:
             executable = Path(tmp) / "AstraDownloader.exe"
             with mock.patch.object(ad.sys, "frozen", True, create=True), \
                  mock.patch.object(ad.sys, "executable", str(executable)):
-                self.assertEqual(ad.runtime_state_dir(True), executable.parent.resolve())
+                root = ad.runtime_state_dir(True)
+            self.assertEqual(
+                root, executable.parent.resolve() / ad.PORTABLE_STATE_DIRNAME
+            )
+            self.assertEqual(root.parent, executable.parent.resolve())
+            self.assertNotIn("AppData", str(root).replace(tmp, ""))
 
     def test_portable_install_target_and_copy_stay_with_the_running_exe(self):
         with tempfile.TemporaryDirectory() as tmp:

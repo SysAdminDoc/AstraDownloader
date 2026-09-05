@@ -57,13 +57,17 @@ repository's git log.
   already running. With the API up it says there are no events yet and offers
   nothing to start; with it stopped it still offers Start server.
 - The Scoop package no longer throws your data away when it updates. It
-  installs the portable layout, which keeps state beside the executable, but
+  installs the portable layout, which keeps state beside the executable, and
   the manifest persisted nothing, so `scoop update` started from an empty
   state root: settings, history, queue, subscriptions and stored sign-ins were
   gone and the managed yt-dlp, FFmpeg and JavaScript runtime were downloaded
-  again. All of it is persisted now, a test derives the list from the paths the
-  app actually writes so it cannot drift, and the README documents the install
-  command, which it had never mentioned.
+  again. A new portable install now keeps all of that in a `data` folder,
+  which is what the package persists. It has to be a folder: Scoop hard-links
+  a persisted file, and this program replaces its state files rather than
+  writing them in place, so listing them one by one looked right and lost the
+  data anyway. A portable copy that already keeps its state loose beside the
+  executable carries on doing that, so updating in place moves nothing. The
+  README documents the Scoop install command, which it had never mentioned.
 - A SOCKS proxy no longer breaks Astra's own requests. yt-dlp speaks SOCKS
   natively so downloads always worked, but the library behind the setup,
   update and Kick fetches needs a package this build does not ship, and the
