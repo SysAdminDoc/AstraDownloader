@@ -38,7 +38,7 @@ __all__ = (
     "select_impersonate_target",
     "site_referer_for_url", "site_auth_expectation", "describe_site_auth",
     "site_expects_sign_in", "site_supports_credentials",
-    "site_note_for_url",
+    "site_failure_note_for_url",
     "site_catalog", "merge_extractor_names", "search_site_catalog",
     "CATALOG_SOURCE_CURATED", "CATALOG_SOURCE_EXTRACTOR",
 )
@@ -128,6 +128,7 @@ def _profile(
     impersonate="",
     referer=False,
     notes="",
+    note_explains_failure=False,
 ):
     """Build one registry row.
 
@@ -149,6 +150,12 @@ def _profile(
         "impersonate": impersonate,
         "referer": bool(referer),
         "notes": notes,
+        # Most notes describe the site for the catalogue — how its extractor
+        # arguments are built, which cookie domains it uses. Only a note that
+        # explains why the site cannot produce a file belongs on a failure,
+        # and putting the rest there told a user reading a removed-video
+        # error how YouTube's client chain is assembled.
+        "note_explains_failure": bool(note_explains_failure),
     }
 
 
@@ -339,6 +346,7 @@ SITE_PROFILES = {
             "Only podcast episodes resolve. Spotify music is DRM-protected "
             "and cannot be downloaded."
         ),
+        note_explains_failure=True,
     ),
 
     # --- news and broadcast ---
@@ -415,6 +423,7 @@ SITE_PROFILES = {
             "Premium titles are DRM-protected and will not produce a file "
             "even with a valid sign-in."
         ),
+        note_explains_failure=True,
     ),
     "funimation.com": _profile("Funimation", "anime", auth=SITE_AUTH_REQUIRED),
     "hidive.com": _profile("HIDIVE", "anime", auth=SITE_AUTH_REQUIRED,
@@ -464,6 +473,7 @@ SITE_PROFILES = {
         "OnlyFans", "adult",
         auth=SITE_AUTH_REQUIRED,
         notes="Not supported by yt-dlp; listed so the failure is not a mystery.",
+        note_explains_failure=True,
     ),
 }
 
@@ -540,17 +550,19 @@ def resolve_site_profile(url):
     return resolved
 
 
-def site_note_for_url(url):
-    """Return the registry's standing note about a site, or "".
+def site_failure_note_for_url(url):
+    """Return the note that explains why a site cannot produce a file, or "".
 
-    The catalogue already records why some sites cannot produce a file at all
+    Only the handful of profiles carrying `note_explains_failure` answer here
     — Spotify music and Crunchyroll premium titles are DRM-protected, OnlyFans
-    has no extractor. A failure on one of those is not a mystery to be
-    retried, so the note belongs in the failure the user is looking at and not
-    only on the Sites page they would have to think to visit.
+    has no extractor. Those are worth putting in front of a user looking at
+    the failure rather than on a Sites page they would have to think to visit.
+    Every other note describes the site for the catalogue, and putting one on
+    a failure told a user reading a removed-video error how YouTube's client
+    chain is assembled.
     """
     profile = resolve_site_profile(url)
-    if not profile:
+    if not profile or not profile.get("note_explains_failure"):
         return ""
     return str(profile.get("notes") or "").strip()
 

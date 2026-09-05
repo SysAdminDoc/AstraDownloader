@@ -2455,17 +2455,63 @@ class FirstPartyNetworkPolicyTests(unittest.TestCase):
         # clearing trust_env to pin the route would also discard the corporate
         # CA bundle. On a TLS-intercepting proxy, the network this policy is
         # for, that turns a working fetch into CERTIFICATE_VERIFY_FAILED.
-        bundle = str(Path(tempfile.gettempdir()) / 'astra-test-ca.pem')
-        with mock.patch.dict(ad.os.environ, {'REQUESTS_CA_BUNDLE': bundle}):
-            ad.set_first_party_network_policy(
-                self._config(Proxy='http://proxy.example:3128'), detected='',
+        # The bundle has to exist on disk. This fixture named a path it never
+        # created, which requests would have rejected at request time anyway;
+        # the file is created here so the test asserts on a usable bundle.
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = str(Path(tmp) / 'astra-test-ca.pem')
+            Path(bundle).write_text("", encoding="utf-8")
+            with mock.patch.dict(ad.os.environ, {'REQUESTS_CA_BUNDLE': bundle}):
+                ad.set_first_party_network_policy(
+                    self._config(Proxy='http://proxy.example:3128'), detected='',
+                )
+                session = ad.build_first_party_session()
+                try:
+                    self.assertFalse(session.trust_env)
+                    self.assertEqual(session.verify, bundle)
+                finally:
+                    session.close()
+
+    def test_a_ca_bundle_is_honoured_only_when_the_path_exists(self):
+        # requests raises for a path it cannot open, so a leftover variable
+        # pointing at a deleted file would fail every proxied fetch, which is
+        # worse than the certifi fallback this replaced.
+        with tempfile.TemporaryDirectory() as tmp:
+            present = Path(tmp) / "corp-ca.pem"
+            present.write_text("", encoding="utf-8")
+            missing = str(Path(tmp) / "gone" / "corp-ca.pem")
+
+            def session_verify(environment):
+                with mock.patch.dict(ad.os.environ, environment, clear=False):
+                    for stale in ('REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE'):
+                        if stale not in environment:
+                            ad.os.environ.pop(stale, None)
+                    ad.set_first_party_network_policy(
+                        self._config(Proxy='http://proxy.example:3128'),
+                        detected='',
+                    )
+                    session = ad.build_first_party_session()
+                    try:
+                        return session.verify
+                    finally:
+                        session.close()
+
+            self.assertEqual(
+                session_verify({'REQUESTS_CA_BUNDLE': str(present)}),
+                str(present),
             )
-            session = ad.build_first_party_session()
-            try:
-                self.assertFalse(session.trust_env)
-                self.assertEqual(session.verify, bundle)
-            finally:
-                session.close()
+            # A missing path is ignored rather than failing the request.
+            self.assertIs(session_verify({'REQUESTS_CA_BUNDLE': missing}), True)
+            # The second variable is consulted when the first is unusable.
+            self.assertEqual(
+                session_verify({
+                    'REQUESTS_CA_BUNDLE': missing,
+                    'CURL_CA_BUNDLE': str(present),
+                }),
+                str(present),
+            )
+            # And no variable at all leaves verification at its default.
+            self.assertIs(session_verify({}), True)
 
     def test_both_transports_agree_about_an_environment_proxy(self):
         # With nothing configured the requests path honours HTTP_PROXY, so the

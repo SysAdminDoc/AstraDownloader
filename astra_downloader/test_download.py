@@ -1628,6 +1628,69 @@ class DownloadFailureClassifierTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertEqual(ad.classify_download_failure(message), expected)
 
+    def test_a_proxy_password_reaches_no_message_record_or_payload(self):
+        import config
+        import download
+
+        secret = "Sup3rSecret"
+        proxy = f"http://corpuser:{secret}@proxy.example:3128"
+
+        # The redactor keeps what makes a message useful and drops the rest.
+        self.assertEqual(
+            config.redact_proxy_url(proxy), "http://proxy.example:3128"
+        )
+        self.assertNotIn(secret, config.redact_proxy_url(proxy))
+        self.assertNotIn("corpuser", config.redact_proxy_url(proxy))
+        for shape in ("socks5://u:p@host:1080", "https://u:p@host"):
+            with self.subTest(shape=shape):
+                self.assertNotIn("p@", config.redact_proxy_url(shape))
+        # A value this app would never have accepted says nothing at all,
+        # rather than guessing which half was the password.
+        self.assertEqual(config.redact_proxy_url("not a url"), "[redacted proxy]")
+        self.assertEqual(config.redact_proxy_url(""), "")
+
+        # The argv redactor keeps the host and loses the credentials, for both
+        # the separate-value and the joined form.
+        for argv in (
+            ["yt-dlp", "--proxy", proxy, "--geo-verification-proxy", proxy],
+            ["yt-dlp", f"--proxy={proxy}", f"--geo-verification-proxy={proxy}"],
+        ):
+            with self.subTest(argv=argv[1]):
+                rendered = " ".join(
+                    download.format_redacted_command_args(argv)
+                )
+                self.assertNotIn(secret, rendered)
+                self.assertNotIn("corpuser", rendered)
+                self.assertIn("proxy.example:3128", rendered)
+
+    def test_a_native_failure_through_a_credentialed_proxy_hides_it(self):
+        # The message becomes dl.error, which is written into the queue and
+        # history files and returned over the local API.
+        secret = "Sup3rSecret"
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            dead_port = probe.getsockname()[1]
+        proxy = f"http://corpuser:{secret}@127.0.0.1:{dead_port}"
+        saved = ad.first_party_network_policy()
+        try:
+            ad.set_first_party_network_policy(
+                lambda key, default=None: {"Proxy": proxy}.get(key, default),
+                detected="",
+            )
+            with self.assertRaises(Exception) as caught:
+                ad.first_party_native_fetch("http://unresolvable.invalid/x")
+            message = str(caught.exception)
+            self.assertNotIn(secret, message)
+            self.assertNotIn("corpuser", message)
+            self.assertIn(str(dead_port), message)
+        finally:
+            ad.set_first_party_network_policy(
+                lambda key, default=None: {
+                    "Proxy": saved.get("proxy", "")
+                }.get(key, default),
+                detected="",
+            )
+
     def test_drm_and_gone_media_are_named_rather_than_left_generic(self):
         cases = [
             ('ERROR: This video is DRM protected', 'drm-protected'),
@@ -1643,6 +1706,86 @@ class DownloadFailureClassifierTests(unittest.TestCase):
         for message, expected in cases:
             with self.subTest(expected=expected, message=message):
                 self.assertEqual(ad.classify_download_failure(message), expected)
+
+    def test_a_country_block_is_geo_restricted_not_permanently_gone(self):
+        # YouTube's real copyright block leads with "Video unavailable", so the
+        # media-unavailable bucket took it and offered no retry for a video the
+        # proxy and geo settings already handle.
+        blocked = (
+            "ERROR: [youtube] aB1: Video unavailable. This video contains "
+            "content from SME, who has blocked it in your country on "
+            "copyright grounds"
+        )
+        self.assertEqual(ad.classify_download_failure(blocked), "geo-restricted")
+        # A plain unavailable message keeps its own answer.
+        self.assertEqual(
+            ad.classify_download_failure("ERROR: Video unavailable"),
+            "media-unavailable",
+        )
+
+    def test_a_playlist_entry_note_never_outranks_the_transport_failure(self):
+        # classify_download_failure joins the whole 30-line tail into one blob
+        # when the final message is unrecognized. A note about one playlist
+        # entry is true of that entry and says nothing about why the run ended;
+        # reading it as the cause cost the download its retry and, for
+        # sign-in-required, opened a 15 minute host cooldown.
+        cases = [
+            (
+                [
+                    "[youtube:tab] Downloading playlist",
+                    "[download] Skipping: Private video. Sign in if you have "
+                    "been granted access to this video",
+                    "ERROR: unable to download video data: HTTP Error 429: "
+                    "Too Many Requests",
+                ],
+                "rate-limited",
+            ),
+            (
+                [
+                    "[youtube:tab] Downloading playlist",
+                    "[download] Skipping: This video has been removed by the "
+                    "uploader",
+                    "ERROR: unable to download video data: HTTP Error 503",
+                ],
+                "network-unreachable",
+            ),
+            (
+                [
+                    "[download] Skipping: This video is DRM protected",
+                    "ERROR: Connection reset by peer",
+                ],
+                "network-unreachable",
+            ),
+        ]
+        for tail, expected in cases:
+            with self.subTest(expected=expected):
+                self.assertEqual(
+                    ad.classify_download_failure("exit code 1", lines=tail),
+                    expected,
+                )
+        import download
+
+        self.assertIn(expected, download.DOWNLOAD_RETRYABLE_ERROR_CODES)
+
+        # A session-level cause in the tail still applies to the whole run.
+        self.assertEqual(
+            ad.classify_download_failure(
+                "exit code 1",
+                lines=["ERROR: Sign in to confirm you are not a bot"],
+            ),
+            "sign-in-required",
+        )
+        # And a per-item cause reported as the definitive message is still
+        # classified, because there it is the reason the run ended.
+        self.assertEqual(
+            ad.classify_download_failure("ERROR: Private video. Sign in if you "
+                                         "have been granted access"),
+            "sign-in-required",
+        )
+        self.assertEqual(
+            ad.classify_download_failure("ERROR: This video is DRM protected"),
+            "drm-protected",
+        )
 
     def test_drm_outranks_a_sign_in_phrase_in_the_same_message(self):
         # Signing in has never produced a file from an encrypted stream, so
@@ -1693,29 +1836,55 @@ class DownloadFailureClassifierTests(unittest.TestCase):
                     'a retry for this can never succeed',
                 )
 
-    def test_a_terminal_failure_carries_the_registry_note_for_its_site(self):
+    def test_only_a_note_that_explains_a_failure_reaches_one(self):
+        # Rewritten because its subject was removed, not because it was wrong:
+        # append_site_note_advice concatenated the note into the advice, which
+        # is the defect. The note is now a separate line the GUI renders, and
+        # only a note written to explain a failure qualifies.
+        import sites
+
+        self.assertIn(
+            "DRM-protected",
+            sites.site_failure_note_for_url("https://open.spotify.com/track/x"),
+        )
+        self.assertIn(
+            "DRM-protected",
+            sites.site_failure_note_for_url("https://www.crunchyroll.com/x"),
+        )
+        self.assertIn(
+            "Not supported by yt-dlp",
+            sites.site_failure_note_for_url("https://onlyfans.com/x"),
+        )
+        # A site whose note describes the registry, not a failure, says
+        # nothing. This one used to tell a user reading a removed-video error
+        # how YouTube's client chain is assembled.
+        for url in (
+            "https://www.youtube.com/watch?v=x",
+            "https://www.twitch.tv/videos/1",
+            "https://vimeo.com/1",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(sites.site_failure_note_for_url(url), "")
+        # An unlisted site has nothing to say either.
+        self.assertEqual(
+            sites.site_failure_note_for_url("https://example.invalid/x"), ""
+        )
+
+    def test_the_advice_is_never_lengthened_by_a_site_note(self):
+        # The GUI translates error_advice as one string, so anything appended
+        # to it makes it match no catalogue entry and the whole sentence falls
+        # back to English.
         import download
 
-        advice = download.append_site_note_advice(
-            'Base advice.', 'drm-protected', 'https://open.spotify.com/track/x',
-        )
-        self.assertIn('Base advice.', advice)
-        self.assertIn('DRM-protected', advice)
-        # A site with no note is left exactly as it was.
+        record = types.SimpleNamespace(url="https://open.spotify.com/track/x")
+        download.apply_download_failure_classification(record, "drm-protected")
         self.assertEqual(
-            download.append_site_note_advice(
-                'Base advice.', 'drm-protected', 'https://example.invalid/x',
-            ),
-            'Base advice.',
+            record.error_advice,
+            download.DOWNLOAD_FAILURE_RECOVERY["drm-protected"]["advice"],
+            "the advice must still be exactly the catalogued string",
         )
-        # A retryable code never picks up the note.
-        self.assertEqual(
-            download.append_site_note_advice(
-                'Base advice.', 'network-unreachable',
-                'https://open.spotify.com/track/x',
-            ),
-            'Base advice.',
-        )
+        self.assertNotIn("DRM-protected and cannot be downloaded",
+                         record.error_advice)
 
     def test_message_borne_cause_outranks_benign_warning_lines(self):
         # yt-dlp routinely emits a benign "PO Token which was not provided"
