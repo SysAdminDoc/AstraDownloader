@@ -3153,14 +3153,14 @@ class PoTokenProviderTests(unittest.TestCase):
         self.assertEqual(ad.build_youtube_extractor_args("https://example.com/x"), [])
 
     def test_probe_never_claims_a_provider_is_usable(self):
-        original_get = ad.http_requests.get
+        original_get = ad.first_party_http_get
         calls = []
-        ad.http_requests.get = lambda *args, **kwargs: calls.append(args) or None
+        ad.first_party_http_get = lambda *args, **kwargs: calls.append(args) or None
         try:
             self.assertIsNone(ad.probe_po_token_provider(force=True))
             self.assertIsNone(ad.probe_po_token_provider())
         finally:
-            ad.http_requests.get = original_get
+            ad.first_party_http_get = original_get
         self.assertEqual(calls, [])
 
     def test_compare_semver_handles_unusual_inputs(self):
@@ -3585,14 +3585,14 @@ class HealthPoTokenSurfaceTests(unittest.TestCase):
         api = ad.create_api(config, manager, FakeHistory())
 
         # Force the probe to return None without hitting the network.
-        original_get = ad.http_requests.get
-        ad.http_requests.get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
+        original_get = ad.first_party_http_get
+        ad.first_party_http_get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
         try:
             resp = api.test_client().get(
                 "/health", headers={"X-MDL-Client": "MediaDL"},
             )
         finally:
-            ad.http_requests.get = original_get
+            ad.first_party_http_get = original_get
         body = resp.get_json()
         self.assertIn("poTokenProvider", body)
         self.assertIsNone(body["poTokenProvider"])
@@ -3615,10 +3615,10 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         api = ad.create_api(config, manager, FakeHistory())
         original_which = ad.shutil.which
         original_get_version = ad.get_ytdlp_version
-        original_po_get = ad.http_requests.get
+        original_po_get = ad.first_party_http_get
         ad.shutil.which = lambda binary: None
         ad.get_ytdlp_version = lambda force=False: '2025.10.22'
-        ad.http_requests.get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
+        ad.first_party_http_get = lambda *a, **k: (_ for _ in ()).throw(Exception("offline"))
         try:
             resp = api.test_client().get(
                 "/health", headers={"X-MDL-Client": "MediaDL"},
@@ -3626,7 +3626,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         finally:
             ad.shutil.which = original_which
             ad.get_ytdlp_version = original_get_version
-            ad.http_requests.get = original_po_get
+            ad.first_party_http_get = original_po_get
         body = resp.get_json()
         self.assertIn("denoRuntime", body)
         self.assertIn("javascriptRuntime", body)
@@ -4139,8 +4139,17 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         return api.test_client()
 
     class _ReleaseResponse:
+        # A real requests.Response is a context manager, and the release-tag
+        # fetch now uses one so the session it borrowed is closed. A double
+        # that cannot be entered is not standing in for the real object.
         def __init__(self, payload):
             self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
 
         def raise_for_status(self):
             return None
@@ -4174,7 +4183,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         # an update: the binary can only come from a Release asset.
         response = self._VersionSourceResponse([b'APP_VERSION = "9.9.9"\n'])
         get, calls = self._release_and_source(response, tag='v9.9.9')
-        with mock.patch.object(ad.http_requests, 'get', side_effect=get):
+        with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
             self.assertEqual(ad.fetch_latest_companion_version(), '9.9.9')
         self.assertEqual(calls[0], ad.COMPANION_UPDATE_RELEASE_API_URL)
         self.assertEqual(
@@ -4187,7 +4196,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         def get(url, *_args, **_kwargs):
             self.assertEqual(url, ad.COMPANION_UPDATE_RELEASE_API_URL)
             return self._ReleaseResponse({'tag_name': 'v1.0.0', 'draft': True})
-        with mock.patch.object(ad.http_requests, 'get', side_effect=get):
+        with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
             with self.assertRaisesRegex(RuntimeError, 'No published'):
                 ad.fetch_latest_companion_version()
 
@@ -4220,7 +4229,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             b'header\nAPP_VER', b'SION = "9.9.9"\n',
         ])
         get, _calls = self._release_and_source(response)
-        with mock.patch.object(ad.http_requests, 'get', side_effect=get) as patched:
+        with mock.patch.object(ad, 'first_party_http_get', side_effect=get) as patched:
             self.assertEqual(ad.fetch_latest_companion_version(), '9.9.9')
         self.assertTrue(patched.call_args.kwargs['stream'])
 
@@ -4228,7 +4237,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             b'x' * (ad.COMPANION_VERSION_SOURCE_MAX_BYTES + 1),
         ])
         get, _calls = self._release_and_source(oversized)
-        with mock.patch.object(ad.http_requests, 'get', side_effect=get):
+        with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
             with self.assertRaisesRegex(RuntimeError, 'size limit'):
                 ad.fetch_latest_companion_version()
 
@@ -4240,7 +4249,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             },
         )
         get, _calls = self._release_and_source(response)
-        with mock.patch.object(ad.http_requests, 'get', side_effect=get):
+        with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
             with self.assertRaisesRegex(RuntimeError, 'size limit'):
                 ad.fetch_latest_companion_version()
 

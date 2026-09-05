@@ -12,6 +12,18 @@ repository's git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- The proxy and network identity now apply to what Astra fetches for itself.
+  Downloads always honoured them because they reach yt-dlp as command-line
+  arguments, but the first-run binary setup, the checksum sidecars, the Deno
+  archive, the GitHub release API, the version check and the Kick resolver all
+  went out on the default route. On a network where the proxy is the only way
+  out that was a silent half-outage: downloads worked, setup and updates did
+  not, and Kick reported an unreachable network rather than a blocked route.
+  Forcing IPv4 or IPv6 and binding a source address now apply to those
+  requests as well.
+
 ### Changed
 
 - `npm run check` runs the Python suite. Its first gate was called "unit
