@@ -2591,10 +2591,24 @@ class MainWindowCore(
             installed = str(entry.get("installed") or "")
             pinned = str(entry.get("pinned") or "")
             rollback = str(entry.get("rollback") or "")
-            row["installed"].setText(
-                tr_format("Installed {version}", version=installed)
-                if installed else tr("Not installed")
-            )
+            # The inventory has carried a floor for every managed binary since
+            # the pins were added, and this page never read it. A user running
+            # a build below its floor saw the readiness panel go red with no
+            # matching detail on the page that offers Pin and Rollback.
+            floor = str(entry.get("floor") or "")
+            below_floor = bool(entry.get("belowFloor"))
+            if below_floor:
+                row["installed"].setText(tr_format(
+                    "Installed {version}, below the {floor} security floor",
+                    version=installed, floor=floor,
+                ))
+            else:
+                row["installed"].setText(
+                    tr_format("Installed {version}", version=installed)
+                    if installed else tr("Not installed")
+                )
+            set_status_tone(row["installed"], "danger" if below_floor else "muted")
+            repolish(row["installed"])
             # An ffmpeg master snapshot is longer than the column, so the
             # full string has to be readable somewhere.
             row["installed"].setToolTip(installed)

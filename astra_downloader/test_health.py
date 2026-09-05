@@ -2408,6 +2408,29 @@ class YtDlpPinFloorTests(unittest.TestCase):
         )
         self.assertEqual(quiet, [])
 
+    def test_the_inventory_reports_whether_a_binary_is_below_its_floor(self):
+        # The inventory has carried a floor for every managed binary since the
+        # pins were added, and nothing read it, so a user running a build below
+        # its floor saw the readiness panel go red with no matching detail on
+        # the page that offers Pin and Rollback.
+        self.assertTrue(ad._managed_binary_below_floor("yt-dlp", "2026.06.09"))
+        self.assertFalse(ad._managed_binary_below_floor("yt-dlp", "2026.08.19"))
+        self.assertFalse(
+            ad._managed_binary_below_floor("yt-dlp", ad.YTDLP_SECURITY_MIN_VERSION)
+        )
+        # Nothing installed is not "below" anything.
+        self.assertFalse(ad._managed_binary_below_floor("yt-dlp", ""))
+        # whisper declares no floor, so it can never be below one.
+        self.assertFalse(ad._managed_binary_below_floor("whisper", "0.0.1"))
+        # A snapshot-shaped ffmpeg version carries no semver, and the decision
+        # is reused rather than recompared, so it is judged by its build date.
+        self.assertFalse(
+            ad._managed_binary_below_floor("ffmpeg", "N-126229-gf101fce22d-20260820")
+        )
+        self.assertTrue(
+            ad._managed_binary_below_floor("ffmpeg", "N-100000-gaaaaaaaaa-20200101")
+        )
+
     def test_every_pinnable_binary_that_touches_the_network_has_a_floor(self):
         for name in ('yt-dlp', 'ffmpeg', 'deno', 'quickjs'):
             with self.subTest(name=name):

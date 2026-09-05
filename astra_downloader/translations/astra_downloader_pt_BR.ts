@@ -1587,12 +1587,8 @@
       <translation>{target} (unavailable)</translation>
     </message>
     <message>
-      <source>Installed {version}</source>
-      <translation>Installed {version}</translation>
-    </message>
-    <message>
-      <source>Not installed</source>
-      <translation>Not installed</translation>
+      <source>Installed {version}, below the {floor} security floor</source>
+      <translation>Installed {version}, below the {floor} security floor</translation>
     </message>
     <message>
       <source>Not pinned. {version} installed</source>
@@ -1933,6 +1929,14 @@
     <message>
       <source>Settings, queue and history live at {path}. Copy that folder before replacing this build.</source>
       <translation>Settings, queue and history live at {path}. Copy that folder before replacing this build.</translation>
+    </message>
+    <message>
+      <source>Installed {version}</source>
+      <translation>Installed {version}</translation>
+    </message>
+    <message>
+      <source>Not installed</source>
+      <translation>Not installed</translation>
     </message>
     <message>
       <source>Runtime floor</source>

@@ -53,6 +53,9 @@ repository's git log.
 - Rolling back a managed binary is refused for any reason the pin would have
   been refused for, not only a version below the security floor. A retained
   copy that cannot report a readable version no longer goes live first.
+- Settings now marks a managed tool whose installed version is below its
+  security floor, naming the floor beside the version, on the same page that
+  offers Pin and Rollback. The readiness panel already reported it.
 - A proxy shown or recorded with an IPv6 address keeps its brackets, so the
   address and its port stay readable.
 - A geo-blocked video is no longer reported as permanently gone. YouTube's
