@@ -16,19 +16,7 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-107 | Rolling back a managed binary installs a below-floor build and calls it success
-  Why: rollback_managed_binary copies the retained binary into place before asking set_managed_binary_pin to record it, so when the retained copy is below the security floor the vulnerable binary is already live and only the pin is refused. The function still returns ok true, and gui.py paints that green and treats it as a successful rollback. AD-90 blocked naming an old yt-dlp but not installing one.
-  Evidence: astra_downloader/astra_downloader.py rollback_managed_binary, its atomic_copy_verified call preceding set_managed_binary_pin; astra_downloader/gui.py the rollback result handler keying success off the ok field; reproduced 2026-09-05 returning ok true with reason pin-below-security-floor.
-  Touches: astra_downloader/astra_downloader.py, astra_downloader/gui.py, astra_downloader/test_health.py, translation catalogues.
-  Acceptance: A rollback target below a declared floor is refused before anything is copied, the active binary is untouched, and the result reports failure with the floor named. A rollback to a version at or above the floor still succeeds and pins.
-  Complexity: S
 
-- [ ] P1 | AD-108 | Nothing checks the installed yt-dlp against its security floor
-  Why: YTDLP_SECURITY_MIN_VERSION is read only by the pin table, so dropping a below-floor pin does not raise the binary. With auto-update off, a supported setting, maybe_auto_update_ytdlp returns early and a below-floor yt-dlp stays in use with no signal anywhere. Deno has exactly this check and yt-dlp does not. filter_managed_binary_pins also drops silently and leaves the stale entry in config.json, and _apply_managed_binaries never reads the floor field managed_binary_inventory already publishes.
-  Evidence: astra_downloader/astra_downloader.py YTDLP_SECURITY_MIN_VERSION referenced only by MANAGED_BINARY_FLOORS, the maybe_auto_update_ytdlp early return, managed_binary_inventory floor field; astra_downloader/gui.py _apply_managed_binaries; astra_downloader/health.py filter_managed_binary_pins and the MANAGED_BINARY_SECURITY_FLOORS comment still claiming yt-dlp has no floor.
-  Touches: astra_downloader/health.py, astra_downloader/astra_downloader.py, astra_downloader/gui.py, astra_downloader/test_health.py, translation catalogues.
-  Acceptance: An installed yt-dlp below the floor is reported by the preflight surface with a refresh action whatever the auto-update setting. A dropped pin is logged with the floor that dropped it, the Settings panel shows the floor beside the installed version, and the stale comment is corrected.
-  Complexity: M
 
 
 - [ ] P1 | AD-110 | A failure notification can focus a card that is no longer rendered

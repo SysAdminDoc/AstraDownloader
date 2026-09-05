@@ -3201,12 +3201,18 @@ class PreflightHealthTests(unittest.TestCase):
         return next(item for item in result['checks'] if item['id'] == check_id)
 
     def test_ytdlp_freshness_names_stale_release_and_refresh_action(self):
+        # This test is about age, so its fixture has to be a version whose
+        # only problem is age. It used to pin 2026.06.01, which now also sits
+        # below the yt-dlp security floor and so reports `error` for a
+        # different and stricter reason. The floor case is covered separately;
+        # the assertion here is unchanged.
         check = self._check(
-            self._base(ytdlp_version='2026.06.01'), 'ytdlp-freshness'
+            self._base(ytdlp_version='2026.07.04'), 'ytdlp-freshness'
         )
         self.assertEqual(check['status'], 'warning')
         self.assertEqual(check['action'], 'refresh-ytdlp')
-        self.assertEqual(check['details']['ageDays'], 71)
+        self.assertEqual(check['details']['ageDays'], 38)
+        self.assertFalse(check['details']['belowSecurityFloor'])
 
     def test_javascript_runtime_names_missing_external_runtime(self):
         check = self._check(self._base(

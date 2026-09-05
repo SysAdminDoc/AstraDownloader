@@ -186,6 +186,7 @@ try:
         probe_output_folder, probe_state_location,
         measure_system_clock_offset, parse_http_date_epoch,
         MANAGED_BINARY_NAMES, MANAGED_BINARY_SECURITY_FLOORS,
+        YTDLP_SECURITY_MIN_VERSION,
         evaluate_managed_binary_pin, filter_managed_binary_pins,
         managed_binary_pin,
     )
@@ -339,6 +340,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         probe_output_folder, probe_state_location,
         measure_system_clock_offset, parse_http_date_epoch,
         MANAGED_BINARY_NAMES, MANAGED_BINARY_SECURITY_FLOORS,
+        YTDLP_SECURITY_MIN_VERSION,
         evaluate_managed_binary_pin, filter_managed_binary_pins,
         managed_binary_pin,
     )
@@ -2386,23 +2388,12 @@ def reset_ffmpeg_capabilities_cache():
         _ffmpeg_filter_probe_checked_at = 0.0
 
 
-# The yt-dlp release that fixed CVE-2026-55404, downstream command injection
-# through unsanitized `--write-link` output. `requirements.txt` has named this
-# release since it shipped and the packaged binary has carried the fix ever
-# since; the number was only ever missing from the *pin* path, which is a
-# user-writable setting and so the one place an older build could be asked for
-# by name. yt-dlp versions are dates, and `_compare_semver` reads them
-# correctly in both the padded (`2026.08.19`) and unpadded (`2026.7.4`) forms
-# the project publishes.
-YTDLP_SECURITY_MIN_VERSION = '2026.07.04'
-
-# health.py declares the floors it knows about; ffmpeg's and yt-dlp's live here
-# beside the probes that also use them. One merged table so a pin and a
-# capability check can never disagree about what "too old" means.
+# health.py declares the floors it knows about, including yt-dlp's; ffmpeg's
+# lives here beside the capability probe that also uses it. One merged table so
+# a pin and a capability check can never disagree about what "too old" means.
 MANAGED_BINARY_FLOORS = {
     **MANAGED_BINARY_SECURITY_FLOORS,
     'ffmpeg': _FFMPEG_MIN_VERSION,
-    'yt-dlp': YTDLP_SECURITY_MIN_VERSION,
 }
 # FFmpeg-Builds ships master snapshots with no semver, so the pin is measured
 # against the same dated floor the capability probe uses.
@@ -2498,6 +2489,7 @@ def active_managed_binary_pins(config):
     return filter_managed_binary_pins(
         raw, floors=MANAGED_BINARY_FLOORS,
         snapshot_floors=MANAGED_BINARY_SNAPSHOT_FLOORS,
+        logger=write_persistent_log,
     )
 
 
@@ -2562,6 +2554,27 @@ def rollback_managed_binary(config, name):
             'ok': False, 'name': name, 'version': '',
             'reason': 'retained-copy-unverified',
             'message': f'The retained {name} could not report its version.',
+        }
+    # Before the copy, not after. Asking set_managed_binary_pin about it once
+    # the binary is already live refuses only the pin: the below-floor build is
+    # running, and the result still reported ok, which the Settings page paints
+    # green. A floor that blocks naming an old release but not installing one
+    # is not a floor.
+    decision = evaluate_binary_pin(name, retained_version)
+    if not decision['ok'] and decision['reason'] == 'pin-below-security-floor':
+        write_persistent_log(
+            f'{name} rollback refused: retained {retained_version} is below '
+            f"the {decision['floor']} security floor."
+        )
+        return {
+            'ok': False, 'name': name, 'version': retained_version,
+            'floor': decision['floor'],
+            'reason': 'rollback-below-security-floor',
+            'message': (
+                f'The retained {name} {retained_version} is below the '
+                f"{decision['floor']} security floor, so it was not restored. "
+                f'The installed {name} is unchanged.'
+            ),
         }
     try:
         atomic_copy_verified(backup, path)
