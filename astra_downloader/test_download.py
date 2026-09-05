@@ -1922,6 +1922,12 @@ class DownloadFailureClassifierTests(unittest.TestCase):
             "Not supported by yt-dlp",
             sites.site_failure_note_for_url("https://onlyfans.com/x"),
         )
+        # Bilibili's note explains why a region-locked title cannot produce a
+        # file, so it belongs on a failure too.
+        self.assertIn(
+            "mainland China",
+            sites.site_failure_note_for_url("https://www.bilibili.com/video/x"),
+        )
         # A site whose note describes the registry, not a failure, says
         # nothing. This one used to tell a user reading a removed-video error
         # how YouTube's client chain is assembled.
@@ -1952,6 +1958,37 @@ class DownloadFailureClassifierTests(unittest.TestCase):
         )
         self.assertNotIn("DRM-protected and cannot be downloaded",
                          record.error_advice)
+
+    def test_the_note_reaches_the_payload_beside_the_advice(self):
+        # Moving the note out of error_advice fixed the translation defect and
+        # left every non-Qt consumer with nothing: the extension used to read
+        # it inside the advice string.
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        manager.pause_intake()
+        dl_id, error = manager.start_download("https://open.spotify.com/track/x")
+        self.assertIsNone(error)
+        download = manager.downloads[dl_id]
+        ad.apply_download_failure_classification(download, "drm-protected")
+
+        payload = download.to_dict()
+        self.assertIn("cannot be downloaded", payload["siteNote"])
+        # The advice is exactly its catalogue entry, so it still translates.
+        self.assertEqual(
+            payload["advice"],
+            ad.DOWNLOAD_FAILURE_RECOVERY["drm-protected"]["advice"],
+        )
+        self.assertNotIn(payload["siteNote"], payload["advice"])
+
+        # A site with no failure note publishes no field at all.
+        other_id, error = manager.start_download("https://example.invalid/x")
+        self.assertIsNone(error)
+        other = manager.downloads[other_id]
+        ad.apply_download_failure_classification(other, "drm-protected")
+        self.assertNotIn("siteNote", other.to_dict())
+
+        # And a retryable code never carries one.
+        ad.apply_download_failure_classification(download, "network-unreachable")
+        self.assertNotIn("siteNote", download.to_dict())
 
     def test_message_borne_cause_outranks_benign_warning_lines(self):
         # yt-dlp routinely emits a benign "PO Token which was not provided"

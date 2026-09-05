@@ -56,14 +56,14 @@ try:
         build_site_cookie_filter, build_site_extractor_args,
         describe_site_auth, select_impersonate_target, site_display_name,
         site_impersonate_target, site_referer_for_url,
-        site_supports_credentials,
+        site_failure_note_for_url, site_supports_credentials,
     )
 except ImportError:  # Flat source-path compatibility.
     from sites import (
         build_site_cookie_filter, build_site_extractor_args,
         describe_site_auth, select_impersonate_target, site_display_name,
         site_impersonate_target, site_referer_for_url,
-        site_supports_credentials,
+        site_failure_note_for_url, site_supports_credentials,
     )
 
 
@@ -3640,6 +3640,18 @@ class Download:
         if self.status in DOWNLOAD_TERMINAL_STATES and self.finished_time is None:
             self.finished_time = self._clock()
 
+    @property
+    def error_site_note(self):
+        """The registry note explaining this failure, or "".
+
+        Derived rather than stored: it is a pure function of the URL and the
+        error code, both of which are already persisted, so it needs no queue
+        schema of its own and cannot go stale against the registry.
+        """
+        if self.error_code not in TERMINAL_SITE_NOTE_ERROR_CODES:
+            return ''
+        return site_failure_note_for_url(self.url)
+
     def to_dict(self):
         payload = {
             "id": self.id, "url": self.url, "title": self.title,
@@ -3662,6 +3674,12 @@ class Download:
             payload["error_code"] = self.error_code
             payload["advice"] = self.error_advice
             payload["next_action"] = self.error_action
+            # Beside the advice rather than inside it. Concatenating made the
+            # advice match no catalogue entry and fall back to English, and
+            # moving it into the interface alone left the extension and the
+            # strict API with nothing.
+            if self.error_site_note:
+                payload["siteNote"] = self.error_site_note
         if self.section:
             payload["section"] = dict(self.section)
         if self.playlist_items:
