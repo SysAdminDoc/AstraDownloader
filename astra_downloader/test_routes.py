@@ -3510,7 +3510,11 @@ class PreflightHealthTests(unittest.TestCase):
     def test_health_exposes_preflight_without_network_or_site_metadata(self):
         config = FakeConfig({'ServerToken': 'p' * 32})
         manager = ad.DownloadManager(config, FakeHistory())
-        with mock.patch.object(ad, 'get_ytdlp_version', return_value='2026.08.01'), \
+        # The route reads the real clock, so the version must come from the
+        # same clock. A literal here asserted 'ready' until the 30-day
+        # freshness window closed under it and then failed every run.
+        with mock.patch.object(ad, 'get_ytdlp_version',
+                               return_value=fresh_ytdlp_version()), \
                 mock.patch.object(ad, 'get_ffmpeg_version', return_value='8.1.2'), \
                 mock.patch.object(ad, 'probe_javascript_runtime', return_value={
                     'ytdlpNeedsRuntime': False,
@@ -3548,7 +3552,10 @@ class PreflightHealthTests(unittest.TestCase):
             manager._record_host_circuit_failure(
                 'https://refuser.invalid/watch', 'blocked-by-site',
             )
-        with mock.patch.object(ad, 'get_ytdlp_version', return_value='2026.08.01'),                 mock.patch.object(ad, 'get_ffmpeg_version', return_value='8.1.2'),                 mock.patch.object(ad, 'probe_javascript_runtime', return_value={
+        with mock.patch.object(ad, 'get_ytdlp_version',
+                               return_value=fresh_ytdlp_version()), \
+                mock.patch.object(ad, 'get_ffmpeg_version', return_value='8.1.2'), \
+                mock.patch.object(ad, 'probe_javascript_runtime', return_value={
                     'ytdlpNeedsRuntime': False,
                 }):
             refused = api.test_client().get(

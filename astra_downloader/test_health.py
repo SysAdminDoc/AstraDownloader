@@ -19,7 +19,7 @@ import time
 import types
 import unittest
 import zipfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest import mock
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -2184,6 +2184,131 @@ class ProbeRestartsRatherThanAnsweringAboutAGoneBinaryTests(unittest.TestCase):
         self.assertTrue(
             result["got"]["current"],
             "the replaced ffmpeg was reported for a whole TTL",
+        )
+
+
+class DatedFixtureShelfLifeTests(unittest.TestCase):
+    """A fixture measured against a relative window must not carry a literal date.
+
+    `ytdlp-freshness` compares a dated yt-dlp release against `date.today()`
+    through `YTDLP_STALE_AFTER_DAYS`. A test that pins an absolute version and
+    then asserts a *fresh* outcome passes on the day it is written and fails,
+    silently and later, a run that changed nothing. That is what happened to
+    `test_health_exposes_preflight_without_network_or_site_metadata`, which
+    pinned `2026.08.01` and went red on 2026-08-31.
+    """
+
+    _VERSION_PATCH_RE = re.compile(
+        r"""get_ytdlp_version['"]\s*,\s*return_value\s*=\s*['"](\d{4}\.\d{1,2}\.\d{1,2})['"]"""
+    )
+    # A literal version is only a fuse where the outcome under assertion is
+    # measured against the clock. The same literal feeding a pin comparison
+    # (`ManagedBinaryPins`) is a plain string equality and never expires, so
+    # the scan looks for the freshness surface by name rather than flagging
+    # every dated literal in the tree.
+    _FRESHNESS_MARKERS = ("preflight", "ytdlp-freshness", "evaluate_preflight_checks")
+    # And on that surface, direction decides. Asserting a *stale* or *warning*
+    # outcome from an absolute date is correct and permanent, because an
+    # absolute date can only get staler. Asserting a *fresh* one from an
+    # absolute date is the fuse: it holds until the window closes under it.
+    _FRESH_OUTCOME_RE = re.compile(r"""['"](?:ready|ok)['"]""")
+
+    @staticmethod
+    def _test_module_sources():
+        root = Path(ad.__file__).resolve().parent
+        return sorted(root.glob("test_*.py"))
+
+    @classmethod
+    def _dated_literals_in_freshness_tests(cls, text):
+        """Yield (test name, version literal) for clock-sensitive fixtures."""
+        for node in ast.walk(ast.parse(text)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not node.name.startswith("test_"):
+                continue
+            body = ast.get_source_segment(text, node) or ""
+            if not any(marker in body for marker in cls._FRESHNESS_MARKERS):
+                continue
+            if not cls._FRESH_OUTCOME_RE.search(body):
+                continue
+            for literal in cls._VERSION_PATCH_RE.findall(body):
+                yield node.name, literal
+
+    def test_helper_reads_fresh_at_any_point_on_the_clock(self):
+        # One year out and one day past the nominal release both have to hold,
+        # because the helper's whole job is to have no shelf life.
+        for offset in (0, 1, 30, 365, 3650):
+            with self.subTest(days_ahead=offset):
+                simulated = date(2026, 9, 4) + timedelta(days=offset)
+                check = next(
+                    item
+                    for item in ad.evaluate_preflight_checks(
+                        ytdlp_version=fresh_ytdlp_version(simulated),
+                        ffmpeg_capabilities={
+                            "current": True, "filterCheck": True, "missingFilters": [],
+                        },
+                        javascript_runtime={"ytdlpNeedsRuntime": False},
+                        sign_in_entries=[],
+                        github_api_budget={"remaining": 20, "limit": 60},
+                        po_token_provider=None,
+                        now=simulated,
+                    )["checks"]
+                    if item["id"] == "ytdlp-freshness"
+                )
+                self.assertEqual(check["status"], "ok")
+                self.assertEqual(check["details"]["ageDays"], 0)
+
+    def test_the_scan_flags_a_planted_fuse(self):
+        # Positive control: with the tree clean the scan below has nothing to
+        # report, and a check that can only pass is not a check. Feed it the
+        # exact shape of the bug and confirm it is seen.
+        planted = (
+            "def test_planted(self):\n"
+            "    with mock.patch.object(ad, 'get_ytdlp_version',"
+            " return_value='2026.08.01'):\n"
+            "        body = client.get('/health').get_json()\n"
+            "    self.assertEqual(body['preflight']['status'], 'ready')\n"
+        )
+        self.assertEqual(
+            list(self._dated_literals_in_freshness_tests(planted)),
+            [("test_planted", "2026.08.01")],
+        )
+        # And the two shapes that are correct stay unflagged: the same literal
+        # outside the freshness surface, and one on that surface asserting the
+        # stale direction, which an absolute date can only keep satisfying.
+        pinned = (
+            "def test_pin(self):\n"
+            "    with mock.patch.object(ad, 'get_ytdlp_version',"
+            " return_value='2026.08.01'):\n"
+            "        ad.maybe_auto_update_ytdlp(config)\n"
+        )
+        self.assertEqual(list(self._dated_literals_in_freshness_tests(pinned)), [])
+        stale_direction = (
+            "def test_stale(self):\n"
+            "    with mock.patch.object(ad, 'get_ytdlp_version',"
+            " return_value='2026.01.01'):\n"
+            "        body = client.get('/health').get_json()\n"
+            "    self.assertEqual(body['preflight']['status'], 'attention')\n"
+        )
+        self.assertEqual(
+            list(self._dated_literals_in_freshness_tests(stale_direction)), []
+        )
+
+    def test_no_freshness_fixture_pins_a_version_that_can_expire(self):
+        offenders = [
+            f"{source.name}::{name} pins {literal}"
+            for source in self._test_module_sources()
+            for name, literal in self._dated_literals_in_freshness_tests(
+                source.read_text(encoding="utf-8")
+            )
+        ]
+        self.assertEqual(
+            offenders, [],
+            "These tests patch get_ytdlp_version to an absolute version and then "
+            "assert a fresh outcome on a check measured against date.today(). "
+            "That passes on the day it is written and fails later on a run that "
+            "changed nothing. Use fresh_ytdlp_version() from testing_support, or "
+            "freeze the clock with the check's own `now` argument.",
         )
 
 
