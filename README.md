@@ -150,21 +150,27 @@ portable marker, so its state stays beside the executable automatically:
 ```
 
 Portable mode keeps configuration, queue/history, sign-ins, logs, and the
-managed yt-dlp/ffmpeg/runtime files beside the executable. It does not create
-Start Menu, desktop, protocol, logon-task, or browser native-messaging
-registrations.
+managed yt-dlp/ffmpeg/runtime files in a `data` folder beside the executable.
+It does not create Start Menu, desktop, protocol, logon-task, or browser
+native-messaging registrations. A portable copy that already keeps its state
+loose beside the executable carries on doing that, so updating in place never
+moves your queue or your sign-ins.
 
 There is also a [Scoop](https://scoop.sh) manifest, which installs the
-one-folder layout and keeps its state beside the executable:
+one-folder layout and keeps its state in the `data` folder beside the
+executable:
 
 ```powershell
 scoop install https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/main/packaging/scoop/astra-downloader.json
 ```
 
-Your settings, history, queue, subscriptions and stored sign-ins are persisted,
-so `scoop update astra-downloader` keeps them, and so are the managed yt-dlp,
-FFmpeg and JavaScript runtime files, so an update does not fetch them again.
-`scoop uninstall -p astra-downloader` removes that state along with the app.
+That whole folder is persisted, so `scoop update astra-downloader` keeps your
+settings, history, queue, subscriptions and stored sign-ins, and does not fetch
+the managed yt-dlp, FFmpeg and JavaScript runtime files again. It has to be the
+folder rather than the files inside it: Scoop hard-links a persisted file, and
+this program replaces its state files rather than writing them in place, which
+would break the link and leave the saved copy empty.
+`scoop uninstall -p astra-downloader` removes that folder along with the app.
 
 The one-file executable is the installable layout: running it normally copies
 the executable to `%LOCALAPPDATA%\AstraDownloader` and registers integrations.
@@ -248,7 +254,7 @@ Release dependencies are pinned in
 ## Tests and gates
 
 ```powershell
-py -3.13 -m pytest          # 1300 tests across every core; scratch stays under build/pytest
+py -3.13 -m pytest          # 1302 tests across every core; scratch stays under build/pytest
 npm run check               # all nine gates, PASS/FAIL printed per gate
 npm run smoke:gui           # renders the real Qt window offscreen
 npm run smoke:yt-dlp        # downloads a small video with the pinned yt-dlp

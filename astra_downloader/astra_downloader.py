@@ -444,12 +444,45 @@ def portable_mode_requested(argv=None, *, executable=None, install_dir=None,
     )
 
 
+PORTABLE_STATE_DIRNAME = "data"
+# The files whose presence beside the executable means an install predates the
+# `data` subdirectory. Only the ones a user would lose: a stray managed binary
+# proves nothing, because the first run downloads those anyway.
+_LEGACY_PORTABLE_STATE_MARKERS = (
+    "config.json", "history.json", "download-queue.json", "subscriptions.json",
+    "site-logins",
+)
+
+
+def portable_state_dir(executable_dir):
+    """Choose where a portable launch keeps its state.
+
+    New portable installs put everything in one `data` subdirectory rather
+    than loose beside the executable, because that is the only shape a Scoop
+    package can actually keep. Scoop persists a single file as a hard link and
+    a directory as a junction, and every state file here is written by
+    replacing it — `atomic_write_json` and `atomic_copy_verified` both
+    `os.replace`, which drops the link and leaves the persisted copy empty.
+    Writes *inside* a junctioned directory land in the persist directory, so
+    one directory survives where fifteen files did not.
+
+    An install that already has state beside the executable keeps using it.
+    Moving a user's queue and sign-ins on an update is a risk that buys
+    nothing: the layout only matters to a package manager, and any install old
+    enough to have loose state was not made by one.
+    """
+    root = Path(executable_dir)
+    if any((root / name).exists() for name in _LEGACY_PORTABLE_STATE_MARKERS):
+        return root
+    return root / PORTABLE_STATE_DIRNAME
+
+
 def runtime_state_dir(portable=None):
     """Choose the state root without letting a portable launch touch AppData."""
     if portable is None:
         portable = PORTABLE_MODE
     if portable:
-        return _launch_executable_path().parent
+        return portable_state_dir(_launch_executable_path().parent)
     return default_install_dir()
 
 
