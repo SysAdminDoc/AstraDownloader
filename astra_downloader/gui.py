@@ -4752,6 +4752,9 @@ class MainWindowCore(
         repolish(self.server_badge)
         repolish(self.status_dot)
         repolish(self.status_label)
+        # Every server state change lands here, so the empty log card follows
+        # the same signal the badge and the start/stop button do.
+        self._sync_log_empty_state()
 
     def _clear_layout(self, layout):
         while layout.count():
@@ -7930,11 +7933,47 @@ class MainWindowCore(
         self.log_text.setPlainText("\n".join(lines))
         self.log_empty_state.setVisible(not lines)
         self.log_text.setVisible(bool(lines))
+        self._sync_log_empty_state()
+
+    def _sync_log_empty_state(self):
+        """Say why the log is empty, which depends on whether the API is up.
+
+        The card used to tell the user to start the server while the page
+        beside it said Server online, Running, and offered Stop server. With
+        the API up the honest answer is that nothing has happened yet, and
+        there is nothing to start.
+        """
+        empty_state = getattr(self, "log_empty_state", None)
+        if empty_state is None:
+            return
+        running = bool(getattr(self, "server_running", False))
+        title = getattr(empty_state, "empty_title", None)
+        body = getattr(empty_state, "empty_body", None)
+        action = getattr(empty_state, "empty_action", None)
+        if title is not None:
+            title.setText(
+                tr("No events yet") if running else tr("No server events yet")
+            )
+        if body is not None:
+            body.setText(
+                tr(
+                    "The local API is running. Pair the browser extension or "
+                    "send a download to see activity here."
+                )
+                if running else
+                tr(
+                    "Start the local API or pair the browser extension to see "
+                    "recent activity here."
+                )
+            )
+        if action is not None:
+            action.setVisible(not running)
 
     def _clear_log(self):
         self.log_text.clear()
         self.log_empty_state.setVisible(True)
         self.log_text.setVisible(False)
+        self._sync_log_empty_state()
 
     def _toggle_token_visible(self):
         showing = self.cfg_token.echoMode() == QLineEdit.EchoMode.Normal

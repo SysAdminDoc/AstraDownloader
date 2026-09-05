@@ -1891,6 +1891,22 @@
       <translation>Entfernt. Diese Kopie registriert keine Browser-Hosts.</translation>
     </message>
     <message>
+      <source>No events yet</source>
+      <translation>Noch keine Ereignisse</translation>
+    </message>
+    <message>
+      <source>No server events yet</source>
+      <translation>Noch keine Serverereignisse</translation>
+    </message>
+    <message>
+      <source>The local API is running. Pair the browser extension or send a download to see activity here.</source>
+      <translation>Die lokale API läuft. Koppeln Sie die Browsererweiterung oder senden Sie einen Download, um hier Aktivitäten zu sehen.</translation>
+    </message>
+    <message>
+      <source>Start the local API or pair the browser extension to see recent activity here.</source>
+      <translation>Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.</translation>
+    </message>
+    <message>
       <source>Copy a video link, then choose Paste and download.</source>
       <translation>Kopieren Sie einen Videolink und wählen Sie dann Einfügen und herunterladen.</translation>
     </message>
@@ -2901,14 +2917,6 @@
     <message>
       <source>Open the persisted server log in File Explorer.</source>
       <translation>Gespeichertes Serverprotokoll im Datei-Explorer öffnen.</translation>
-    </message>
-    <message>
-      <source>No server events yet</source>
-      <translation>Noch keine Serverereignisse</translation>
-    </message>
-    <message>
-      <source>Start the local API or pair the browser extension to see recent activity here.</source>
-      <translation>Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.</translation>
     </message>
     <message>
       <source>Recent local companion events. Use Clear to remove visible entries.</source>

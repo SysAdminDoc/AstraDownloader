@@ -718,6 +718,7 @@ def make_empty_state(title, body, action_text=None, action=None):
     empty_body = make_label(body, "emptyBody", word_wrap=True)
     empty_body.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(empty_body)
+    button = None
     if action_text and callable(action):
         translated_action = tr(action_text)
         button = QPushButton(translated_action)
@@ -728,6 +729,14 @@ def make_empty_state(title, body, action_text=None, action=None):
         layout.addSpacing(8)
         layout.addWidget(button, 0, Qt.AlignmentFlag.AlignCenter)
     layout.addStretch(3)
+    # An empty state whose text depends on what the page is doing needs its
+    # pieces back. The server log is the case: with the API running there are
+    # no events yet, and with it stopped the reason there are none is that it
+    # is stopped. Handing back the widgets keeps that logic on the page that
+    # knows the state instead of building two frames and toggling them.
+    frame.empty_title = empty_title
+    frame.empty_body = empty_body
+    frame.empty_action = button
     return frame
 
 

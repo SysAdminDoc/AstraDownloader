@@ -741,17 +741,15 @@ def main():
             elif scenario in {
                     "dashboard-online", "dashboard-light-theme",
                     "dashboard-log-populated"}:
-                window.status_label.setText("Running")
-                window.status_label.setProperty("tone", "success")
-                window.status_dot.setProperty("tone", "success")
-                window.dash_status.setText("Server online")
-                window.dash_hint.setText("Local only · ready for Astra Deck")
-                window.server_badge.setProperty("tone", "success")
-                window.btn_startstop.setText("Stop Server")
-                for status_widget in (
-                        window.status_label, window.status_dot, window.server_badge):
-                    app_module.repolish(status_widget)
-                window._set_readiness("server", "Running", "success")
+                # Set the state and let the window paint itself. Every widget
+                # here used to be hand-painted into an "online" costume while
+                # `server_running` stayed False, so anything that reads the
+                # real flag rendered the stopped variant next to a page
+                # claiming Server online — which is how the empty log card
+                # came to offer Start server beside a Stop Server button.
+                window.server_running = True
+                window._server_starting = False
+                window._update_server_ui()
                 window._set_readiness("ytDlp", "2026.07.04", "success")
                 window._set_readiness("ffmpeg", "7.1", "success")
                 window._set_readiness("deno", "Deno 2.7.11", "success")
