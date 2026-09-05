@@ -22,6 +22,7 @@ __all__ = (
     "line_icon_glyph", "make_stat", "make_state_label", "make_status_badge",
     "make_vertical_divider",
     "announce_status", "refresh_line_icons", "repolish", "sanitize_csv_cell",
+    "short_error_text", "SHORT_ERROR_LIMIT",
     "set_gui_theme", "set_line_icon", "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
 )
@@ -600,6 +601,27 @@ def download_status_tone(status):
     if status == "downloading":
         return "info"
     return "neutral"
+
+
+SHORT_ERROR_LIMIT = 160
+
+
+def short_error_text(error, limit=SHORT_ERROR_LIMIT):
+    """Return one bounded line for a caught exception.
+
+    A Python exception string is unbounded and can carry newlines, a full
+    path, or a wrapped chain. Spliced straight into a status label it pushes
+    the useful part of the sentence off the end of the widget. Callers pair
+    this with a concrete next step, so the reason stays informative without
+    becoming the whole message.
+    """
+    text = " ".join(str(error or "").split())
+    if not text:
+        return tr("no reason was reported")
+    limit = max(16, int(limit))
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
 
 
 def describe_rejected_links(failures):

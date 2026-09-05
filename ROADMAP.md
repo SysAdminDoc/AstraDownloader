@@ -12,10 +12,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P2
 
-- [ ] P2 — AD-61 — Six error toasts splice raw exception text and name no next step
-  Why: `Could not read stored sign-ins: {error}`, `Could not read that file: {error}` (twice), `Could not write the bundle: {error}`, `Could not read that bundle: {error}`, `Could not export download history: {error}`, plus `{label}: {error}` paired with a bare "Test failed". Their siblings all end in a concrete action ("check disk permissions and retry"). These end in a Python exception string, unbounded in length, with no suggestion of what to do.
-  Where: `astra_downloader/gui.py`, the seven `tr_format` sites listed above.
-
 - [ ] P2 — AD-62 — A rejected link's reason is translated around, not translated
   Why: `describe_rejected_links` wraps `{reason}` in a translated frame, but the reason itself comes from the URL policy untranslated. A German build shows a German sentence containing an English clause.
   Where: `astra_downloader/gui_support.py` `describe_rejected_links`; the reasons originate in `astra_downloader/config.py` `normalize_url` and its callers.

@@ -2081,7 +2081,8 @@ CATALOGS["de"].update({
     "{count} {discarded}": "{count} {discarded}",
     "That cookie file is too large to be a browser export.":
         "Diese Cookie-Datei ist zu groß für einen Browserexport.",
-    "{label}: {error}": "{label}: {error}",
+    "{label}: {error} Update the stored sign-in for this site, then test again.":
+        "{label}: {error} Aktualisieren Sie die gespeicherte Anmeldung für diese Website und testen Sie erneut.",
     "Start the local companion before adding a subscription.":
         "Starten Sie den lokalen Begleiter, bevor Sie ein Abonnement hinzufügen.",
     "{label}: {language}": "{label}: {language}",
@@ -2136,23 +2137,25 @@ CATALOGS["de"].update({
     "creator subtitles only": "nur Untertitel vom Ersteller",
     "auto-generated subtitles only": "nur automatisch erzeugte Untertitel",
     "Saving to {path}.": "Speichern unter {path}.",
-    "Could not read stored sign-ins: {error}":
-        "Gespeicherte Anmeldungen konnten nicht gelesen werden: {error}",
+    "Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.":
+        "Gespeicherte Anmeldungen konnten nicht gelesen werden: {error} Prüfen Sie, ob der Installationsordner lesbar ist, und öffnen Sie diese Seite erneut.",
     "{count} {auth} · {from_label} {source} · {state}":
         "{count} {auth} · {from_label} {source} · {state}",
-    "Could not read that file: {error}": "Datei konnte nicht gelesen werden: {error}",
+    "Could not read that file: {error} Check the path and its permissions, then choose the file again.":
+        "Datei konnte nicht gelesen werden: {error} Prüfen Sie den Pfad und dessen Berechtigungen und wählen Sie die Datei erneut aus.",
     "{removed} {site}.": "{removed} {site}.",
     "Download complete": "Download abgeschlossen",
     "Download failed": "Download fehlgeschlagen",
     "Download failed: {reason}": "Download fehlgeschlagen: {reason}",
     "No failure details were recorded.":
         "Es wurden keine Fehlerdetails aufgezeichnet.",
-    "Could not write the bundle: {error}":
-        "Das Paket konnte nicht geschrieben werden: {error}",
-    "Could not read that bundle: {error}":
-        "Das Paket konnte nicht gelesen werden: {error}",
-    "Could not export download history: {error}":
-        "Downloadverlauf konnte nicht exportiert werden: {error}",
+    "Could not write the bundle: {error} Choose a folder you can write to, then export again.":
+        "Das Paket konnte nicht geschrieben werden: {error} Wählen Sie einen beschreibbaren Ordner und exportieren Sie erneut.",
+    "Could not read that bundle: {error} Choose a bundle exported by Astra Downloader, then import again.":
+        "Das Paket konnte nicht gelesen werden: {error} Wählen Sie ein von Astra Downloader exportiertes Paket und importieren Sie erneut.",
+    "Could not export download history: {error} Choose a folder you can write to, then export again.":
+        "Downloadverlauf konnte nicht exportiert werden: {error} Wählen Sie einen beschreibbaren Ordner und exportieren Sie erneut.",
+    "no reason was reported": "es wurde kein Grund gemeldet",
     "Still running in the tray so Astra Deck can keep sending downloads.":
         "Läuft weiterhin im Infobereich, damit Astra Deck Downloads senden kann.",
     "{label} {date}": "{label} {date}",

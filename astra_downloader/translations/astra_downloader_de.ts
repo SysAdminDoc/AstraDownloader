@@ -1151,8 +1151,8 @@
       <translation>Keine entfernte Anmeldung zum Wiederherstellen verfügbar.</translation>
     </message>
     <message>
-      <source>{label}: {error}</source>
-      <translation>{label}: {error}</translation>
+      <source>{label}: {error} Update the stored sign-in for this site, then test again.</source>
+      <translation>{label}: {error} Aktualisieren Sie die gespeicherte Anmeldung für diese Website und testen Sie erneut.</translation>
     </message>
     <message>
       <source>Test passed</source>
@@ -1683,8 +1683,8 @@
       <translation>Das Archiv konnte nicht gelesen werden.</translation>
     </message>
     <message>
-      <source>Could not read stored sign-ins: {error}</source>
-      <translation>Gespeicherte Anmeldungen konnten nicht gelesen werden: {error}</translation>
+      <source>Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.</source>
+      <translation>Gespeicherte Anmeldungen konnten nicht gelesen werden: {error} Prüfen Sie, ob der Installationsordner lesbar ist, und öffnen Sie diese Seite erneut.</translation>
     </message>
     <message>
       <source>No stored sign-ins</source>
@@ -1719,8 +1719,8 @@
       <translation>Benutzername/Passwort sicher gespeichert.</translation>
     </message>
     <message>
-      <source>Could not read that file: {error}</source>
-      <translation>Datei konnte nicht gelesen werden: {error}</translation>
+      <source>Could not read that file: {error} Check the path and its permissions, then choose the file again.</source>
+      <translation>Datei konnte nicht gelesen werden: {error} Prüfen Sie den Pfad und dessen Berechtigungen und wählen Sie die Datei erneut aus.</translation>
     </message>
     <message>
       <source>{removed} {site}.</source>
@@ -1839,16 +1839,16 @@
       <translation>Einstellungen wiederhergestellt und Server neu gestartet.</translation>
     </message>
     <message>
-      <source>Could not write the bundle: {error}</source>
-      <translation>Das Paket konnte nicht geschrieben werden: {error}</translation>
+      <source>Could not write the bundle: {error} Choose a folder you can write to, then export again.</source>
+      <translation>Das Paket konnte nicht geschrieben werden: {error} Wählen Sie einen beschreibbaren Ordner und exportieren Sie erneut.</translation>
     </message>
     <message>
-      <source>Could not read that bundle: {error}</source>
-      <translation>Das Paket konnte nicht gelesen werden: {error}</translation>
+      <source>Could not read that bundle: {error} Choose a bundle exported by Astra Downloader, then import again.</source>
+      <translation>Das Paket konnte nicht gelesen werden: {error} Wählen Sie ein von Astra Downloader exportiertes Paket und importieren Sie erneut.</translation>
     </message>
     <message>
-      <source>Could not export download history: {error}</source>
-      <translation>Downloadverlauf konnte nicht exportiert werden: {error}</translation>
+      <source>Could not export download history: {error} Choose a folder you can write to, then export again.</source>
+      <translation>Downloadverlauf konnte nicht exportiert werden: {error} Wählen Sie einen beschreibbaren Ordner und exportieren Sie erneut.</translation>
     </message>
     <message>
       <source>History could not be read</source>
@@ -2129,6 +2129,10 @@
     <message>
       <source>{label}: {value}</source>
       <translation>{label}: {value}</translation>
+    </message>
+    <message>
+      <source>no reason was reported</source>
+      <translation>es wurde kein Grund gemeldet</translation>
     </message>
     <message>
       <source>link</source>
