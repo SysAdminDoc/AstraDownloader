@@ -1151,8 +1151,8 @@
       <translation>No sign-in removal is available to undo.</translation>
     </message>
     <message>
-      <source>{label}: {error}</source>
-      <translation>{label}: {error}</translation>
+      <source>{label}: {error} Update the stored sign-in for this site, then test again.</source>
+      <translation>{label}: {error} Update the stored sign-in for this site, then test again.</translation>
     </message>
     <message>
       <source>Test passed</source>
@@ -1683,8 +1683,8 @@
       <translation>The archive could not be read.</translation>
     </message>
     <message>
-      <source>Could not read stored sign-ins: {error}</source>
-      <translation>Could not read stored sign-ins: {error}</translation>
+      <source>Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.</source>
+      <translation>Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.</translation>
     </message>
     <message>
       <source>No stored sign-ins</source>
@@ -1719,8 +1719,8 @@
       <translation>username/password stored securely.</translation>
     </message>
     <message>
-      <source>Could not read that file: {error}</source>
-      <translation>Could not read that file: {error}</translation>
+      <source>Could not read that file: {error} Check the path and its permissions, then choose the file again.</source>
+      <translation>Could not read that file: {error} Check the path and its permissions, then choose the file again.</translation>
     </message>
     <message>
       <source>{removed} {site}.</source>
@@ -1839,16 +1839,16 @@
       <translation>Settings restored and server restarted.</translation>
     </message>
     <message>
-      <source>Could not write the bundle: {error}</source>
-      <translation>Could not write the bundle: {error}</translation>
+      <source>Could not write the bundle: {error} Choose a folder you can write to, then export again.</source>
+      <translation>Could not write the bundle: {error} Choose a folder you can write to, then export again.</translation>
     </message>
     <message>
-      <source>Could not read that bundle: {error}</source>
-      <translation>Could not read that bundle: {error}</translation>
+      <source>Could not read that bundle: {error} Choose a bundle exported by Astra Downloader, then import again.</source>
+      <translation>Could not read that bundle: {error} Choose a bundle exported by Astra Downloader, then import again.</translation>
     </message>
     <message>
-      <source>Could not export download history: {error}</source>
-      <translation>Could not export download history: {error}</translation>
+      <source>Could not export download history: {error} Choose a folder you can write to, then export again.</source>
+      <translation>Could not export download history: {error} Choose a folder you can write to, then export again.</translation>
     </message>
     <message>
       <source>History could not be read</source>
@@ -2129,6 +2129,10 @@
     <message>
       <source>{label}: {value}</source>
       <translation>{label}: {value}</translation>
+    </message>
+    <message>
+      <source>no reason was reported</source>
+      <translation>no reason was reported</translation>
     </message>
     <message>
       <source>link</source>

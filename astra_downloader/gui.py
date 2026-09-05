@@ -119,6 +119,7 @@ try:
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
+        short_error_text,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 except ImportError:  # Flat source-path compatibility.
@@ -131,6 +132,7 @@ except ImportError:  # Flat source-path compatibility.
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
+        short_error_text,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 
@@ -3613,7 +3615,9 @@ class MainWindowCore(
                 entries = store.entries()
             except Exception as error:  # noqa: BLE001
                 load_error = tr_format(
-                    "Could not read stored sign-ins: {error}", error=error
+                    "Could not read stored sign-ins: {error} Check that the "
+                    "install folder is readable, then reopen this page.",
+                    error=short_error_text(error),
                 )
         signature = json.dumps(
             {"entries": entries, "error": load_error},
@@ -3911,7 +3915,11 @@ class MainWindowCore(
             size = Path(path).stat().st_size
         except OSError as error:
             self._show_site_login_status(
-                tr_format("Could not read that file: {error}", error=error),
+                tr_format(
+                    "Could not read that file: {error} Check the path and its "
+                    "permissions, then choose the file again.",
+                    error=short_error_text(error),
+                ),
                 "error",
             )
             return
@@ -3925,7 +3933,11 @@ class MainWindowCore(
             text = Path(path).read_text(encoding="utf-8", errors="replace")
         except OSError as error:
             self._show_site_login_status(
-                tr_format("Could not read that file: {error}", error=error),
+                tr_format(
+                    "Could not read that file: {error} Check the path and its "
+                    "permissions, then choose the file again.",
+                    error=short_error_text(error),
+                ),
                 "error",
             )
             return
@@ -4033,9 +4045,10 @@ class MainWindowCore(
             self._site_login_test_states[site] = {
                 "ok": False,
                 "message": tr_format(
-                    "{label}: {error}",
+                    "{label}: {error} Update the stored sign-in for this site, "
+                    "then test again.",
                     label=tr("Test failed"),
-                    error=error[:200],
+                    error=short_error_text(error),
                 ),
             }
             self._show_site_login_status(error, "error")
@@ -5854,7 +5867,11 @@ class MainWindowCore(
                 json.dump(bundle, output, indent=2, ensure_ascii=False)
         except OSError as error:
             self._show_settings_status(
-                tr_format("Could not write the bundle: {error}", error=error),
+                tr_format(
+                    "Could not write the bundle: {error} Choose a folder you "
+                    "can write to, then export again.",
+                    error=short_error_text(error),
+                ),
                 "danger",
             )
             return False
@@ -5889,7 +5906,11 @@ class MainWindowCore(
                 payload = json.load(handle)
         except (OSError, ValueError) as error:
             self._show_settings_status(
-                tr_format("Could not read that bundle: {error}", error=error),
+                tr_format(
+                    "Could not read that bundle: {error} Choose a bundle "
+                    "exported by Astra Downloader, then import again.",
+                    error=short_error_text(error),
+                ),
                 "danger",
             )
             return False
@@ -6183,7 +6204,9 @@ class MainWindowCore(
         except OSError as error:
             self._show_history_status(
                 tr_format(
-                    "Could not export download history: {error}", error=error
+                    "Could not export download history: {error} Choose a "
+                    "folder you can write to, then export again.",
+                    error=short_error_text(error),
                 ),
                 "error",
             )

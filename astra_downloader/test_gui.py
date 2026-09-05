@@ -5874,6 +5874,71 @@ class ButtonLabelCaseTests(unittest.TestCase):
         self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
 
 
+class ErrorToastWordingTests(unittest.TestCase):
+    """A caught exception is a reason, not the whole message.
+
+    Seven status messages spliced a raw Python exception string in and stopped
+    there, while every sibling message ends in something to do about it. The
+    exception is also unbounded: a wrapped chain or a long path pushed the
+    useful half of the sentence out of the widget.
+    """
+
+    def test_a_long_exception_is_bounded_to_one_line(self):
+        import gui_support as support
+
+        long_reason = "x" * 400
+        shortened = support.short_error_text(OSError(long_reason))
+        self.assertLessEqual(len(shortened), support.SHORT_ERROR_LIMIT)
+        self.assertTrue(shortened.endswith("…"))
+
+        # Newlines collapse: a multi-line traceback string must not turn one
+        # status label into several.
+        self.assertEqual(
+            support.short_error_text("first line\n  second line"),
+            "first line second line",
+        )
+        # A short reason survives untouched.
+        self.assertEqual(support.short_error_text("Permission denied"),
+                         "Permission denied")
+        # An exception with no message still reads as a sentence.
+        self.assertEqual(support.short_error_text(""), "no reason was reported")
+        self.assertEqual(support.short_error_text(None), "no reason was reported")
+
+    def test_every_spliced_error_message_names_something_to_do(self):
+        source = (
+            Path(ad.__file__).resolve().parent / "gui.py"
+        ).read_text(encoding="utf-8")
+        # The templates that carry a raw {error}. Each must continue past it.
+        offenders = []
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            if getattr(node.func, "id", None) != "tr_format" or not node.args:
+                continue
+            template = node.args[0]
+            parts = []
+            if isinstance(template, ast.Constant) and isinstance(template.value, str):
+                parts = [template.value]
+            elif isinstance(template, ast.JoinedStr):
+                continue
+            else:
+                # An implicitly concatenated literal arrives as one Constant,
+                # so anything else here is a computed template.
+                continue
+            text = "".join(parts)
+            if "{error}" not in text:
+                continue
+            after = text.split("{error}", 1)[1].strip()
+            # A trailing clause is what turns a report into an instruction.
+            if len(after.split()) < 3:
+                offenders.append(text)
+        self.assertEqual(
+            offenders, [],
+            "these messages end at the exception text and name no next step; "
+            "add the action a user should take, as their siblings do",
+        )
+
+
 class SmokeDialogTitleAgreementTests(unittest.TestCase):
     """The GUI smoke selects dialogs by title; nothing pinned the two files.
 
