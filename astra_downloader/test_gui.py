@@ -5874,6 +5874,97 @@ class ButtonLabelCaseTests(unittest.TestCase):
         self.assertEqual(offenders, [], f"Title Case labels: {offenders}")
 
 
+class SmokeDialogTitleAgreementTests(unittest.TestCase):
+    """The GUI smoke selects dialogs by title; nothing pinned the two files.
+
+    `capture_modal_dialog` compares `dialog.windowTitle()` against a literal
+    written into `scripts/render-companion-gui.py`. Renaming a dialog title in
+    `gui.py` therefore broke a gate in a file nobody editing the GUI would
+    think to open, and it surfaced as a stalled capture rather than a message.
+    Fail here instead, in the suite a GUI change already runs.
+    """
+
+    @staticmethod
+    def _render_script_source():
+        return (
+            Path(ad.__file__).resolve().parent.parent
+            / "scripts" / "render-companion-gui.py"
+        ).read_text(encoding="utf-8")
+
+    @staticmethod
+    def _string_arg(node):
+        """Return the literal behind `x`, `tr("x")` or `tr_format("x", ...)`."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in {"tr", "tr_format"}
+            and node.args
+        ):
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                return first.value
+        return None
+
+    @classmethod
+    def _expected_titles(cls):
+        """Titles the smoke script demands, from its capture_modal_dialog calls."""
+        titles = []
+        for node in ast.walk(ast.parse(cls._render_script_source())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if name != "capture_modal_dialog" or len(node.args) < 2:
+                continue
+            literal = cls._string_arg(node.args[1])
+            if literal is not None:
+                titles.append(literal)
+        return titles
+
+    @classmethod
+    def _window_titles_set_by_the_gui(cls):
+        source = (
+            Path(ad.__file__).resolve().parent / "gui.py"
+        ).read_text(encoding="utf-8")
+        titles = set()
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            if getattr(node.func, "attr", None) != "setWindowTitle" or not node.args:
+                continue
+            literal = cls._string_arg(node.args[0])
+            # A computed title (the app name) cannot be compared here and is
+            # not one the smoke selects by.
+            if literal is not None:
+                titles.add(literal)
+        return titles
+
+    def test_the_smoke_asks_for_dialog_titles_the_gui_actually_sets(self):
+        expected = self._expected_titles()
+        self.assertGreaterEqual(
+            len(expected), 5,
+            "the smoke script must still select its dialogs by title",
+        )
+        available = self._window_titles_set_by_the_gui()
+        missing = sorted({t for t in expected if t not in available})
+        self.assertEqual(
+            missing, [],
+            "scripts/render-companion-gui.py waits for a dialog with one of "
+            "these titles and gui.py sets no such title. Renaming a dialog "
+            "means renaming it in both places, or the smoke stalls waiting "
+            "for a window that never appears.",
+        )
+
+    def test_the_agreement_check_notices_a_renamed_title(self):
+        # Positive control: with both files in step the check above can only
+        # pass, and a check that can only pass is not a check.
+        available = self._window_titles_set_by_the_gui()
+        self.assertNotIn("Review diagnostics renamed", available)
+        self.assertIn("Review diagnostics", available)
+
+
 class DownloaderFirstLayoutTests(unittest.TestCase):
     """The product is a video downloader; the extension server is a feature
     of it. That ordering is a design decision, so exercise the constructed
