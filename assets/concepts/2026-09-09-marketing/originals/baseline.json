@@ -1,0 +1,753 @@
+{
+  "project": "SysAdminDoc/AstraDownloader",
+  "nodeId": "R_kgDOTvW_6A",
+  "repositoryId": 1324728296,
+  "head": "8947adef8e894cd79ad5324c318afe39d1f341d9",
+  "version": "2.15.0",
+  "archiveSHA256": "e8bc885cf107d68b2494c7f3138d76c49460de8f78b7e7b196a8b6cbb4bc426d",
+  "gitFiles": [
+    {
+      "path": ".gitattributes",
+      "oid": "27ab980dc187c14e7c2c70960d43d00dac02d34f"
+    },
+    {
+      "path": ".gitignore",
+      "oid": "96b3c00931fb2feeaea1344a8f726ac6af83bc48"
+    },
+    {
+      "path": "AstraDownloader.ico",
+      "oid": "f324a2b9530ca90c36614e22c588cc33c3281535"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "oid": "5f9e44105e04f2e84a14fe780b3c40256ca62164"
+    },
+    {
+      "path": "LICENSE",
+      "oid": "6185585df6ae9ff2a22f3e19eac7a69a46ad8a6d"
+    },
+    {
+      "path": "README.md",
+      "oid": "0379c1fd6e3ab2025b90a612a10dcfad779567f9"
+    },
+    {
+      "path": "ROADMAP.md",
+      "oid": "b54cfa8f708349a738956343d04070cb744f7c8e"
+    },
+    {
+      "path": "Roadmap_Blocked.md",
+      "oid": "2979cc690d28431822275413401b05b5cdd491e7"
+    },
+    {
+      "path": "SECURITY.md",
+      "oid": "067bea6ec56f2147af2472ccbc3ad76c12483426"
+    },
+    {
+      "path": "astra_downloader/_compat.py",
+      "oid": "3b365d48f857da8f53264d66afdbb9e3737428f6"
+    },
+    {
+      "path": "astra_downloader/astra_downloader.py",
+      "oid": "47a9c39e814e6ea5f075809e171fecc555f2cd25"
+    },
+    {
+      "path": "astra_downloader/build.py",
+      "oid": "bcd0a2b3c934555ec67fd660a13665d6f9bf7a77"
+    },
+    {
+      "path": "astra_downloader/companion_ports.py",
+      "oid": "bca2bacbd94cb35e514d286e8f3e518f0de3aa34"
+    },
+    {
+      "path": "astra_downloader/config.py",
+      "oid": "8870b0a81b7e8ace432cf6f8258fc5c35287b4f8"
+    },
+    {
+      "path": "astra_downloader/conftest.py",
+      "oid": "da0739d1ddcf530f6b860ece92c432fe6fb11fe7"
+    },
+    {
+      "path": "astra_downloader/constraints-release.txt",
+      "oid": "ae401adae96eb9c33b286236790c73b1e6a35fd3"
+    },
+    {
+      "path": "astra_downloader/download.py",
+      "oid": "90f07a9de1bcc5b23888cace60b28396ca2f2293"
+    },
+    {
+      "path": "astra_downloader/gui.py",
+      "oid": "18d096c118958c5eef3d56f4387bd0489599f0ef"
+    },
+    {
+      "path": "astra_downloader/gui_download_page.py",
+      "oid": "2a37164660264ea538b753c93b65c9710b4cccbf"
+    },
+    {
+      "path": "astra_downloader/gui_extension_page.py",
+      "oid": "c9008977545f41b9d0761e522eeb75a5524246cf"
+    },
+    {
+      "path": "astra_downloader/gui_history_page.py",
+      "oid": "33b2a0124c0ecf9deba7db78e259a15ac4f29157"
+    },
+    {
+      "path": "astra_downloader/gui_settings_page.py",
+      "oid": "0429ef96ef422fc1391e49bc0bec749d646d7c1d"
+    },
+    {
+      "path": "astra_downloader/gui_site_logins_page.py",
+      "oid": "663ea50c2f22fd8544b46655326c08eee7d1df95"
+    },
+    {
+      "path": "astra_downloader/gui_sites_page.py",
+      "oid": "33e786f36ad68c3c7a0e006120f685cb9e802363"
+    },
+    {
+      "path": "astra_downloader/gui_subscriptions_page.py",
+      "oid": "a1f13f63ecc923abdad9fb1861131c268752a221"
+    },
+    {
+      "path": "astra_downloader/gui_support.py",
+      "oid": "e95ee4f3e9647be31d3d41f831cac62d820a1327"
+    },
+    {
+      "path": "astra_downloader/health.py",
+      "oid": "4eb6ca5408670a9497d87b8f4e57f8dc3a0cbb95"
+    },
+    {
+      "path": "astra_downloader/i18n.py",
+      "oid": "bf5692f451370e099304c4af54e57041bbf01c6c"
+    },
+    {
+      "path": "astra_downloader/license-policy.json",
+      "oid": "a4f989a2aea9c42796c802821cc5b7e866f8e7bf"
+    },
+    {
+      "path": "astra_downloader/native_sources.py",
+      "oid": "7d28271b41d112ea5a6103d0d7528e6b5190ce51"
+    },
+    {
+      "path": "astra_downloader/requirements.txt",
+      "oid": "02c86e65666a7a20174b3561d0ad6bf9210d60ce"
+    },
+    {
+      "path": "astra_downloader/routes.py",
+      "oid": "248f3fbb10416108d46c38e260aa46a7030e4722"
+    },
+    {
+      "path": "astra_downloader/sites.py",
+      "oid": "dfef85a697fb9805aff0f493e9e069fbe0446540"
+    },
+    {
+      "path": "astra_downloader/subscriptions.py",
+      "oid": "c43b54fc60243c35b4ad70a10d96f2935e2c0bcf"
+    },
+    {
+      "path": "astra_downloader/test_build.py",
+      "oid": "b24b9a41047cd03d17effdeb6cf9fa1a08789dab"
+    },
+    {
+      "path": "astra_downloader/test_config.py",
+      "oid": "bbea52affb5470c0174164b2baf656a4bf3dee4a"
+    },
+    {
+      "path": "astra_downloader/test_download.py",
+      "oid": "b64202e39118d770987ec4238972ee4269d1e052"
+    },
+    {
+      "path": "astra_downloader/test_feature_upgrades.py",
+      "oid": "9fd732ef97c8d7d0fb5f017ba449101134b3871f"
+    },
+    {
+      "path": "astra_downloader/test_gui.py",
+      "oid": "fa57108a484414cad17c3a608fc612160b643e40"
+    },
+    {
+      "path": "astra_downloader/test_health.py",
+      "oid": "086fee77dd1bad894bd8db4d71354b312e195eaa"
+    },
+    {
+      "path": "astra_downloader/test_native_sources.py",
+      "oid": "a7f18e67e5107e2fe13a3806aa1d22293a902ca4"
+    },
+    {
+      "path": "astra_downloader/test_routes.py",
+      "oid": "710d07f14848b698f111bce2ff95fdc3d03668d4"
+    },
+    {
+      "path": "astra_downloader/test_sites.py",
+      "oid": "4122409c3aa88135818cebc95a8c58a0e3b7476d"
+    },
+    {
+      "path": "astra_downloader/test_subscriptions.py",
+      "oid": "3e87a326aadf034a772a2f74c7688edb3bd26ff1"
+    },
+    {
+      "path": "astra_downloader/testing_support.py",
+      "oid": "50ff8a9e1d0af76f7242bf63ef464cc29499b2c1"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ar.qm",
+      "oid": "e8dfdb9e74ddb6dd0a912e067a7ec31169071022"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ar.ts",
+      "oid": "745f46cf685e6e2095134da727e3e9acd7d78170"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_de.qm",
+      "oid": "626eefe4dab77970fc0964ba478258b73f9da7bd"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_de.ts",
+      "oid": "134119a65df0eea139b22b5264ed647e81af64af"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_en.qm",
+      "oid": "836ea2925f6f0b53e3289ee01b0c2d3f053095b3"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_en.ts",
+      "oid": "4a8a432ef03427ab466e170d1a816fea133911e8"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_es.qm",
+      "oid": "d21ecf52b125bde8efc66d918150dcf817d59fa8"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_es.ts",
+      "oid": "a89b1aa3316358482a034438915987d5cd531f98"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_fr.qm",
+      "oid": "015c1a6699b310dc7bb34d1071c67d3b86e782ee"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_fr.ts",
+      "oid": "6a71a3fa39cd80cc022df77c188a805c71f67be9"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_it.qm",
+      "oid": "a189ca2957fe5c0d2c26bad275f691b66eaa50d5"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_it.ts",
+      "oid": "a72fc97cb58476e8e41ad504e1c51d5335689056"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ja.qm",
+      "oid": "8e06d6d501ac30830db7c5d38e672701fdf37c5b"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ja.ts",
+      "oid": "ae36dd5927df50ca0372ecd3761a58288eff58e2"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ko.qm",
+      "oid": "15436bb4afb8c30d4ec0f7dd7321d775c837e4eb"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ko.ts",
+      "oid": "419ae8a52656bc94c18cc53ec82e540b7bfd6ef2"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_pt_BR.qm",
+      "oid": "99c2b1a16a69836aef533b9ec9912bcb2279123b"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_pt_BR.ts",
+      "oid": "af9a6e8243399ea003cea922f74eecf574f3919a"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ru.qm",
+      "oid": "7d69acf4ce60ee4de4377869098d2e40f6c27057"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_ru.ts",
+      "oid": "35e73e724921bc59357182fe5f60c52fb93fdf0f"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_zh_CN.qm",
+      "oid": "dcfd67b69a21d75104ce7d02bd61068ef808414d"
+    },
+    {
+      "path": "astra_downloader/translations/astra_downloader_zh_CN.ts",
+      "oid": "1539c3dad2ab6c15efd37b98aefe15e8044f15b2"
+    },
+    {
+      "path": "docs/yt-dlp-cookie-threat-model.md",
+      "oid": "55b9a31a0551d7e88726cb6f59936d9090512aa9"
+    },
+    {
+      "path": "package.json",
+      "oid": "eff0ba501004bf575ffa79eaec86d166734df595"
+    },
+    {
+      "path": "packaging/scoop/astra-downloader.json",
+      "oid": "8f3e3f247842b22006b3c030fbafedb5e365a1c7"
+    },
+    {
+      "path": "pytest.ini",
+      "oid": "6110fb372d55e57af600101e1c0213f816a02581"
+    },
+    {
+      "path": "scripts/audit-python-deps.js",
+      "oid": "37bb9d29d53937330869732110f927edce8c7e92"
+    },
+    {
+      "path": "scripts/build-companion-translations.py",
+      "oid": "99997f42a136dd9e3229f4f8cdb822c4c243bf2e"
+    },
+    {
+      "path": "scripts/check-companion-inventory.js",
+      "oid": "312a07a647a2ea8f7d3e1ff27babb785cf3fac55"
+    },
+    {
+      "path": "scripts/check-companion-port-catalogue.js",
+      "oid": "8d9163660cdee50e7345b30dcbda7551f8b987e5"
+    },
+    {
+      "path": "scripts/check-companion-translations.py",
+      "oid": "02de5ca9ed71fd1e4b51fbafabdfac5fa68a7c09"
+    },
+    {
+      "path": "scripts/check-python-catch-reasons.js",
+      "oid": "7bfb4285e884a5c525efe954bf88047699180697"
+    },
+    {
+      "path": "scripts/check-site-registry.py",
+      "oid": "bbde2f5cf1fe91a85a6a8f75988ab5d83c4aa0e1"
+    },
+    {
+      "path": "scripts/check-versions.js",
+      "oid": "3262d94af2b4eeb1c31778372def4ba9c376db84"
+    },
+    {
+      "path": "scripts/companion-license-inventory.js",
+      "oid": "5d16f9d7081febdbd9bc02087519a865a6b95abb"
+    },
+    {
+      "path": "scripts/companion-port-catalogue.js",
+      "oid": "5e3709fb664e1503113f7845dfc5c1af6218b30c"
+    },
+    {
+      "path": "scripts/companion-port-catalogue.json",
+      "oid": "38e767ac917ba4e470954f48b59a6878b4224ae1"
+    },
+    {
+      "path": "scripts/extract_companion_strings.py",
+      "oid": "1a5166728502124e2cb88b0c3fe5ade01befaaa5"
+    },
+    {
+      "path": "scripts/generate-companion-port-modules.js",
+      "oid": "3d2ea11810523673ee0cdfe5f00f4294fc4854bb"
+    },
+    {
+      "path": "scripts/render-companion-gui.py",
+      "oid": "ac481b7533ebfafe39dae3446dede8da8b5966a5"
+    },
+    {
+      "path": "scripts/resolve-runtime-helpers.js",
+      "oid": "bcfcc30aa010b6628c6c03ce8f6c41dc8dded44c"
+    },
+    {
+      "path": "scripts/run-checks.js",
+      "oid": "25934d32156ffa6988553c558945b9552cf3b84b"
+    },
+    {
+      "path": "scripts/stage-companion-release.js",
+      "oid": "353a7a47835432567c35cae1f3060357c1f45d3c"
+    },
+    {
+      "path": "scripts/write-release-provenance.js",
+      "oid": "4b64ea73616f7d59a2c57c1c25487b6f44d96ba4"
+    },
+    {
+      "path": "scripts/yt-dlp-smoke.py",
+      "oid": "ac688f467ca22130b67b992d3f9de4dc96e66998"
+    },
+    {
+      "path": "tests/companion-license-inventory.test.js",
+      "oid": "ed17aa1a42889e96ab0475f7f7fad525f9b50470"
+    },
+    {
+      "path": "tests/documentation-facts.test.js",
+      "oid": "d9a7cbfb29de1642ba0f0e5a6890481840837da1"
+    },
+    {
+      "path": "tests/python-catch-reason-gate.test.js",
+      "oid": "3a180563de27a492891c858fab28f464ac977156"
+    },
+    {
+      "path": "tests/python-dependency-policy.test.js",
+      "oid": "85329c327bcfa8928afba384597fb47c7430d0e3"
+    },
+    {
+      "path": "tests/release-provenance.test.js",
+      "oid": "2b3effebdab1eb99fbb3559784a0af02bf0d927d"
+    },
+    {
+      "path": "tests/runtime-helper-resolution.test.js",
+      "oid": "bf752ebe025b3eec693c017f9c3c2c77cde0ddfd"
+    },
+    {
+      "path": "tests/scoop-manifest.test.js",
+      "oid": "0ca701bc20d00b64644f176e4e4cd0d590996faf"
+    }
+  ],
+  "copied": [
+    {
+      "path": "README.md",
+      "sha256": "a3c72025d8e159ca5338c68a90571c71da81c1479eb500be6159ccc81df6c3fc",
+      "size": 17763
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "c98129469db91fec7c413fcb98dc07ee42aed8aac9595fa8619e0685d8a27990",
+      "size": 147118
+    },
+    {
+      "path": "ROADMAP.md",
+      "sha256": "f7c0de86add9c2069a7dfecd3b083b9285495a997f6a1f27cc2b756d79af2f4b",
+      "size": 29659
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "cdc7b7d17eb11c3eca5e2bb27e2a667282833e21d8c4b2f29f927f12005b2c2f",
+      "size": 5789
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "d9901971146aa4f98a6b4fed9a6128ce334ab4769970e10340bc8e5f244538f2",
+      "size": 1076
+    },
+    {
+      "path": "AstraDownloader.ico",
+      "sha256": "f088373f5bdbb6f408669098eda77529bb8a5939520d3e237a65202dfaee21bb",
+      "size": 370070
+    },
+    {
+      "path": "prior-captures/dashboard-chinese.png",
+      "sha256": "c0b1f4944dd1443087001037e5ec933cb1a32ff4eefe7bb1e852948a80b82b13",
+      "size": 68735
+    },
+    {
+      "path": "prior-captures/dashboard-error-degraded.png",
+      "sha256": "110d8e6471b1e5a33356947e531773a3cc1eb86afa53d14311b2f9e10a9eba1d",
+      "size": 77885
+    },
+    {
+      "path": "prior-captures/dashboard-french.png",
+      "sha256": "b92bd5d79f5f795602def43a573e3e1b703cad3431e2b249dae6045b3aa01d26",
+      "size": 78952
+    },
+    {
+      "path": "prior-captures/dashboard-german.png",
+      "sha256": "1a929ee4c0e8610f680ef86da1053d7b5feeea51dc72dd0450c47ae7becce714",
+      "size": 84891
+    },
+    {
+      "path": "prior-captures/dashboard-italian.png",
+      "sha256": "a381c49ae26090da861454638fd4b0c8d77ec1dddbf6f4f83c99055c0e2efcd0",
+      "size": 77138
+    },
+    {
+      "path": "prior-captures/dashboard-japanese.png",
+      "sha256": "2f955c277c44632e87ee9a520aff076b2099c7193c263eae5c41ec3e170bcd26",
+      "size": 68918
+    },
+    {
+      "path": "prior-captures/dashboard-korean.png",
+      "sha256": "05090ea4f8cf558b02cac112954d1c37c0ea4e82a36482defe5722a8aea9c501",
+      "size": 68939
+    },
+    {
+      "path": "prior-captures/dashboard-light-theme.png",
+      "sha256": "3925c9fe9973ab7b626dc9ab6ff822b55e471ca8b16abe094c8e461818221caf",
+      "size": 76265
+    },
+    {
+      "path": "prior-captures/dashboard-log-populated.png",
+      "sha256": "a20dd018ceea347c7f9a4797b7bd09bcfcef968a5b9917b674c24aec157b79cd",
+      "size": 76881
+    },
+    {
+      "path": "prior-captures/dashboard-online.png",
+      "sha256": "eec9cd81b818937c3c2c928d1c177283c043a8a9ff4b956ad2b4d519e7126ac4",
+      "size": 76322
+    },
+    {
+      "path": "prior-captures/dashboard-portuguese.png",
+      "sha256": "1ade4097874b63f16e04f5f249f7199c4be9c0852b3ec33cdb7debe68e3cda70",
+      "size": 78635
+    },
+    {
+      "path": "prior-captures/dashboard-russian.png",
+      "sha256": "50c3775c28446b9599467e352e8d40fc5f0e0ce034c6eae9b438ee1a3949ff72",
+      "size": 77825
+    },
+    {
+      "path": "prior-captures/dashboard-spanish.png",
+      "sha256": "c4780dc5fdfc30e6273b18fb5573d0ccd89b47a6d64b2d5bb0de5e547331502d",
+      "size": 79171
+    },
+    {
+      "path": "prior-captures/dashboard-starting.png",
+      "sha256": "907b6753d4cc92ddced3f71fe36e3d7402c1444fdf08df0bf5fb1db37e4e0fe8",
+      "size": 78770
+    },
+    {
+      "path": "prior-captures/downloads-active-pending.png",
+      "sha256": "d2d78710a016c71f57c5921cbca1e27d5e187e42416589f3cddd9ae2be60e101",
+      "size": 64758
+    },
+    {
+      "path": "prior-captures/downloads-advanced-options.png",
+      "sha256": "5eab333242fcf489af2b82c38c039211df36e06213465400883c9ebd65ec2736",
+      "size": 72195
+    },
+    {
+      "path": "prior-captures/downloads-arabic-rtl.png",
+      "sha256": "d29a7d1589e6f8262bb9b89828ba387c88b6d8f8e75ef58f2bba980b96690524",
+      "size": 63894
+    },
+    {
+      "path": "prior-captures/downloads-clipboard-staged.png",
+      "sha256": "db892a6b2a211addc13301ad2a92817522d4ad064840614378f4d3fd30420914",
+      "size": 66448
+    },
+    {
+      "path": "prior-captures/downloads-first-run.png",
+      "sha256": "ba3415cac63d8a63f5f5b29b2a51b1da48b2d593491ac3ee86eafc9e8cc23ff0",
+      "size": 77288
+    },
+    {
+      "path": "prior-captures/downloads-focus-1x.png",
+      "sha256": "d2d78710a016c71f57c5921cbca1e27d5e187e42416589f3cddd9ae2be60e101",
+      "size": 64758
+    },
+    {
+      "path": "prior-captures/downloads-format-probe.png",
+      "sha256": "ededaea217ccee4d4d39734ebd54757a95f509782a22c942c156210460d222d1",
+      "size": 68795
+    },
+    {
+      "path": "prior-captures/downloads-health-error.png",
+      "sha256": "dca62ea28f6222b6f23e8a0ea6288ba4913d49985c4a8c3019a89b50f855e701",
+      "size": 73070
+    },
+    {
+      "path": "prior-captures/downloads-health-german.png",
+      "sha256": "7bc2d5701e91b07f70c2e180fa62b784f60251de76c5b3ccf5d58398fc219e7b",
+      "size": 80023
+    },
+    {
+      "path": "prior-captures/downloads-light-theme.png",
+      "sha256": "521323b73fd8d72edfd14b10fdf5f4b4227ac749e4e47751b30a057eead1d595",
+      "size": 64599
+    },
+    {
+      "path": "prior-captures/downloads-paused-intake.png",
+      "sha256": "47104305366fb456f2fc94c841dd14ba7ffdba5ca7021a9512cf10c6c68e1216",
+      "size": 64919
+    },
+    {
+      "path": "prior-captures/downloads-quarantine.png",
+      "sha256": "c525132542568a34ed991aaa216c43988ad7a649717565683d456dab13d122a5",
+      "size": 65230
+    },
+    {
+      "path": "prior-captures/downloads-queue-full.png",
+      "sha256": "cc52ce5770d1bfea02f6f71e207b8fb49d9901f01598ae04fc75a7b67e85c5d4",
+      "size": 69042
+    },
+    {
+      "path": "prior-captures/downloads-rate-limited.png",
+      "sha256": "710b49af09839f2fc6a9b740f8861c8102689f3572c27a890cb4de68d0a1767c",
+      "size": 67015
+    },
+    {
+      "path": "prior-captures/downloads-recovery-terminal.png",
+      "sha256": "54f990e63ccfc30310f34aa3b4c1af17bfd1edacdc7417e4993f306bcbe483e1",
+      "size": 68466
+    },
+    {
+      "path": "prior-captures/downloads-subtitles-only.png",
+      "sha256": "d0160dee4e9f98e5a82fe8238c6b4a875da5602a79f90c7e8cf5bde2d7dc15d2",
+      "size": 68654
+    },
+    {
+      "path": "prior-captures/history-arabic-rtl.png",
+      "sha256": "d2039b3c79f21e358ebb0c8a8edd17b12b88723081c3f20ebffe0910953357a9",
+      "size": 55695
+    },
+    {
+      "path": "prior-captures/history-cleared-undo.png",
+      "sha256": "942ccd1ae82a848275fca5bfd77cd0f7c9f0b987039eec0d1a8c8469344a658c",
+      "size": 51534
+    },
+    {
+      "path": "prior-captures/history-filter-empty.png",
+      "sha256": "83ad03d7fedfa4a6a70a999bb83e6ec7a528ce64bad7b36b50cba1b8e52ace7c",
+      "size": 48773
+    },
+    {
+      "path": "prior-captures/history-german.png",
+      "sha256": "d0d5c4cbb830fe586d88a082d5a05b719ba0f596ca09028fa07ef3760ea06095",
+      "size": 59016
+    },
+    {
+      "path": "prior-captures/history-light-theme.png",
+      "sha256": "c1ccf97a59d13765c93bcb6e0d33ee9facddc4c36a0df2d7397d7898c451da52",
+      "size": 56374
+    },
+    {
+      "path": "prior-captures/history-pagination.png",
+      "sha256": "1b47102fcacff17991448dbc77955fb7b799258e4dd940e5244d2acaca62caac",
+      "size": 79607
+    },
+    {
+      "path": "prior-captures/history-populated.png",
+      "sha256": "e486f76c4c722e41eb4fb365967fe534747276e3434d54ea87710fad1f844749",
+      "size": 56648
+    },
+    {
+      "path": "prior-captures/history-restored.png",
+      "sha256": "5fd7991b96e4a64149db8e1f4de91f73953207fed478a47e25dbeaad3d57ed50",
+      "size": 58131
+    },
+    {
+      "path": "prior-captures/history-unreadable.png",
+      "sha256": "3e415cd95e6d942b5ea8bad6e93a548a2ce41969907e24db9b83c8d22b5ea6a8",
+      "size": 53378
+    },
+    {
+      "path": "prior-captures/site-logins-empty.png",
+      "sha256": "e80ed42ca08c79dc6038b3c7337d2e944e58fa6c5787bd272feea087720e9f06",
+      "size": 72402
+    },
+    {
+      "path": "prior-captures/site-logins-light-theme.png",
+      "sha256": "37db7ba1c6198cc1cb7930d4f1536c66cbf7e61370a4f2fcc592c49e36f76730",
+      "size": 68805
+    },
+    {
+      "path": "prior-captures/site-logins-stored.png",
+      "sha256": "d4e3fc7f49f92cce0b7cec23bb38c707a9ebdcb5c570b755fb9be8b56f11505d",
+      "size": 69248
+    },
+    {
+      "path": "prior-captures/site-logins-youtube-warning.png",
+      "sha256": "f0016846dfb6267080d6753665c54a0588f709ca9128e763be635aa328565656",
+      "size": 80747
+    },
+    {
+      "path": "prior-captures/sites-catalogue.png",
+      "sha256": "d0bf0538eeea8da312f1506ddef35fdf91f10079432a602805c66a35d219bf65",
+      "size": 57979
+    },
+    {
+      "path": "prior-captures/sites-filter-empty.png",
+      "sha256": "170adf0e06f2ff7f3e650a50e9110a172e867a7788c4e3c62dfe863c4ecf3494",
+      "size": 32434
+    },
+    {
+      "path": "prior-captures/sites-filtered.png",
+      "sha256": "136c5a6e24f9e3d23d8dd622d4bb19a9cd196eaa1da3baf76b16b386663c83e9",
+      "size": 56529
+    },
+    {
+      "path": "prior-captures/sites-german.png",
+      "sha256": "1aa00ec05199a3f82435b9272ffd2bb8a8a4e0fb9bf863f44fc4b1f2ec70fb54",
+      "size": 62014
+    },
+    {
+      "path": "prior-captures/sites-light-theme.png",
+      "sha256": "7a4c751c9efecc394a69f40ace14bccf2b8ceb1e6192754b5ddbf2291f0f862c",
+      "size": 57802
+    },
+    {
+      "path": "prior-captures/subscriptions-arabic-rtl.png",
+      "sha256": "2d6043c0ba2d3e7df2c9c9e100937a5ab8f3de199a99eab05086d4249725ef0c",
+      "size": 54624
+    },
+    {
+      "path": "prior-captures/subscriptions-disabled.png",
+      "sha256": "49c630a9022db471feb83436146efea36ab9c7c16f69e8504d3e0102a427eedc",
+      "size": 54476
+    },
+    {
+      "path": "prior-captures/subscriptions-empty.png",
+      "sha256": "ef4040b4d3b5dedff4b53b3fe81f6d4c722c3b493e1b864194d1d0ad8037415e",
+      "size": 53190
+    },
+    {
+      "path": "prior-captures/subscriptions-error.png",
+      "sha256": "8f5466671b5184612608cd5fca478c1bbaa4695e0b5f1b611388762d8e8cb01c",
+      "size": 51873
+    },
+    {
+      "path": "prior-captures/subscriptions-filter-empty.png",
+      "sha256": "4963519a3ac90328a4cd890329100b131efa575d1ee5dcf5b92eecaed3e1eeab",
+      "size": 52177
+    },
+    {
+      "path": "prior-captures/subscriptions-german.png",
+      "sha256": "6008a524ad4a92ec28980d97122c987e9aaa516c711a401a94091c6440fde032",
+      "size": 55851
+    },
+    {
+      "path": "prior-captures/subscriptions-light-theme.png",
+      "sha256": "0e2d7734899e8fbd5056b2247c3a2e54e9fc4068f12783e3d71092b8919dadd4",
+      "size": 54795
+    },
+    {
+      "path": "prior-captures/subscriptions-populated.png",
+      "sha256": "475fcb7b77b7bdbf155b720fcc0e7725bb11cec8af3d2440e7f37b797f5a2776",
+      "size": 55024
+    },
+    {
+      "path": "prior-captures/subscriptions-scanning.png",
+      "sha256": "431c0265928d43c427cd5a3fa1d7ef6eca43a5304ce3fbb8ce61a3b8fcc617a8",
+      "size": 54685
+    }
+  ],
+  "iconFrames": [
+    {
+      "width": 256,
+      "height": 256,
+      "png": false,
+      "sha256": "9c6c46df4c805a424aff1ff9b88afda2a30387025fe68824349041735d12f990"
+    },
+    {
+      "width": 128,
+      "height": 128,
+      "png": false,
+      "sha256": "7d677bc416e53f940c8bb47a8b82db9ca73c4477028601b360e2889ae5e07a15"
+    },
+    {
+      "width": 64,
+      "height": 64,
+      "png": false,
+      "sha256": "36e53bbf53582b421f038117b160d90774cc9a9d00de8104596c687405ac3aca"
+    },
+    {
+      "width": 48,
+      "height": 48,
+      "png": false,
+      "sha256": "71087226ecd49a63640b5ca8051080a72f4ba2c7732597de6f2b43d2625934d6"
+    },
+    {
+      "width": 32,
+      "height": 32,
+      "png": false,
+      "sha256": "a8965f3e41c9eaf8e3a20c55a6a195f57be4ba60d4fa997a67406335479122ca"
+    },
+    {
+      "width": 16,
+      "height": 16,
+      "png": false,
+      "sha256": "fab83e51f9f68f63f866bc82ca1c8208f1c624528e8aa65c1dbe116838b37a53"
+    }
+  ]
+}

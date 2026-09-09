@@ -37,6 +37,23 @@ class FakeDistribution:
 
 
 class ReleaseConstraintsTests(unittest.TestCase):
+    def test_builder_excludes_ambient_native_library_directories(self):
+        with mock.patch.dict(os.environ, {"PATH": "C:/unrelated-tools", "PYTHONPATH": "C:/ambient"}):
+            environment = build.release_subprocess_environment()
+            self.assertNotIn("unrelated-tools", environment["PATH"])
+            self.assertNotIn("PYTHONPATH", environment)
+            self.assertIn(str(Path(sys.executable).parent), environment["PATH"])
+            self.assertEqual(os.environ["PATH"], "C:/unrelated-tools")
+
+    def test_native_origin_check_rejects_a_path_sibling(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch) / 'reviewed'
+            valid = ('Qt6Core.dll', str(root / 'Qt6Core.dll'), 'BINARY')
+            build.validate_native_origins([valid], [root])
+            invalid = ('icuuc.dll', str(Path(scratch) / 'reviewed-other' / 'icuuc.dll'), 'BINARY')
+            with self.assertRaisesRegex(SystemExit, 'Unreviewed native dependency'):
+                build.validate_native_origins([valid, invalid], [root])
+
     def test_frozen_build_keeps_lazy_boundary_modules_in_the_graph(self):
         source = MODULE_PATH.read_text(encoding='utf-8')
         for module_name in ('_compat', 'config', 'download', 'health', 'routes', 'gui'):

@@ -491,8 +491,10 @@ def pyinstaller_args(mode):
         "--clean",
         f"--{mode}",
         "--windowed",
+        "--runtime-hook", str(HERE / "runtime_hook_mp.py"),
         "--name", "AstraDownloader",
         "--icon", str(ICON),
+        "--add-data", str(ICON) + os.pathsep + ".",
         "--add-data", (
             str(TRANSLATIONS_DIR / "*.qm")
             + os.pathsep
@@ -525,9 +527,40 @@ def pyinstaller_args(mode):
     ]
 
 
+def release_subprocess_environment():
+    """Do not let unrelated applications on PATH supply native libraries."""
+    environment = dict(os.environ)
+    windows = Path(os.environ.get("SystemRoot", "C:/Windows"))
+    environment["PATH"] = os.pathsep.join(map(str, (
+        Path(sys.executable).parent, Path(sys.base_prefix),
+        Path(sys.base_prefix) / "DLLs", windows / "System32", windows,
+    )))
+    for key in ("PYTHONPATH", "PYTHONHOME", "QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH"):
+        environment.pop(key, None)
+    return environment
+
+
+def validate_native_origins(toc, allowed_roots=None):
+    """Reject a collected DLL from outside the reviewed build environment."""
+    roots = [Path(value).resolve() for value in (allowed_roots or (
+        sys.prefix, sys.base_prefix, ROOT, os.environ.get("SystemRoot", "C:/Windows"),
+    ))]
+    if isinstance(toc, (list, tuple)):
+        if len(toc) == 3 and toc[2] in ("BINARY", "EXTENSION"):
+            origin = Path(toc[1]).resolve()
+            if not any(origin.is_relative_to(root) for root in roots):
+                raise SystemExit(f"Unreviewed native dependency: {toc[0]} from {origin}")
+        else:
+            for value in toc:
+                validate_native_origins(value, roots)
+
+
 def run_pyinstaller(mode):
     print(f"Building AstraDownloader ({mode})...")
-    subprocess.check_call(pyinstaller_args(mode), cwd=str(HERE))
+    subprocess.check_call(pyinstaller_args(mode), cwd=str(HERE),
+                          env=release_subprocess_environment())
+    analysis = BUILD_DIR / "AstraDownloader" / "Analysis-00.toc"
+    validate_native_origins(ast.literal_eval(analysis.read_text(encoding="utf-8")))
 
 
 def build():

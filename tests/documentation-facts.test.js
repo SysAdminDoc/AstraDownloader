@@ -8,6 +8,8 @@ const { spawnSync } = require('node:child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
 const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
+const building = fs.readFileSync(path.join(repoRoot, 'docs/BUILDING.md'), 'utf8');
+const documentation = readme + '\n' + building;
 const packageJson = require(path.join(repoRoot, 'package.json'));
 
 function pythonCandidates() {
@@ -19,7 +21,7 @@ function pythonCandidates() {
 // A stated count in a README is a fact with a shelf life. Reading it back off
 // the command the README tells you to run is the only way it stays true; every
 // previous pass left the number behind and the next reader trusted it.
-test('the test count the README states is the count pytest collects', () => {
+test('the documented test count is the count pytest collects', () => {
     let collected = null;
     let ran = false;
     let lastOutput = '';
@@ -54,16 +56,17 @@ test('the test count the README states is the count pytest collects', () => {
         'pytest ran but reported no collected count:\n' + lastOutput.slice(-2000),
     );
 
-    const stated = /py -3\.\d+ -m pytest\s+# (\d[\d,]*) tests/.exec(readme);
-    assert.ok(stated, 'README must state the test count beside the pytest command');
+    const stated = /py -3\.\d+ -m pytest(?: -rs)?\s+# (\d[\d,]*) tests/.exec(documentation);
+    assert.ok(stated, 'The build guide must state the count beside the pytest command');
     assert.equal(
         Number(stated[1].replace(/,/g, '')), collected,
         `README says ${stated[1]} tests, pytest collects ${collected}`,
     );
 });
 
-test('the commands the README shows are commands the project defines', () => {
-    const fenced = readme.match(/```powershell\n([\s\S]*?)```/g) || [];
+test('documented commands are commands the project defines', () => {
+    assert.match(readme, /\]\(docs\/BUILDING\.md\)/, 'README must link to the build guide');
+    const fenced = documentation.match(/```powershell\n([\s\S]*?)```/g) || [];
     const npmRuns = new Set();
     for (const block of fenced) {
         for (const line of block.split('\n')) {
@@ -85,7 +88,7 @@ const GATE_COUNT_WORDS = [
     'nine', 'ten', 'eleven', 'twelve',
 ];
 
-test('the README describes the gate set npm run check actually runs', () => {
+test('the build guide describes the gate set npm run check actually runs', () => {
     const { GATES } = require(path.join(repoRoot, 'scripts', 'run-checks.js'));
     assert.ok(GATES.length >= 5, 'the gate table must be readable from run-checks.js');
     const word = GATE_COUNT_WORDS[GATES.length];
@@ -94,7 +97,7 @@ test('the README describes the gate set npm run check actually runs', () => {
     // both this test and the README, so adding a gate meant editing the
     // assertion that was supposed to catch the drift.
     assert.match(
-        readme,
+        documentation,
         new RegExp(`all ${word} gates`),
         `run-checks.js declares ${GATES.length} gates; the README must say "all ${word} gates"`,
     );

@@ -1,0 +1,34 @@
+[
+  {
+    "file": "downloads-light.png",
+    "sha256": "b94b3479f020256c6686313fb1357c04fe0836952985bfd6ff843825d6456b87"
+  },
+  {
+    "file": "downloads.png",
+    "sha256": "7e14044269d0457024a3b094f8a5904c828b41dd26464593c295ff09ae3fb0fa"
+  },
+  {
+    "file": "first-run.png",
+    "sha256": "6b2f2475eb0dbdd0ae3566c0dbdf4394e7c179529584173fb9ea2586919e7a97"
+  },
+  {
+    "file": "history.png",
+    "sha256": "4b9bbfe7a03f4b080df97bd567d59f552b2816691576dc41ee6b044f9f38dca9"
+  },
+  {
+    "file": "review.json",
+    "sha256": "6479f9ad5043a66a43d2f4c75f5fc65b6de58db9701b59d1be16143bca78d885"
+  },
+  {
+    "file": "settings.png",
+    "sha256": "ef337d8afa8a03a9f1fa3907e00aa18a14b94823d95d35cebe842508487fca5c"
+  },
+  {
+    "file": "sign-ins.png",
+    "sha256": "6ead2cdc6692ae7ad35685c842a06effe5f26ee9dd3255e181085b8d804d46dc"
+  },
+  {
+    "file": "sites.png",
+    "sha256": "27d8fde19dd7b348ee560209c49a262f34787e0b5f6740f1f0d234d00cdbcbd0"
+  }
+]

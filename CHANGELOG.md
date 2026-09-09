@@ -10,7 +10,17 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
-## [Unreleased]
+## [2.15.1] (2026-09-09)
+
+### Documentation and release review
+
+- Release builds now restrict native-library discovery to the reviewed environment. An unrelated ICU library on PATH could be bundled into an otherwise successful build and prevent Qt from loading. Collected native-library origins are checked before packaging proceeds.
+- The README now shows the packaged interface and separates installation from portable use. Detailed controls and build instructions live in focused guides.
+- Cookie handling and URL filtering are described with their actual limits. Signing and download checks no longer suggest bypassing a security warning by default.
+- Original source, artwork and earlier screenshots are retained in a dated concept archive. The existing folded-A icon remains the project identity.
+- A bounded offscreen review mode exercises the packaged window in its own profile, saves screenshots and exits. It doesn't pair a browser, install integrations or start downloads.
+
+The fixes below were already on the main branch and are included in this release.
 
 ### Security
 
@@ -147,7 +157,7 @@ repository's git log.
   clock the check reads, and a guard scans every test module for the same
   shape so the next one is caught when it is written rather than a month later.
 
-## [2.15.0] - 2026-08-30
+## [2.15.0] (2026-08-30)
 
 ### Added
 
@@ -170,7 +180,7 @@ repository's git log.
   reports and picks the newest one, and still sends nothing when that family
   is missing, because an unknown target ends the download rather than warning.
 
-## [2.14.0] - 2026-08-29
+## [2.14.0] (2026-08-29)
 
 ### Added
 
@@ -248,7 +258,7 @@ repository's git log.
   survive export and import. A folder outside the bundle's own download roots
   is left out and named in the import result.
 
-## [2.13.1] - 2026-08-27
+## [2.13.1] (2026-08-27)
 
 ### Fixed
 
@@ -258,7 +268,7 @@ repository's git log.
   exact version for command-line callers, exits cleanly, and never starts Qt.
   Silent installation uses the same safe output path.
 
-## [2.13.0] - 2026-08-26
+## [2.13.0] (2026-08-26)
 
 Astra Deck can talk to this program again. If downloads from the extension have
 been failing with "Astra Downloader is not running" while the window was open in
@@ -300,7 +310,7 @@ front of you, this is the release that fixes it.
   answered. The oldest client version this program accepts is unchanged, so an
   older extension keeps working exactly as it did.
 
-## [2.12.0] - 2026-08-22
+## [2.12.0] (2026-08-22)
 
 An audit pass. Nothing here is a new feature; it is a list of things that were
 quietly wrong.
@@ -394,7 +404,7 @@ quietly wrong.
   string could reach the German window untranslated. It also found eighteen
   German translations keyed on English that no longer exists.
 
-## [2.11.0] - 2026-08-22
+## [2.11.0] (2026-08-22)
 
 ### Changed
 
@@ -516,7 +526,7 @@ quietly wrong.
   section labels can grow past their old pixel widths instead of being cut
   off.
 
-## [2.10.0] - 2026-08-21
+## [2.10.0] (2026-08-21)
 ### Changed
 
 - **The window no longer waits on the disk to write a log line.** Every status
@@ -556,7 +566,7 @@ quietly wrong.
   registration would silently drop. What the field stores is now what actually
   gets registered.
 
-## [2.9.0] - 2026-08-21
+## [2.9.0] (2026-08-21)
 
 ### Added
 - **Status messages now reach screen readers.** Changing a label's text tells
@@ -693,7 +703,7 @@ quietly wrong.
 - **Importing a settings bundle restarts the local API when the port
   changed.** The restore-defaults path already did this.
 
-## [2.8.0] - 2026-08-14
+## [2.8.0] (2026-08-14)
 
 ### Added
 
@@ -777,7 +787,7 @@ quietly wrong.
   handler, so a parser bug surfaces loudly instead of masquerading as
   `runtime-probe-failed`.
 
-## [2.7.0] - 2026-08-11
+## [2.7.0] (2026-08-11)
 
 ### Changed
 
@@ -1038,7 +1048,7 @@ quietly wrong.
   requests share one scan, scan-thread exceptions are recorded, and the scan
   endpoint has a bounded retry window.
 
-## [2.6.0] - 2026-08-09
+## [2.6.0] (2026-08-09)
 
 ### Added
 
@@ -1056,7 +1066,7 @@ quietly wrong.
   provision there, the video destination is confirmed once, and the welcome
   panel links directly to browser-extension pairing.
 
-## [2.5.0] - 2026-08-06
+## [2.5.0] (2026-08-06)
 
 ### Added
 
@@ -1266,7 +1276,7 @@ quietly wrong.
   chain is pinned to the 2026-08-08 measurement while keeping the fallback
   explicit for the next yt-dlp extractor drift check.
 
-## [2.4.0] - 2026-08-06
+## [2.4.0] (2026-08-06)
 
 ### Fixed
 
@@ -1320,7 +1330,7 @@ quietly wrong.
 - "Start Server", "Stop Server" and "Check yt-dlp Update" are now sentence
   case, matching every other label.
 
-## [2.3.0] - 2026-08-06
+## [2.3.0] (2026-08-06)
 
 ### Added
 
@@ -1381,7 +1391,7 @@ quietly wrong.
   one: nine advertised locales ship five of twenty-one strings and every
   check passed. The incomplete locales are now named in a test.
 
-## [2.2.0] - 2026-08-06
+## [2.2.0] (2026-08-06)
 
 ### Added
 
@@ -1425,7 +1435,7 @@ quietly wrong.
   are now added at the same process boundary that refuses `--exec` and the
   external downloaders, so an invocation added later cannot forget them.
 
-## [2.1.0] - 2026-08-06
+## [2.1.0] (2026-08-06)
 
 ### Security
 
@@ -1546,7 +1556,7 @@ quietly wrong.
   predicate selects the cookie jar handed to yt-dlp on a `--cookies` write
   path, so it now compares host labels from `urlparse().hostname`.
 
-## [2.0.0] - 2026-08-05
+## [2.0.0] (2026-08-05)
 
 Astra Downloader is its own product, in its own repository, designed around
 the thing it is actually for: downloading a video.

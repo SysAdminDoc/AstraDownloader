@@ -1,0 +1,230 @@
+[
+  {
+    "file": "dashboard-chinese.png",
+    "sha256": "5e55472036dc1549dfec67168ac16ca640a006d2b8d155926ef3dc152040452c"
+  },
+  {
+    "file": "dashboard-error-degraded.png",
+    "sha256": "c5c30e276ec02294b94ebfd23ac32bd8de301c0ac99c1c13532178b92e0e4bab"
+  },
+  {
+    "file": "dashboard-french.png",
+    "sha256": "b150bb07b57a050aeb68e5a22e48962b02c490c0c74cbc21bcdfc768cf0a199d"
+  },
+  {
+    "file": "dashboard-german.png",
+    "sha256": "e4cee37747bc1644a2995495635fceed774b668e36e565008d639f6bcb63743a"
+  },
+  {
+    "file": "dashboard-italian.png",
+    "sha256": "cb3d8bc78b2fe18ed9e974497d0335fed1bea77bf0aef233efad472854815364"
+  },
+  {
+    "file": "dashboard-japanese.png",
+    "sha256": "26f1fff66b8370fafcd2abe1bee497b6225e87af957171e9c6ae73cace8e157b"
+  },
+  {
+    "file": "dashboard-korean.png",
+    "sha256": "d90c36271ed42e57e484bed8d166bea52a66cab9e4021877497ef12447ed489d"
+  },
+  {
+    "file": "dashboard-light-theme.png",
+    "sha256": "59368433a75e4fc629d74c3669cfafb309c678fada1e772b85722d6c09e1057a"
+  },
+  {
+    "file": "dashboard-log-populated.png",
+    "sha256": "9cb152eb0cc9930c07dfa66738b19c8cc34eb43edb865a2142a960303da9608a"
+  },
+  {
+    "file": "dashboard-online.png",
+    "sha256": "8cf193662be3b0fa603bb2b45be7ea634f45465ddb9d842dd013cd685d49379d"
+  },
+  {
+    "file": "dashboard-portuguese.png",
+    "sha256": "e792a863fbcfb445f52ef8e3a376c75c55eca769a6d906616cf5f98b1bc47d8e"
+  },
+  {
+    "file": "dashboard-russian.png",
+    "sha256": "a9062ef7fc61c7e100dd85553ab4444ff6524d24f9e68faf4f89028d94119e9d"
+  },
+  {
+    "file": "dashboard-spanish.png",
+    "sha256": "87444ea80e12fdf82a8852762a4ee0835a8382160546a1e883b9f994553e1caf"
+  },
+  {
+    "file": "dashboard-starting.png",
+    "sha256": "8a6cebbb7d21cd6ebf9c4c128355a71713923daaa27b1763e93cf874bdcaf998"
+  },
+  {
+    "file": "downloads-active-pending.png",
+    "sha256": "7b398980d99db90d7cf98b45053c701558636d47742e74d5ae36b41c908bef71"
+  },
+  {
+    "file": "downloads-advanced-options.png",
+    "sha256": "847ea5ebad5fbb60e4855b8a2c05f03a07e2c718a205543d8233df3f78271dd8"
+  },
+  {
+    "file": "downloads-arabic-rtl.png",
+    "sha256": "8c86d9edc26fa48f1cdca915e4e6a3862fb1eba3d3d8de23be4cc984ded6da7e"
+  },
+  {
+    "file": "downloads-clipboard-staged.png",
+    "sha256": "f91f58e0d1d47cfb5e97792b9fe90c27bf9edfc5cf9dd458351da21fd5808b4d"
+  },
+  {
+    "file": "downloads-first-run.png",
+    "sha256": "35d67099e74bd3665a2bc510740e8e68a3770a653055f5956d626fe81f09c7b8"
+  },
+  {
+    "file": "downloads-focus-1x.png",
+    "sha256": "7b398980d99db90d7cf98b45053c701558636d47742e74d5ae36b41c908bef71"
+  },
+  {
+    "file": "downloads-format-probe.png",
+    "sha256": "cc9c942fa889013dc3150cdb5588d783e3f9c22e1c2356c1573c37b811599e2f"
+  },
+  {
+    "file": "downloads-health-error.png",
+    "sha256": "c48af4ca58ff8fe71c371c9871e87201af067eefa5c63fd340b139da03441464"
+  },
+  {
+    "file": "downloads-health-german.png",
+    "sha256": "fb2c632822d8658c7c69ba6049b67c37cd5c11ccbb5ef9ebc6f54a67507f1cac"
+  },
+  {
+    "file": "downloads-light-theme.png",
+    "sha256": "d20b0971f99854e3493a22f106c19c069902a95a518246e16aeed28374ceb724"
+  },
+  {
+    "file": "downloads-paused-intake.png",
+    "sha256": "21d8c7fb1d718b30d7644dfbc82be761d6d05801b3075c877f7291d41771348d"
+  },
+  {
+    "file": "downloads-quarantine.png",
+    "sha256": "80de44671a8d63a717a0c7542b4605a296521f024631230ac870ac193d89da23"
+  },
+  {
+    "file": "downloads-queue-full.png",
+    "sha256": "8afb272e60cc96bbb1daa79ab2e5d8322d130063a6d83a440aec0046d47dac97"
+  },
+  {
+    "file": "downloads-rate-limited.png",
+    "sha256": "1720d6eadcb8b4336211c25119da6dca9d9bde561d2d407c1a3297ca0f65e916"
+  },
+  {
+    "file": "downloads-recovery-terminal.png",
+    "sha256": "4113e64e5ee30c2d5e23ae97e3bf6479413dce4ed46590e0a3eb468d17826d68"
+  },
+  {
+    "file": "downloads-subtitles-only.png",
+    "sha256": "8581b1f57e4d83e44f2d5775f93d33d2baaedddb09089e803f1ebe89a285c46e"
+  },
+  {
+    "file": "history-arabic-rtl.png",
+    "sha256": "123bd4c840652da57139c2f6b7edabb5ad20f3a630a87137ea03dfd2d135e0dd"
+  },
+  {
+    "file": "history-cleared-undo.png",
+    "sha256": "4aa59d7d133e78d4cdb9095b06a932a2d8179c5a91f0d3f782072abf022732bc"
+  },
+  {
+    "file": "history-filter-empty.png",
+    "sha256": "d881036d788fb13c49edfe4b616e8dcbbff9328893d237907ac7edbc654b1be6"
+  },
+  {
+    "file": "history-german.png",
+    "sha256": "ad0e58a332d25607fb67aa0bfc548b5044d2e44fa3656d9f7d16b8626f03bc0a"
+  },
+  {
+    "file": "history-light-theme.png",
+    "sha256": "ac769398ec8036ed4ee1b697c4394a600f3460343a8e8dab0a9f337ab0f75036"
+  },
+  {
+    "file": "history-pagination.png",
+    "sha256": "7826212320283407ded8e57f517baa9649171cf38b203e66fd142836e88ac978"
+  },
+  {
+    "file": "history-populated.png",
+    "sha256": "7685381a8f2b3fc283a7526c0acf0c1151f547c351092256a64aa5880cbe4571"
+  },
+  {
+    "file": "history-restored.png",
+    "sha256": "3d4ce3c844db3f5657e646723bf571545129f8e7fed80a14a4dd9f9440021b2c"
+  },
+  {
+    "file": "history-unreadable.png",
+    "sha256": "197b9e1acf80609828214b7e584a5f0724e06038a4d51cf0c8146140c063949f"
+  },
+  {
+    "file": "site-logins-empty.png",
+    "sha256": "c7e83e056c34e72e409fb981bc8887bf0da26b5d7359ba95f42e305f958e9694"
+  },
+  {
+    "file": "site-logins-light-theme.png",
+    "sha256": "187c33bc30b298c0a0ce010df28e541b688e850209bbd33df37d497e3a95bdf3"
+  },
+  {
+    "file": "site-logins-stored.png",
+    "sha256": "39217fb5838c74061db0c33b40f01e93877106f3487e3b9bfce9fed62409ed3a"
+  },
+  {
+    "file": "site-logins-youtube-warning.png",
+    "sha256": "90285a73794f7aecc699560b5b814158150b2d8924b65a82d3cb54da928dfcae"
+  },
+  {
+    "file": "sites-catalogue.png",
+    "sha256": "1dabca0d722c980ee81a024dc7bb1407fbdbe01d5a516255f32289746c4784fe"
+  },
+  {
+    "file": "sites-filter-empty.png",
+    "sha256": "f5350caf5830b00b61c9494261cec98b2294cb9209fb9b4b7dd8434259acc6c4"
+  },
+  {
+    "file": "sites-filtered.png",
+    "sha256": "84d9ab1ccb98f957e8d124db022f85ecaf04d2dbf73d96e853fc40754f67f616"
+  },
+  {
+    "file": "sites-german.png",
+    "sha256": "04398b058929cec3c8c502e0ac5cc09167dcdcae797eee9d467b69c7484ecd80"
+  },
+  {
+    "file": "sites-light-theme.png",
+    "sha256": "49ba65f841d7f44d5abc99f2e086d664b75af1fa72e6b3e324e39598fca3797b"
+  },
+  {
+    "file": "subscriptions-arabic-rtl.png",
+    "sha256": "203061e4dada31f9e4f10242cfcbf41a9dbc9b7a4e30b2162836fdfd36e3e27f"
+  },
+  {
+    "file": "subscriptions-disabled.png",
+    "sha256": "80bc28396a9a09f0104052b0ad33ae4d1130e2f054eb3a9c4c46c7cdb63a3e97"
+  },
+  {
+    "file": "subscriptions-empty.png",
+    "sha256": "66b046a47ff8c8cf1d7057bd1141b764ebe8eaf48f9a49bcaca0171440f25bcc"
+  },
+  {
+    "file": "subscriptions-error.png",
+    "sha256": "87a604a5f6a76c45e593d93ecf66ebc8a4aaeead0e5072f83758cc71ec1825c2"
+  },
+  {
+    "file": "subscriptions-filter-empty.png",
+    "sha256": "13b340cd98d7dafc82ec005d54f7ee0dcbd84ab429e169511f3211fdb6a33d58"
+  },
+  {
+    "file": "subscriptions-german.png",
+    "sha256": "41b35bffd4e8c8bdae8f64626b724d2d5916ee123a5b6edcd64c32c31324d51f"
+  },
+  {
+    "file": "subscriptions-light-theme.png",
+    "sha256": "e61c545b1b034dcf5d5de96b35b0106baadf989ac80426aa2bea62a25295bd70"
+  },
+  {
+    "file": "subscriptions-populated.png",
+    "sha256": "b8d2b2e35615ee210ef96870619bee0233572e8a5a3767b29ab8d7e3a94d9c14"
+  },
+  {
+    "file": "subscriptions-scanning.png",
+    "sha256": "fb42c895747a3b5fdc649074ac2441299dcdda731ffab0f781328b092791fdfd"
+  }
+]

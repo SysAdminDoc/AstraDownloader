@@ -2,6 +2,10 @@
 
 Actionable work only. Historical and completed roadmap material is archived in CHANGELOG.md; blocked work is kept in Roadmap_Blocked.md.
 
+## v2.15.1 marketing delivery
+
+The README, usage guide and build guide now separate verified product behavior from site-dependent claims. A dated concept archive retains the original source and prior captures. The package review runs offscreen in a new disposable profile. Existing feature work below remains open.
+
 ## Research-Driven Additions
 
 ID scheme: `AD-nn`, continue sequentially from the highest below.
@@ -24,19 +28,19 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 
-- [ ] P2 — AD-62 — A rejected link's reason is translated around, not translated
+- [ ] P2 | AD-62 | A rejected link's reason is translated around, not translated
   Why: `describe_rejected_links` wraps `{reason}` in a translated frame, but the reason itself comes from the URL policy untranslated. A German build shows a German sentence containing an English clause.
   Where: `astra_downloader/gui_support.py` `describe_rejected_links`; the reasons originate in `astra_downloader/config.py` `normalize_url` and its callers.
 
-- [ ] P2 — AD-63 — Tray notifications raise no accessibility event
+- [ ] P2 | AD-63 | Tray notifications raise no accessibility event
   Why: every status label in the app announces itself through `StatusLabel.setText` / `announce_status`. The five `QSystemTrayIcon.showMessage` balloons bypass that path entirely, so a completion or a failure that fires while the window is minimised is announced to nobody. That is exactly when the balloon is the only report.
   Where: `astra_downloader/gui.py`, the five `showMessage` call sites; `astra_downloader/gui_support.py` `announce_status`.
 
-- [ ] P2 — AD-64 — `_arm_host_backoff_wakeup` decides on liveness it does not hold
+- [ ] P2 | AD-64 | `_arm_host_backoff_wakeup` decides on liveness it does not hold
   Why: the timer is created under the lock and started outside it, so `current.is_alive()` is False for a timer another thread has installed but not yet started. Two threads can each install and start one; the loser is unreachable by `cancel_all` and fires anyway. The observed cost is a redundant daemon timer rather than a missed wakeup, which is why it is here and not above, but the check-then-act is real.
   Where: `astra_downloader/download.py` `_arm_host_backoff_wakeup`.
 
-- [ ] P2 — AD-65 — `_persist_stop` is set by nothing
+- [ ] P2 | AD-65 | `_persist_stop` is set by nothing
   Why: the queue writer thread has a stop event that is never signalled anywhere in the tree. Retirement relies entirely on the two-second idle timeout, and `cancel_all` does not stop the writer. Either wire the event into shutdown or delete it; as written it reads like a shutdown path that exists.
   Where: `astra_downloader/download.py` (`_persist_stop`, and the writer loop that reads it).
 
@@ -126,27 +130,27 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: Each resolver declares the upstream reason it exists, as an extractor name plus the issue it answers. A gate reports when the installed yt-dlp's extractor for that site changes shape from the recorded state, so the claim is re-examined rather than assumed. The user agent is derived from the same source the impersonation targets come from, or is a named constant with a recorded review date that the gate flags once it is a year old.
   Complexity: S
 
-- [ ] P3 — AD-66 — `read_settings_bundle` and `ConfigStore` disagree about a boolean schema version
+- [ ] P3 | AD-66 | `read_settings_bundle` and `ConfigStore` disagree about a boolean schema version
   Why: `read_settings_bundle` accepts `"schemaVersion": true` because `int(True) == 1`, while `ConfigStore._load_and_sanitize` rejects a bool for the same field on purpose. One of the two is wrong about what a version marker is.
   Where: `astra_downloader/config.py`, `read_settings_bundle` and `_load_and_sanitize`.
 
-- [ ] P3 — AD-67 — Two interactive surfaces have no focus or selection styling
+- [ ] P3 | AD-67 | Two interactive surfaces have no focus or selection styling
   Why: `QScrollArea` is keyboard-scrollable with `border: none` and no `:focus` rule, so a keyboard user scrolling a long list has no indication of where they are. `QComboBox QAbstractItemView` sets `selection-background-color` but the popup has no `::item` rule, so the keyboard highlight inside an open combo falls back to the platform default over a custom background. Neither is measured by the focus-ring test added this pass, because neither declares a ring to measure.
   Where: `astra_downloader/astra_downloader.py`, the `QScrollArea` and `QComboBox QAbstractItemView` rules.
 
-- [ ] P3 — AD-68 — Three sibling spin boxes spell their units three ways
+- [ ] P3 | AD-68 | Three sibling spin boxes spell their units three ways
   Why: `' entries'`, `' seconds'`, `' s'`, `' MB'`, `' min'`. Two of them sit on the same Settings page. Pick one convention: spelled out, or abbreviated, not both.
   Where: `astra_downloader/gui_settings_page.py` (`setSuffix` at the retention, timeout and size fields), `astra_downloader/gui_subscriptions_page.py`.
 
-- [ ] P3 — AD-69 — The playlist dialog calls the same thing a video and an item
+- [ ] P3 | AD-69 | The playlist dialog calls the same thing a video and an item
   Why: "Select every video in this playlist preview" sits beside "Select playlist item {index}", and the confirm button says "Download selected" while the resulting toast says "Queued {count} items from playlist." The subscription archive has the mirror problem: "Captured subscription items" beside "The source no longer lists this video."
   Where: `astra_downloader/gui.py`, the `PlaylistStagingDialog` and `SubscriptionArchiveDialog` strings.
 
-- [ ] P3 — AD-70 — The empty-state ETA is punctuation where every other empty state is a word
+- [ ] P3 | AD-70 | The empty-state ETA is punctuation where every other empty state is a word
   Why: an unknown ETA renders as `--`. Everywhere else the app writes "Not set", "unknown", "Off", "No limit".
   Where: `astra_downloader/gui.py`, the download-card ETA field.
 
-- [ ] P3 — AD-71 — Areas the 2026-08-22 audit did not reach
+- [ ] P3 | AD-71 | Areas the 2026-08-22 audit did not reach
   Why: recorded so the next pass starts where this one stopped rather than re-covering it. Not audited: the PyInstaller build pipeline beyond running it; the native messaging host registration; the Windows shell integration (jump list, `RegisterApplicationRestart`, Recycle Bin delete) beyond reading it, since driving it needs a real desktop session; the whisper transcription path; the SponsorBlock and NFO writers; and the browser extension, which is a separate repository. The GUI was exercised offscreen through `npm run smoke:gui` and the Qt test suite, never driven interactively, so nothing here rests on watching a real window.
   Where: `astra_downloader/build.py`, the native-host block in `astra_downloader/astra_downloader.py`, the taskbar and jump-list block in `astra_downloader/gui.py`, the transcription block in `astra_downloader/download.py`.
 

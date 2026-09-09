@@ -6,6 +6,9 @@ Manages yt-dlp downloads with a PySide6 GUI, system tray, and REST API on port 9
 First run auto-downloads yt-dlp + ffmpeg. No separate installer needed.
 """
 
+import multiprocessing
+multiprocessing.freeze_support()
+
 import sys, os, json, time, re, uuid, subprocess, threading, socket, shutil, traceback, hmac, hashlib, struct, math, stat
 import queue
 import http.client
@@ -15,6 +18,15 @@ import weakref
 from pathlib import Path, PureWindowsPath
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
+
+try:
+    from .visual_review import prepare_review, run_review
+except ImportError:  # Flat source and frozen entry point.
+    from visual_review import prepare_review, run_review
+
+# Review setup precedes Qt imports and state-path constants. It can never use
+# a caller's real profile or the portable package's existing data directory.
+REVIEW_ROOT = prepare_review(sys.argv[1:]) if __name__ == '__main__' else None
 
 # requirements.txt declares a Python 3.11 floor. Every pinned wheel would
 # still install on 3.10 — the floor is a policy choice, because CPython 3.10
@@ -374,7 +386,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.15.0"
+APP_VERSION = "2.15.1"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -479,6 +491,8 @@ def portable_state_dir(executable_dir):
 
 def runtime_state_dir(portable=None):
     """Choose the state root without letting a portable launch touch AppData."""
+    if REVIEW_ROOT is not None:
+        return REVIEW_ROOT / 'profile' / 'LocalAppData' / 'AstraDownloader'
     if portable is None:
         portable = PORTABLE_MODE
     if portable:
@@ -7397,6 +7411,8 @@ def companion_install_exit_code(argv=None):
 
 
 def main():
+    if REVIEW_ROOT is not None:
+        raise SystemExit(run_review(sys.modules[__name__], REVIEW_ROOT))
     probe_exit = companion_probe_exit_code(sys.argv[1:])
     if probe_exit is not None:
         if probe_exit == 0:
@@ -7576,8 +7592,6 @@ def main():
     sys.exit(app.exec())
 
 if __name__ == '__main__':
-    import multiprocessing
-    multiprocessing.freeze_support()
     try:
         main()
     except SystemExit:

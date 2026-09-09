@@ -1,0 +1,34 @@
+[
+  {
+    "file": "downloads-light.png",
+    "sha256": "7309c562401c758c18beb3e98a40c5ae28f9b9133f3bf9c3ac4248bd0f128645"
+  },
+  {
+    "file": "downloads.png",
+    "sha256": "605fb420fdc579bbda6c3a74f5d3224d99b17b3eaeb6ec59f50c6d961d7c4693"
+  },
+  {
+    "file": "first-run.png",
+    "sha256": "4606135599921a0653e49cf34da04695ff7e8a7464bab7279685c1512c485808"
+  },
+  {
+    "file": "history.png",
+    "sha256": "dab867c2af872ace0a7c01f7ecc4eeeac2cb658e4c979dab5858ce6ee6cafc9e"
+  },
+  {
+    "file": "review.json",
+    "sha256": "0505f7e5717d2eef40183308fba544157bb30219405615b15efc1bf853816659"
+  },
+  {
+    "file": "settings.png",
+    "sha256": "4592cc4808aa3ccaa081e88dde57ba8b70885a52737bd73161b82030a08792b4"
+  },
+  {
+    "file": "sign-ins.png",
+    "sha256": "b499842bf6d959810686e1744f4215c8edb8a9cfa1904f31663831d48c6bea8e"
+  },
+  {
+    "file": "sites.png",
+    "sha256": "83803104505f8d04ad8e21bbb35706352358ace8f32c1fa90fb471bf3bb41f3d"
+  }
+]

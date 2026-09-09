@@ -1,0 +1,39 @@
+{
+  "version": "2.15.1",
+  "frozen": false,
+  "backend": "offscreen",
+  "dataset": "Seeded examples, not completed downloads",
+  "network": "Disabled. No server, browser pairing, helper setup or media transfers.",
+  "checks": [
+    "isolated state root",
+    "review configuration saved",
+    "first-run panel visible",
+    "first-run frame geometry",
+    "first-run navigation Download",
+    "first-run painted navigation Download",
+    "first-run navigation History",
+    "first-run painted navigation History",
+    "first-run navigation Sites",
+    "first-run painted navigation Sites",
+    "first-run navigation Sign-ins",
+    "first-run painted navigation Sign-ins",
+    "first-run navigation Subscriptions",
+    "first-run painted navigation Subscriptions",
+    "first-run navigation Browser extension",
+    "first-run painted navigation Browser extension",
+    "first-run navigation Settings",
+    "first-run painted navigation Settings",
+    "first-run PNG saved",
+    "destination confirmation persisted"
+  ],
+  "captures": [
+    {
+      "file": "first-run.png",
+      "width": 1440,
+      "height": 1040,
+      "sha256": "6b2f2475eb0dbdd0ae3566c0dbdf4394e7c179529584173fb9ea2586919e7a97"
+    }
+  ],
+  "passed": false,
+  "error": "Traceback (most recent call last):\n  File \"C:\\repos\\AstraDownloader\\astra_downloader\\visual_review.py\", line 157, in run_review\n    check(len(window._download_widgets) == 2, 'example queue rendered')\n    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\repos\\AstraDownloader\\astra_downloader\\visual_review.py\", line 63, in check\n    raise AssertionError(name)\nAssertionError: example queue rendered\n"
+}

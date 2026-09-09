@@ -1280,7 +1280,8 @@ def main():
                 app.processEvents()
                 assert_visible_text(window, {
                     "Site sign-ins are unavailable in this session.",
-                    "Could not read stored sign-ins: fixture sign-in store failure",
+                    "Could not read stored sign-ins: fixture sign-in store failure "
+                    "Check that the install folder is readable, then reopen this page.",
                 })
             elif scenario == "site-logins-empty":
                 window._refresh_site_logins(force=True)

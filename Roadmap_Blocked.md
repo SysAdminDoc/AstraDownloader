@@ -1,42 +1,17 @@
 # Blocked
 
-Items that cannot be finished without something outside this repository —
-credentials, a human decision, or a service. Moved here so `ROADMAP.md` stays
-a list of work a coding agent can actually pick up.
+Items that cannot be finished without something such as credentials, a licensing decision or an upstream release. Moved here so `ROADMAP.md` stays
+a list of implementation work.
 
-## Translate the nine incomplete locales — needs native speakers
+## Translation coverage needs native review
 
-**State:** the machinery is done and shipped. `scripts/extract_companion_strings.py`
-discovers every user-facing literal from the GUI's syntax tree (219 of them,
-against the 21 a hand-written tuple used to declare), the generator builds all
-eleven catalogues from that list, and `npm run check` fails when a string
-reaches the UI without reaching the catalogues. German is complete at 219/219
-and the render scenario asserts translated body copy on all six pages.
+The string extractor currently finds 1,016 user-facing strings. All eleven catalogues contain those keys, including English fallback entries. That is not the same as eleven fully translated interfaces.
 
-**What is blocked:** Arabic, Spanish, French, Italian, Japanese, Korean,
-Brazilian Portuguese, Russian and Simplified Chinese each declare only their
-five navigation strings. Filling them means 214 strings per locale, and doing
-that without a speaker of the language produces a UI that is confidently
-wrong in ways nobody here can review. The roadmap research already recorded
-what comparable projects do: ytDownloader uses Crowdin across 23 languages
-and Parabolic uses Weblate. Both outsource exactly this.
+The current checker requires complete German coverage and exposes English and German in the language picker. Nine partial catalogues remain for older saved configurations. Run `py -3.13 scripts/check-companion-translations.py` for current per-language coverage; the older 219-string figures no longer describe this release.
 
-`py -3.13 scripts/build-companion-translations.py` prints current coverage per
-locale, so the gap is measured rather than assumed.
+Native-speaker review is still needed before advertising each additional language. Translation-platform suggestions from earlier notes have not been re-evaluated in this marketing pass.
 
-**To unblock:** stand up a translation platform (Crowdin and Weblate are both
-free for open source) and seed it from
-`build/companion-translatable-strings.json`, or take contributions per locale.
-Astra Deck issue #1 asks for Chinese, which makes `zh_CN` the first one worth
-having.
-
-**Corrected 2026-08-21:** the History column headers used to be named here as
-strings the extractor could not see. They are extracted and translated now —
-the German catalogue carries `Duration` as `Dauer`. What is left is the fixed
-column width, which a longer translated header overflows, and that is tracked
-as AD-35 in `ROADMAP.md` rather than here.
-
-## AD-30 — Mint PO tokens from a sidecar the app owns — needs a licence review
+## AD-30 | Mint PO tokens from a sidecar the app owns | needs a licence review
 
 **State:** the argv route is confirmed and the candidate is identified, so the
 research half of this item is done. `--extractor-args
@@ -53,19 +28,19 @@ beside yt-dlp rather than inside it.
   `bgutil-pot-windows-x86_64.exe` (45.7 MB), which is a managed binary this
   app could own. It ships no checksum sidecar file, but the GitHub release
   API carries a per-asset `digest`, and `fetch_expected_sha256` could be
-  taught to read it — the app already talks to that API and already meters
+  taught to read it | the app already talks to that API and already meters
   its anonymous budget.
 
 **What is blocked:** adding a runtime helper to `license-policy.json` requires
 `"licenseReviewed": true`, and `scripts/resolve-runtime-helpers.js` refuses to
-approve an entry without it — on purpose, so that adding a helper cannot
+approve an entry without it | on purpose, so that adding a helper cannot
 approve it by simply running staging. Reading a third party's terms and
 accepting them on the maintainer's behalf is the human judgement that gate
 exists to demand. A 45.7 MB binary that talks to YouTube on the user's behalf
 is also exactly the kind of dependency that deserves it.
 
 **Also unvalidated:** the acceptance says "a video that previously failed
-`po-token-required` succeeds". That precondition cannot be manufactured — it
+`po-token-required` succeeds". That precondition cannot be manufactured | it
 needs YouTube to be gating this machine at the time of the test. Whoever picks
 this up needs a reproducible failing video, not a green suite.
 
@@ -75,13 +50,13 @@ and sets `licenseReviewed` on the policy entry. The implementation after that
 is: manage the exe like Deno, run it in HTTP-server mode on loopback, mint per
 video, and pass the token on argv. No plugin directory is enabled at any point.
 
-## AD-53 — Set `SABR_NATIVE_MIN_VERSION` — waits on an upstream merge
+## AD-53 | Set `SABR_NATIVE_MIN_VERSION` | waits on an upstream merge
 
 **State:** the wiring is already there. `evaluate_sabr_support` returns
 `"limited"` while the sentinel is not a real version, the Download-page SABR
 pill reads it, and a test pins both sides.
 
-**What is blocked:** yt-dlp PR #13515 (native SABR) is still open — updated
+**What is blocked:** The August review recorded yt-dlp PR #13515 (native SABR) as open, updated
 2026-08-19 and not in 2026.08.19, which is the pinned release. The item itself
 says "do not invent a version while the PR is open", and the whole value of
 the constant is that it names the first stable release that actually contains
@@ -91,14 +66,12 @@ the change.
 `SABR_NATIVE_MIN_VERSION` to that version. Nothing else changes; the pill
 flips on its own.
 
-## AD-56 — Areas this audit did not exercise — five separate external needs
+## AD-56 | Earlier review gaps | four separate checks
 
 **State:** a self-audit note rather than one task. The four areas and what
 each actually needs:
 
-1. **The signed-release chain.** There is no code-signing certificate on this
-   machine and the release ships unsigned by design, with a SHA-256 sidecar
-   instead. Exercising a signed chain needs a certificate the maintainer would
+1. **The signed-release chain.** The release is unsigned and has a SHA-256 sidecar. A checksum is not a publisher signature. Exercising a signed chain needs a certificate the maintainer would
    have to buy and hold.
 2. **The whisper transcription live path.** Needs a real audio file and the
    whisper.cpp model downloaded for a live run, not a fixture.
@@ -112,14 +85,14 @@ each actually needs:
 picked up as one. When an area gets a live check or a named test, strike it
 from this list rather than closing the whole entry.
 
-## AD-123 — The extension shows a green yt-dlp pill on a below-floor build
+## AD-123 | The extension shows a green yt-dlp pill on a below-floor build
 
 **State:** the downloader half is done. `evaluate_preflight_checks` reports
 `securityFloor` and `belowSecurityFloor` on the `ytdlp-freshness` check, and
 `/health` serves them, so everything the extension needs is already on the
 wire.
 
-**What is blocked:** the fix itself lives in the
+**Where to verify next:** the earlier review placed this fix in the
 [Astra Deck](https://github.com/SysAdminDoc/Astra-Deck) repository, not this
 one. Its health normalizer whitelists thirteen keys and `preflight` is not
 among them, and its yt-dlp pill is rendered unconditionally `ok` while the
@@ -127,7 +100,7 @@ ffmpeg and JavaScript-runtime pills tone on state. Nothing in this repository
 can change that, and a downloader-side change would be inventing a second
 health surface for one consumer.
 
-**To unblock:** ship it in Astra Deck — add `preflight` to the normalizer's
+**To unblock:** ship it in Astra Deck | add `preflight` to the normalizer's
 allowed keys and tone the yt-dlp pill from the `ytdlp-freshness` check,
 naming the floor when `belowSecurityFloor` is set. Verify against a running
 Astra Downloader reporting a below-floor version, which

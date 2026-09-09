@@ -258,7 +258,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         build_module = importlib.util.module_from_spec(build_spec)
         build_spec.loader.exec_module(build_module)
         args = build_module.pyinstaller_args("onefile")
-        add_data = args[args.index("--add-data") + 1]
+        add_data = next(args[index + 1] for index, flag in enumerate(args)
+                        if flag == "--add-data" and "*.qm" in args[index + 1])
         self.assertIn("*.qm", add_data)
         self.assertTrue(add_data.endswith(os.pathsep + "translations"))
         hidden_imports = [

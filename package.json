@@ -1,8 +1,8 @@
 {
   "private": true,
   "name": "astra-downloader",
-  "version": "2.15.0",
-  "description": "A desktop video downloader for Windows. Paste a link from almost any site. It also serves the Astra Deck browser extension over a local API.",
+  "version": "2.15.1",
+  "description": "A Windows video and audio downloader built on yt-dlp, with format choices, a persistent queue and searchable history.",
   "author": "SysAdminDoc",
   "license": "MIT",
   "repository": {

@@ -28,7 +28,7 @@ Do not include:
 - Cookies, session tokens, API keys, or the contents of a site sign-in jar.
 - Working exploit payloads beyond the minimum needed to explain impact.
 - Full logs or unredacted local filesystem paths. The in-app **Review
-  diagnostics** action produces a redacted payload — prefer that.
+  diagnostics** action produces a redacted payload. Prefer that.
 
 Public issues remain appropriate for non-sensitive bugs, usability problems,
 documentation mistakes, and feature requests.
@@ -56,7 +56,7 @@ These are known and accepted properties, not vulnerabilities:
   `Win32_Process.CommandLine` to any process running as the same user, and
   to endpoint software that records command lines. This is a deliberate
   consequence of the boundary above: the alternatives all hand the secret to
-  something worse — the `--netrc` family is refused at the spawn boundary
+  another storage or process boundary. The `--netrc` family is refused at the spawn boundary
   because a netrc file is a durable, format-ambiguous credential store, and
   yt-dlp offers no stdin credential channel. The store itself is ACL'd to
   the owner and the values are redacted from history, diagnostics, logs, the
@@ -64,25 +64,25 @@ These are known and accepted properties, not vulnerabilities:
 - **URL policy is literal-only.** Private-network targets are refused by
   inspecting the URL, not by resolving it: resolving at validation time proves
   nothing about resolution a millisecond later. The accepted residual is a
-  public DNS name pointed at a private address — DNS itself is not a boundary
+  public DNS name pointed at a private address. DNS itself is not a boundary
   the local user account model defends. See
   [`docs/yt-dlp-cookie-threat-model.md`](docs/yt-dlp-cookie-threat-model.md).
 - **Client-supplied output paths are confined.** A `/download` request may
   name an output directory, but it is accepted only inside the configured
   download roots (plus the reviewed extra roots), resolved through symlinks
-  and checked before any directory is created — a compromised extension
+  and checked before any directory is created. A compromised extension
   cannot hand the server an arbitrary absolute path and watch it write there.
-- **The executable is unsigned by design.** Verify the published SHA-256
-  sidecar against the downloaded binary rather than relying on a signature.
-  SmartScreen will warn on first run; that is expected, not a compromise
-  indicator. See the README for the verification command.
+- **The release executable is unsigned.** Compare its SHA-256 with the sidecar
+  from the same release before running it. This checks bytes, not publisher
+  identity. An unknown-publisher warning isn't proof of compromise, but a
+  security warning should still be investigated. See the README for the command.
 - **No external downloader is offered, and none can be requested.** aria2c,
   curl and the rest are refused at the process boundary along with `--exec`,
   `--exec-before-download` and the `--netrc` family. This is deliberate:
   those options hand the transfer, or a command line, to a process this
   program does not control, and 2026 brought code-execution advisories
   against two of the common choices (CVE-2026-50574, CVE-2026-50019). yt-dlp
-  itself has had its own run of advisories in the same period — GHSA-6v4j-43gg-vj32,
+  itself has had its own run of advisories in the same period. GHSA-6v4j-43gg-vj32,
   GHSA-c6mh-fpjc-4pr3 and GHSA-f7j3-774f-rfhj landed on 2026-06-09, and
   CVE-2026-55404 (`--write-link` shortcut injection) on 2026-07-04. Astra
   Downloader tracks the pinned release forward and denies every link-file flag
@@ -101,7 +101,7 @@ These are known and accepted properties, not vulnerabilities:
 ## Third-Party Components
 
 Astra Downloader drives yt-dlp and ffmpeg. Vulnerabilities in those belong
-upstream — report them to their projects. Report to us if Astra Downloader
+upstream. Report them to their projects. Report to us if Astra Downloader
 pins a version that is known-vulnerable, or invokes them in a way that creates
 an issue they do not have on their own.
 
