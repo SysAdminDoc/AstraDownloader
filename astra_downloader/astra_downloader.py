@@ -386,7 +386,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.15.1"
+APP_VERSION = "2.15.2"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753

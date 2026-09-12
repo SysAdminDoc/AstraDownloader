@@ -10,6 +10,18 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [2.15.2] (2026-09-12)
+
+### Marketing
+
+- The README now opens with the selected dark share card, so the product and its real Download screen are clear before the installation details.
+- The share card no longer carries a release number. It can stay current while version details remain in the badge and release links.
+- A documentation check keeps the hero first, allows exactly one reference, verifies its dimensions and rejects version text in its source.
+
+### Fixed
+
+- Immediate queue saves now wait for a deferred queue write to finish. Starting a download while another worker was saving could make the atomic files collide and report a false disk or permissions error.
+
 ## [2.15.1] (2026-09-09)
 
 ### Documentation and release review

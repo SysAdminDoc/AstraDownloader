@@ -1,6 +1,8 @@
-# Astra Downloader v2.15.1
+![Astra Downloader for Windows with the Download queue and format controls](assets/marketing/social-card-dark.png)
 
-[![version](https://img.shields.io/badge/version-2.15.1-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.15.1) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows_10%2B_x64-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
+# Astra Downloader v2.15.2
+
+[![version](https://img.shields.io/badge/version-2.15.2-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.15.2) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows_10%2B_x64-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 
 Save videos and audio without building a command line. Astra Downloader puts yt-dlp in a Windows desktop app, with format choices, a persistent queue and searchable download history.
 
@@ -12,12 +14,12 @@ Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdm
 
 ## Download
 
-Choose a Windows x64 package from the [v2.15.1 release](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.15.1).
+Choose a Windows x64 package from the [v2.15.2 release](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.15.2).
 
 | Package | Use it when |
 | --- | --- |
-| [AstraDownloader.exe](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.15.1/AstraDownloader.exe) | You want a per-user installation with desktop and Start Menu entries. No separate installer. |
-| [AstraDownloader-onedir.zip](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.15.1/AstraDownloader-onedir.zip) | You want a portable folder. Extract it somewhere writable, then run the executable inside. |
+| [AstraDownloader.exe](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.15.2/AstraDownloader.exe) | You want a per-user installation with desktop and Start Menu entries. No separate installer. |
+| [AstraDownloader-onedir.zip](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.15.2/AstraDownloader-onedir.zip) | You want a portable folder. Extract it somewhere writable, then run the executable inside. |
 
 The app downloads its managed yt-dlp and FFmpeg tools during first-run setup. YouTube may also need a JavaScript runtime. Internet access is required; neither download includes an offline-ready tool bundle.
 

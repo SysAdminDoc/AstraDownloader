@@ -945,6 +945,50 @@ class FatalErrorReportingTests(unittest.TestCase):
 
 
 class DownloadManagerTests(unittest.TestCase):
+    def test_deferred_and_synchronous_queue_writes_never_overlap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ad.DownloadManager(
+                FakeConfig({"DownloadPath": tmp, "AudioDownloadPath": tmp}),
+                FakeHistory(),
+                queue_path=Path(tmp) / "download-queue.json",
+            )
+            deferred_entered = threading.Event()
+            release_deferred = threading.Event()
+            synchronous_calls = []
+
+            def blocked_write(_payload):
+                deferred_entered.set()
+                release_deferred.wait(5)
+                return True
+
+            def observed_save(_downloads, _paused):
+                synchronous_calls.append(True)
+                return True
+
+            manager._queue_store.write = blocked_write
+            manager._queue_store.save = observed_save
+            with manager._lock:
+                manager._persist_async_locked()
+            self.assertTrue(deferred_entered.wait(2))
+
+            def save_now():
+                with manager._lock:
+                    manager._persist_locked()
+
+            synchronous = threading.Thread(target=save_now)
+            synchronous.start()
+            try:
+                time.sleep(0.05)
+                self.assertEqual(
+                    synchronous_calls, [],
+                    "a synchronous queue save overlapped the deferred writer",
+                )
+            finally:
+                release_deferred.set()
+                synchronous.join(5)
+            self.assertFalse(synchronous.is_alive())
+            self.assertEqual(synchronous_calls, [True])
+
     def test_start_download_applies_profile_format_quality_and_persists_choice(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = FakeConfig({

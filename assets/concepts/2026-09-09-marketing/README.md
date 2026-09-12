@@ -8,7 +8,7 @@ Keep the original folded-A icon. Its green and orange shape remains recognizable
 
 The README uses four captures from the portable executable. Both release layouts were opened offscreen on private desktops and produced the same seven review states. The example queue was seeded deliberately; it isn't a throughput benchmark or evidence of a private-site download. The first-run profile is disposable, and helper probes were not started for these screenshots.
 
-The [share-card source](../../marketing/social-card.html) uses the existing icon and the actual Download-page capture. Dark is the selected card; light is retained as an alternative. The files are ready for reuse, but no GitHub Settings social-preview upload is claimed.
+The [share-card source](../../marketing/social-card.html) uses the existing icon and the actual Download-page capture. Dark is the selected card; light is retained as an alternative. Its September 12 revision removes the release number so the artwork stays current. The files are ready for reuse, but no GitHub Settings social-preview upload is claimed.
 
 ## Preserved work
 
@@ -20,6 +20,8 @@ The [share-card source](../../marketing/social-card.html) uses the existing icon
 | `gui-01`, `gui-02` | The partial fixture run and the complete 85-state run after fixing its stale assertion. |
 | `packaged-onefile`, `packaged-portable` | Seven captures per layout, with frame hashes and checks in `review.json`. Only the passing rebuilt packages appear here. |
 | `documents-r1`, `documents-r2` | Logo-size review, share-card variants and README renders in dark, light and narrow layouts. The first share-card composition was rejected because its frame was cropped too tightly. |
+| `documents-r3-evergreen-candidate`, `documents-r4-evergreen-final` | The first version-free text pass. It exposed the release number still visible in the app sidebar, so these captures were rejected rather than published. |
+| `documents-r5-cropped-candidate`, `documents-r6-cropped-final` | The focused Download-page crop, dark and light cards, a pre-publish README check and the final README renders. The last set confirms the selected hero appears once at the top without broken images, a release number or horizontal overflow. |
 
 Original-source SHA-256: `e8bc885cf107d68b2494c7f3138d76c49460de8f78b7e7b196a8b6cbb4bc426d`.
 

@@ -1,4 +1,4 @@
-# Building and checking Astra Downloader v2.15.1
+# Building and checking Astra Downloader v2.15.2
 
 [Back to the project](../README.md)
 
@@ -32,7 +32,7 @@ Use a Git checkout with tags for the full gate. Node 22+ and Python 3.13 must be
 
 ```powershell
 npm test
-py -3.13 -m pytest -rs       # 1327 tests collected; the gate verifies this count
+py -3.13 -m pytest -rs       # 1328 tests collected; the gate verifies this count
 npm run check
 npm run smoke:gui
 ```

@@ -2,9 +2,9 @@
 
 Actionable work only. Historical and completed roadmap material is archived in CHANGELOG.md; blocked work is kept in Roadmap_Blocked.md.
 
-## v2.15.1 marketing delivery
+## v2.15.2 marketing delivery
 
-The README, usage guide and build guide now separate verified product behavior from site-dependent claims. A dated concept archive retains the original source and prior captures. The package review runs offscreen in a new disposable profile. Existing feature work below remains open.
+The README opens with one evergreen share card and keeps release numbers in text and badges. The usage guide and build guide separate verified product behavior from site-dependent claims. A dated concept archive retains the original source and every review capture. The package review runs offscreen in a new disposable profile. Existing feature work below remains open.
 
 ## Research-Driven Additions
 

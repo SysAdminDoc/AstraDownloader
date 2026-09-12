@@ -4010,6 +4010,10 @@ class DownloadManagerCore:
         # full snapshot — a newer one makes an older one irrelevant.
         self._persist_pending = None
         self._persist_lock = threading.Lock()
+        # Synchronous rollback-aware saves and deferred snapshots target the
+        # same atomic file. Keep their actual writes serial even though their
+        # scheduling state uses a separate lock.
+        self._persist_write_lock = threading.Lock()
         self._persist_ready = threading.Event()
         self._persist_idle = threading.Event()
         self._persist_idle.set()
@@ -4262,7 +4266,11 @@ class DownloadManagerCore:
             return True
         if not self._persistence_compatible:
             return False
-        if self._queue_store.save(self.downloads.values(), self.intake_paused):
+        with self._persist_write_lock:
+            saved = self._queue_store.save(
+                self.downloads.values(), self.intake_paused,
+            )
+        if saved:
             self._persistence_error = ''
             return True
         self._persistence_error = 'Could not save the pending download queue.'
@@ -4334,7 +4342,9 @@ class DownloadManagerCore:
                 store = self._queue_store
                 if store is None:
                     break
-                if not store.write(payload):
+                with self._persist_write_lock:
+                    saved = store.write(payload)
+                if not saved:
                     # The mutation already happened in memory and the next
                     # successful write carries the whole state, so this is
                     # reported rather than rolled back.

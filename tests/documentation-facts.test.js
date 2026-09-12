@@ -11,12 +11,39 @@ const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
 const building = fs.readFileSync(path.join(repoRoot, 'docs/BUILDING.md'), 'utf8');
 const documentation = readme + '\n' + building;
 const packageJson = require(path.join(repoRoot, 'package.json'));
+const heroReference = '![Astra Downloader for Windows with the Download queue and format controls](assets/marketing/social-card-dark.png)';
 
 function pythonCandidates() {
     return process.platform === 'win32'
         ? [{ command: 'py', prefix: ['-3.13'] }, { command: 'python', prefix: [] }]
         : [{ command: process.env.ASTRA_PYTHON || 'python3', prefix: [] }];
 }
+
+test('the README leads with one evergreen marketing hero', () => {
+    assert.ok(readme.startsWith(heroReference), 'the selected hero must be the first README content');
+    assert.equal(
+        readme.split('assets/marketing/social-card-dark.png').length - 1,
+        1,
+        'the selected hero must appear exactly once in the README',
+    );
+
+    const source = fs.readFileSync(
+        path.join(repoRoot, 'assets', 'marketing', 'social-card.html'), 'utf8',
+    );
+    assert.doesNotMatch(source, /\bv\d+\.\d+\.\d+\b/i, 'hero source must not carry a release number');
+    assert.match(
+        source,
+        /transform:translateX\(-120px\)/,
+        'the hero must crop the version-bearing app sidebar from its product preview',
+    );
+
+    const png = fs.readFileSync(
+        path.join(repoRoot, 'assets', 'marketing', 'social-card-dark.png'),
+    );
+    assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(png.readUInt32BE(16), 1280, 'hero width');
+    assert.equal(png.readUInt32BE(20), 640, 'hero height');
+});
 
 // A stated count in a README is a fact with a shelf life. Reading it back off
 // the command the README tells you to run is the only way it stays true; every

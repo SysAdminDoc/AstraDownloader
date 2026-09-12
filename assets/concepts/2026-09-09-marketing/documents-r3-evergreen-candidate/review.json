@@ -1,0 +1,53 @@
+{
+  "iteration": "documents-r3-evergreen-candidate",
+  "checks": [
+    {
+      "name": "brand-review",
+      "width": 1100,
+      "height": 760,
+      "overflow": false,
+      "broken": [],
+      "text": "Keep the folded A.\n\nAstra Downloader v2.15.1. The existing green and orange mark is compact, recognizable and distinct from the red download controls. This board uses the original artwork without a redraw.\n\nDark surface\n16 px\n24 px\n32 px\n48 px\n64 px\n"
+    },
+    {
+      "name": "social-card-dark",
+      "width": 1280,
+      "height": 640,
+      "overflow": false,
+      "broken": [],
+      "text": "Astra Downloader\nVideo. Audio.\nYour choice.\n\nPick your format.\nKeep your queue.\n\nWindows desktop · Built on yt-dlp\ngithub.com/SysAdminDoc/AstraDownloader\nInterface shown with example data"
+    },
+    {
+      "name": "social-card-light",
+      "width": 1280,
+      "height": 640,
+      "overflow": false,
+      "broken": [],
+      "text": "Astra Downloader\nVideo. Audio.\nYour choice.\n\nPick your format.\nKeep your queue.\n\nWindows desktop · Built on yt-dlp\ngithub.com/SysAdminDoc/AstraDownloader\nInterface shown with example data"
+    },
+    {
+      "name": "readme-dark-desktop",
+      "width": 1200,
+      "height": 1150,
+      "overflow": false,
+      "broken": [],
+      "text": "Astra Downloader v2.15.2\n\n  \n\nSave videos and audio without building a command line. Astra Downloader puts yt-dlp in a Windows desktop app, with format choices, a persistent queue and searchable download history.\n\nUse it on its own. The optional Astr"
+    },
+    {
+      "name": "readme-light-desktop",
+      "width": 1200,
+      "height": 1150,
+      "overflow": false,
+      "broken": [],
+      "text": "Astra Downloader v2.15.2\n\n  \n\nSave videos and audio without building a command line. Astra Downloader puts yt-dlp in a Windows desktop app, with format choices, a persistent queue and searchable download history.\n\nUse it on its own. The optional Astr"
+    },
+    {
+      "name": "readme-dark-mobile",
+      "width": 390,
+      "height": 1150,
+      "overflow": false,
+      "broken": [],
+      "text": "Astra Downloader v2.15.2\n\n  \n\nSave videos and audio without building a command line. Astra Downloader puts yt-dlp in a Windows desktop app, with format choices, a persistent queue and searchable download history.\n\nUse it on its own. The optional Astr"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-# Using Astra Downloader v2.15.1
+# Using Astra Downloader v2.15.2
 
 [Back to the download page](../README.md)
 
