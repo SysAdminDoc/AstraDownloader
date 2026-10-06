@@ -133,6 +133,33 @@ class ExtensionPageMixin:
         self.native_pairing_status.hide()
         layout.addWidget(self.native_pairing_status)
 
+        userscript_header = QHBoxLayout()
+        userscript_header.setSpacing(12)
+        userscript_header.addWidget(make_label("Userscript pairing", "panelTitle"))
+        userscript_header.addWidget(make_label(
+            "Using the Astra Deck userscript instead of the extension? Choose "
+            "Pair userscript, then press a download button on YouTube within "
+            "two minutes. Regenerating the token in Settings unpairs it.",
+            "fieldHint",
+            word_wrap=True,
+        ), 1)
+        layout.addLayout(userscript_header)
+        userscript_row = QHBoxLayout()
+        userscript_row.setSpacing(8)
+        self.btn_pair_userscript = self._make_tool_button("Pair userscript", "secondary")
+        self.btn_pair_userscript.setToolTip(
+            tr("Let the Astra Deck userscript collect the token once in the next two minutes.")
+        )
+        self.btn_pair_userscript.clicked.connect(self._open_userscript_pairing)
+        userscript_row.addWidget(self.btn_pair_userscript)
+        self.userscript_pairing_status = make_label("", "fieldHint", word_wrap=True, status=True)
+        self.userscript_pairing_status.setAccessibleName(tr("Userscript pairing status"))
+        self.userscript_pairing_status.hide()
+        userscript_row.addWidget(self.userscript_pairing_status, 1)
+        # Holds the button at its own width while the status line is hidden.
+        userscript_row.addStretch()
+        layout.addLayout(userscript_row)
+
         layout.addWidget(make_divider())
 
         # Metrics — one strip, with rhythm supplied by separators rather than cards.
@@ -186,4 +213,12 @@ class ExtensionPageMixin:
         self._restore_log_view()
         layout.addWidget(self.log_text, 1)
 
-        self.tabs.addTab(page, tr("Browser extension"))
+        # Two pairing sections sit above the metrics and the log, more than
+        # the documented minimum window height holds. Let the page scroll, as
+        # the Download page does, so the server cards keep their full height
+        # instead of being compressed into each other.
+        page_scroll = QScrollArea()
+        page_scroll.setWidgetResizable(True)
+        page_scroll.setWidget(page)
+        self.extension_page_scroll = page_scroll
+        self.tabs.addTab(page_scroll, tr("Browser extension"))

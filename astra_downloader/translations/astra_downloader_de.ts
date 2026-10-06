@@ -855,6 +855,10 @@
       <translation>Endpunkt kopiert.</translation>
     </message>
     <message>
+      <source>Waiting for the userscript, {time} left. Press a download button on YouTube now.</source>
+      <translation>Warten auf das Userscript, noch {time}. Drücken Sie jetzt auf YouTube einen Download-Button.</translation>
+    </message>
+    <message>
       <source>That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.</source>
       <translation>Das ist keine Chrome-Erweiterungs-ID. Die 32-Buchstaben-ID von chrome://extensions kopieren.</translation>
     </message>
@@ -1479,6 +1483,10 @@
       <translation>Videolink vorgemerkt. Öffnen Sie Downloads, um ihn vor dem Einreihen zu prüfen.</translation>
     </message>
     <message>
+      <source>The userscript is paired. Its download buttons work now.</source>
+      <translation>Das Userscript ist gekoppelt. Seine Download-Buttons funktionieren jetzt.</translation>
+    </message>
+    <message>
       <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
       <translation>Gespeichert. Diese portable Kopie registriert keine Browser-Hosts. Koppeln Sie über eine installierte Kopie.</translation>
     </message>
@@ -1877,6 +1885,10 @@
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>Dieser Link bietet höchstens {height}p.</translation>
+    </message>
+    <message>
+      <source>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</source>
+      <translation>Zwei Minuten sind ohne Anfrage vom Userscript vergangen. Wählen Sie „Userscript koppeln“ und versuchen Sie es erneut.</translation>
     </message>
     <message>
       <source>Chrome and Edge pairing cleared.</source>
@@ -2851,6 +2863,10 @@
       <translation>Registrieren</translation>
     </message>
     <message>
+      <source>Pair userscript</source>
+      <translation>Userscript koppeln</translation>
+    </message>
+    <message>
       <source>In progress</source>
       <translation>Läuft</translation>
     </message>
@@ -2913,6 +2929,22 @@
     <message>
       <source>Chrome pairing status</source>
       <translation>Status der Chrome-Kopplung</translation>
+    </message>
+    <message>
+      <source>Userscript pairing</source>
+      <translation>Kopplung mit dem Userscript</translation>
+    </message>
+    <message>
+      <source>Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.</source>
+      <translation>Sie verwenden das Astra-Deck-Userscript statt der Erweiterung? Wählen Sie „Userscript koppeln“ und drücken Sie dann innerhalb von zwei Minuten auf YouTube einen Download-Button. Wenn Sie das Servertoken in den Einstellungen neu erzeugen, wird die Kopplung aufgehoben.</translation>
+    </message>
+    <message>
+      <source>Let the Astra Deck userscript collect the token once in the next two minutes.</source>
+      <translation>Das Astra-Deck-Userscript darf das Token in den nächsten zwei Minuten einmal abholen.</translation>
+    </message>
+    <message>
+      <source>Userscript pairing status</source>
+      <translation>Status der Userscript-Kopplung</translation>
     </message>
     <message>
       <source>Server log</source>

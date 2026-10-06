@@ -1,4 +1,4 @@
-# Building and checking Astra Downloader v2.15.2
+# Building and checking Astra Downloader v2.16.0
 
 [Back to the project](../README.md)
 
@@ -32,7 +32,7 @@ Use a Git checkout with tags for the full gate. Node 22+ and Python 3.13 must be
 
 ```powershell
 npm test
-py -3.13 -m pytest -rs       # 1328 tests collected; the gate verifies this count
+py -3.13 -m pytest -rs       # 1345 tests collected; the gate verifies this count
 npm run check
 npm run smoke:gui
 ```
@@ -53,6 +53,6 @@ Choose a directory that doesn't exist. The mode creates its own profile, forces 
 
 Run this on each distribution layout. Review the images, not just the process exit code. A source-window render doesn't establish that the executable contains every required module.
 
-The larger `smoke:gui` suite covers 85 fixture states, including small layouts and translated pages. It writes under `build/companion-ui-smoke`. Preserve earlier captures before regenerating them if they are part of a review record.
+The larger `smoke:gui` suite covers 86 fixture states, including small layouts and translated pages. It writes under `build/companion-ui-smoke`. Preserve earlier captures before regenerating them if they are part of a review record.
 
 For a network smoke test, set `ASTRA_YTDLP_SMOKE_URL` to a small public clip you have permission to download, then run `npm run smoke:yt-dlp` or `npm run smoke:yt-dlp:managed`. Don't use a private browser session as test data. Keep a record of the source, its license and the output check.

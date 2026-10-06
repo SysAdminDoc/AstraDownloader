@@ -206,6 +206,8 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'normalize_extension_origin',
     'is_extension_origin_shape',
     'pair_browser_extension',
+    'pair_userscript',
+    'USERSCRIPT_CLIENT_ID',
     'normalize_url',
     'probe_javascript_runtime',
     'probe_po_token_provider',
@@ -1502,6 +1504,8 @@ def _register_system_routes(api, context, dependencies):
     is_paired_extension_origin = context.is_paired_extension_origin
     compute_endpoint_proof = dependencies["compute_endpoint_proof"]
     pair_browser_extension = dependencies["pair_browser_extension"]
+    pair_userscript = dependencies["pair_userscript"]
+    USERSCRIPT_CLIENT_ID = dependencies["USERSCRIPT_CLIENT_ID"]
     probe_javascript_runtime = dependencies["probe_javascript_runtime"]
     probe_po_token_provider = dependencies["probe_po_token_provider"]
     provision_deno = dependencies["provision_deno"]
@@ -1545,6 +1549,10 @@ def _register_system_routes(api, context, dependencies):
             "legacyTokenEcho": legacy_health_token_echo,
             "paired": paired_origin,
             "nativeChannelRequired": not token_reachable,
+            # Whether the X-Auth-Token on this request is current. The
+            # userscript keeps the token it paired with; after the token is
+            # regenerated this is how it learns to pair again.
+            "authorized": check_auth(),
             # v1.2.0: surface tool versions so the extension can show
             # "yt-dlp 2026.04.01" in the repair panel + warn on stale binaries.
             "ytDlpVersion": ytdlp_version,
@@ -1690,19 +1698,24 @@ def _register_system_routes(api, context, dependencies):
         """Let Astra Deck introduce its Chrome/Edge ID over loopback.
 
         Native messaging cannot start until that ID is in the host manifest.
-        This route does not echo the session token; the extension retries the
-        native channel after a successful pair.
+        This route does not echo the session token to an extension; it retries
+        the native channel after a successful pair. The userscript is the one
+        exception: it has neither channel, so during a pairing window the user
+        opened in the companion it is handed the token here, once.
         """
         origin = request.headers.get("Origin", "")
         reflected = normalize_extension_origin(origin) if is_extension_origin_shape(origin) else ""
-        if not reflected:
-            return cors_response({
-                "ok": False,
-                "paired": False,
-                "code": "invalid-origin",
-                "error": "Pairing is only accepted from the Astra Deck extension.",
-            }, 403)
-        allowed, retry_after = pair_rate_limiter.allow(reflected)
+        invalid_origin = {
+            "ok": False,
+            "paired": False,
+            "code": "invalid-origin",
+            "error": "Pairing is only accepted from the Astra Deck extension.",
+        }
+        # A userscript manager sends no Origin at all. Anything that sends one
+        # must be an extension; web pages and "null" stop here.
+        if not reflected and origin:
+            return cors_response(invalid_origin, 403)
+        allowed, retry_after = pair_rate_limiter.allow(reflected or 'userscript')
         if not allowed:
             return cors_response(
                 {
@@ -1724,6 +1737,16 @@ def _register_system_routes(api, context, dependencies):
                 "error": body_error,
             }, 400, allow_origin=reflected)
         requested_id = clean_text((body or {}).get("id", ""), "", 128)
+        if requested_id == USERSCRIPT_CLIENT_ID:
+            result = pair_userscript(origin)
+            if result.get("code") == "userscript-pairing-closed":
+                result["error"] = (
+                    "Open Astra Downloader, choose Pair userscript on the Browser "
+                    "extension page, then try again within two minutes."
+                )
+            return cors_response(result, 200 if result.get("ok") else 403, allow_origin=reflected or None)
+        if not reflected:
+            return cors_response(invalid_origin, 403)
         result = pair_browser_extension(origin, requested_id)
         status = 200 if result.get("ok") else 403
         if "token" in result:

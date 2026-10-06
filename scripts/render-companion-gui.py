@@ -21,6 +21,7 @@ CAPTURE_NAMES = (
     "dashboard-light-theme",
     "dashboard-log-populated",
     "dashboard-error-degraded",
+    "dashboard-userscript-pairing",
     "dashboard-german",
     "dashboard-spanish",
     "dashboard-french",
@@ -770,6 +771,28 @@ def main():
                         raise RuntimeError("Populated server log is hidden")
                     if "Download request accepted" not in window.log_text.toPlainText():
                         raise RuntimeError("Populated server log text is missing")
+            elif scenario == "dashboard-userscript-pairing":
+                # The window the userscript pairs through, two minutes from
+                # being opened. The countdown timer is stopped so the capture
+                # cannot tick between the assertion and the grab.
+                window.server_running = True
+                window._server_starting = False
+                window._update_server_ui()
+                window._open_userscript_pairing()
+                window._userscript_pairing_timer.stop()
+                current = window.tabs.currentWidget()
+                scroll = (current if isinstance(current, QScrollArea)
+                          else current.findChild(QScrollArea))
+                if scroll is not None:
+                    scroll.ensureWidgetVisible(window.userscript_pairing_status, 0, 160)
+                    app.processEvents()
+                    QTest.qWait(40)
+                assert_visible_text(window, {
+                    "Userscript pairing",
+                    "Waiting for the userscript, 2:00 left. Press a download button on YouTube now.",
+                })
+                if not window.btn_pair_userscript.isVisible():
+                    raise RuntimeError("The Pair userscript button is hidden")
             else:
                 window.status_label.setText("Server error")
                 window.status_label.setProperty("tone", "danger")

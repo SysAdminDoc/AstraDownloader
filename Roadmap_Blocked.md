@@ -66,9 +66,9 @@ the change.
 `SABR_NATIVE_MIN_VERSION` to that version. Nothing else changes; the pill
 flips on its own.
 
-## AD-56 | Earlier review gaps | four separate checks
+## AD-56 | Earlier review gaps | three separate checks
 
-**State:** a self-audit note rather than one task. The four areas and what
+**State:** a self-audit note rather than one task. The three areas and what
 each actually needs:
 
 1. **The signed-release chain.** The release is unsigned and has a SHA-256 sidecar. A checksum is not a publisher signature. Exercising a signed chain needs a certificate the maintainer would
@@ -78,8 +78,6 @@ each actually needs:
 3. **Native-host stdio against a real Chrome profile.** Needs a browser
    session with the extension loaded; the loopback pairing route is covered by
    tests but the stdio channel to a live Chrome is not.
-4. **The Astra Deck userscript `/health` token echo.** Lives in the Astra-Deck
-   repository and is deliberately off.
 
 **To unblock:** each area separately. This is not one item and should not be
 picked up as one. When an area gets a live check or a named test, strike it

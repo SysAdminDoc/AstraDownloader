@@ -925,6 +925,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_output_dir',
     'parse_native_extension_ids',
     'refresh_native_messaging_registration',
+    'userscript_pairing',
     'detect_system_proxy',
     'normalize_download_section',
     'normalize_output_name',
@@ -7810,6 +7811,60 @@ class MainWindowCore(
         set_status_tone(self.native_pairing_status, state)
         repolish(self.native_pairing_status)
 
+    def pair_userscript_from_command(self):
+        """`--pair-userscript`: show the Browser extension page and open the window."""
+        self._show_from_tray()
+        self._nav_click("Browser extension")
+        if not self.server_running and not self._setup_running:
+            self._start_server()
+        self._open_userscript_pairing()
+
+    def _open_userscript_pairing(self):
+        """Let the Astra Deck userscript collect the token once, for two minutes."""
+        self._dependencies["userscript_pairing"]().open()
+        self._append_log("Userscript pairing is open for two minutes.")
+        timer = getattr(self, "_userscript_pairing_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setInterval(1000)
+            timer.timeout.connect(self._refresh_userscript_pairing)
+            self._userscript_pairing_timer = timer
+        timer.start()
+        self._refresh_userscript_pairing()
+
+    def _refresh_userscript_pairing(self):
+        pairing = self._dependencies["userscript_pairing"]()
+        state = pairing.state()
+        if state == 'open':
+            remaining = pairing.remaining()
+            message = tr_format(
+                "Waiting for the userscript, {time} left. Press a download "
+                "button on YouTube now.",
+                time=f"{remaining // 60}:{remaining % 60:02d}",
+            )
+            tone = "warning"
+        else:
+            timer = getattr(self, "_userscript_pairing_timer", None)
+            if timer is not None:
+                timer.stop()
+            if state == 'paired':
+                message = tr("The userscript is paired. Its download buttons work now.")
+                tone = "success"
+                self._append_log("Paired the Astra Deck userscript.")
+            elif state == 'expired':
+                message = tr(
+                    "Two minutes passed without a request from the userscript. "
+                    "Choose Pair userscript and try again."
+                )
+                tone = "error"
+            else:
+                message = ""
+                tone = "neutral"
+        self.userscript_pairing_status.setText(message)
+        self.userscript_pairing_status.setVisible(bool(message))
+        set_status_tone(self.userscript_pairing_status, tone)
+        repolish(self.userscript_pairing_status)
+
     def _apply_native_chrome_ids(self):
         """Save the Chrome/Edge extension IDs and re-register the native host.
 
@@ -8175,7 +8230,7 @@ class MainWindowCore(
                             self.instance_command.emit(command)
                         elif command.lower().startswith('jump '):
                             self.instance_command.emit(command.lower())
-                        elif command.lower() in {'show', 'start', 'shutdown'}:
+                        elif command.lower() in {'show', 'start', 'shutdown', 'pair-userscript'}:
                             self.instance_command.emit(command.lower())
             except OSError as e:
                 if not self._instance_command_stop.is_set():
@@ -8216,6 +8271,9 @@ class MainWindowCore(
         if command == 'show':
             self._append_log("Received request to show the existing window.")
             self._show_from_tray()
+            return
+        if command == 'pair-userscript':
+            self.pair_userscript_from_command()
             return
         if command == 'shutdown':
             self._append_log("Received uninstall shutdown request.")

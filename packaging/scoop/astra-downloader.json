@@ -1,5 +1,5 @@
 {
-    "version": "2.15.2",
+    "version": "2.16.0",
     "description": "A Windows video and audio downloader built on yt-dlp, with format choices, a persistent queue and searchable history.",
     "homepage": "https://github.com/SysAdminDoc/AstraDownloader",
     "license": "MIT",
@@ -10,7 +10,7 @@
     ],
     "architecture": {
         "64bit": {
-            "url": "https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.15.2/AstraDownloader-onedir.zip",
+            "url": "https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.16.0/AstraDownloader-onedir.zip",
             "hash": "57b96410d01cd2def7594d65cd5eb96680d00f2a8b5f962e2e06c702979f59ba",
             "extract_dir": "AstraDownloader"
         }

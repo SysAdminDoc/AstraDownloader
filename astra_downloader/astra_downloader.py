@@ -386,7 +386,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.15.2"
+APP_VERSION = "2.16.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -4561,6 +4561,11 @@ def download_url_from_protocol_argv(argv=None):
 
 def startup_command_from_argv(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
+    # Opens the userscript pairing window. Checked before the loop: it brings
+    # the window up on purpose, so a --start-server anywhere on the same
+    # command line must not turn it into a silent background start.
+    if any(str(arg).strip().lower() in ('--pair-userscript', 'pair-userscript') for arg in args):
+        return 'pair-userscript'
     for arg in args:
         value = str(arg).strip().lower()
         if value in ('--start-server', '-start-server', 'start'):
@@ -4601,7 +4606,9 @@ def instance_control_token():
 def send_instance_command(command, host=INSTANCE_CONTROL_HOST, port=INSTANCE_CONTROL_PORT,
                           attempts=5, delay=0.2, token=None):
     command = str(command or '').strip()
-    if command.lower() in {'show', 'start', 'shutdown'}:
+    # Keep in step with the listener's allowlist in gui.py; a verb missing
+    # here is dropped before it is ever sent.
+    if command.lower() in {'show', 'start', 'shutdown', 'pair-userscript'}:
         command = command.lower()
     elif command.lower().startswith('jump '):
         command = command.lower()
@@ -5030,6 +5037,96 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None):
         "alreadyPaired": already,
         "id": extension_id,
         "nativeHostRegistered": registered,
+        "service": SERVICE_ID,
+        "api": SERVICE_API_VERSION,
+    }
+
+
+# The Astra Deck userscript has no extension Origin to pair and no native
+# messaging channel, so neither path above can ever reach it. It collects the
+# session token once, through a window the user opens here, and keeps it in
+# its userscript manager's private storage. Regenerating the token in
+# Settings unpairs it.
+USERSCRIPT_CLIENT_ID = "astra-deck-userscript"
+USERSCRIPT_PAIRING_WINDOW_SECONDS = 120
+
+
+class UserscriptPairingWindow:
+    """A short, single-use window in which the userscript may take the token.
+
+    Requests from userscript managers arrive without an Origin header, which
+    any other extension or userscript allowed to reach 127.0.0.1 could send
+    too. The window is what turns "some local client asked" into "the user
+    asked for this, just now": it opens only from the companion itself and
+    closes on the first pairing it grants.
+    """
+
+    def __init__(self, clock=time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._until = 0.0
+        self._granted = False
+
+    def open(self, seconds=USERSCRIPT_PAIRING_WINDOW_SECONDS):
+        with self._lock:
+            self._until = self._clock() + max(1, int(seconds))
+            self._granted = False
+        return self.remaining()
+
+    def close(self):
+        with self._lock:
+            self._until = 0.0
+            self._granted = False
+
+    def state(self):
+        """'idle', 'open', 'paired' or 'expired', for the Browser extension page."""
+        with self._lock:
+            if self._granted:
+                return 'paired'
+            if not self._until:
+                return 'idle'
+            return 'open' if self._clock() < self._until else 'expired'
+
+    def remaining(self):
+        with self._lock:
+            return max(0, int(round(self._until - self._clock())))
+
+    def consume(self):
+        with self._lock:
+            if self._clock() >= self._until:
+                return False
+            self._until = 0.0
+            self._granted = True
+            return True
+
+
+USERSCRIPT_PAIRING = UserscriptPairingWindow()
+
+
+def pair_userscript(config, origin="", window=None):
+    """Hand the session token to the Astra Deck userscript, once.
+
+    Accepted only while the pairing window is open, and only from a request
+    with no Origin (Violentmonkey and Tampermonkey in Firefox) or an extension
+    Origin (a manager's own pages in Chromium). A web page always sends its
+    Origin, or "null" from a sandboxed frame, so it is refused before the
+    window is spent.
+    """
+    window = USERSCRIPT_PAIRING if window is None else window
+    origin = str(origin or "").strip()
+    if origin and not is_extension_origin_shape(origin):
+        return {"ok": False, "paired": False, "code": "invalid-origin"}
+    if not window.consume():
+        return {"ok": False, "paired": False, "code": "userscript-pairing-closed"}
+    token = str(config.get("ServerToken") or "")
+    if not token:
+        return {"ok": False, "paired": False, "code": "token-unavailable"}
+    write_persistent_log("Paired the Astra Deck userscript. Regenerate the token in Settings to unpair it.")
+    return {
+        "ok": True,
+        "paired": True,
+        "userscript": True,
+        "token": token,
         "service": SERVICE_ID,
         "api": SERVICE_API_VERSION,
     }
@@ -5704,6 +5801,7 @@ class DownloadManager(DownloadManagerCore):
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
                 'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
                 'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
+                'userscript_pairing': lambda: USERSCRIPT_PAIRING,
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
@@ -5876,6 +5974,8 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'pair_browser_extension': lambda origin, requested_id='': pair_browser_extension(
             config, origin, requested_id
         ),
+        'pair_userscript': lambda origin='': pair_userscript(config, origin),
+        'USERSCRIPT_CLIENT_ID': USERSCRIPT_CLIENT_ID,
         'paired_extension_origin_allowlist': lambda *a, **k: paired_extension_origin_allowlist(*a, **k),
         'compute_endpoint_proof': lambda *a, **k: compute_endpoint_proof(*a, **k),
         'normalize_url': lambda *args, **kwargs: normalize_url(*args, **kwargs),
@@ -6340,6 +6440,7 @@ class MainWindow(MainWindowCore):
                 'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
                 'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
                 'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
+                'userscript_pairing': lambda: USERSCRIPT_PAIRING,
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
@@ -7569,6 +7670,8 @@ def main():
     jump_task = jump_list_command_from_argv()
     if jump_task and not visual_smoke:
         QTimer.singleShot(0, lambda: window.run_jump_list_task(jump_task))
+    if startup_command == 'pair-userscript' and not visual_smoke:
+        QTimer.singleShot(0, window.pair_userscript_from_command)
 
     # The visual-smoke path exercises the frozen UI without installing system
     # integrations, starting the local server, or bootstrapping helper tools.

@@ -1,4 +1,4 @@
-# Using Astra Downloader v2.15.2
+# Using Astra Downloader v2.16.0
 
 [Back to the download page](../README.md)
 
@@ -51,6 +51,8 @@ Settings can use a configured proxy or the Windows system proxy. The displayed a
 Advanced options include IPv4 or IPv6 preference, a source address, geo-related headers and a verification proxy. Browser impersonation is limited to targets included in your yt-dlp build. None of these options grants access to content you aren't authorized to use.
 
 [Astra Deck](https://github.com/SysAdminDoc/Astra-Deck) is optional and maintained separately. Its handoff uses the local API's fixed loopback port catalogue and session token. Browser-specific extension IDs are checked before native-messaging registration. A native bootstrap can prove the endpoint knows the session secret before receiving cookies. Pairing a live browser wasn't part of the screenshot capture.
+
+The Astra Deck userscript can't use native messaging, so it pairs once by hand. Open Browser extension, choose **Pair userscript**, then press a download button on YouTube within two minutes. The status line counts down and says when the userscript is paired. The window closes after the first request it answers. To unpair the userscript, regenerate the token in Settings. You can also open the window from a command line with `AstraDownloader.exe --pair-userscript`, which hands the request to the copy that's already running.
 
 ## Installation and portable storage
 

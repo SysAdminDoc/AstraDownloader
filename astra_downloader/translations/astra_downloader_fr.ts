@@ -855,6 +855,10 @@
       <translation>Endpoint copied.</translation>
     </message>
     <message>
+      <source>Waiting for the userscript, {time} left. Press a download button on YouTube now.</source>
+      <translation>Waiting for the userscript, {time} left. Press a download button on YouTube now.</translation>
+    </message>
+    <message>
       <source>That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.</source>
       <translation>That is not a Chrome extension ID. Copy the 32-letter ID shown on chrome://extensions.</translation>
     </message>
@@ -1479,6 +1483,10 @@
       <translation>Video link staged. Open Downloads to review it before adding it to the queue.</translation>
     </message>
     <message>
+      <source>The userscript is paired. Its download buttons work now.</source>
+      <translation>The userscript is paired. Its download buttons work now.</translation>
+    </message>
+    <message>
       <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
       <translation>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</translation>
     </message>
@@ -1877,6 +1885,10 @@
     <message>
       <source>This link tops out at {height}p.</source>
       <translation>This link tops out at {height}p.</translation>
+    </message>
+    <message>
+      <source>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</source>
+      <translation>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</translation>
     </message>
     <message>
       <source>Chrome and Edge pairing cleared.</source>
@@ -2851,6 +2863,10 @@
       <translation>Register</translation>
     </message>
     <message>
+      <source>Pair userscript</source>
+      <translation>Pair userscript</translation>
+    </message>
+    <message>
       <source>In progress</source>
       <translation>In progress</translation>
     </message>
@@ -2913,6 +2929,22 @@
     <message>
       <source>Chrome pairing status</source>
       <translation>Chrome pairing status</translation>
+    </message>
+    <message>
+      <source>Userscript pairing</source>
+      <translation>Userscript pairing</translation>
+    </message>
+    <message>
+      <source>Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.</source>
+      <translation>Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.</translation>
+    </message>
+    <message>
+      <source>Let the Astra Deck userscript collect the token once in the next two minutes.</source>
+      <translation>Let the Astra Deck userscript collect the token once in the next two minutes.</translation>
+    </message>
+    <message>
+      <source>Userscript pairing status</source>
+      <translation>Userscript pairing status</translation>
     </message>
     <message>
       <source>Server log</source>

@@ -10,6 +10,22 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## [2.16.0] (2026-10-06)
+
+### Added
+
+- The Astra Deck userscript can pair with Astra Downloader. A userscript manager has no native messaging and sends no extension origin, so the userscript never got a token and its download buttons stopped at a repair prompt. Open Browser extension, choose **Pair userscript**, then press a download button on YouTube within two minutes. The window answers one request and closes. A web page can't use it, and regenerating the token in Settings unpairs the userscript.
+- `AstraDownloader.exe --pair-userscript` opens the same window. When Astra Downloader is already running, the new copy hands the request to it and exits.
+- `/health` reports `authorized`, which says whether the token a client sent is the current one. The userscript uses it to notice a regenerated token and pair again.
+
+### Fixed
+
+- The Browser extension page scrolls when the window is short. It used to squeeze the server card, its buttons and the stats row until their text was cut off.
+
+### Security
+
+- The release bundles urllib3 2.8.0 and Werkzeug 3.1.9. urllib3 2.8.0 fixes an HTTPS proxy TLS setting that could be ignored and two ways a chunked response could hang a read or fill memory (CVE-2026-97687, CVE-2026-97688, CVE-2026-97689). Werkzeug 3.1.9 stops `safe_join()` from accepting Windows device names (CVE-2026-102598).
+
 ## [2.15.2] (2026-09-12)
 
 ### Marketing

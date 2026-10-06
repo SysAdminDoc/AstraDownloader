@@ -2362,6 +2362,19 @@ CATALOGS["de"].update({
     "Write the Chrome and Edge native-messaging registration for these IDs.":
         "Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.",
     "Chrome pairing status": "Status der Chrome-Kopplung",
+    "Userscript pairing": "Kopplung mit dem Userscript",
+    "Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.":
+        "Sie verwenden das Astra-Deck-Userscript statt der Erweiterung? Wählen Sie „Userscript koppeln“ und drücken Sie dann innerhalb von zwei Minuten auf YouTube einen Download-Button. Wenn Sie das Servertoken in den Einstellungen neu erzeugen, wird die Kopplung aufgehoben.",
+    "Pair userscript": "Userscript koppeln",
+    "Let the Astra Deck userscript collect the token once in the next two minutes.":
+        "Das Astra-Deck-Userscript darf das Token in den nächsten zwei Minuten einmal abholen.",
+    "Userscript pairing status": "Status der Userscript-Kopplung",
+    "Waiting for the userscript, {time} left. Press a download button on YouTube now.":
+        "Warten auf das Userscript, noch {time}. Drücken Sie jetzt auf YouTube einen Download-Button.",
+    "The userscript is paired. Its download buttons work now.":
+        "Das Userscript ist gekoppelt. Seine Download-Buttons funktionieren jetzt.",
+    "Two minutes passed without a request from the userscript. Choose Pair userscript and try again.":
+        "Zwei Minuten sind ohne Anfrage vom Userscript vergangen. Wählen Sie „Userscript koppeln“ und versuchen Sie es erneut.",
 })
 
 
