@@ -4,6 +4,16 @@
 
 [![version](https://img.shields.io/badge/version-2.16.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.16.0) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows_10%2B_x64-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 
+<p align="center">
+  <a href="https://ko-fi.com/X8K126YVER">
+    <img height="42" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy me a coffee on Ko-fi" />
+  </a>
+</p>
+
+<p align="center">
+  <sub><em>If this project helps you, a coffee helps me keep working on it.</em></sub>
+</p>
+
 Save videos and audio without building a command line. Astra Downloader puts yt-dlp in a Windows desktop app, with format choices, a persistent queue and searchable download history.
 
 Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdminDoc/Astra-Deck) can also send links from your browser, and so can its userscript once you pair it on the Browser extension page.
