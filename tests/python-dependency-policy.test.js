@@ -23,8 +23,10 @@ test('requirements stay pinned for local companion dependency review', () => {
         'Requests must exclude the vulnerable pre-2.33.0 range and track the maintained 2.34 line');
     assert.match(requirements, /^waitress>=3\.0\.2,<4$/m,
         'Waitress must exclude the vulnerable 3.0.0 and 3.0.1 releases');
-    assert.match(requirements, /^werkzeug>=3\.1\.8,<4$/m,
-        'Werkzeug must carry the 3.1.7/3.1.8 HTTP-parsing hardening');
+    assert.match(requirements, /^werkzeug>=3\.1\.9,<4$/m,
+        'Werkzeug must carry the 3.1.7/3.1.8 HTTP-parsing hardening and the 3.1.9 safe_join device-name fix');
+    assert.match(requirements, /^urllib3>=2\.8\.0,<3$/m,
+        'urllib3 must exclude the releases before the 2.8.0 proxy-TLS and chunked-read fixes');
     assert.match(requirements, /^certifi>=\d{4}\.\d+\.\d+,<\d{4}$/m,
         'certifi is a trust store and must be declared, never left transitive');
 
