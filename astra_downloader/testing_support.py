@@ -41,6 +41,7 @@ __all__ = (
     "gui_module_for_tests",
     "_RETAINED_TEST_WINDOWS",
     "_qapp_singleton",
+    "isolate_child_temp",
 )
 
 
@@ -159,6 +160,20 @@ def _retire_test_window(window):
     window.close()
     QApplication.processEvents()
     _RETAINED_TEST_WINDOWS.append(window)
+
+
+def isolate_child_temp(test_case, env):
+    """Give a child process a temp folder this test removes after it exits.
+
+    The offscreen window scripts make their own LOCALAPPDATA with mkdtemp and
+    exit without removing it. Cleaning up here, once the child is gone, also
+    covers the log files it still held open at exit.
+    """
+    temp = tempfile.TemporaryDirectory(prefix="astra-child-", ignore_cleanup_errors=True)
+    test_case.addCleanup(temp.cleanup)
+    for key in ("TMPDIR", "TEMP", "TMP"):
+        env[key] = temp.name
+    return env
 
 
 def _get_qapp_or_skip(test_case):

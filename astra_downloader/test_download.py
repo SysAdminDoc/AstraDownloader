@@ -6642,6 +6642,7 @@ window.close()
 '''
         env = os.environ.copy()
         env["QT_QPA_PLATFORM"] = "offscreen"
+        isolate_child_temp(self, env)
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=Path(ad.__file__).resolve().parent.parent,
@@ -6732,6 +6733,7 @@ window.close()
 '''
         env = os.environ.copy()
         env["QT_QPA_PLATFORM"] = "offscreen"
+        isolate_child_temp(self, env)
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=Path(ad.__file__).resolve().parent.parent,
@@ -6860,6 +6862,7 @@ window.close()
 '''
         env = os.environ.copy()
         env["QT_QPA_PLATFORM"] = "offscreen"
+        isolate_child_temp(self, env)
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=Path(ad.__file__).resolve().parent.parent,
@@ -8683,6 +8686,7 @@ window.close()
 '''
         env = os.environ.copy()
         env["QT_QPA_PLATFORM"] = "offscreen"
+        isolate_child_temp(self, env)
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=Path(ad.__file__).resolve().parent.parent,

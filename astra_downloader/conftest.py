@@ -25,6 +25,8 @@ runtime is available" passed only because this box had none.
 """
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -39,6 +41,10 @@ _executed_nodeids = set()
 _skipped_nodeids = {}
 _TEST_ROOT = Path(__file__).resolve().parent
 _FULL_SUITE_TARGETS = frozenset({_TEST_ROOT, _TEST_ROOT.parent})
+# FakeConfig's default DownloadPath. Tests in several modules create it and,
+# under xdist, share it, so only the controller removes it, after every
+# worker has finished.
+_SHARED_DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "astra-downloader-tests"
 
 
 def _is_full_suite_run(config):
@@ -122,7 +128,10 @@ def pytest_runtest_logreport(report):
 def pytest_sessionfinish(session, exitstatus):
     del exitstatus
     config = session.config
-    if hasattr(config, "workerinput") or not _is_full_suite_run(config):
+    if hasattr(config, "workerinput"):
+        return
+    shutil.rmtree(_SHARED_DOWNLOAD_DIR, ignore_errors=True)
+    if not _is_full_suite_run(config):
         return
     executed = len(_executed_nodeids)
     if executed >= MIN_FULL_SUITE_EXECUTED_TESTS:
