@@ -136,7 +136,7 @@
     {
       "key": "ffmpeg",
       "name": "FFmpeg GPL build",
-      "version": "master-2026-09-11T174629Z",
+      "version": "master-2026-10-05T215404Z",
       "licenseExpression": "GPL-3.0-or-later",
       "licenseReviewed": true,
       "decision": "approved",
@@ -147,13 +147,13 @@
       "obligations": [
         "Record the resolved build version and SHA-256, identify the exact configured license, retain notices, and provide corresponding source for the distributed GPL build."
       ],
-      "sha256": "0454711ebdc92ce80af06998f64984623cf46d56602c830b5ba61a7645da5ea4",
-      "approvalEvidence": "Resolved at staging from the publisher's own checksum sidecar: ffmpeg-master-latest-win64-gpl.zip at master-2026-09-11T174629Z is SHA-256 0454711ebdc92ce80af06998f64984623cf46d56602c830b5ba61a7645da5ea4, read from https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/checksums.sha256. The application downloads the same rolling alias and verifies it against the same sidecar before use, so the reviewed bytes and the shipped bytes are the same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, which would break first-run setup once the pin aged out."
+      "sha256": "9b0a7e37323fa875f92221dda54828fde48eccf1c542fddcea37251b4a39fa59",
+      "approvalEvidence": "Resolved at staging from the publisher's own checksum sidecar: ffmpeg-master-latest-win64-gpl.zip at master-2026-10-05T215404Z is SHA-256 9b0a7e37323fa875f92221dda54828fde48eccf1c542fddcea37251b4a39fa59, read from https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/checksums.sha256. The application downloads the same rolling alias and verifies it against the same sidecar before use, so the reviewed bytes and the shipped bytes are the same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, which would break first-run setup once the pin aged out."
     },
     {
       "key": "deno",
       "name": "Deno runtime",
-      "version": "2.9.6",
+      "version": "2.9.7",
       "licenseExpression": "MIT",
       "licenseReviewed": true,
       "decision": "approved",
@@ -164,8 +164,8 @@
       "obligations": [
         "Record the resolved release version and SHA-256 and retain the MIT notice."
       ],
-      "sha256": "15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11",
-      "approvalEvidence": "Resolved at staging from the publisher's own checksum sidecar: deno-x86_64-pc-windows-msvc.zip at 2.9.6 is SHA-256 15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11, read from https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip.sha256sum. The application downloads the same rolling alias and verifies it against the same sidecar before use, so the reviewed bytes and the shipped bytes are the same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, which would break first-run setup once the pin aged out."
+      "sha256": "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238",
+      "approvalEvidence": "Resolved at staging from the publisher's own checksum sidecar: deno-x86_64-pc-windows-msvc.zip at 2.9.7 is SHA-256 a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238, read from https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip.sha256sum. The application downloads the same rolling alias and verifies it against the same sidecar before use, so the reviewed bytes and the shipped bytes are the same check. A dated pin was examined and rejected: FFmpeg-Builds prunes its dated tags, which would break first-run setup once the pin aged out."
     },
     {
       "key": "quickjs",
