@@ -370,8 +370,6 @@ CATALOGS = {
             "Livestreams von Anfang an starten",
         "Live-video retry interval":
             "Intervall für Live-Video-Wiederholungen",
-        " seconds":
-            " Sekunden",
         "Archive output":
             "Archiv-Ausgabe",
         "Optional sidecars, chapter splitting and live-event controls. These do not change the existing embed options.":

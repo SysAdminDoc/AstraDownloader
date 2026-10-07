@@ -15,6 +15,7 @@ repository's git log.
 ### Changed
 
 - An ETA that can't be estimated reads "ETA unknown" on the download card, and the Uptime stat says "Off" while the local API is stopped. Both used to show dashes.
+- Settings writes every time unit the same way. The live-video retry interval said "seconds" while the subtitle pause beside it said "s", and both now use "s" like the "min" and "MB" fields do.
 
 ### Fixed
 

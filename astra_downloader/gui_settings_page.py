@@ -429,7 +429,7 @@ class SettingsPageMixin:
         self.cfg_wait_for_video = QSpinBox()
         self.cfg_wait_for_video.setAccessibleName(tr("Live-video retry interval"))
         self.cfg_wait_for_video.setRange(0, 3600)
-        self.cfg_wait_for_video.setSuffix(tr(" seconds"))
+        self.cfg_wait_for_video.setSuffix(" s")
         self.cfg_wait_for_video.setValue(
             self._dependencies["clamp_int"](
                 self.config.get("WaitForVideoSeconds", 0), 0, 0, 3600

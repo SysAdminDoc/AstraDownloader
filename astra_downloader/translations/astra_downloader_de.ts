@@ -1227,6 +1227,10 @@
       <translation>Nächster Schritt: {action}</translation>
     </message>
     <message>
+      <source>unknown</source>
+      <translation>unbekannt</translation>
+    </message>
+    <message>
       <source>ETA {eta}</source>
       <translation>Restzeit {eta}</translation>
     </message>
@@ -1261,6 +1265,10 @@
     <message>
       <source>No failure details were recorded.</source>
       <translation>Es wurden keine Fehlerdetails aufgezeichnet.</translation>
+    </message>
+    <message>
+      <source>Off</source>
+      <translation>Aus</translation>
     </message>
     <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
@@ -2121,10 +2129,6 @@
     <message>
       <source>{count} checks need attention. Downloads can still run.</source>
       <translation>{count} Prüfungen brauchen Aufmerksamkeit. Downloads können trotzdem verfügbar sein.</translation>
-    </message>
-    <message>
-      <source>unknown</source>
-      <translation>unbekannt</translation>
     </message>
     <message>
       <source>required</source>
@@ -3147,10 +3151,6 @@
       <translation>IPv4 oder IPv6 für jede Anfrage verwenden. Aus nutzt die Systemroute.</translation>
     </message>
     <message>
-      <source>Off</source>
-      <translation>Aus</translation>
-    </message>
-    <message>
       <source>IPv4</source>
       <translation>IPv4</translation>
     </message>
@@ -3313,10 +3313,6 @@
     <message>
       <source>Live-video retry interval</source>
       <translation>Intervall für Live-Video-Wiederholungen</translation>
-    </message>
-    <message>
-      <source> seconds</source>
-      <translation> Sekunden</translation>
     </message>
     <message>
       <source>Tracks</source>

@@ -1227,6 +1227,10 @@
       <translation>Next: {action}</translation>
     </message>
     <message>
+      <source>unknown</source>
+      <translation>unknown</translation>
+    </message>
+    <message>
       <source>ETA {eta}</source>
       <translation>ETA {eta}</translation>
     </message>
@@ -1261,6 +1265,10 @@
     <message>
       <source>No failure details were recorded.</source>
       <translation>No failure details were recorded.</translation>
+    </message>
+    <message>
+      <source>Off</source>
+      <translation>Off</translation>
     </message>
     <message>
       <source>Resume pending downloads explicitly. Items needing sign-in remain paused.</source>
@@ -2121,10 +2129,6 @@
     <message>
       <source>{count} checks need attention. Downloads can still run.</source>
       <translation>{count} checks need attention. Downloads can still run.</translation>
-    </message>
-    <message>
-      <source>unknown</source>
-      <translation>unknown</translation>
     </message>
     <message>
       <source>required</source>
@@ -3147,10 +3151,6 @@
       <translation>Use IPv4 or IPv6 for every request. Off uses the system route.</translation>
     </message>
     <message>
-      <source>Off</source>
-      <translation>Off</translation>
-    </message>
-    <message>
       <source>IPv4</source>
       <translation>IPv4</translation>
     </message>
@@ -3313,10 +3313,6 @@
     <message>
       <source>Live-video retry interval</source>
       <translation>Live-video retry interval</translation>
-    </message>
-    <message>
-      <source> seconds</source>
-      <translation> seconds</translation>
     </message>
     <message>
       <source>Tracks</source>
