@@ -2381,6 +2381,23 @@ class SubscriptionFilterTests(unittest.TestCase):
                 sub_id, filters={"includeTitleRegex": "[unclosed"})
             self.assertIn("not a valid regular expression", error)
 
+    def test_a_backtracking_pattern_cannot_stall_the_scan_thread(self):
+        module = subscriptions_module()
+        nested = {"includeTitleRegex": r"^(\w+\s?)*$"}
+        # re.search takes about five seconds on this title, doubling with
+        # each extra character. The title is the uploader's to choose.
+        started = time.perf_counter()
+        decision = module.evaluate_subscription_filters({"title": "a" * 28 + "!"}, nested)
+        self.assertLess(time.perf_counter() - started, 1.0)
+        self.assertEqual(decision, ("skipped", "title-not-included"))
+        self.assertEqual(
+            module.evaluate_subscription_filters({"title": "Part 12 tutorial"}, nested),
+            ("matched", ""),
+        )
+        _filters, error = module.sanitize_subscription_filters(
+            {"includeTitleRegex": r"(a)\1"})
+        self.assertIn("backreference", error)
+
 
 if __name__ == "__main__":
     unittest.main()

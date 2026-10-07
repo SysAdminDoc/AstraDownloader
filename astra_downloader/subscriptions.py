@@ -28,6 +28,7 @@ try:
         SUBSCRIPTION_FILTER_FIELDS,
         sanitize_subscription_delivery,
         sanitize_subscription_filters,
+        compile_title_filter,
     )
 except ImportError:  # Flat source-path compatibility.
     from config import (
@@ -38,6 +39,7 @@ except ImportError:  # Flat source-path compatibility.
         SUBSCRIPTION_FILTER_FIELDS,
         sanitize_subscription_delivery,
         sanitize_subscription_filters,
+        compile_title_filter,
     )
 
 
@@ -278,7 +280,9 @@ def _filter_pattern(pattern):
     if compiled is None:
         if len(_FILTER_PATTERN_CACHE) > 256:
             _FILTER_PATTERN_CACHE.clear()
-        compiled = re.compile(pattern, re.IGNORECASE)
+        # Never re.compile: a title is uploader text, and a backtracking
+        # pattern on the scheduler thread stalls every subscription.
+        compiled = compile_title_filter(pattern)
         _FILTER_PATTERN_CACHE[pattern] = compiled
     return compiled
 
@@ -305,7 +309,7 @@ def evaluate_subscription_filters(candidate, filters):
             return "skipped", "title-not-included"
         if exclude and _filter_pattern(exclude).search(title):
             return "skipped", "title-excluded"
-    except re.error:
+    except ValueError:
         # Only reachable through a hand-edited state file. Skipping is the
         # safe reading of a filter that cannot be applied.
         return "skipped", "invalid-filter"

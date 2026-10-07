@@ -11,6 +11,8 @@ import ipaddress
 import json
 import math
 import re
+import re._constants  # noqa: F401  (the title filter compiler reads both)
+import re._parser  # noqa: F401
 import shutil
 import threading
 import time
@@ -712,12 +714,252 @@ _SUBSCRIPTION_FILTER_LABELS = {
     "excludeTitleRegex": "exclude",
 }
 
+# Title filters run against uploader-controlled titles on the scheduler
+# thread, so Python's backtracking matcher can't be trusted with them:
+# "^(\w+\s?)*$" spends most of a second on a 25-character title and doubles
+# with each extra character, and even a flat "\w*\w*\w*!" takes seconds on a
+# long one. A filter is parsed with the re module's own parser, then run on a
+# small Thompson NFA whose cost is the title length times the program size,
+# whatever the pattern. Features that need backtracking (backreferences,
+# lookarounds, possessive and atomic groups) are refused when the filter is
+# saved, as is a program too large to keep that product small.
+TITLE_FILTER_PROGRAM_LIMIT = 256
+_RE = re._constants
+_TITLE_FILTER_ANCHORS = frozenset({
+    _RE.AT_BEGINNING, _RE.AT_BEGINNING_STRING, _RE.AT_END, _RE.AT_END_STRING,
+    _RE.AT_BOUNDARY, _RE.AT_NON_BOUNDARY,
+})
+_TITLE_FILTER_CATEGORIES = {
+    _RE.CATEGORY_DIGIT: lambda ch: ch.isdecimal(),
+    _RE.CATEGORY_NOT_DIGIT: lambda ch: not ch.isdecimal(),
+    _RE.CATEGORY_SPACE: lambda ch: ch.isspace(),
+    _RE.CATEGORY_NOT_SPACE: lambda ch: not ch.isspace(),
+    _RE.CATEGORY_WORD: lambda ch: ch.isalnum() or ch == "_",
+    _RE.CATEGORY_NOT_WORD: lambda ch: not (ch.isalnum() or ch == "_"),
+    _RE.CATEGORY_LINEBREAK: lambda ch: ch == "\n",
+    _RE.CATEGORY_NOT_LINEBREAK: lambda ch: ch != "\n",
+}
+
+
+class TitleFilterError(ValueError):
+    """A title pattern the filter matcher refuses; the text completes
+    "The include title pattern ..."."""
+
+
+def _title_char_forms(ch):
+    # re.IGNORECASE compares simple case mappings, so a character matches
+    # through itself or a one-character lower or upper form.
+    forms = {ch}
+    for form in (ch.lower(), ch.upper()):
+        if len(form) == 1:
+            forms.add(form)
+    return forms
+
+
+class _TitleFilterProgram:
+    """The compiled program. ``search`` answers whether the pattern matches
+    anywhere in the text, as ``re.search`` does, in linear time."""
+
+    __slots__ = ("pattern", "_program", "_multiline", "_dotall")
+
+    def __init__(self, pattern, program, flags):
+        self.pattern = pattern
+        self._program = program
+        self._multiline = bool(flags & re.MULTILINE)
+        self._dotall = bool(flags & re.DOTALL)
+
+    def search(self, text):
+        text = str(text or "")
+        program = self._program
+        threads, seen = [], set()
+        for position in range(len(text) + 1):
+            # Unanchored, like re.search: a fresh thread starts at every
+            # position. Each instruction runs at most once per position.
+            if self._follow(0, position, text, threads, seen):
+                return True
+            if position == len(text):
+                return False
+            char = text[position]
+            forms = _title_char_forms(char)
+            following, following_seen = [], set()
+            for pc in threads:
+                if self._consumes(program[pc], char, forms) and self._follow(
+                    pc + 1, position + 1, text, following, following_seen,
+                ):
+                    return True
+            threads, seen = following, following_seen
+        return False
+
+    def _follow(self, pc, position, text, out, seen):
+        program = self._program
+        stack = [pc]
+        while stack:
+            pc = stack.pop()
+            if pc in seen:
+                continue
+            seen.add(pc)
+            op = program[pc]
+            kind = op[0]
+            if kind == "match":
+                return True
+            if kind == "jmp":
+                stack.append(op[1])
+            elif kind == "split":
+                stack.append(op[2])
+                stack.append(op[1])
+            elif kind == "at":
+                if self._at(op[1], position, text):
+                    stack.append(pc + 1)
+            else:
+                out.append(pc)
+        return False
+
+    def _consumes(self, op, char, forms):
+        kind = op[0]
+        if kind == "char":
+            return not forms.isdisjoint(op[1])
+        if kind == "notchar":
+            return forms.isdisjoint(op[1])
+        if kind == "any":
+            return self._dotall or char != "\n"
+        negate, chars, ranges, categories = op[1:]
+        hit = (
+            not forms.isdisjoint(chars)
+            or any(low <= ord(form) <= high for form in forms for low, high in ranges)
+            or any(test(char) for test in categories)
+        )
+        return hit != negate
+
+    def _at(self, anchor, position, text):
+        size = len(text)
+        if anchor is _RE.AT_BEGINNING_STRING:
+            return position == 0
+        if anchor is _RE.AT_BEGINNING:
+            return position == 0 or (self._multiline and text[position - 1] == "\n")
+        if anchor is _RE.AT_END_STRING:
+            return position == size
+        if anchor is _RE.AT_END:
+            return (
+                position == size
+                or (position == size - 1 and text[position] == "\n")
+                or (self._multiline and position < size and text[position] == "\n")
+            )
+
+        def word(index):
+            return 0 <= index < size and (text[index].isalnum() or text[index] == "_")
+
+        boundary = word(position - 1) != word(position)
+        if anchor is _RE.AT_BOUNDARY:
+            return boundary
+        # Python before 3.14 never matches \B in an empty string.
+        return bool(size) and not boundary
+
+
+def _emit_title_filter(items, program):
+    for op, av in items:
+        if len(program) > TITLE_FILTER_PROGRAM_LIMIT:
+            raise TitleFilterError(
+                "is too complex. Use fewer or smaller repeat counts"
+            )
+        if op is _RE.LITERAL:
+            program.append(("char", frozenset(_title_char_forms(chr(av)))))
+        elif op is _RE.NOT_LITERAL:
+            program.append(("notchar", frozenset(_title_char_forms(chr(av)))))
+        elif op is _RE.ANY:
+            program.append(("any",))
+        elif op is _RE.IN:
+            negate, chars, ranges, categories = False, set(), [], []
+            for item, value in av:
+                if item is _RE.NEGATE:
+                    negate = True
+                elif item is _RE.LITERAL:
+                    chars |= _title_char_forms(chr(value))
+                elif item is _RE.RANGE:
+                    ranges.append(value)
+                elif item is _RE.CATEGORY and value in _TITLE_FILTER_CATEGORIES:
+                    categories.append(_TITLE_FILTER_CATEGORIES[value])
+                else:
+                    raise TitleFilterError("uses a character class title filters can't read")
+            program.append(
+                ("set", negate, frozenset(chars), tuple(ranges), tuple(categories))
+            )
+        elif op is _RE.AT and av in _TITLE_FILTER_ANCHORS:
+            program.append(("at", av))
+        elif op is _RE.SUBPATTERN:
+            _group, add_flags, del_flags, body = av
+            if add_flags or del_flags:
+                raise TitleFilterError("uses a scoped flag group, which title filters don't support")
+            _emit_title_filter(body, program)
+        elif op is _RE.BRANCH:
+            alternatives = av[1]
+            exits = []
+            for index, alternative in enumerate(alternatives):
+                if index == len(alternatives) - 1:
+                    _emit_title_filter(alternative, program)
+                    break
+                split = len(program)
+                program.append(None)
+                _emit_title_filter(alternative, program)
+                exits.append(len(program))
+                program.append(None)
+                program[split] = ("split", split + 1, len(program))
+            for position in exits:
+                program[position] = ("jmp", len(program))
+        elif op is _RE.MAX_REPEAT or op is _RE.MIN_REPEAT:
+            # Greedy and lazy match the same titles; only the span differs,
+            # and a filter asks only whether there is a match.
+            low, high, body = av
+            for _copy in range(low):
+                _emit_title_filter(body, program)
+            if high == _RE.MAXREPEAT:
+                loop = len(program)
+                program.append(None)
+                _emit_title_filter(body, program)
+                program.append(("jmp", loop))
+                program[loop] = ("split", loop + 1, len(program))
+            else:
+                for _copy in range(high - low):
+                    split = len(program)
+                    program.append(None)
+                    _emit_title_filter(body, program)
+                    program[split] = ("split", split + 1, len(program))
+        elif op is _RE.GROUPREF or op is _RE.GROUPREF_EXISTS:
+            raise TitleFilterError("uses a backreference, which title filters don't support")
+        elif op is _RE.ASSERT or op is _RE.ASSERT_NOT:
+            raise TitleFilterError(
+                "uses a lookahead or lookbehind, which title filters don't support"
+            )
+        elif op is _RE.POSSESSIVE_REPEAT or op is _RE.ATOMIC_GROUP:
+            raise TitleFilterError(
+                "uses a possessive or atomic group, which title filters don't support"
+            )
+        else:
+            raise TitleFilterError("uses regular expression syntax title filters don't support")
+    if len(program) > TITLE_FILTER_PROGRAM_LIMIT:
+        raise TitleFilterError("is too complex. Use fewer or smaller repeat counts")
+
+
+def compile_title_filter(pattern):
+    """Compile a case-insensitive title pattern, or raise TitleFilterError."""
+    text = str(pattern or "")
+    try:
+        parsed = re._parser.parse(text, re.IGNORECASE)
+    except re.error as error:
+        raise TitleFilterError(f"is not a valid regular expression: {error}") from None
+    flags = parsed.state.flags
+    if flags & re.ASCII:
+        raise TitleFilterError("uses the ASCII flag, which title filters don't support")
+    program = []
+    _emit_title_filter(parsed, program)
+    program.append(("match",))
+    return _TitleFilterProgram(text, tuple(program), flags)
+
 
 def sanitize_subscription_filters(raw):
     """Return ``(filters, error)`` for a subscription's title and date filters.
 
     Patterns are Python regular expressions matched case-insensitively
-    anywhere in the title. ``uploadedAfter`` accepts YYYY-MM-DD or YYYYMMDD,
+    anywhere in the title, less the features compile_title_filter refuses. ``uploadedAfter`` accepts YYYY-MM-DD or YYYYMMDD,
     means "on or after" (yt-dlp's --dateafter reads the same way) and is
     stored as YYYYMMDD. Empty means no filter. An invalid value is an error,
     not a silent blank, because a dropped include filter would queue the
@@ -735,12 +977,9 @@ def sanitize_subscription_filters(raw):
             )
         if pattern:
             try:
-                re.compile(pattern, re.IGNORECASE)
-            except re.error as error:
-                return None, (
-                    f"The {label} title pattern is not a valid regular "
-                    f"expression: {error}."
-                )
+                compile_title_filter(pattern)
+            except TitleFilterError as error:
+                return None, f"The {label} title pattern {error}."
         filters[key] = pattern
     value = raw.get("uploadedAfter")
     text = "" if value is None else str(value).strip()
