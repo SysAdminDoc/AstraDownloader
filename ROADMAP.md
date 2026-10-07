@@ -116,14 +116,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 
-- [ ] P3 | AD-97 | The README count check calls a missing interpreter a hard failure
-  Why: documentation-facts.test.js skips its pytest collect-count check only when spawn returns ENOENT. On Windows without CPython on PATH the `python` App Execution Alias still spawns, exits 9009 and prints the Microsoft Store notice, so `result.error` is null, `collected` stays null and the test asserts its way to a failure that says "pytest ran but reported no collected count". Observed 2026-09-04 while verifying the AD-87 SKIP path with the Python entries stripped from PATH.
-  Evidence: tests/documentation-facts.test.js pythonCandidates and the ENOENT branch; the `node tests (exit 1)` line in the PATH-scrubbed `node scripts/run-checks.js` run of 2026-09-04, beside the three gates that correctly reported SKIP.
-  Touches: tests/documentation-facts.test.js.
-  Acceptance: A candidate interpreter that exits non-zero without producing a collected count and whose output carries the Store-alias notice is treated the same as ENOENT: the loop moves to the next candidate, and exhausting them logs the skip rather than asserting. A candidate that runs pytest and genuinely fails collection still fails the test, pinned by a fixture for each of the two cases.
-  Complexity: S
-
-
 - [ ] P3 | AD-99 | npm run check collects the Python suite twice
   Why: tests/documentation-facts.test.js spawns `pytest --collect-only -q` to read the count the README states, and that runs inside the `node tests` gate while the `python suite` gate then runs the full suite, which collects again. Measured at roughly 8 s of the command's runtime on 2026-09-04. Cost, not correctness.
   Evidence: tests/documentation-facts.test.js:22-61; scripts/run-checks.js GATES.

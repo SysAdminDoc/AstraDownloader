@@ -45,15 +45,26 @@ test('the README leads with one evergreen marketing hero', () => {
     assert.equal(png.readUInt32BE(20), 640, 'hero height');
 });
 
-// A stated count in a README is a fact with a shelf life. Reading it back off
-// the command the README tells you to run is the only way it stays true; every
-// previous pass left the number behind and the next reader trusted it.
-test('the documented test count is the count pytest collects', () => {
-    let collected = null;
+// Windows answers `python` with an App Execution Alias even when no CPython
+// is installed: it spawns, prints the Microsoft Store notice and exits 9009,
+// so spawn reports no error. The `py` launcher's equivalent is exit 103,
+// "No suitable Python runtime found". Both mean "no interpreter here", the
+// same thing ENOENT means, and neither is a broken suite.
+const STORE_ALIAS_NOTICE = /Microsoft Store|App execution aliases/i;
+const COLLECTED_COUNT = /^(\d+) tests collected/m;
+
+function isMissingInterpreter(candidate, result) {
+    if (result.status === 0) return false;
+    const output = `${result.stdout || ''}${result.stderr || ''}`;
+    if (STORE_ALIAS_NOTICE.test(output)) return true;
+    return candidate.command === 'py' && result.status === 103;
+}
+
+function collectPytestCount(candidates = pythonCandidates(), spawn = spawnSync) {
     let ran = false;
     let lastOutput = '';
-    for (const candidate of pythonCandidates()) {
-        const result = spawnSync(
+    for (const candidate of candidates) {
+        const result = spawn(
             candidate.command,
             [...candidate.prefix, '-m', 'pytest', '--collect-only', '-q'],
             { cwd: repoRoot, encoding: 'utf8' },
@@ -66,29 +77,77 @@ test('the documented test count is the count pytest collects', () => {
             if (result.error.code === 'ENOENT') continue;
             throw result.error;
         }
+        const match = COLLECTED_COUNT.exec(result.stdout || '');
+        if (match) return { ran: true, collected: Number(match[1]), output: '' };
+        if (isMissingInterpreter(candidate, result)) continue;
         ran = true;
         lastOutput = `${result.stdout || ''}${result.stderr || ''}`;
-        const match = /^(\d+) tests collected/m.exec(result.stdout || '');
-        if (match) {
-            collected = Number(match[1]);
-            break;
-        }
     }
-    if (!ran) {
+    return { ran, collected: null, output: lastOutput };
+}
+
+function verifyStatedCount(probe, text = documentation) {
+    if (!probe.ran) {
         console.log('[documentation-facts] no Python interpreter; skipping the count check');
-        return;
+        return 'skipped';
     }
     assert.ok(
-        collected !== null,
-        'pytest ran but reported no collected count:\n' + lastOutput.slice(-2000),
+        probe.collected !== null,
+        'pytest ran but reported no collected count:\n' + probe.output.slice(-2000),
     );
-
-    const stated = /py -3\.\d+ -m pytest(?: -rs)?\s+# (\d[\d,]*) tests/.exec(documentation);
+    const stated = /py -3\.\d+ -m pytest(?: -rs)?\s+# (\d[\d,]*) tests/.exec(text);
     assert.ok(stated, 'The build guide must state the count beside the pytest command');
     assert.equal(
-        Number(stated[1].replace(/,/g, '')), collected,
-        `README says ${stated[1]} tests, pytest collects ${collected}`,
+        Number(stated[1].replace(/,/g, '')), probe.collected,
+        `README says ${stated[1]} tests, pytest collects ${probe.collected}`,
     );
+    return 'verified';
+}
+
+// A stated count in a README is a fact with a shelf life. Reading it back off
+// the command the README tells you to run is the only way it stays true; every
+// previous pass left the number behind and the next reader trusted it.
+test('the documented test count is the count pytest collects', () => {
+    verifyStatedCount(collectPytestCount());
+});
+
+function fakeSpawn(results) {
+    return (command) => {
+        const result = results[command];
+        assert.ok(result, `unexpected interpreter ${command}`);
+        return { error: null, stdout: '', stderr: '', ...result };
+    };
+}
+
+const WINDOWS_CANDIDATES = [{ command: 'py', prefix: ['-3.13'] }, { command: 'python', prefix: [] }];
+
+test('the Store python alias and a launcher with no runtime skip the count check', () => {
+    const probe = collectPytestCount(WINDOWS_CANDIDATES, fakeSpawn({
+        py: { status: 103, stderr: 'No suitable Python runtime found\n' },
+        python: {
+            status: 9009,
+            stderr: 'Python was not found; run without arguments to install from the Microsoft Store, ' +
+                'or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.\n',
+        },
+    }));
+    assert.equal(probe.ran, false);
+    assert.equal(verifyStatedCount(probe), 'skipped');
+});
+
+test('a pytest that fails collection still fails the count check', () => {
+    const probe = collectPytestCount(WINDOWS_CANDIDATES, fakeSpawn({
+        py: {
+            status: 2,
+            stdout: 'ERROR astra_downloader/test_gui.py - ImportError: cannot import name\n' +
+                '!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!\n',
+        },
+        python: {
+            status: 9009,
+            stderr: 'Python was not found; run without arguments to install from the Microsoft Store.\n',
+        },
+    }));
+    assert.equal(probe.ran, true);
+    assert.throws(() => verifyStatedCount(probe), /pytest ran but reported no collected count[\s\S]*1 error during collection/);
 });
 
 test('documented commands are commands the project defines', () => {
