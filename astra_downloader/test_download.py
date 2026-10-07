@@ -9059,6 +9059,37 @@ class DeferredQueuePersistTests(unittest.TestCase):
             self.assertTrue(manager.flush_persistence())
             self.assertTrue(writes, "a retired writer left the payload unwritten")
 
+    def test_cancel_all_retires_the_writer_after_its_last_snapshot(self):
+        # The idle timeout is pushed far past the join below, so only the
+        # shutdown stop can make the writer exit in time.
+        writes = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = self._manager(tmpdir, lambda _p, payload: writes.append(payload))
+            manager.PERSIST_WRITER_IDLE_SECONDS = 120
+            download = ad.Download("dl_shutdown", "https://example.com/video")
+            download.status = "queued"
+            with manager._lock:
+                manager.downloads[download.id] = download
+                manager._persist_async_locked()
+            writer = manager._persist_thread
+            self.assertIsNotNone(writer)
+
+            manager.cancel_all()
+            writer.join(10)
+
+            self.assertFalse(
+                writer.is_alive(),
+                "the writer is still waiting out its idle timeout after shutdown",
+            )
+            self.assertIsNone(manager._persist_thread)
+            # The durable snapshot is the one from before shutdown: the
+            # record is still unfinished, so the next launch restores it.
+            self.assertEqual(
+                [record["id"] for record in writes[-1]["downloads"]],
+                ["dl_shutdown"],
+            )
+            self.assertTrue(manager.flush_persistence(0))
+
     def test_the_drain_helper_reaches_the_composition_root(self):
         # conftest guards with `if callable(...)`, so a helper that never got
         # re-exported fails soft and the drain silently does nothing.

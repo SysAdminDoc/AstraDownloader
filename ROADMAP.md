@@ -34,10 +34,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Where: `astra_downloader/gui.py`, the five `showMessage` call sites; `astra_downloader/gui_support.py` `announce_status`.
 
 
-- [ ] P2 | AD-65 | `_persist_stop` is set by nothing
-  Why: the queue writer thread has a stop event that is never signalled anywhere in the tree. Retirement relies entirely on the two-second idle timeout, and `cancel_all` does not stop the writer. Either wire the event into shutdown or delete it; as written it reads like a shutdown path that exists.
-  Where: `astra_downloader/download.py` (`_persist_stop`, and the writer loop that reads it).
-
 - [ ] P2 | AD-77 | Turn the format probe into a truthful pre-download summary
   Why: The probe already returns title, duration, formats, and approximate sizes, but the GUI shows only maximum height and deliberately hides every lookup error.
   Evidence: astra_downloader/download.py summarize_ytdlp_formats; astra_downloader/gui.py _apply_format_probe; Parabolic 2026.4 preview work; ytDownloader issue 406.

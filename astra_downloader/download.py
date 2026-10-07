@@ -4325,42 +4325,50 @@ class DownloadManagerCore:
     PERSIST_WRITER_IDLE_SECONDS = 2.0
 
     def _persist_writer_loop(self):
-        while not self._persist_stop.is_set():
-            if not self._persist_ready.wait(self.PERSIST_WRITER_IDLE_SECONDS):
-                with self._persist_lock:
-                    if self._persist_pending is None:
-                        self._persist_thread = None
-                        self._persist_idle.set()
-                        return
-            self._persist_ready.clear()
-            while True:
-                with self._persist_lock:
-                    payload = self._persist_pending
-                    self._persist_pending = None
-                if payload is None:
-                    break
-                store = self._queue_store
-                if store is None:
-                    break
-                with self._persist_write_lock:
-                    saved = store.write(payload)
-                if not saved:
-                    # The mutation already happened in memory and the next
-                    # successful write carries the whole state, so this is
-                    # reported rather than rolled back.
-                    with self._lock:
-                        self._persistence_error = (
-                            'Could not save the pending download queue.'
-                        )
-                else:
-                    with self._lock:
-                        if self._persistence_error == (
-                            'Could not save the pending download queue.'
-                        ):
-                            self._persistence_error = ''
+        while True:
+            woke = self._persist_ready.wait(self.PERSIST_WRITER_IDLE_SECONDS)
+            if woke:
+                self._persist_ready.clear()
+                self._drain_persist_pending()
             with self._persist_lock:
-                if self._persist_pending is None:
-                    self._persist_idle.set()
+                if self._persist_pending is not None:
+                    continue
+                self._persist_idle.set()
+                # Retire after an idle timeout, or straight after a drain once
+                # cancel_all has asked. Retirement only ever happens with
+                # nothing pending, so a stop never drops the last snapshot,
+                # and cancel_all sets _closing before it asks, so no producer
+                # can queue another one behind it.
+                if not woke or self._persist_stop.is_set():
+                    self._persist_thread = None
+                    return
+
+    def _drain_persist_pending(self):
+        while True:
+            with self._persist_lock:
+                payload = self._persist_pending
+                self._persist_pending = None
+            if payload is None:
+                break
+            store = self._queue_store
+            if store is None:
+                break
+            with self._persist_write_lock:
+                saved = store.write(payload)
+            if not saved:
+                # The mutation already happened in memory and the next
+                # successful write carries the whole state, so this is
+                # reported rather than rolled back.
+                with self._lock:
+                    self._persistence_error = (
+                        'Could not save the pending download queue.'
+                    )
+            else:
+                with self._lock:
+                    if self._persistence_error == (
+                        'Could not save the pending download queue.'
+                    ):
+                        self._persistence_error = ''
 
     def flush_persistence(self, timeout=5.0):
         """Wait for any deferred queue write to reach disk."""
@@ -7162,6 +7170,12 @@ class DownloadManagerCore:
         # Drain before the process goes: a deferred snapshot that never
         # reaches disk restores the previous one on the next launch.
         self.flush_persistence()
+        # Then retire the writer instead of letting it wait out its idle
+        # timeout. _closing already stops every producer, and the writer only
+        # retires with nothing pending, so a flush that timed out on a slow
+        # disk still gets its snapshot written first.
+        self._persist_stop.set()
+        self._persist_ready.set()
 
     def active_count(self):
         with self._lock:
