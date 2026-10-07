@@ -15,6 +15,7 @@ repository's git log.
 ### Fixed
 
 - Two GUI tests that sometimes failed on a busy machine now drive their Qt timers by hand, so the progress-coalescing and History search checks no longer depend on how fast the machine is.
+- The instance listener test waits for the listener to say it has bound and has rejected the untokened command, instead of waiting a fixed few seconds, so a slow machine no longer fails it.
 
 ## [2.16.0] (2026-10-06)
 

@@ -188,9 +188,3 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: The extractor reaches the auth_note and notes literals in the site registry, by whichever shape suits its existing runtime-literal handling, and the translation gate counts them. German carries all of them. A note added to a profile without a German entry fails the gate rather than silently rendering English.
   Complexity: M
 
-- [ ] P2 | AD-112 | The instance-control listener test is timing-flaky
-  Why: test_instance_control_listener_rejects_an_untokened_command intermittently sees the untokened `show` command arrive, failing with the received list carrying an extra 'show'. Observed 2026-09-05 failing twice in full-suite runs, once in a class-scoped run, then passing three times in a row on the same tree, and passing on a clean tree in between. It is a socket handshake raced against an assertion, not a policy defect: the token check itself is covered by the sibling assertions that pass every time. A test that fails on load is a test nobody trusts, and this one has already cost two investigations.
-  Evidence: astra_downloader/test_routes.py InstanceCommandTests, the received-commands assertion; the listener under test in astra_downloader/astra_downloader.py instance control.
-  Touches: astra_downloader/test_routes.py, astra_downloader/astra_downloader.py instance control listener if it needs a readiness signal.
-  Acceptance: The test waits on a deterministic signal that the listener has processed the untokened command rather than on elapsed time, so a slow machine cannot change the outcome. Running the class 20 times in a row passes 20 times, and the assertion still fails when the token check is removed from the listener.
-  Complexity: S

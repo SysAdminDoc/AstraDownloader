@@ -253,9 +253,13 @@ class InstanceCommandTests(unittest.TestCase):
         token = "c" * 32
         config = FakeConfig({"ServerToken": token})
         manager = ad.DownloadManager(config, FakeHistory())
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.bind(("127.0.0.1", 0))
-            port = probe.getsockname()[1]
+
+        def free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.bind(("127.0.0.1", 0))
+                return probe.getsockname()[1]
+
+        port = free_port()
 
         with mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
                 mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
@@ -264,12 +268,62 @@ class InstanceCommandTests(unittest.TestCase):
 
         try:
             window._dependencies['INSTANCE_CONTROL_PORT'] = lambda: port
+            listening = threading.Event()
+            persistent_log = window._dependencies['write_persistent_log']
+
+            def note_listener_start(message):
+                if "listener started" in message:
+                    listening.set()
+                return persistent_log(message)
+
+            window._dependencies['write_persistent_log'] = note_listener_start
             commands = []
+            rejections = []
+            unavailable = []
+
+            def note_log(message):
+                if message.startswith("Rejected an instance command"):
+                    rejections.append(message)
+                elif message.startswith("Instance command listener unavailable"):
+                    unavailable.append(message)
+
             window.instance_command.connect(commands.append)
-            window._start_instance_command_listener()
+            window.log_message.connect(note_log)
+
+            # Every wait below ends on something the listener did, never on
+            # how long it took: the old count-plus-three-seconds budget was a
+            # bet on how busy the machine was, and it lost often enough to
+            # cost two investigations. The thirty seconds are a give-up for a
+            # listener that never answers, not a timing assumption.
+            def wait_for(predicate):
+                deadline = time.monotonic() + 30
+                while not predicate() and time.monotonic() < deadline:
+                    QApplication.processEvents()
+                    time.sleep(0.01)
+
+            # A port probed free can be taken by another process before the
+            # listener binds it, most often while other suites keep the
+            # machine busy. That is the probe losing a race, not the listener
+            # failing, so the test takes a fresh port and starts again.
+            for _attempt in range(5):
+                window._start_instance_command_listener()
+                wait_for(lambda: listening.is_set() or unavailable)
+                if listening.is_set():
+                    break
+                window._instance_command_thread.join(5)
+                unavailable.clear()
+                port = free_port()
+            self.assertTrue(listening.is_set(), "the listener never bound its port")
 
             self.assertTrue(ad.send_instance_command(
                 "shutdown", port=port, attempts=10, token="wrong-token"))
+            # The rejection is the listener's own report that it read and
+            # dropped the untokened line. Without the token check it emits
+            # the command instead, which ends this wait just as surely.
+            wait_for(lambda: rejections or commands)
+            self.assertEqual(commands, [], "an untokened shutdown reached the window")
+            self.assertEqual(len(rejections), 1)
+
             # A protocol link is the command most likely to be dropped: it is
             # the only one carrying an argument, and asserting solely that an
             # untokened command never arrives passes just as happily against a
@@ -280,15 +334,16 @@ class InstanceCommandTests(unittest.TestCase):
             self.assertTrue(ad.send_instance_command(
                 "show", port=port, attempts=10, token=token))
 
-            deadline = time.monotonic() + 3
-            while len(commands) < 2 and time.monotonic() < deadline:
-                QApplication.processEvents()
-                time.sleep(0.02)
+            # The listener is a single accept loop, so it emits in the order
+            # it received. `show` was sent last, which makes its arrival the
+            # signal that everything before it has been handled.
+            wait_for(lambda: "show" in commands)
 
             self.assertEqual(
                 commands, [f"download {url}", "show"],
                 "a tokened download must arrive with its URL case intact, and "
-                "an unauthenticated shutdown must never reach the window",
+                "an unauthenticated shutdown must never reach the window; "
+                f"received {commands!r}",
             )
         finally:
             window._stop_instance_command_listener()
