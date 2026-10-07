@@ -986,6 +986,26 @@ class _TitleFilterProgram:
         return bool(size) and not boundary
 
 
+def _title_filter_zero_width(items):
+    """True when these parsed items can only ever match the empty string."""
+    for op, av in items:
+        if op is _RE.AT:
+            continue
+        if op is _RE.SUBPATTERN:
+            _group, add_flags, del_flags, body = av
+            if add_flags or del_flags or not _title_filter_zero_width(body):
+                return False
+        elif op is _RE.BRANCH:
+            if not all(_title_filter_zero_width(branch) for branch in av[1]):
+                return False
+        elif op is _RE.MAX_REPEAT or op is _RE.MIN_REPEAT:
+            if not _title_filter_zero_width(av[2]):
+                return False
+        else:
+            return False
+    return True
+
+
 def _emit_title_filter(items, program):
     for op, av in items:
         if len(program) > TITLE_FILTER_PROGRAM_LIMIT:
@@ -1038,6 +1058,19 @@ def _emit_title_filter(items, program):
             # Greedy and lazy match the same titles; only the span differs,
             # and a filter asks only whether there is a match.
             low, high, body = av
+            if _title_filter_zero_width(body):
+                # A body that can only match empty text passes or fails the
+                # same way on every pass at one position, so zero passes
+                # (always true) or one pass says everything. Expanding
+                # (?:){4294967294} copy by copy never finished.
+                if low:
+                    _emit_title_filter(body, program)
+                continue
+            copies = low + (1 if high == _RE.MAXREPEAT else high - low)
+            if copies > TITLE_FILTER_PROGRAM_LIMIT:
+                # Counted before expanding: each copy of a body that isn't
+                # zero-width adds at least one instruction.
+                raise _LinearUnsupported
             for _copy in range(low):
                 _emit_title_filter(body, program)
             if high == _RE.MAXREPEAT:

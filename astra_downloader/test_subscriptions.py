@@ -2437,6 +2437,26 @@ class SubscriptionFilterTests(unittest.TestCase):
         self.assertEqual(
             imported["subscriptions"][0]["filters"]["excludeTitleRegex"], r"(?<!no )shorts")
 
+    def test_a_huge_repeat_of_nothing_compiles_at_once(self):
+        # Expanded copy by copy, the first took 2 s, the second about 48
+        # minutes and the third never finished, on Flask and GUI threads.
+        module = subscriptions_module()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        for pattern, title, expected in (
+            ("(){3000000}", "anything", True),
+            ("(?:){4294967294}", "anything", True),
+            ("(?:(?:){4294967294}){4294967294}", "", True),
+            (r"(?:\b){0,5}x", "ax", True),
+            (r"(?:\b){7}x", "ax", False),
+        ):
+            # No subTest: the first slow one must end the test, not hang it.
+            started = time.perf_counter()
+            compiled = module.compile_title_filter(pattern)
+            self.assertLess(time.perf_counter() - started, 1.0, pattern)
+            self.assertNotIsInstance(
+                compiled, config_module._BacktrackingTitleFilter, pattern)
+            self.assertIs(compiled.search(title), expected, pattern)
+
     def test_a_backtracking_pattern_runs_out_of_time_closed(self):
         module = subscriptions_module()
         # Python's re needs minutes here, and the lookahead keeps it off the
