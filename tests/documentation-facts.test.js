@@ -104,11 +104,54 @@ function verifyStatedCount(probe, text = documentation) {
     return 'verified';
 }
 
+// Under `npm run check` the python-suite gate has just collected the whole
+// suite, and conftest.py wrote that count where ASTRA_PYTEST_COUNT_FILE points.
+// Reading it back saves a second full collection. A missing or narrowed record
+// fails rather than skips: the suite ran, so it owes this test a count.
+const SUITE_COUNT_ENV = 'ASTRA_PYTEST_COUNT_FILE';
+
+function countFromSuiteGate(file) {
+    let record;
+    try {
+        record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (error) {
+        return { ran: true, collected: null, output: `the python suite gate left no readable count at ${file}: ${error.message}` };
+    }
+    if (record.fullSuite !== true) {
+        return { ran: true, collected: null, output: `the python suite gate ran a narrowed selection: ${JSON.stringify(record)}` };
+    }
+    return { ran: true, collected: Number.isInteger(record.collected) ? record.collected : null, output: JSON.stringify(record) };
+}
+
 // A stated count in a README is a fact with a shelf life. Reading it back off
 // the command the README tells you to run is the only way it stays true; every
 // previous pass left the number behind and the next reader trusted it.
 test('the documented test count is the count pytest collects', () => {
-    verifyStatedCount(collectPytestCount());
+    const suiteRecord = process.env[SUITE_COUNT_ENV];
+    verifyStatedCount(suiteRecord ? countFromSuiteGate(suiteRecord) : collectPytestCount());
+});
+
+test('the count the python suite gate recorded is checked, and a missing one fails', (t) => {
+    const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'astra-count-'));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const file = path.join(dir, 'pytest-collected.json');
+    const stated = 'py -3.13 -m pytest -rs       # 1,346 tests collected';
+
+    fs.writeFileSync(file, JSON.stringify({ collected: 1346, fullSuite: true }));
+    assert.equal(verifyStatedCount(countFromSuiteGate(file), stated), 'verified');
+    fs.writeFileSync(file, JSON.stringify({ collected: 1347, fullSuite: true }));
+    assert.throws(() => verifyStatedCount(countFromSuiteGate(file), stated), /README says 1,346 tests, pytest collects 1347/);
+    fs.writeFileSync(file, JSON.stringify({ collected: 1346, fullSuite: false }));
+    assert.throws(() => verifyStatedCount(countFromSuiteGate(file), stated), /narrowed selection/);
+    fs.rmSync(file);
+    assert.throws(() => verifyStatedCount(countFromSuiteGate(file), stated), /left no readable count/);
+
+    // run-checks hands the file over only after the suite really ran.
+    const { gateEnvironment, COUNT_ENV } = require(path.join(repoRoot, 'scripts', 'run-checks.js'));
+    assert.equal(COUNT_ENV, SUITE_COUNT_ENV);
+    assert.ok(gateEnvironment('node tests', [{ label: 'python suite', skipped: false }])[COUNT_ENV]);
+    assert.equal(gateEnvironment('node tests', [{ label: 'python suite', skipped: true }])[COUNT_ENV], undefined);
+    assert.equal(gateEnvironment('node tests', [])[COUNT_ENV], undefined);
 });
 
 function fakeSpawn(results) {

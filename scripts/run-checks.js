@@ -9,7 +9,9 @@
 // is not a gate.
 //
 // Every gate now runs, every result is printed, and the exit code is the OR of
-// the failures. Order still matters for readability, not for control flow.
+// the failures. Order matters in one place: the Python suite runs first so
+// the Node tests can check the README's test count against what that run
+// collected, rather than collecting the whole suite a second time.
 
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -36,8 +38,8 @@ if (!TEST_FILES.length) {
 // passed" line: nothing in this command, `release:stage` or `build.py` ever
 // ran pytest, and `documentation-facts` only ever collected it to count.
 const GATES = [
-    ['node tests', process.execPath, ['--test', ...TEST_FILES]],
     ['python suite', 'py', ['-3.13', '-m', 'pytest', '-q']],
+    ['node tests', process.execPath, ['--test', ...TEST_FILES]],
     ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
     ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
     ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],
@@ -47,11 +49,31 @@ const GATES = [
     ['python audit', process.execPath, ['scripts/audit-python-deps.js']],
 ];
 
+// conftest.py writes the collected count to this file when the variable names
+// it, and tests/documentation-facts.test.js reads it back when it is set.
+const COUNT_ENV = 'ASTRA_PYTEST_COUNT_FILE';
+const COUNT_FILE = path.join(ROOT, 'build', 'pytest-collected.json');
+
+// The Node tests only get the count file when the Python suite actually ran.
+// A skipped suite leaves none, and the documentation test then collects for
+// itself (and skips, since the interpreter is missing). The variable is never
+// inherited from the caller's shell, which could point at a stale file.
+function gateEnvironment(label, results) {
+    const env = { ...process.env };
+    delete env[COUNT_ENV];
+    const suiteRan = results.some((result) => result.label === 'python suite' && !result.skipped);
+    if (label === 'python suite' || (label === 'node tests' && suiteRan)) env[COUNT_ENV] = COUNT_FILE;
+    return env;
+}
+
 function main() {
     const results = [];
+    fs.rmSync(COUNT_FILE, { force: true });
     for (const [label, command, args] of GATES) {
         process.stdout.write(`\n──── ${label} ────\n`);
-        const run = spawnSync(command, args, { cwd: ROOT, stdio: 'inherit', shell: false });
+        const run = spawnSync(command, args, {
+            cwd: ROOT, stdio: 'inherit', shell: false, env: gateEnvironment(label, results),
+        });
         // A gate that could not be spawned at all is never a pass — an
         // uninstalled toolchain must not read as a green gate. A missing
         // interpreter is reported as SKIP with the reason named rather than a
@@ -103,4 +125,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { GATES };
+module.exports = { GATES, COUNT_ENV, gateEnvironment };

@@ -36,6 +36,9 @@ class ExecutionFloorPolicyTests(unittest.TestCase):
         import pytest
 
         suite_policy = sys.modules["conftest"]
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
 
         class Reporter:
             def __init__(self):
@@ -61,11 +64,14 @@ class ExecutionFloorPolicyTests(unittest.TestCase):
             ),
         )
         session = types.SimpleNamespace(
-            config=config, exitstatus=pytest.ExitCode.OK
+            config=config, exitstatus=pytest.ExitCode.OK, testscollected=6
         )
         executed_before = set(suite_policy._executed_nodeids)
         skipped_before = dict(suite_policy._skipped_nodeids)
         try:
+            # The run-checks gate sets this for the whole pytest process; a
+            # fabricated session must not overwrite the real count with 6.
+            os.environ.pop(suite_policy.COLLECTED_COUNT_ENV, None)
             suite_policy._executed_nodeids.clear()
             suite_policy._executed_nodeids.add("one-test")
             suite_policy._skipped_nodeids.clear()
@@ -95,6 +101,29 @@ class ExecutionFloorPolicyTests(unittest.TestCase):
             suite_policy._is_full_suite_run(config),
             "an ignored test path must disable the full-suite floor",
         )
+
+    def test_the_suite_records_what_it_collected_for_the_readme_check(self):
+        suite_policy = sys.modules["conftest"]
+        with tempfile.TemporaryDirectory() as root:
+            target = Path(root) / "build" / "pytest-collected.json"
+            config = types.SimpleNamespace(
+                option=types.SimpleNamespace(
+                    collectonly=False, keyword="", markexpr="", lf=False,
+                    failedfirst=False, newfirst=False, stepwise=False,
+                    ignore=[], ignore_glob=[], deselect=[],
+                ),
+                invocation_params=types.SimpleNamespace(args=(), dir=Path.cwd()),
+                args=(),
+            )
+            session = types.SimpleNamespace(config=config, testscollected=1346)
+            with mock.patch.dict(
+                os.environ, {suite_policy.COLLECTED_COUNT_ENV: str(target)}
+            ):
+                suite_policy._record_collected_count(session)
+            self.assertEqual(
+                json.loads(target.read_text(encoding="utf-8")),
+                {"collected": 1346, "fullSuite": True},
+            )
 
     def test_a_fresh_checkout_gets_the_basetemp_parent_folder(self):
         suite_policy = sys.modules["conftest"]

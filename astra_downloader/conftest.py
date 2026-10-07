@@ -24,6 +24,7 @@ own machine happened to have a runtime provisioned — a test asserting "no
 runtime is available" passed only because this box had none.
 """
 
+import json
 import os
 import shutil
 import tempfile
@@ -45,6 +46,10 @@ _FULL_SUITE_TARGETS = frozenset({_TEST_ROOT, _TEST_ROOT.parent})
 # under xdist, share it, so only the controller removes it, after every
 # worker has finished.
 _SHARED_DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "astra-downloader-tests"
+# scripts/run-checks.js names a file here for its python-suite gate. The run
+# records what it collected, and the README count check reads that back
+# instead of collecting the whole suite a second time.
+COLLECTED_COUNT_ENV = "ASTRA_PYTEST_COUNT_FILE"
 
 
 def _is_full_suite_run(config):
@@ -81,6 +86,19 @@ def _is_full_suite_run(config):
         if target.resolve() not in _FULL_SUITE_TARGETS:
             return False
     return True
+
+
+def _record_collected_count(session):
+    target = os.environ.get(COLLECTED_COUNT_ENV)
+    if not target:
+        return
+    record = {
+        "collected": session.testscollected,
+        "fullSuite": _is_full_suite_run(session.config),
+    }
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record), encoding="utf-8")
 
 
 def _skipped_group(reason):
@@ -140,6 +158,7 @@ def pytest_sessionfinish(session, exitstatus):
     if hasattr(config, "workerinput"):
         return
     shutil.rmtree(_SHARED_DOWNLOAD_DIR, ignore_errors=True)
+    _record_collected_count(session)
     if not _is_full_suite_run(config):
         return
     executed = len(_executed_nodeids)
