@@ -1180,6 +1180,23 @@ class SettingsPageMixin:
             beh_l.addWidget(w)
         layout.addWidget(beh_card)
 
+        # Unattended runs report somewhere durable. Off until an address is
+        # entered; the address is never exported because it is the secret.
+        hook_card, hook_l = self._make_settings_group("Webhook")
+        hook_l.addWidget(make_label("Webhook address", "fieldLabel"))
+        hook_l.addWidget(make_label(
+            "Optional. Astra Downloader posts a short JSON message here when a "
+            "download finishes or fails and when a subscription captures a "
+            "video. Leave it blank to turn this off. Local and private network "
+            "addresses are refused, and the address stays out of settings exports.",
+            "fieldHint", word_wrap=True,
+        ))
+        self.cfg_webhook_url = QLineEdit(self.config.get("WebhookUrl", ""))
+        self.cfg_webhook_url.setAccessibleName(tr("Webhook address"))
+        self.cfg_webhook_url.setPlaceholderText("https://hooks.example.com/astra")
+        hook_l.addWidget(self.cfg_webhook_url)
+        layout.addWidget(hook_card)
+
         # Clipboard staging fills the Quick download field; it is a download
         # behaviour, not something the tray does.
         clip_card, clip_l = self._make_settings_group("Clipboard")

@@ -895,6 +895,10 @@
       <translation>Geben Sie eine http-, https- oder socks-Proxy-URL ein oder lassen Sie das Feld leer.</translation>
     </message>
     <message>
+      <source>Enter a public http or https webhook address with no user name or password, or leave this blank.</source>
+      <translation>Geben Sie eine öffentliche http- oder https-Webhook-Adresse ohne Benutzernamen und Passwort ein oder lassen Sie das Feld leer.</translation>
+    </message>
+    <message>
       <source>The private API token cannot be empty.</source>
       <translation>Das private API-Token darf nicht leer sein.</translation>
     </message>
@@ -3151,6 +3155,10 @@
       <translation>Fenster und Infobereich</translation>
     </message>
     <message>
+      <source>Webhook</source>
+      <translation>Webhook</translation>
+    </message>
+    <message>
       <source>Clipboard</source>
       <translation>Zwischenablage</translation>
     </message>
@@ -3761,6 +3769,14 @@
     <message>
       <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
       <translation>Standardmäßig deaktiviert. Zwischenablageinhalte, die nicht wie ein Videolink aussehen, werden ignoriert; passende Links werden bereitgestellt, ohne einen Download zu starten.</translation>
+    </message>
+    <message>
+      <source>Webhook address</source>
+      <translation>Webhook-Adresse</translation>
+    </message>
+    <message>
+      <source>Optional. Astra Downloader posts a short JSON message here when a download finishes or fails and when a subscription captures a video. Leave it blank to turn this off. Local and private network addresses are refused, and the address stays out of settings exports.</source>
+      <translation>Optional. Astra Downloader sendet hierher eine kurze JSON-Nachricht, wenn ein Download abgeschlossen ist oder fehlschlägt und wenn ein Abonnement ein Video erfasst. Lassen Sie das Feld leer, um dies auszuschalten. Lokale und private Netzwerkadressen werden abgelehnt, und die Adresse bleibt aus Einstellungsexporten heraus.</translation>
     </message>
     <message>
       <source>Keep yt-dlp up to date automatically</source>

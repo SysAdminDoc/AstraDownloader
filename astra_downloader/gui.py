@@ -948,6 +948,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_force_ip_version',
     'normalize_source_address',
     'normalize_xff',
+    'normalize_webhook_url',
     'normalize_rate_limit',
     'select_site_profile',
     'validate_site_profiles',
@@ -5696,6 +5697,7 @@ class MainWindowCore(
         ("cfg_source_address", "SourceAddress", "text"),
         ("cfg_xff", "Xff", "text"),
         ("cfg_geo_verification_proxy", "GeoVerificationProxy", "text"),
+        ("cfg_webhook_url", "WebhookUrl", "text"),
         ("cfg_playlist_dateafter", "PlaylistDateAfter", "text"),
         ("cfg_metadata", "EmbedMetadata", "check"),
         ("cfg_thumbnail", "EmbedThumbnail", "check"),
@@ -7371,6 +7373,7 @@ class MainWindowCore(
 
     def _save_settings(self):
         site_profiles_field = getattr(self, "cfg_site_profiles", None)
+        webhook_field = getattr(self, "cfg_webhook_url", None)
         validated_fields = (
             self.cfg_token, self.cfg_dl_path, self.cfg_audio_path,
             self.cfg_sublangs, self.cfg_ratelimit, self.cfg_proxy,
@@ -7380,6 +7383,8 @@ class MainWindowCore(
         )
         if site_profiles_field is not None:
             validated_fields += (site_profiles_field,)
+        if webhook_field is not None:
+            validated_fields += (webhook_field,)
         for field in validated_fields:
             self._set_input_error(field, False)
             field.setAccessibleDescription("")
@@ -7417,6 +7422,15 @@ class MainWindowCore(
         xff = self._dependencies['normalize_xff'](xff_raw)
         geo_proxy_raw = self.cfg_geo_verification_proxy.text().strip()
         geo_proxy = self._dependencies['normalize_proxy'](geo_proxy_raw)
+        normalize_webhook = self._dependencies.get('normalize_webhook_url')
+        webhook_url, webhook_error = (
+            normalize_webhook(
+                webhook_field.text() if webhook_field is not None
+                else self.config.get("WebhookUrl", "")
+            )
+            if callable(normalize_webhook)
+            else (self.config.get("WebhookUrl", ""), None)
+        )
         site_profiles_raw = (
             site_profiles_field.toPlainText().strip()
             if site_profiles_field is not None else ""
@@ -7481,6 +7495,12 @@ class MainWindowCore(
             mark_error(
                 self.cfg_geo_verification_proxy,
                 "Enter an http, https, or socks proxy URL, or leave this blank.",
+            )
+        if webhook_error and webhook_field is not None:
+            mark_error(
+                webhook_field,
+                "Enter a public http or https webhook address with no user "
+                "name or password, or leave this blank.",
             )
         # Validated after the download folder, because a profile folder is
         # checked inside it: created if missing, writable, with free space,
@@ -7553,6 +7573,8 @@ class MainWindowCore(
         self.cfg_source_address.setText(source_address)
         self.cfg_xff.setText(xff)
         self.cfg_geo_verification_proxy.setText(geo_proxy)
+        if webhook_field is not None:
+            webhook_field.setText(webhook_url or "")
         if site_profiles_field is not None:
             site_profiles_field.setPlainText(json.dumps(
                 site_profiles or [], indent=2, ensure_ascii=False
@@ -7658,6 +7680,7 @@ class MainWindowCore(
             "SourceAddress": source_address,
             "Xff": xff,
             "GeoVerificationProxy": geo_proxy,
+            "WebhookUrl": webhook_url or "",
             "SiteProfiles": site_profiles or [],
             "JavaScriptRuntime": self.cfg_js_runtime.currentData(),
             "YtDlpUpdateChannel": self.cfg_ytdlp_channel.currentData(),

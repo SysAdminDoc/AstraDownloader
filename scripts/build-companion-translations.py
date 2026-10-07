@@ -80,6 +80,14 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "Webhook":
+            "Webhook",
+        "Webhook address":
+            "Webhook-Adresse",
+        "Optional. Astra Downloader posts a short JSON message here when a download finishes or fails and when a subscription captures a video. Leave it blank to turn this off. Local and private network addresses are refused, and the address stays out of settings exports.":
+            "Optional. Astra Downloader sendet hierher eine kurze JSON-Nachricht, wenn ein Download abgeschlossen ist oder fehlschlägt und wenn ein Abonnement ein Video erfasst. Lassen Sie das Feld leer, um dies auszuschalten. Lokale und private Netzwerkadressen werden abgelehnt, und die Adresse bleibt aus Einstellungsexporten heraus.",
+        "Enter a public http or https webhook address with no user name or password, or leave this blank.":
+            "Geben Sie eine öffentliche http- oder https-Webhook-Adresse ohne Benutzernamen und Passwort ein oder lassen Sie das Feld leer.",
         "the title does not match the include pattern":
             "der Titel passt nicht zum Einschlussmuster",
         "the title matches the exclude pattern":

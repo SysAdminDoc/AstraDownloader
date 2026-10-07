@@ -1508,8 +1508,13 @@ class SubscriptionManager:
         clock=time.time,
         tick_seconds=15,
         probe_limit=SUBSCRIPTION_PROBE_LIMIT,
+        on_archived=None,
     ):
         self.store = store
+        # Told the download id once a completed download is in the archive.
+        # The download webhook uses it; a failure here never touches the
+        # archive write that already happened.
+        self._on_archived = on_archived
         self._probe = probe
         self._enqueue = enqueue
         self._status_reader = status_reader or (lambda _download_id: "failed")
@@ -2033,13 +2038,19 @@ class SubscriptionManager:
         except Exception as error:  # noqa: BLE001
             self._logger(f"Could not read the delivered file path: {error}")
             file_path = ""
-        return self.store.mark_download(
+        marked = self.store.mark_download(
             download_id,
             status,
             error="Scheduled download failed." if status != "complete" else "",
             delivered_height=delivered_height,
             file_path=file_path,
         )
+        if marked and status == "complete" and self._on_archived is not None:
+            try:
+                self._on_archived(download_id)
+            except Exception as error:  # noqa: BLE001
+                self._logger(f"Could not report the archived download: {error}")
+        return marked
 
     def reconcile_downloads(self, downloads):
         return self.store.reconcile_downloads(downloads)

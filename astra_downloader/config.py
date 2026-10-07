@@ -62,6 +62,7 @@ __all__ = (
     "allowed_output_roots", "clean_text", "clean_path_text", "coerce_bool",
     "clamp_int", "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
+    "normalize_webhook_url",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "normalize_managed_binary_pins", "MANAGED_BINARY_PIN_NAMES",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
@@ -90,6 +91,7 @@ _OWNED_EXPORTS = {
     "clean_text", "clean_path_text", "coerce_bool", "clamp_int",
     "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
+    "normalize_webhook_url",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "normalize_managed_binary_pins", "MANAGED_BINARY_PIN_NAMES",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
@@ -356,6 +358,9 @@ DEFAULT_CONFIG = {
     "SourceAddress": "",
     "Xff": "",
     "GeoVerificationProxy": "",
+    # Optional endpoint told about finished, failed and subscription-captured
+    # downloads. Empty is off, which is the default.
+    "WebhookUrl": "",
     # Named per-domain defaults. Secrets deliberately do not belong here:
     # cookies and credentials remain in SiteLoginStore, scoped by site.
     "SiteProfiles": [],
@@ -1724,6 +1729,39 @@ def media_url_block_reason(url):
     return None
 
 
+WEBHOOK_URL_MAX = 2048
+
+
+def normalize_webhook_url(value):
+    """Return ``(url, error)`` for the optional download-event webhook.
+
+    Empty is ``("", None)``, which leaves the feature off. Anything else
+    passes the same literal-only policy as a download target, so the webhook
+    cannot be aimed at loopback, link-local or private ranges, and user names
+    and passwords in the address are refused.
+    """
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return "", None
+    if len(text) > WEBHOOK_URL_MAX:
+        return None, "That webhook address is too long."
+    normalized, error = normalize_url(text)
+    if error or not normalized:
+        return None, "Enter a full http or https webhook address, or leave this blank."
+    reason = media_url_block_reason(normalized)
+    if reason == "credentials-in-url":
+        return None, (
+            "A webhook address cannot carry a user name and password. Use the "
+            "token the service puts in the address instead."
+        )
+    if reason:
+        return None, (
+            "A webhook must be a public internet address. Local and private "
+            "network addresses are refused."
+        )
+    return normalized, None
+
+
 def is_supported_media_url(url):
     """True when yt-dlp may be pointed at this URL."""
     return media_url_block_reason(url) is None
@@ -2007,6 +2045,9 @@ BUNDLE_EXCLUDED_SETTINGS = frozenset({
     "Xff",
     "SiteProfiles",
     "ExtraOutputRoots",
+    # Webhook addresses usually carry their secret in the path or query
+    # (Slack, Discord, ntfy), so the address itself is a credential.
+    "WebhookUrl",
 })
 
 # Subscription fields that describe one machine's scan history rather than
@@ -2415,6 +2456,8 @@ def sanitize_config(raw):
     data["SourceAddress"] = normalize_source_address(data.get("SourceAddress"))
     data["Xff"] = normalize_xff(data.get("Xff"))
     data["GeoVerificationProxy"] = normalize_proxy(data.get("GeoVerificationProxy"))
+    webhook_url, _webhook_error = normalize_webhook_url(data.get("WebhookUrl"))
+    data["WebhookUrl"] = webhook_url or ""
     data["SiteProfiles"] = normalize_site_profiles(data.get("SiteProfiles"))
     data["ManagedBinaryPins"] = normalize_managed_binary_pins(
         data.get("ManagedBinaryPins"))

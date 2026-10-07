@@ -16,7 +16,8 @@ import threading
 import time
 import uuid
 import weakref
-from datetime import datetime
+from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
@@ -3910,7 +3911,104 @@ _REQUIRED_MANAGER_DEPENDENCIES = frozenset({
     'terminate_process_tree',
     'write_media_server_sidecars',
     'write_persistent_log',
+    'normalize_webhook_url',
+    'post_webhook',
 })
+
+
+class WebhookNotifier:
+    """Deliver download events to the configured webhook on its own thread.
+
+    ``submit`` only appends to a bounded queue, so a slow, failing or
+    unreachable endpoint can never delay or fail the download that produced
+    the event. One sender thread exists while events are pending and exits
+    when the queue is empty. The address is re-read and re-checked for every
+    delivery, so clearing the setting stops events already queued. Logs name
+    the host only: webhook addresses carry their secret in the path or query.
+    """
+
+    ATTEMPTS = 3
+    RETRY_DELAYS = (2.0, 10.0)
+    TIMEOUT_SECONDS = 10
+    QUEUE_LIMIT = 64
+
+    def __init__(self, *, url_reader, normalize, post, logger, sleep=time.sleep):
+        self._url_reader = url_reader
+        self._normalize = normalize
+        self._post = post
+        self._logger = logger
+        self._sleep = sleep
+        self._pending = deque()
+        self._lock = threading.Lock()
+        self._thread = None
+
+    def configured_url(self):
+        try:
+            url, error = self._normalize(self._url_reader())
+        except Exception:  # noqa: BLE001
+            # reason: an unreadable setting is the same as no webhook
+            return ""
+        return url if url and not error else ""
+
+    def submit(self, body):
+        """Queue one JSON body. Returns at once and never raises."""
+        if not self.configured_url():
+            return False
+        with self._lock:
+            if len(self._pending) >= self.QUEUE_LIMIT:
+                self._pending.popleft()
+            self._pending.append(body)
+            if self._thread is None:
+                thread = threading.Thread(
+                    target=self._run, name="download-webhook", daemon=True
+                )
+                try:
+                    thread.start()
+                except RuntimeError:
+                    self._pending.clear()
+                    return False
+                self._thread = thread
+        return True
+
+    def _run(self):
+        while True:
+            with self._lock:
+                if not self._pending:
+                    self._thread = None
+                    return
+                body = self._pending.popleft()
+            try:
+                self._deliver(body)
+            except Exception as error:  # noqa: BLE001
+                self._logger(f"Webhook sender error: {type(error).__name__}")
+
+    def _deliver(self, body):
+        url = self.configured_url()
+        if not url:
+            return
+        try:
+            host = urlparse(url).hostname or "the webhook"
+        except ValueError:
+            host = "the webhook"
+        outcome = ""
+        for attempt in range(self.ATTEMPTS):
+            if attempt:
+                delays = self.RETRY_DELAYS
+                self._sleep(delays[min(attempt - 1, len(delays) - 1)])
+            try:
+                status = int(self._post(url, body, self.TIMEOUT_SECONDS))
+            except Exception as error:  # noqa: BLE001
+                # The class name only: transport messages can echo the route.
+                outcome = type(error).__name__
+                continue
+            if 200 <= status < 300:
+                return
+            outcome = f"HTTP {status}"
+            if not (status in (408, 429) or status >= 500):
+                break
+        self._logger(
+            f"Webhook delivery to {host} failed ({outcome}); the event was dropped."
+        )
 
 
 class DownloadManagerCore:
@@ -3936,6 +4034,14 @@ class DownloadManagerCore:
         self.download_completed = download_completed
         self.config = config
         self.history = history
+        self._webhook = WebhookNotifier(
+            url_reader=lambda: self.config.get("WebhookUrl", ""),
+            normalize=lambda value: self._dependencies['normalize_webhook_url'](value),
+            post=lambda url, body, timeout: self._dependencies['post_webhook'](
+                url, body, timeout
+            ),
+            logger=lambda message: self._dependencies['write_persistent_log'](message),
+        )
         self.downloads = {}
         self._next_id = 0
         self._next_order = 0
@@ -6030,9 +6136,64 @@ class DownloadManagerCore:
                 f"Download {dl.id} reached {dl.status} but its history entry "
                 "could not be saved."
             )
+        event = self.WEBHOOK_TERMINAL_EVENTS.get(dl.status)
+        if event:
+            self._queue_webhook_event(event, dl, duration=duration)
 
         self.progress_updated.emit()
         self.download_completed.emit(dl.id)
+
+    # Cancelled and skipped are the user's own choices, so they are not news.
+    WEBHOOK_TERMINAL_EVENTS = {
+        "complete": "download.completed",
+        "failed": "download.failed",
+    }
+
+    def notify_webhook_event(self, event, download_id):
+        """Queue a webhook event about one download. Never blocks or raises."""
+        with self._lock:
+            dl = self.downloads.get(download_id)
+        if dl is None:
+            return False
+        return self._queue_webhook_event(event, dl)
+
+    def _queue_webhook_event(self, event, dl, duration=None):
+        """Build the bounded body from History's own fields and queue it.
+
+        Only what History already exposes goes out: no cookie, credential,
+        token, local path or command line. The error text has the download's
+        own secrets removed, as it does on its way into History.
+        """
+        try:
+            clean = self._dependencies['clean_text']
+            if duration is None:
+                duration = int(time.time() - dl.start_time) if dl.start_time else 0
+            fields = {
+                "id": clean(dl.id, "", 64),
+                "url": clean(dl.url, "", 2048),
+                "title": clean(dl.title, "", 300),
+                "filename": clean(Path(str(dl.filename or "")).name, "", 255),
+                "format": clean(dl.format, "", 16),
+                "quality": clean(dl.quality, "", 16),
+                "audioOnly": bool(dl.audio_only),
+                "status": clean(dl.status, "", 24),
+                "errorCode": clean(dl.error_code, "", 64),
+                "error": clean(_redact_download_secrets(dl.error, dl), "", 500),
+                "duration": max(0, int(duration or 0)),
+            }
+            if dl.subscription_id:
+                fields["subscriptionId"] = clean(dl.subscription_id, "", 120)
+            body = json.dumps({
+                "event": event,
+                "sentAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "download": fields,
+            }).encode("utf-8")
+            return self._webhook.submit(body)
+        except Exception as error:  # noqa: BLE001
+            self._dependencies['write_persistent_log'](
+                f"Could not queue a webhook event: {type(error).__name__}"
+            )
+            return False
 
     def _run_download(self, dl):
         with self._lock:

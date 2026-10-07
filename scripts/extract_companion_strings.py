@@ -115,6 +115,7 @@ NOT_TRANSLATABLE = {
     "192.0.2.10",
     "US or 203.0.113.0/24",
     "https://proxy.example:8080",
+    "https://hooks.example.com/astra",
     "%(title)s.%(ext)s",
     "en,es",
     "today-30days",

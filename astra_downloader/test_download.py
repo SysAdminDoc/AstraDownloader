@@ -9500,5 +9500,123 @@ class ARestoredIndexRowMustNotLieTests(unittest.TestCase):
             )
 
 
+class DownloadWebhookTests(unittest.TestCase):
+    """AD-95: terminal events reach an optional webhook without touching the download."""
+
+    HOOK = "https://hooks.example.com/services/T0KEN-SECRET-PATH"
+
+    def _manager(self, posted, *, url=HOOK, post=None):
+        manager = ad.DownloadManager(FakeConfig({"WebhookUrl": url}), FakeHistory())
+        manager.pause_intake()
+        logs = []
+        delivered = threading.Event()
+
+        def default_post(target, body, timeout):
+            posted.append((threading.current_thread().name, target, json.loads(body)))
+            delivered.set()
+            return 204
+
+        manager._dependencies['post_webhook'] = post or default_post
+        manager._dependencies['write_persistent_log'] = logs.append
+        manager._webhook._sleep = lambda _seconds: None
+        return manager, logs, delivered
+
+    def _terminal(self, manager, status, **fields):
+        dl_id = manager.start_download("https://www.example.com/video-1")[0]
+        dl = manager.downloads[dl_id]
+        dl.status = status
+        for key, value in fields.items():
+            setattr(dl, key, value)
+        with mock.patch.object(manager, "_arm_host_backoff_wakeup"):
+            manager._record_terminal_download(dl)
+        return dl
+
+    def test_a_failed_download_posts_a_bounded_redacted_event_off_its_thread(self):
+        posted = []
+        manager, _logs, delivered = self._manager(posted)
+        self._terminal(
+            manager, "failed",
+            error="Login as matt with hunter2 was refused",
+            error_code="sign-in-required",
+            filename=r"C:\Users\someone\Videos\clip.mp4",
+            subscription_id="sub_abc",
+            _credentials={"username": "matt", "password": "hunter2"},
+        )
+        self.assertTrue(delivered.wait(5))
+        self.assertEqual(len(posted), 1)
+        thread_name, target, body = posted[0]
+        self.assertEqual(thread_name, "download-webhook")
+        self.assertEqual(target, self.HOOK)
+        self.assertEqual(body["event"], "download.failed")
+        download = body["download"]
+        self.assertEqual(set(download), {
+            "id", "url", "title", "filename", "format", "quality", "audioOnly",
+            "status", "errorCode", "error", "duration", "subscriptionId",
+        })
+        self.assertEqual(download["filename"], "clip.mp4", "no local path leaves")
+        self.assertNotIn("hunter2", json.dumps(body))
+        self.assertIn("[redacted]", download["error"])
+        self.assertLessEqual(len(json.dumps(body)), 8192)
+
+        # Off by default: no address, no thread, nothing queued.
+        idle = ad.DownloadManager(FakeConfig(), FakeHistory())
+        self.assertFalse(idle._webhook.submit(b"{}"))
+        self.assertIsNone(idle._webhook._thread)
+
+    def test_a_failing_endpoint_never_holds_the_download_and_is_tried_three_times(self):
+        release = threading.Event()
+        attempts = []
+
+        def post(_target, _body, _timeout):
+            attempts.append(1)
+            release.wait(5)
+            raise OSError("connection refused")
+
+        manager, logs, _delivered = self._manager([], post=post)
+        started = time.monotonic()
+        self._terminal(manager, "complete")
+        self.assertLess(time.monotonic() - started, 2.0)
+        release.set()
+        deadline = time.monotonic() + 5
+        while manager._webhook._thread is not None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(len(attempts), manager._webhook.ATTEMPTS)
+        failure = [line for line in logs if "Webhook delivery" in line]
+        self.assertEqual(len(failure), 1)
+        self.assertIn("hooks.example.com", failure[0])
+        self.assertNotIn("T0KEN", failure[0], "only the host is ever logged")
+
+    def test_a_private_or_credentialed_address_is_refused_and_never_exported(self):
+        for url in ("http://127.0.0.1:8080/hook", "http://192.168.1.20/hook",
+                    "http://localhost/hook", "https://user:pw@hooks.example.com/x"):
+            with self.subTest(url=url):
+                self.assertIsNotNone(ad.normalize_webhook_url(url)[1])
+                self.assertEqual(ad.sanitize_config({"WebhookUrl": url})["WebhookUrl"], "")
+                manager, _logs, _delivered = self._manager([], url=url)
+                self.assertFalse(manager._webhook.submit(b"{}"))
+        self.assertEqual(ad.normalize_webhook_url(self.HOOK), (self.HOOK, None))
+        bundle = ad.build_settings_bundle(
+            ad.sanitize_config({"WebhookUrl": self.HOOK}), [])
+        self.assertNotIn("T0KEN", json.dumps(bundle))
+
+    def test_a_subscription_capture_is_reported_once_it_is_archived(self):
+        posted = []
+        manager, _logs, delivered = self._manager(posted)
+        dl = self._terminal(manager, "skipped", subscription_id="sub_abc")
+        self.assertEqual(posted, [], "a skipped download is not news")
+        subscriptions = ad.SubscriptionManager(
+            store=types.SimpleNamespace(mark_download=lambda *_a, **_k: 1),
+            probe=lambda _url: ([], None),
+            enqueue=lambda *_args: ("dl", None),
+            status_reader=lambda _id: "complete",
+            on_archived=lambda download_id: manager.notify_webhook_event(
+                "subscription.archived", download_id),
+        )
+        subscriptions.handle_download_completed(dl.id)
+        self.assertTrue(delivered.wait(5))
+        self.assertEqual(posted[0][2]["event"], "subscription.archived")
+        self.assertEqual(posted[0][2]["download"]["subscriptionId"], "sub_abc")
+
+
 if __name__ == "__main__":
     unittest.main()

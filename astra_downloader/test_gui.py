@@ -3880,7 +3880,7 @@ class SettingsBundleTests(unittest.TestCase):
             "NativeChromeExtensionIds", "NativeFirefoxExtensionIds",
             "WindowGeometry", "WindowMaximized", "LastPage", "FirstRunComplete",
             "Proxy", "UseSystemProxy", "GeoVerificationProxy", "SourceAddress",
-            "Xff", "SiteProfiles", "ExtraOutputRoots",
+            "Xff", "SiteProfiles", "ExtraOutputRoots", "WebhookUrl",
         }
         self.assertEqual(set(ad.BUNDLE_EXCLUDED_SETTINGS), expected)
         self.assertTrue(

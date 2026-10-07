@@ -98,6 +98,7 @@ try:
         parse_native_extension_ids,
         output_template_preview,
         normalize_force_ip_version, normalize_source_address, normalize_xff,
+        normalize_webhook_url,
         validate_site_profiles,
         normalize_rate_limit, normalize_sponsorblock_categories,
         normalize_playlist_date,
@@ -251,6 +252,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
         parse_native_extension_ids,
         output_template_preview,
         normalize_force_ip_version, normalize_source_address, normalize_xff,
+        normalize_webhook_url,
         validate_site_profiles,
         normalize_rate_limit, normalize_sponsorblock_categories,
         normalize_playlist_date,
@@ -4303,7 +4305,15 @@ def first_party_http_get(url, **kwargs):
     return response
 
 
-def first_party_native_fetch(url, *, data=None, headers=None, timeout=20):
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Hand a 3xx back to the caller instead of following it."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def first_party_native_fetch(url, *, data=None, headers=None, timeout=20,
+                             follow_redirects=True):
     """The `fetch` a native source resolver runs on, policy included.
 
     `native_sources` is a stdlib-only leaf module and stays that way: it
@@ -4345,6 +4355,10 @@ def first_party_native_fetch(url, *, data=None, headers=None, timeout=20):
                 return self.do_open(_BoundHTTPSConnection, req)
 
         handlers += [_BoundHTTPHandler(), _BoundHTTPSHandler()]
+    if not follow_redirects:
+        # The webhook address was checked against the private-network policy;
+        # a redirect would send the event somewhere that never was.
+        handlers.append(_NoRedirectHandler())
     opener = urllib.request.build_opener(*handlers)
     request = urllib.request.Request(url, data=data, headers=dict(headers or {}))
     try:
@@ -5849,6 +5863,14 @@ class DownloadManager(DownloadManagerCore):
                 'terminate_process_tree': lambda *args, **kwargs: terminate_process_tree(*args, **kwargs),
                 'write_media_server_sidecars': lambda *args, **kwargs: write_media_server_sidecars(*args, **kwargs),
                 'write_persistent_log': lambda *args, **kwargs: write_persistent_log(*args, **kwargs),
+                'normalize_webhook_url': lambda *args, **kwargs: normalize_webhook_url(*args, **kwargs),
+                'post_webhook': lambda url, body, timeout: first_party_native_fetch(
+                    url, data=body, timeout=timeout, follow_redirects=False,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'User-Agent': f'{APP_NAME}/{APP_VERSION} webhook',
+                    },
+                )[0],
             },
             progress_updated=self._signal_bridge.progress_updated,
             download_completed=self._signal_bridge.download_completed,
@@ -5928,6 +5950,9 @@ def build_subscription_manager(config, dl_manager):
         height_probe=lambda url: best_available_height(dl_manager, url),
         logger=lambda message: write_persistent_log(message),
         activity_registry=_YTDLP_ACTIVITY,
+        on_archived=lambda download_id: dl_manager.notify_webhook_event(
+            "subscription.archived", download_id
+        ),
     )
 
 
@@ -6483,6 +6508,7 @@ class MainWindow(MainWindowCore):
                 'normalize_force_ip_version': lambda *args, **kwargs: normalize_force_ip_version(*args, **kwargs),
                 'normalize_source_address': lambda *args, **kwargs: normalize_source_address(*args, **kwargs),
                 'normalize_xff': lambda *args, **kwargs: normalize_xff(*args, **kwargs),
+                'normalize_webhook_url': lambda *args, **kwargs: normalize_webhook_url(*args, **kwargs),
                 'normalize_rate_limit': lambda *args, **kwargs: normalize_rate_limit(*args, **kwargs),
                 'select_site_profile': lambda *args, **kwargs: select_site_profile(*args, **kwargs),
                 'validate_site_profiles': lambda *args, **kwargs: validate_site_profiles(*args, **kwargs),

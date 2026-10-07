@@ -51,13 +51,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P3
 
-- [ ] P3 | AD-95 | Report terminal download events to a configured webhook
-  Why: Completion and failure are reported only through tray balloons and the window, so a subscription archive left running overnight on a machine nobody is watching reports nothing anywhere durable. Astra already runs an HTTP stack and already builds redacted download descriptions, so the outbound half is small. This is the unattended-archivist counterpart to AD-76, which covers the interactive case.
-  Evidence: astra_downloader/gui.py _notify_completed_downloads and the five QSystemTrayIcon.showMessage sites; astra_downloader/download.py _record_terminal_download and format_redacted_command_args; YTPTube ships Apprise and direct HTTP webhook notifications (https://github.com/arabcoders/ytptube).
-  Touches: astra_downloader/config.py, astra_downloader/download.py, astra_downloader/gui_settings_page.py, astra_downloader/test_download.py, translation catalogues.
-  Acceptance: One optional webhook URL is stored, validated by the same URL policy that governs download targets so it cannot address loopback or private ranges, and is never written to the log, diagnostics or the settings bundle if it carries credentials. Completion, failure and subscription-archive events POST a bounded JSON body carrying the same redacted fields History already exposes, never a cookie, credential, token or raw command line. Delivery is off the download thread, is attempted a bounded number of times, and a failing endpoint never delays or fails the download itself. The feature is off by default.
-  Complexity: M
-
 
 - [ ] P3 | AD-71 | Areas the 2026-08-22 audit did not reach
   Why: recorded so the next pass starts where this one stopped rather than re-covering it. Not audited: the PyInstaller build pipeline beyond running it; the native messaging host registration; the Windows shell integration (jump list, `RegisterApplicationRestart`, Recycle Bin delete) beyond reading it, since driving it needs a real desktop session; the whisper transcription path; the SponsorBlock and NFO writers; and the browser extension, which is a separate repository. The GUI was exercised offscreen through `npm run smoke:gui` and the Qt test suite, never driven interactively, so nothing here rests on watching a real window.

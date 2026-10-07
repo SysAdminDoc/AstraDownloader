@@ -895,6 +895,10 @@
       <translation>Enter an http, https, or socks proxy URL, or leave this blank.</translation>
     </message>
     <message>
+      <source>Enter a public http or https webhook address with no user name or password, or leave this blank.</source>
+      <translation>Enter a public http or https webhook address with no user name or password, or leave this blank.</translation>
+    </message>
+    <message>
       <source>The private API token cannot be empty.</source>
       <translation>The private API token cannot be empty.</translation>
     </message>
@@ -3151,6 +3155,10 @@
       <translation>Window and tray</translation>
     </message>
     <message>
+      <source>Webhook</source>
+      <translation>Webhook</translation>
+    </message>
+    <message>
       <source>Clipboard</source>
       <translation>Clipboard</translation>
     </message>
@@ -3761,6 +3769,14 @@
     <message>
       <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
       <translation>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</translation>
+    </message>
+    <message>
+      <source>Webhook address</source>
+      <translation>Webhook address</translation>
+    </message>
+    <message>
+      <source>Optional. Astra Downloader posts a short JSON message here when a download finishes or fails and when a subscription captures a video. Leave it blank to turn this off. Local and private network addresses are refused, and the address stays out of settings exports.</source>
+      <translation>Optional. Astra Downloader posts a short JSON message here when a download finishes or fails and when a subscription captures a video. Leave it blank to turn this off. Local and private network addresses are refused, and the address stays out of settings exports.</translation>
     </message>
     <message>
       <source>Keep yt-dlp up to date automatically</source>
