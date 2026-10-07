@@ -28,7 +28,15 @@ These builds aren't Authenticode-signed. Do not describe a checksum as a publish
 
 ## Local checks
 
-Use a Git checkout with tags for the full gate. Node 22+ and Python 3.13 must be available; `npm run check` invokes `py -3.13`. The development interpreter needs the app requirements and pytest, pytest-xdist, pytest-qt, pytest-asyncio and pip-audit. Keep development tools separate from the reviewed release environment.
+Use a Git checkout with tags for the full gate. Node 22+ and Python 3.13 must be available. The test tools are declared as the `test` dependency group in `pyproject.toml`, so a clean environment needs one install command (pip 25.1 or newer reads `--group`):
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --require-virtualenv -r astra_downloader/requirements.txt --group test
+.\.venv\Scripts\python.exe -m pytest
+```
+
+`npm run check` invokes `py -3.13` itself, so that interpreter needs the same install, plus pip-audit for the dependency audit. Keep development tools out of the reviewed release environment.
 
 ```powershell
 npm test

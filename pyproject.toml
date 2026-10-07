@@ -1,0 +1,22 @@
+# Development tooling only. Astra Downloader is not a pip-installable package:
+# there is deliberately no [build-system] or [project] table here, the runtime
+# graph lives in astra_downloader/requirements.txt, and the release build is
+# astra_downloader/build.py against astra_downloader/constraints-release.txt.
+#
+# The test group is everything pytest.ini needs beyond the app requirements.
+# Floors are the versions the suite was last run against, ceilings stop a
+# fresh resolve from landing a major release without a deliberate pass.
+# tests/python-test-toolchain.test.js fails if pytest.ini starts relying on a
+# plugin that is not declared here.
+#
+#   py -3.13 -m pip install -r astra_downloader/requirements.txt --group test
+#
+# `--group` needs pip 25.1 or newer (PEP 735 dependency groups).
+
+[dependency-groups]
+test = [
+    "pytest>=9.1.1,<10",
+    "pytest-xdist>=3.8.0,<4",
+    "pytest-qt>=4.5.0,<5",
+    "pytest-asyncio>=1.4.0,<2",
+]
