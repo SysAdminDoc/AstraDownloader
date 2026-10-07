@@ -2085,7 +2085,25 @@ for forbidden in (
                 f'state "{value}" is set somewhere but no stylesheet rule matches it',
             )
 
-    def test_status_change_raises_a_screen_reader_alert(self):
+    def _assert_announced(self, posted, label, message):
+        """The one event posted is an announcement that carries the words.
+
+        An Alert reaches Qt 6.11's Windows UIA bridge only as a chime, so the
+        type and the message are what a screen reader depends on.
+        """
+        import gui_support as gs
+
+        self.assertEqual(posted.call_count, 1)
+        event = posted.call_args.args[0]
+        self.assertIsInstance(event, gs.QAccessibleAnnouncementEvent)
+        self.assertEqual(event.type(), gs.QAccessible.Event.Announcement)
+        self.assertIs(event.object(), label)
+        self.assertEqual(event.message(), message)
+        self.assertEqual(
+            event.politeness(), gs.QAccessible.AnnouncementPoliteness.Polite
+        )
+
+    def test_status_change_is_announced_with_its_text(self):
         # WCAG 2.2 SC 4.1.3: setText() alone delivers nothing to assistive
         # technology, so assert against the real Qt call rather than a stand-in
         # helper that could drift from what ships.
@@ -2097,12 +2115,14 @@ for forbidden in (
         self.addCleanup(label.deleteLater)
         with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
             label.setText("Download rejected.")
-        self.assertEqual(posted.call_count, 1)
-        event = posted.call_args.args[0]
-        self.assertIs(event.object(), label)
-        self.assertEqual(event.type(), gs.QAccessible.Event.Alert)
+        self._assert_announced(posted, label, "Download rejected.")
 
-    def test_a_tray_balloon_raises_the_same_alert_as_a_status_label(self):
+        # A label cleared to nothing has nothing to say.
+        with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
+            label.setText("")
+        self.assertEqual(posted.call_count, 0)
+
+    def test_a_tray_balloon_is_announced_like_a_status_label(self):
         # A balloon is the only report while the window is minimised, and
         # showMessage raises no accessibility event, so it was heard by nobody.
         import gui_support as gs
@@ -2122,10 +2142,9 @@ for forbidden in (
                 self.assertTrue(gs.show_tray_message(
                     window, "Download failed", "HTTP 403 from the site.", 2, 6000,
                 ))
-            self.assertEqual(posted.call_count, 1, "a repeated balloon still announces")
-            event = posted.call_args.args[0]
-            self.assertIs(event.object(), announcer)
-            self.assertEqual(event.type(), gs.QAccessible.Event.Alert)
+            # A repeated balloon still announces: it is a new event.
+            self._assert_announced(
+                posted, announcer, "Download failed. HTTP 403 from the site.")
         self.assertEqual(announcer.text(), "Download failed. HTTP 403 from the site.")
         self.assertEqual(len(shown), 2)
 

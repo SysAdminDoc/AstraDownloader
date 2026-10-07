@@ -10,7 +10,8 @@ import unicodedata
 
 from PySide6.QtCore import QCoreApplication, QSize, Qt
 from PySide6.QtGui import (
-    QAccessible, QAccessibleEvent, QColor, QIcon, QPainter, QPen, QPixmap,
+    QAccessible, QAccessibleAnnouncementEvent, QColor, QIcon, QPainter, QPen,
+    QPixmap,
 )
 from PySide6.QtWidgets import (
     QApplication, QFrame, QLabel, QPushButton, QSizePolicy, QVBoxLayout,
@@ -109,14 +110,23 @@ def repolish(widget):
 
 
 def announce_status(label):
-    """Raise a screen-reader Alert for a status label whose text just changed.
+    """Have the screen reader speak a status label's new text.
 
     WCAG 2.2 SC 4.1.3 asks that a status message reach assistive technology
-    without moving focus. Qt does not infer that from ``setText`` — nothing is
+    without moving focus. Qt does not infer that from ``setText``. Nothing is
     delivered unless an accessibility event is posted, so a screen-reader user
     who presses Download and is rejected otherwise hears nothing.
 
-    Returns whether the event was posted, which is what the test asserts.
+    The event is an announcement carrying the text (Qt 6.8+), which Qt's
+    Windows bridge raises as a UI Automation notification that NVDA and
+    Narrator read out. An Alert event is not enough: Qt 6.11's UIA bridge has
+    no Alert case and only plays the SystemAsterisk sound for it, so the user
+    heard a chime and no words. The Alert added nothing beyond that chime, so
+    it is no longer posted. Politeness stays polite, like an ARIA status
+    region: the message waits for the current utterance instead of cutting it
+    off. A label cleared to nothing has nothing to say.
+
+    Returns whether an announcement was posted.
     """
     if not isinstance(label, QWidget):
         # Several harnesses drive lightweight doubles through the same status
@@ -124,9 +134,13 @@ def announce_status(label):
         return False
     if QApplication.instance() is None:
         return False
-    QAccessible.updateAccessibility(
-        QAccessibleEvent(label, QAccessible.Event.Alert)
-    )
+    read_text = getattr(label, "text", None)
+    message = " ".join(str(read_text() if callable(read_text) else "").split())
+    if not message:
+        return False
+    event = QAccessibleAnnouncementEvent(label, message)
+    event.setPoliteness(QAccessible.AnnouncementPoliteness.Polite)
+    QAccessible.updateAccessibility(event)
     return True
 
 
@@ -193,7 +207,7 @@ def show_tray_message(window, title, message, icon, msecs):
     screen-reader user needs it. The window's hidden ``tray_announcer`` label
     takes the balloon's text and goes through announce_status, the path every
     status label uses. A repeated balloon announces again: it is a new event,
-    not an unchanged label. Returns whether the Alert was posted.
+    not an unchanged label. Returns whether the announcement was posted.
     """
     window.tray.showMessage(title, message, icon, msecs)
     announcer = getattr(window, "tray_announcer", None)
@@ -230,11 +244,11 @@ def set_status_tone(label, state, *, announce=True):
     convention instead of setting a `state` property no stylesheet rule ever
     matched.
 
-    The screen-reader Alert is raised by StatusLabel.setText, not here: a tone
+    The screen-reader announcement is raised by StatusLabel.setText, not here: a tone
     change on its own is not a status message, and half the call sites that
     write these labels never come through this function. ``announce`` is kept
     because it marks the two clearing call sites, and a label that is not a
-    StatusLabel still gets an Alert from here so a plain QLabel used as a
+    StatusLabel still gets an announcement from here so a plain QLabel used as a
     status surface is not silent.
     """
     tone = str(state or "neutral")

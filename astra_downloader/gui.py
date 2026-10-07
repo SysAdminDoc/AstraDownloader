@@ -5563,7 +5563,7 @@ class MainWindowCore(
                 self._last_notified_download_id = d.id
                 self._last_notification_kind = "failure"
                 # quick_download_status is a StatusLabel. Its setText path
-                # posts the QAccessible Alert introduced for status messages.
+                # posts the screen-reader announcement for status messages.
                 self._set_quick_download_status(
                     tr_format("Download failed: {reason}", reason=reason),
                     "error",
