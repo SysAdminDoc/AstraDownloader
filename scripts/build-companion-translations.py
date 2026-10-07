@@ -80,6 +80,8 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. DownloadFolder puts the site's files in a folder inside the download folder, and MaxConcurrent limits how many of its downloads run at once. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.":
+            "Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Downloadtyp, Format, Qualität, Proxy, Impersonation und Anfragepausen. DownloadFolder legt die Dateien der Website in einem Ordner innerhalb des Downloadordners ab, und MaxConcurrent begrenzt, wie viele ihrer Downloads gleichzeitig laufen. Eine Vorgabe greift, wenn die Anfrage das Feld nicht selbst setzt, sodass auch ein Download über die Browsererweiterung oder ein Abonnement sie verwendet; speichern Sie hier keine Cookies oder Passwörter.",
         "Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. A field some videos lack can carry a fallback, as in %(playlist_title|Singles)s. Text fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.":
             "Optionale yt-dlp-Ausgabevorlage, relativ zum Ordner oben (z. B. %(uploader)s/%(title)s.%(ext)s). %(ext)s muss erhalten bleiben. Ein Feld, das manchen Videos fehlt, kann einen Ersatzwert tragen, etwa %(playlist_title|Singles)s. Textfelder werden beim Speichern in der Länge begrenzt, damit lange Titel die maximale Pfadlänge nicht überschreiten. Leer verwendet den Standard.",
         "The site would not hand over this video.":
@@ -328,8 +330,6 @@ CATALOGS = {
             "Benannte Site-Profile",
         'Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]':
             'Beispiel: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]',
-        "One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.":
-            "Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Downloadtyp, Format, Qualität, Proxy, Impersonation und Anfragepausen. Eine Vorgabe greift, wenn die Anfrage das Feld nicht selbst setzt, sodass auch ein Download über die Browsererweiterung oder ein Abonnement sie verwendet; speichern Sie hier keine Cookies oder Passwörter.",
         "Automatic matching is on; no profile matches this link.":
             "Die automatische Zuordnung ist aktiv; kein Profil passt zu diesem Link.",
         "Using site profile: {name}.":

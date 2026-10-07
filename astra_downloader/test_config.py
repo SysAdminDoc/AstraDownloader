@@ -360,6 +360,88 @@ class NormalizationTests(unittest.TestCase):
             ad.select_site_profile("https://youtube.com/watch?v=1", profiles, "")
         )
 
+    def test_a_profile_folder_is_a_subfolder_of_the_download_root(self):
+        profiles, error = ad.validate_site_profiles([{
+            "Name": "Music", "Domain": "soundcloud.com",
+            "DownloadFolder": "Music\\SoundCloud", "MaxConcurrent": 99,
+        }])
+        self.assertIsNone(error)
+        self.assertEqual(profiles[0]["DownloadFolder"], "Music/SoundCloud")
+        self.assertEqual(profiles[0]["MaxConcurrent"], 10, "clamped to the global ceiling")
+        self.assertEqual(ad.sanitize_config({"SiteProfiles": profiles})["SiteProfiles"], profiles)
+
+        with tempfile.TemporaryDirectory() as root, \
+                tempfile.TemporaryDirectory() as elsewhere:
+            inside = str(Path(root) / "Clips" / "Kick")
+            saved, error = ad.validate_site_profiles(
+                [{"Name": "Kick", "Domain": "kick.com", "DownloadFolder": inside}],
+                download_root=root,
+            )
+            self.assertIsNone(error)
+            self.assertEqual(saved[0]["DownloadFolder"], "Clips/Kick")
+            self.assertTrue(Path(inside).is_dir(), "the save-time check creates it")
+
+            refused = {
+                "traversal": "../outside",
+                "nested traversal": "a/../../b",
+                "absolute outside the root": elsewhere,
+                "reserved name": "Music/CON",
+                "invalid character": "Music/a|b",
+            }
+            for reason, folder in refused.items():
+                with self.subTest(reason):
+                    normalized, error = ad.validate_site_profiles(
+                        [{"Name": "x", "Domain": "x.com", "DownloadFolder": folder}],
+                        download_root=root,
+                    )
+                    self.assertIsNone(normalized)
+                    self.assertIn("DownloadFolder", error)
+
+            # A junction inside the root that points out of it passes every
+            # name check and is caught only by resolving it.
+            try:
+                import _winapi
+                _winapi.CreateJunction(elsewhere, str(Path(root) / "Escape"))
+            except (ImportError, AttributeError, OSError) as junction_error:
+                self.skipTest(f"cannot create a junction here: {junction_error}")
+            normalized, error = ad.validate_site_profiles(
+                [{"Name": "x", "Domain": "x.com", "DownloadFolder": "Escape/Inner"}],
+                download_root=root,
+            )
+            self.assertIsNone(normalized)
+            self.assertIn("outside", error)
+            self.assertFalse((Path(elsewhere) / "Inner").exists())
+            os.rmdir(Path(root) / "Escape")
+
+    def test_the_settings_bundle_carries_portable_profile_fields_only(self):
+        config = FakeConfig({"SiteProfiles": [{
+            "Name": "Music", "Domain": "soundcloud.com",
+            "DownloadFolder": "Music", "MaxConcurrent": 2,
+            "Proxy": "http://user:secret@proxy.example:8080",
+        }]})
+        bundle = ad.build_settings_bundle(config)
+        self.assertEqual(bundle["siteProfiles"], [{
+            "Name": "Music", "Domain": "soundcloud.com",
+            "DownloadFolder": "Music", "MaxConcurrent": 2,
+        }])
+        self.assertNotIn("secret", json.dumps(bundle))
+
+        imported, error = ad.read_settings_bundle(
+            json.loads(json.dumps(bundle)),
+            current_site_profiles=[
+                {"Name": "music", "Domain": "soundcloud.com",
+                 "Proxy": "http://local-proxy.example:3128"},
+                {"Name": "Local only", "Domain": "vimeo.com"},
+            ],
+        )
+        self.assertIsNone(error)
+        self.assertEqual(imported["settings"]["SiteProfiles"], [
+            {"Name": "Music", "Domain": "soundcloud.com",
+             "DownloadFolder": "Music", "MaxConcurrent": 2,
+             "Proxy": "http://local-proxy.example:3128"},
+            {"Name": "Local only", "Domain": "vimeo.com"},
+        ])
+
     def test_output_template_bounds_split_long_text_and_preserve_literals(self):
         import config as config_module
 

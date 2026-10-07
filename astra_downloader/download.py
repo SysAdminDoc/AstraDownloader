@@ -4894,6 +4894,19 @@ class DownloadManagerCore:
             # reason: an unreadable concurrency setting falls back to the shipped default
             return MAX_CONCURRENT
 
+    def _profile_cap_locked(self, dl, profiles):
+        """Return (profile key, MaxConcurrent) for a download, or ("", 0)."""
+        profile = select_site_profile(
+            dl.url, profiles, getattr(dl, 'profile_name', None)
+        )
+        if not profile:
+            return '', 0
+        try:
+            cap = int(profile.get('MaxConcurrent') or 0)
+        except (TypeError, ValueError):
+            cap = 0
+        return str(profile.get('Name') or '').casefold(), max(0, cap)
+
     def _schedule(self):
         to_start = []
         wake_delay = None
@@ -4903,6 +4916,23 @@ class DownloadManagerCore:
             available = max(0, self._max_concurrent() - len(self._running_ids))
             if available <= 0:
                 return
+            # A site profile's MaxConcurrent caps that site alone. Count what
+            # each capped profile already has running, and skip (rather than
+            # stop at) its pending items so the remaining global slots still
+            # go to other sites.
+            profiles = self.config.get('SiteProfiles', []) or []
+            running_per_profile = {}
+            has_caps = any(
+                isinstance(p, dict) and p.get('MaxConcurrent') for p in profiles
+            )
+            if has_caps:
+                for running_id in self._running_ids:
+                    running = self.downloads.get(running_id)
+                    if running is None:
+                        continue
+                    key, cap = self._profile_cap_locked(running, profiles)
+                    if cap:
+                        running_per_profile[key] = running_per_profile.get(key, 0) + 1
             # Do not slice before checking the host pause: a throttled item
             # at the head of the queue must not hide work for another site.
             for dl in self._ordered_pending_locked():
@@ -4912,6 +4942,12 @@ class DownloadManagerCore:
                 if remaining > 0:
                     wake_delay = remaining if wake_delay is None else min(wake_delay, remaining)
                     continue
+                if has_caps:
+                    key, cap = self._profile_cap_locked(dl, profiles)
+                    if cap:
+                        if running_per_profile.get(key, 0) >= cap:
+                            continue
+                        running_per_profile[key] = running_per_profile.get(key, 0) + 1
                 dl.status = 'queued'
                 self._running_ids.add(dl.id)
                 to_start.append(dl)
@@ -5055,16 +5091,37 @@ class DownloadManagerCore:
         # paths are confined"); normalize_output_dir resolves symlinks and
         # fails closed before any mkdir.
         client_supplied_output = bool(output_dir)
-        if not output_dir:
+        profile_folder = (
+            str((selected_profile or {}).get('DownloadFolder') or '')
+            if not client_supplied_output else ''
+        )
+        roots = None
+        if profile_folder:
+            # A profile folder is relative to the download root and must stay
+            # inside it, checked here as well as on save: the root can move
+            # after the profile was saved, and a junction can appear later.
+            # It wins over the audio folder, because it is the more specific
+            # choice for this site.
+            try:
+                profile_root = Path(
+                    self.config.get("DownloadPath", default_download_path())
+                ).expanduser().resolve()
+            except (OSError, RuntimeError):
+                return None, "The download folder could not be resolved."
+            output_dir = str(profile_root / profile_folder)
+            roots = [profile_root]
+        elif not output_dir:
             if audio_only and self.config.get("AudioDownloadPath"):
                 output_dir = self.config.get("AudioDownloadPath")
             else:
                 output_dir = self.config.get("DownloadPath", default_download_path())
-        # Only enforce confinement when the client supplied the path. The
-        # fallback defaults above are always inside the allowlist by
-        # construction, and enforcing for them would create a chicken-and-egg
-        # when the user is first setting DownloadPath from the Settings UI.
-        roots = self._dependencies['allowed_output_roots'](self.config) if client_supplied_output else None
+        # Only enforce confinement when the client supplied the path (or a
+        # profile did, above). The fallback defaults are always inside the
+        # allowlist by construction, and enforcing for them would create a
+        # chicken-and-egg when the user is first setting DownloadPath from
+        # the Settings UI.
+        if client_supplied_output:
+            roots = self._dependencies['allowed_output_roots'](self.config)
         output_dir, err = self._dependencies['normalize_output_dir'](
             output_dir,
             self.config.get("DownloadPath", default_download_path()),

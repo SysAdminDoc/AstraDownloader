@@ -5967,7 +5967,12 @@ class MainWindowCore(
                 "danger",
             )
             return False
-        bundle, error = self._dependencies['read_settings_bundle'](payload)
+        bundle, error = self._dependencies['read_settings_bundle'](
+            payload,
+            current_site_profiles=getattr(
+                self.config, "get_persisted", self.config.get
+            )("SiteProfiles", []),
+        )
         if error:
             self._show_settings_status(error, "danger")
             return False
@@ -7241,11 +7246,6 @@ class MainWindowCore(
             site_profiles_field.toPlainText().strip()
             if site_profiles_field is not None else ""
         )
-        validate_profiles = self._dependencies.get('validate_site_profiles')
-        site_profiles, site_profiles_error = (
-            validate_profiles(site_profiles_raw)
-            if callable(validate_profiles) else ([], None)
-        )
         has_error = False
         first_error = None
 
@@ -7307,6 +7307,21 @@ class MainWindowCore(
                 self.cfg_geo_verification_proxy,
                 "Enter an http, https, or socks proxy URL, or leave this blank.",
             )
+        # Validated after the download folder, because a profile folder is
+        # checked inside it: created if missing, writable, with free space,
+        # and short enough for the file names the template renders.
+        validate_profiles = self._dependencies.get('validate_site_profiles')
+        profile_template = self._dependencies['normalize_output_template'](
+            self.cfg_outtmpl.text().strip()
+        ) if self.cfg_outtmpl.text().strip() else ""
+        site_profiles, site_profiles_error = (
+            validate_profiles(
+                site_profiles_raw,
+                download_root=None if dl_path_err else dl_path,
+                output_template=profile_template,
+            )
+            if callable(validate_profiles) else ([], None)
+        )
         if site_profiles_error and site_profiles_field is not None:
             # The validator builds this text at runtime, so it is in no
             # catalogue and must not replace a translated summary.

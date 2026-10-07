@@ -3780,7 +3780,16 @@ class SettingsBundleTests(unittest.TestCase):
         self.assertIsNone(error)
         for key in sensitive:
             with self.subTest(direction="import", key=key):
+                if key == "SiteProfiles":
+                    continue
                 self.assertNotIn(key, imported["settings"])
+        # A profile's portable fields travel in the bundle's own siteProfiles
+        # list. Its proxy never does, and the planted settings copy is ignored.
+        self.assertEqual(
+            imported["settings"]["SiteProfiles"],
+            [{"Name": "private archive", "Domain": "youtube.com"}],
+        )
+        self.assertNotIn("secret", json.dumps(imported["settings"]))
 
     def test_window_state_is_local_and_invalid_pages_fall_back_to_download(self):
         config = ad.sanitize_config({

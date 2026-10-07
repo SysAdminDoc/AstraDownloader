@@ -11,6 +11,7 @@ import ipaddress
 import json
 import math
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -586,6 +587,18 @@ _SITE_PROFILE_DOWNLOAD_TYPES = frozenset({"", "video", "audio", "subtitles"})
 _SITE_PROFILE_VIDEO_FORMATS = frozenset({"", "mp4", "mkv", "webm"})
 _SITE_PROFILE_AUDIO_FORMATS = frozenset({"", "mp3", "m4a", "opus", "flac", "wav"})
 _SITE_PROFILE_QUALITY = frozenset({"", "best", "2160", "1440", "1080", "720", "480"})
+# A profile's own concurrency cap. It can only narrow the global limit, whose
+# ceiling is the same number.
+_SITE_PROFILE_CONCURRENCY_MAX = 10
+_SITE_PROFILE_FOLDER_MAX = 200
+_SITE_PROFILE_FOLDER_PART_MAX = 100
+# The free space a profile folder must have on save. It matches the reserve
+# every download keeps on its output volume.
+_SITE_PROFILE_FOLDER_MIN_FREE_BYTES = 32 * 1024 * 1024
+# Network identity a profile can carry that belongs to one machine or route.
+# A settings bundle leaves these out for the same reason it leaves out the
+# global settings they override, and an import keeps the local values.
+SITE_PROFILE_MACHINE_KEYS = ("Proxy", "GeoVerificationProxy", "SourceAddress", "Xff")
 
 # Subscription delivery uses the same format vocabulary as site profiles.
 # It lives at the configuration boundary so settings bundles and the durable
@@ -702,12 +715,98 @@ def _site_profile_int(item, key, maximum, index):
     return max(0, min(maximum, parsed)), None
 
 
-def validate_site_profiles(value):
+def normalize_site_profile_folder(value, download_root=None):
+    """Return a profile DownloadFolder relative to the download root.
+
+    "" means the profile names no folder and None means the value is not
+    allowed. A profile folder always sits inside the configured download root,
+    the bound every other output path in the app has, so it is stored
+    relative to it. An absolute path is accepted only when ``download_root``
+    is known and the path resolves inside it, and is stored relative; that
+    resolve is also what refuses a junction or symlink pointing back out.
+    """
+    raw = clean_text(value, "", 4096).strip()
+    if not raw:
+        return ""
+    text = raw.replace("\\", "/")
+    if text.startswith("/") or re.match(r"^[A-Za-z]:", text):
+        if not download_root:
+            return None
+        try:
+            root = Path(download_root).expanduser().resolve()
+            candidate = Path(raw).expanduser()
+            if not candidate.is_absolute():
+                return None
+            text = candidate.resolve().relative_to(root).as_posix()
+        except (OSError, RuntimeError, ValueError):
+            return None
+    parts = [part for part in text.split("/") if part]
+    if not parts:
+        return None
+    for part in parts:
+        if (
+            part in (".", "..")
+            or len(part) > _SITE_PROFILE_FOLDER_PART_MAX
+            or re.search(r'[<>:"|?*\x00-\x1f]', part)
+            or part != part.rstrip(" .")
+            or _windows_reserved_output_component(part)
+        ):
+            return None
+    folder = "/".join(parts)
+    if len(folder) > _SITE_PROFILE_FOLDER_MAX:
+        return None
+    return folder
+
+
+def check_site_profile_folder(download_root, folder, output_template=""):
+    """Run the download root's preflight on a profile folder; "" when it passes.
+
+    The folder must resolve inside the root (so a junction cannot carry the
+    downloads elsewhere), exist or be creatable, accept a write, have the
+    reserve every download keeps free, and leave room under the Windows path
+    limit for the file names the output template renders.
+    """
+    try:
+        root = Path(download_root).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return "the download folder could not be resolved."
+    resolved, error = normalize_output_dir(
+        str(root / folder), str(root), allowed_roots=[root],
+    )
+    if error:
+        return error
+    probe = Path(resolved) / f".astra-write-probe-{os.getpid()}"
+    try:
+        with open(probe, "wb"):
+            pass
+    except OSError:
+        return "that folder does not accept new files."
+    finally:
+        try:
+            probe.unlink()
+        except OSError:
+            # reason: the probe file never existed, or something else removed it
+            pass
+    try:
+        free = int(shutil.disk_usage(resolved).free)
+    except (OSError, ValueError):
+        return "the free space on that drive could not be read."
+    if free < _SITE_PROFILE_FOLDER_MIN_FREE_BYTES:
+        return "that drive has less than 32 MB free."
+    report = output_template_preview(output_template or "", resolved)
+    if report.get("valid") and report.get("too_long"):
+        return "file names in that folder would pass the Windows path limit."
+    return ""
+
+
+def validate_site_profiles(value, download_root=None, output_template=""):
     """Validate and normalize the editable named-profile document.
 
     The GUI uses the error text to keep malformed JSON or a bad profile from
     being silently discarded. The config loader calls ``normalize_site_profiles``
-    below, which fails closed for hand-edited or legacy state files.
+    below, which fails closed for hand-edited or legacy state files. Given a
+    ``download_root`` (the Settings save does), each DownloadFolder also runs
+    the same filesystem preflight the root itself gets.
     """
     if value in (None, ""):
         raw_profiles = []
@@ -790,8 +889,65 @@ def validate_site_profiles(value):
             < entry.get("SleepIntervalSeconds", 0)
         ):
             entry["MaxSleepIntervalSeconds"] = entry["SleepIntervalSeconds"]
+
+        folder = normalize_site_profile_folder(
+            _site_profile_value(item, "DownloadFolder", ""), download_root,
+        )
+        if folder is None:
+            return None, (
+                f"Site profile {index} has an invalid DownloadFolder. Use a "
+                "folder inside the download folder, such as Music/YouTube."
+            )
+        if folder:
+            entry["DownloadFolder"] = folder
+        cap, error = _site_profile_int(
+            item, "MaxConcurrent", _SITE_PROFILE_CONCURRENCY_MAX, index,
+        )
+        if error:
+            return None, error
+        if cap:
+            entry["MaxConcurrent"] = cap
         profiles.append(entry)
+    if download_root:
+        for index, entry in enumerate(profiles, 1):
+            if not entry.get("DownloadFolder"):
+                continue
+            problem = check_site_profile_folder(
+                download_root, entry["DownloadFolder"], output_template,
+            )
+            if problem:
+                return None, (
+                    f"Site profile {index} cannot use DownloadFolder "
+                    f"{entry['DownloadFolder']}: {problem}"
+                )
     return profiles, None
+
+
+def merge_imported_site_profiles(imported, current):
+    """Apply a bundle's portable profiles over this machine's own.
+
+    A profile with the same name keeps this machine's network identity
+    fields, which the bundle never carries. Profiles the bundle does not
+    name are kept rather than deleted.
+    """
+    local = {}
+    for profile in normalize_site_profiles(current):
+        local[profile["Name"].casefold()] = profile
+    merged = []
+    seen = set()
+    for profile in imported or ():
+        key = profile["Name"].casefold()
+        seen.add(key)
+        entry = {
+            name: value for name, value in profile.items()
+            if name not in SITE_PROFILE_MACHINE_KEYS
+        }
+        for name in SITE_PROFILE_MACHINE_KEYS:
+            if name in local.get(key, {}):
+                entry[name] = local[key][name]
+        merged.append(entry)
+    merged.extend(profile for key, profile in local.items() if key not in seen)
+    return merged[:_SITE_PROFILE_MAX]
 
 
 def normalize_site_profiles(value):
@@ -1850,6 +2006,18 @@ def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
         site = clean_text(site, "", 253)
         if site and site not in names:
             names.append(site)
+    # SiteProfiles stays an excluded setting because a profile can carry a
+    # proxy with a password in it. The rest of each profile is portable
+    # preference (formats, pacing, folder, concurrency) and travels here.
+    exported_profiles = [
+        {
+            name: value for name, value in profile.items()
+            if name not in SITE_PROFILE_MACHINE_KEYS
+        }
+        for profile in normalize_site_profiles(
+            read("SiteProfiles", []) if callable(read) else []
+        )
+    ]
     return {
         "schema": SETTINGS_BUNDLE_SCHEMA,
         "schemaVersion": SETTINGS_BUNDLE_VERSION,
@@ -1857,18 +2025,20 @@ def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
         "exportedAt": float(now if now is not None else 0.0),
         "settings": settings,
         "subscriptions": exported_subscriptions,
+        "siteProfiles": exported_profiles,
         "excludedSettings": sorted(BUNDLE_EXCLUDED_SETTINGS),
         # Names only — see the docstring.
         "siteLoginSites": names,
     }
 
 
-def read_settings_bundle(payload):
+def read_settings_bundle(payload, current_site_profiles=None):
     """Validate a bundle. Returns (bundle, error); never both.
 
     Fails closed on anything that is not recognisably one of ours: an import
     overwrites every setting, so guessing at a malformed file is how a user
-    ends up with a config they cannot explain.
+    ends up with a config they cannot explain. ``current_site_profiles`` is
+    this machine's profile list, so imported profiles keep its network fields.
     """
     if not isinstance(payload, dict):
         return None, "That file is not an Astra Downloader settings bundle."
@@ -1949,6 +2119,24 @@ def read_settings_bundle(payload):
                     delivery["outputDir"] = str(resolved)
             imported["delivery"] = delivery
         subscriptions.append(imported)
+    raw_profiles = payload.get("siteProfiles")
+    if raw_profiles is not None:
+        portable = raw_profiles
+        if isinstance(raw_profiles, list):
+            portable = [
+                {
+                    name: value for name, value in item.items()
+                    if name not in SITE_PROFILE_MACHINE_KEYS
+                } if isinstance(item, dict) else item
+                for item in raw_profiles
+            ]
+        imported_profiles, profile_error = validate_site_profiles(portable)
+        if profile_error:
+            warnings.append(f"Site profiles were not imported: {profile_error}")
+        else:
+            settings["SiteProfiles"] = merge_imported_site_profiles(
+                imported_profiles, current_site_profiles,
+            )
     sites = []
     for site in (payload.get("siteLoginSites") or []):
         site = clean_text(site, "", 253)

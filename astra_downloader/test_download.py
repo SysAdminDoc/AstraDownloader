@@ -1710,6 +1710,56 @@ class HostBackoffTests(unittest.TestCase):
         self.assertIsNone(manager._host_backoff_timer)
 
 
+class SiteProfileFolderAndCapTests(unittest.TestCase):
+    PROFILES = [
+        {"Name": "Music", "Domain": "soundcloud.com",
+         "DownloadFolder": "Music/SoundCloud", "MaxConcurrent": 1},
+    ]
+
+    def test_a_profiled_download_lands_in_its_folder_unless_the_caller_chose(self):
+        with tempfile.TemporaryDirectory() as root, \
+                tempfile.TemporaryDirectory() as chosen:
+            manager = ad.DownloadManager(FakeConfig({
+                "DownloadPath": root, "SiteProfiles": self.PROFILES,
+                "ExtraOutputRoots": [chosen],
+            }), FakeHistory())
+            manager.pause_intake()
+            profiled, error = manager.start_download("https://soundcloud.com/a/b")
+            self.assertIsNone(error)
+            self.assertEqual(
+                Path(manager.downloads[profiled].output_dir),
+                Path(root).resolve() / "Music" / "SoundCloud",
+            )
+            explicit, error = manager.start_download(
+                "https://soundcloud.com/a/c", output_dir=chosen,
+            )
+            self.assertIsNone(error)
+            self.assertEqual(Path(manager.downloads[explicit].output_dir), Path(chosen))
+            self.assertTrue(manager.flush_persistence())
+
+    def test_a_capped_profile_holds_its_own_items_and_others_take_the_slots(self):
+        manager = ad.DownloadManager(FakeConfig({
+            "SiteProfiles": self.PROFILES, "MaxConcurrentDownloads": 3,
+        }), FakeHistory())
+        for order, (dl_id, url) in enumerate((
+            ("music-1", "https://soundcloud.com/a/1"),
+            ("music-2", "https://soundcloud.com/a/2"),
+            ("other-1", "https://vimeo.com/1"),
+            ("other-2", "https://vimeo.com/2"),
+        ), 1):
+            download = ad.Download(dl_id, url)
+            download.status = "pending"
+            download.queue_order = order
+            manager.downloads[dl_id] = download
+
+        with mock.patch.object(manager, "_launch_workers") as launch:
+            manager._schedule()
+
+        started = [dl.id for dl in launch.call_args.args[0]]
+        self.assertEqual(started, ["music-1", "other-1", "other-2"])
+        self.assertEqual(manager.downloads["music-2"].status, "pending")
+
+
 class DownloadFailureClassifierTests(unittest.TestCase):
     def test_classifies_recoverable_youtube_failures(self):
         cases = [
