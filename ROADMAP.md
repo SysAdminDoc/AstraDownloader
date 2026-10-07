@@ -146,12 +146,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: A queue item can carry notBeforeUtc from the GUI or strict API. Future items display Scheduled and do not block later runnable work. One cancellable wake timer reevaluates wall-clock time, overdue work starts after restart or resume, pause and cancel remain authoritative, and the UI states that Astra does not wake a sleeping PC.
   Complexity: M
 
-- [ ] P3 | AD-85 | Sign update metadata independently of release hosting
-  Why: The updater obtains the EXE and SHA-256 sidecar from one GitHub release, so a compromised release account can replace both and can also serve rollback or frozen metadata.
-  Evidence: astra_downloader/astra_downloader.py update flow; SECURITY.md; JDownloader's 2026-05-06 and 2026-05-07 installer incident; TUF specification and security paper.
-  Touches: astra_downloader/astra_downloader.py, astra_downloader/config.py updater state, scripts/write-release-provenance.js, release documentation, Python dependencies, update tests.
-  Acceptance: The application bundles a trusted TUF root and accepts targets only through signed, versioned, expiring targets, snapshot, and timestamp metadata with expected lengths and hashes. Trusted metadata persists across runs to reject rollback, freeze, and mix-and-match attacks. Tests cover expired metadata, older versions, swapped EXE and sidecar, interrupted updates, root rotation, and recovery. Documentation states that this protects installed updates but not the first installer or SmartScreen reputation.
-  Complexity: XL
 
 - [ ] P3 | AD-97 | The README count check calls a missing interpreter a hard failure
   Why: documentation-facts.test.js skips its pytest collect-count check only when spawn returns ENOENT. On Windows without CPython on PATH the `python` App Execution Alias still spawns, exits 9009 and prints the Microsoft Store notice, so `result.error` is null, `collected` stays null and the test asserts its way to a failure that says "pytest ran but reported no collected count". Observed 2026-09-04 while verifying the AD-87 SKIP path with the Python entries stripped from PATH.
