@@ -1227,6 +1227,41 @@ class SubscriptionTests(unittest.TestCase):
             )
             self.assertEqual(patched.status_code, 400, patched.get_json())
 
+    def test_the_api_refuses_an_unreadable_audio_language(self):
+        # Stored as "automatic" with a 200, while the GUI refused the same text.
+        token = "s" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({"ServerToken": token, "DownloadPath": tmp})
+            store = self._store(Path(tmp) / "subscriptions.json")
+            manager = ad.SubscriptionManager(
+                store=store, probe=lambda _url: ([], None),
+                enqueue=lambda *args: ("dl", None))
+            client = ad.create_api(
+                config, ad.DownloadManager(config, FakeHistory()), FakeHistory(),
+                subscriptions=manager,
+            ).test_client()
+            headers = {"X-Auth-Token": token, "Host": "127.0.0.1"}
+            refused = client.post("/subscriptions", json={
+                "url": "https://www.youtube.com/@astra-channel",
+                "audioLanguage": "english!!",
+            }, headers=headers)
+            self.assertEqual(refused.status_code, 400, refused.get_json())
+            self.assertEqual(refused.get_json()["code"], "invalid-audio-language")
+            self.assertEqual(store.list_subscriptions(), [])
+
+            created = client.post("/subscriptions", json={
+                "url": "https://www.youtube.com/@astra-channel",
+                "audioLanguage": "es-us",
+            }, headers=headers)
+            self.assertEqual(created.status_code, 201, created.get_json())
+            self.assertEqual(created.get_json()["audioLanguage"], "es-US")
+            sub_id = created.get_json()["id"]
+            refused = client.patch(
+                f"/subscriptions/{sub_id}", json={"audioLanguage": 7}, headers=headers)
+            self.assertEqual(refused.status_code, 400, refused.get_json())
+            self.assertEqual(refused.get_json()["code"], "invalid-audio-language")
+            self.assertEqual(store.get_subscription(sub_id)["audioLanguage"], "es-US")
+
     def test_the_api_saves_filters_and_previews_them_without_queueing(self):
         token = "s" * 32
         with tempfile.TemporaryDirectory() as tmp:

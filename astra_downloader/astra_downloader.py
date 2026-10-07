@@ -6324,6 +6324,7 @@ def create_api(config, dl_manager, history, subscriptions=None):
         'lookup_history_url': lambda *args, **kwargs: lookup_history_url(*args, **kwargs),
         'normalize_history_date': lambda *args, **kwargs: normalize_history_date(*args, **kwargs),
         'normalize_output_dir': lambda *args, **kwargs: normalize_output_dir(*args, **kwargs),
+        'normalize_audio_language': lambda *args, **kwargs: normalize_audio_language(*args, **kwargs),
         'query_history_entries': lambda *args, **kwargs: query_history_entries(*args, **kwargs),
         'read_update_recovery_status': lambda *args, **kwargs: read_update_recovery_status(*args, **kwargs),
         'subscription_manager': subscriptions,

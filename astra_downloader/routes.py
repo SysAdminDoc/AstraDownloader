@@ -243,6 +243,7 @@ _REQUIRED_API_DEPENDENCIES = frozenset({
     'lookup_history_url',
     'normalize_history_date',
     'normalize_output_dir',
+    'normalize_audio_language',
     'query_history_entries',
     'read_update_recovery_status',
     'validate_download_request_body',
@@ -1125,6 +1126,7 @@ def _register_subscriptions_routes(api, context, dependencies):
     config = context.config
     allowed_output_roots = dependencies['allowed_output_roots']
     normalize_output_dir = dependencies['normalize_output_dir']
+    normalize_audio_language = dependencies['normalize_audio_language']
     subscription_manager = context.subscription_manager
     subscription_scan_rate_limiter = context.subscription_scan_rate_limiter
     check_auth = context.check_auth
@@ -1193,9 +1195,11 @@ def _register_subscriptions_routes(api, context, dependencies):
     def _subscription_delivery(body):
         """The delivery fields present in a body, with the folder checked.
 
-        Returns (delivery, error). An unusable folder stored here does not
-        fail until the next scan, and then once per video, so the subscription
-        reads as configured while delivering nothing.
+        Returns (delivery, error, code). An unusable folder stored here does
+        not fail until the next scan, and then once per video, so the
+        subscription reads as configured while delivering nothing. An audio
+        language is refused here for the same reason the GUI refuses it: the
+        store would quietly turn a typo into "automatic".
         """
         present = {
             key: body[key] for key in SUBSCRIPTION_DELIVERY_FIELDS if key in body
@@ -1208,9 +1212,14 @@ def _register_subscriptions_routes(api, context, dependencies):
                 allowed_roots=allowed_output_roots(config),
             )
             if error:
-                return None, error
+                return None, error, "invalid-subscription-output-dir"
             present["outputDir"] = resolved
-        return (present or None), None
+        if "audioLanguage" in present:
+            language, language_error = normalize_audio_language(present["audioLanguage"])
+            if language_error:
+                return None, language_error, "invalid-audio-language"
+            present["audioLanguage"] = language
+        return (present or None), None, None
 
     @api.route('/subscriptions', methods=['POST'])
     def subscriptions_create():
@@ -1232,11 +1241,11 @@ def _register_subscriptions_routes(api, context, dependencies):
             }, 400)
         if not isinstance(body.get("url"), str) or not body.get("url", "").strip():
             return cors_response({"error": "A YouTube channel or playlist URL is required.", "code": "invalid-subscription-url"}, 400)
-        delivery, delivery_error = _subscription_delivery(body)
+        delivery, delivery_error, delivery_code = _subscription_delivery(body)
         if delivery_error:
             return cors_response({
                 "error": delivery_error,
-                "code": "invalid-subscription-output-dir",
+                "code": delivery_code,
             }, 400)
         record, error = manager.add_subscription(
             body["url"],
@@ -1282,11 +1291,11 @@ def _register_subscriptions_routes(api, context, dependencies):
             fields["enabled"] = body["enabled"]
         if "title" in body:
             fields["title"] = body["title"]
-        delivery, delivery_error = _subscription_delivery(body)
+        delivery, delivery_error, delivery_code = _subscription_delivery(body)
         if delivery_error:
             return cors_response({
                 "error": delivery_error,
-                "code": "invalid-subscription-output-dir",
+                "code": delivery_code,
             }, 400)
         if delivery is not None:
             fields["delivery"] = delivery
