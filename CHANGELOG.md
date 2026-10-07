@@ -10,6 +10,12 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## Unreleased
+
+### Fixed
+
+- Two GUI tests that sometimes failed on a busy machine now drive their Qt timers by hand, so the progress-coalescing and History search checks no longer depend on how fast the machine is.
+
 ## [2.16.0] (2026-10-06)
 
 ### Added

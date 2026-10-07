@@ -17,9 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 ### P2
 
 
-
-
-
 - [ ] P2 | AD-124 | preflight blocking is not a usable signal
   Why: ffmpeg-capabilities lands in blocking on ordinary working installs, so preflight status reads blocked for many users and nothing consumes it. Confirmed 2026-09-05: with a below-floor yt-dlp the health route reported status blocked and blocking naming both ytdlp-freshness and ffmpeg-capabilities, while POST /download accepted the request and start_download ran. That is the correct behaviour today, since a security floor should not silently stop a queue, but it means anything that later starts honouring blocking would refuse work on healthy installs.
   Evidence: astra_downloader/health.py assembling blocking and the blocked summary; astra_downloader/routes.py never calling evaluate_preflight_checks outside the health closure; the /health and POST /download responses captured on 2026-09-05.
@@ -107,12 +104,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Acceptance: The Settings row and the readiness row name the model and its on-disk size. A model choice covering at least tiny and one larger quantized build is offered, each pinned by repository revision, filename and SHA-256 the same way the current one is, with the download deferred until the choice is saved and setup is run. Switching models verifies the new file before the old one is removed, a failed fetch leaves the previous model usable, and the readiness probe reports which model is present rather than a bare ready.
   Complexity: M
 
-- [ ] P2 | AD-125 | The progress-coalescing test is timing-flaky under xdist
-  Why: test_a_burst_of_progress_signals_causes_one_refresh intermittently fails in a parallel run and passes every time in isolation. Observed 2026-09-05 failing twice in `npm run check` runs, once with 1.14 GB free and once with 5.8 GB free, and passing twice in a row in isolation each time, so it is a Qt timer raced against an assertion rather than memory pressure. Same shape as AD-112, which covers the instance-control listener. A test that fails on load is a test nobody trusts, and this one has now cost two investigations.
-  Evidence: astra_downloader/test_download.py UiRefreshCoalescingTests; astra_downloader/gui.py _request_ui_refresh and the coalescing QTimer it starts.
-  Touches: astra_downloader/test_download.py, astra_downloader/gui.py if the coalescer needs a deterministic hook.
-  Acceptance: The test drives the coalescing timer deterministically rather than waiting on elapsed time, so a busy machine cannot change the outcome. Running the class 20 times in a row under `-n auto` passes 20 times, and the assertion still fails when the coalescing is removed from _request_ui_refresh.
-  Complexity: S
 
 ### P3
 

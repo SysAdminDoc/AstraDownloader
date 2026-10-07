@@ -813,21 +813,34 @@ class UiRefreshCoalescingTests(unittest.TestCase):
             window._update_ui = lambda: (refreshes.append(1), real_update())[1]
             window._ui_refresh_timer.timeout.disconnect()
             window._ui_refresh_timer.timeout.connect(lambda: window._update_ui())
+            # The clock never decides this test. The 500 ms poll calls the
+            # real _update_ui, which stops the coalescing timer, so on a busy
+            # machine it could swallow the refresh being counted; and the
+            # coalescing window is parked out of reach so it closes only when
+            # the test closes it.
+            window.update_timer.stop()
+            window._ui_refresh_timer.setInterval(3_600_000)
 
             # yt-dlp emits a line per progress tick, per running download.
             for _ in range(200):
                 window._request_ui_refresh()
             QApplication.processEvents()
             self.assertEqual(refreshes, [], "the burst must not refresh synchronously")
+            self.assertTrue(
+                window._ui_refresh_timer.isActive(),
+                "the burst must leave exactly one refresh pending",
+            )
 
-            deadline = time.monotonic() + 2
-            while not refreshes and time.monotonic() < deadline:
-                QApplication.processEvents()
-                time.sleep(0.02)
+            window._ui_refresh_timer.timeout.emit()
+            QApplication.processEvents()
 
             self.assertEqual(
                 len(refreshes), 1,
                 f"200 progress signals collapsed to {len(refreshes)} refreshes",
+            )
+            self.assertFalse(
+                window._ui_refresh_timer.isActive(),
+                "the burst must leave no further refresh pending",
             )
         finally:
             _retire_test_window(window)
@@ -849,16 +862,19 @@ class UiRefreshCoalescingTests(unittest.TestCase):
         history = CountingHistory()
         window, _manager = self._window(history)
         try:
+            # Same rule as the progress burst: the debounce closes when the
+            # test closes it, so a slow keystroke can't end it early.
+            window.update_timer.stop()
+            window._history_filter_timer.setInterval(3_600_000)
             history.loads = 0
             for length in range(1, 9):
                 window.history_search.setText("holiday"[:length] or "h")
                 QApplication.processEvents()
             self.assertEqual(history.loads, 0, "typing must not hit the store per key")
+            self.assertTrue(window._history_filter_timer.isActive())
 
-            deadline = time.monotonic() + 2
-            while history.loads == 0 and time.monotonic() < deadline:
-                QApplication.processEvents()
-                time.sleep(0.02)
+            window._history_filter_timer.timeout.emit()
+            QApplication.processEvents()
             self.assertEqual(history.loads, 1)
         finally:
             _retire_test_window(window)
