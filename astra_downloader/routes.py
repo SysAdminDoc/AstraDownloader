@@ -36,6 +36,34 @@ _LEGACY_EXPORTS = tuple(
 )
 _resolve_legacy = make_legacy_resolver(_LEGACY_EXPORTS)
 
+class _WholeIpv6Literal(str):
+    """A trusted IPv6 literal that Werkzeug 3.1.9 can still match.
+
+    host_is_trusted in Werkzeug 3.1.9 parses the Host header with a regex,
+    so ``[::1]:9751`` becomes ``[::1]``, but it still cuts every trusted
+    entry at its first colon. A bracketed literal shrinks to ``[`` and never
+    matches, and the API refused IPv6 loopback with 421. This entry stays
+    whole when cut there. Werkzeug 3.1.8 and older cut the Host header at its
+    first colon too, so for them the plain ``"[::1]"`` entry is the one that
+    matches, and both stay in the list. If a later Werkzeug stops calling
+    ``partition``, this entry simply stops matching: IPv6 loopback is refused
+    again and the routes tests say so. Nothing else is let in.
+    """
+
+    __slots__ = ()
+
+    def partition(self, sep):
+        if sep == ":":
+            return str(self), "", ""
+        return super().partition(sep)
+
+
+# The Host names the local API answers to (Flask's TRUSTED_HOSTS). The
+# canonical-authority check in create_api still runs before any handler.
+TRUSTED_API_HOSTS = (
+    "127.0.0.1", "localhost", "[::1]", _WholeIpv6Literal("[::1]"),
+)
+
 _PUBLIC_RUNTIME_FIELDS = (
     "runtime",
     "installed",
@@ -302,7 +330,7 @@ def create_api(config, dl_manager, history, *, dependencies):
     # The error handlers below keep Flask's rejection in the same JSON/CORS
     # contract as an ordinary route response.
     api.config['MAX_CONTENT_LENGTH'] = MAX_REQUEST_BYTES
-    api.config['TRUSTED_HOSTS'] = ['127.0.0.1', 'localhost', '[::1]']
+    api.config['TRUSTED_HOSTS'] = list(TRUSTED_API_HOSTS)
 
     # v1.2.0: token-bucket rate limit on /download. Other endpoints are
     # cheap and read-only; we don't limit them (local-only service, no
@@ -387,8 +415,9 @@ def create_api(config, dl_manager, history, *, dependencies):
         return bool(normalized and normalized in origins)
 
     # Flask owns the primary DNS-rebinding boundary through TRUSTED_HOSTS.
-    # Keep one canonical-authority check because Werkzeug 3.1 treats every
-    # bracketed IPv6 literal as equivalent while matching a trusted `[::1]`.
+    # Keep one canonical-authority check because Werkzeug 3.1.8 and older
+    # treat every bracketed IPv6 literal as equivalent while matching a
+    # trusted `[::1]` (3.1.9 needs _WholeIpv6Literal to match it at all).
     def is_allowed_host():
         authority = request.environ.get('HTTP_HOST', '')
         if not isinstance(authority, str) or not authority:

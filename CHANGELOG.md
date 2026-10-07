@@ -49,6 +49,7 @@ repository's git log.
 - Keyboard users can now see when a scrolling list has focus, and the highlighted choice in an open drop-down gets a clear accent bar in both themes.
 - Screen readers now announce tray notifications, such as a finished or failed download while the window is minimized, the same way they announce status messages in the window.
 - Three tests that drive PowerShell (the delayed install folder removal, the taskbar shortcut identity and the update helper parse check) no longer fail on a busy machine just because PowerShell took a while to start. They now wait for the result they check, and only give up after five minutes of nothing.
+- The local API answers requests sent to the IPv6 loopback address (`[::1]`) again. The release's web library refused them as an invalid host, and every other host is still turned away exactly as before.
 
 ## [2.16.0] (2026-10-06)
 

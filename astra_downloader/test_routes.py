@@ -1822,8 +1822,8 @@ class ApiSecurityTests(unittest.TestCase):
             return int(status.split()[0]), json.loads(b"".join(app_iter))
 
         self.assertEqual(
-            api.config["TRUSTED_HOSTS"],
-            ["127.0.0.1", "localhost", "[::1]"],
+            {str(host) for host in api.config["TRUSTED_HOSTS"]},
+            {"127.0.0.1", "localhost", "[::1]"},
         )
         bad_hosts = (
             "", "attacker.com", "attacker.com:9751", "localhost.evil",
@@ -1849,6 +1849,40 @@ class ApiSecurityTests(unittest.TestCase):
                 self.assertEqual(status, 200, f"Expected 200 for Host={good_host}")
                 self.assertEqual(body, {"ok": True})
                 self.assertEqual(reached, [True])
+
+    def test_the_released_werkzeug_matcher_trusts_ipv6_loopback_only(self):
+        # Werkzeug 3.1.9's host_is_trusted, the version the release pins,
+        # restated here because most development interpreters still run
+        # 3.1.8, where the live test above cannot fail this way. It parses
+        # the Host header whole but cuts each trusted entry at its first
+        # colon, so a plain "[::1]" entry shrinks to "[" and matches nothing.
+        import routes
+
+        host_re = re.compile(
+            r"([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9.:]+])(?::([1-9][0-9]{,4}))?"
+        )
+
+        def host_is_trusted_3_1_9(hostname, trusted_list):
+            match = host_re.fullmatch(hostname)
+            if match is None:
+                return False
+            hostname, port = match.groups()
+            if port and not 1 <= int(port) <= 65535:
+                return False
+            for ref in trusted_list:
+                if ref.partition(":")[0].encode("idna").decode("ascii") == hostname:
+                    return True
+            return False
+
+        trusted = list(routes.TRUSTED_API_HOSTS)
+        self.assertFalse(host_is_trusted_3_1_9("[::1]:9751", ["[::1]"]),
+                         "the restated matcher must show the regression")
+        for good in ("[::1]", "[::1]:9751", "127.0.0.1:9751", "localhost"):
+            with self.subTest(host=good):
+                self.assertTrue(host_is_trusted_3_1_9(good, trusted))
+        for bad in ("[::2]:9751", "[::]:9751", "attacker.com", "localhost.evil:9751"):
+            with self.subTest(host=bad):
+                self.assertFalse(host_is_trusted_3_1_9(bad, trusted))
 
     def test_missing_source_dependency_message_requires_explicit_virtualenv_setup(self):
         error = ModuleNotFoundError("missing PySide6", name="PySide6")
