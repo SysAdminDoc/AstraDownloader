@@ -1424,6 +1424,123 @@ class WhisperModelProvisioningTests(unittest.TestCase):
             self.assertEqual(calls[0][2]["max_bytes"], ad.HELPER_DOWNLOAD_MAX_BYTES)
 
 
+    def test_every_offered_model_is_pinned_like_tiny(self):
+        import config as config_module
+
+        self.assertEqual(
+            tuple(ad.WHISPER_MODELS), config_module.TRANSCRIPTION_MODEL_CHOICES
+        )
+        for key, spec in ad.WHISPER_MODELS.items():
+            self.assertRegex(spec["sha256"], r"^[0-9a-f]{64}$")
+            self.assertGreater(spec["bytes"], ad.WHISPER_MODEL_MIN_BYTES)
+            self.assertIn(
+                f"resolve/{ad.WHISPER_MODEL_REVISION}/{spec['name']}?",
+                ad.whisper_model_url(key),
+            )
+        self.assertEqual(
+            config_module.sanitize_config({"TranscriptionModel": "BASE"})["TranscriptionModel"],
+            "base",
+        )
+        self.assertEqual(
+            config_module.sanitize_config({"TranscriptionModel": "large"})["TranscriptionModel"],
+            "tiny",
+        )
+
+    def _switch(self, verify):
+        root = Path(self._tmp.name)
+        tiny = root / "ggml-tiny-q5_1.bin"
+        tiny.write_bytes(b"tiny model")
+        seen = []
+
+        def fake_download(url, path, **_kwargs):
+            seen.append(("fetch", url, tiny.exists()))
+            Path(path).write_bytes(b"base model")
+
+        def checked(path, digest):
+            seen.append(("verify", digest, tiny.exists()))
+            return verify(path, digest)
+
+        chosen = FakeConfig({"TranscriptionModel": "base"})
+        with mock.patch.object(ad, "WHISPER_MODEL_PATH", tiny), \
+                mock.patch.object(ad, "INSTALL_DIR", root), \
+                mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                mock.patch.object(ad, "download_file_atomic", fake_download), \
+                mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                mock.patch.object(ad, "verify_file_sha256", side_effect=checked), \
+                mock.patch.object(ad, "write_persistent_log"):
+            result = ad.provision_whisper_model(model="base")
+            status = ad.whisper_model_status(chosen)
+        return root, tiny, seen, result, status
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_a_switch_verifies_the_new_model_before_the_old_one_goes(self):
+        root, tiny, seen, result, status = self._switch(lambda *_args: True)
+        base = root / "ggml-base-q5_1.bin"
+        self.assertEqual(result, str(base))
+        self.assertEqual(seen[0], ("fetch", ad.whisper_model_url("base"), True))
+        self.assertEqual(
+            seen[1], ("verify", ad.WHISPER_MODELS["base"]["sha256"], True),
+            "the old model is still there while the new one is checked",
+        )
+        self.assertFalse(tiny.exists(), "a verified switch retires the old model")
+        self.assertEqual(base.read_bytes(), b"base model")
+        self.assertEqual(
+            (status["state"], status["model"], status["chosen"], status["bytes"]),
+            ("ok", "base", "base", 59_707_625),
+        )
+
+    def test_a_failed_switch_keeps_the_previous_model_in_use(self):
+        def reject(*_args):
+            raise RuntimeError("bad digest")
+
+        root, tiny, _seen, result, status = self._switch(reject)
+        self.assertIsNone(result)
+        self.assertEqual(tiny.read_bytes(), b"tiny model")
+        self.assertFalse((root / "ggml-base-q5_1.bin").exists())
+        # Transcription keeps running on tiny, and the row says so.
+        self.assertEqual(
+            (status["state"], status["model"], status["chosen"]),
+            ("ok", "tiny", "base"),
+        )
+
+
+class WhisperReadinessRowTests(unittest.TestCase):
+    """The readiness row names the model on disk and its size, not "Ready"."""
+
+    def test_the_row_names_the_model_in_use_and_a_pending_switch(self):
+        from PySide6.QtCore import QLocale
+
+        calls = []
+        win = types.SimpleNamespace(
+            _set_readiness=lambda key, text, tone="neutral", tooltip="":
+                calls.append((key, text, tone, tooltip)),
+            _dependencies={"WHISPER_MODELS": ad.WHISPER_MODELS},
+        )
+        core = gui_module_for_tests().MainWindowCore
+        for name in ("_value", "_whisper_model_label", "_apply_whisper_readiness"):
+            setattr(win, name, types.MethodType(getattr(core, name), win))
+        base = "Whisper base \u00b7 " + QLocale().formattedDataSize(59_707_625, 0)
+        tiny = "Whisper tiny \u00b7 " + QLocale().formattedDataSize(32_152_673, 0)
+
+        win._apply_whisper_readiness(
+            {"state": "ok", "model": "base", "chosen": "base"}, {"usable": True})
+        self.assertEqual(calls[-1][:3], ("whisper", base, "success"))
+        self.assertIn(base, calls[-1][3])
+
+        win._apply_whisper_readiness(
+            {"state": "ok", "model": "tiny", "chosen": "base"}, {"usable": True})
+        self.assertEqual(calls[-1][1:3], (tiny, "warning"))
+        self.assertIn(base, calls[-1][3])
+
+        win._apply_whisper_readiness(
+            {"state": "missing", "model": "base", "chosen": "base"}, {"usable": False})
+        self.assertEqual(calls[-1][1:3], ("Missing", "danger"))
+        self.assertIn(base, calls[-1][3])
+
+
 class WhisperRuntimeProbeTests(unittest.TestCase):
     """A size-valid CLI is not trusted until its SRT capability is observable."""
 

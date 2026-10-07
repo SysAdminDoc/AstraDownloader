@@ -592,6 +592,26 @@ WHISPER_MODEL_URL = (
 WHISPER_MODEL_SHA256 = (
     '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'
 )
+# The models Settings offers, keyed by the TranscriptionModel setting. Each is
+# pinned the way tiny always was: the repository revision above, its file
+# name and its SHA-256. ``bytes`` is the published size, which Settings and
+# the readiness row show. Base is the one larger choice: roughly twice tiny's
+# CPU time, which keeps a long recording inside the two-hour transcription
+# limit where small (about six times tiny) would not.
+WHISPER_MODELS = {
+    'tiny': {
+        'name': WHISPER_MODEL_NAME,
+        'sha256': WHISPER_MODEL_SHA256,
+        'bytes': 32_152_673,
+    },
+    'base': {
+        'name': 'ggml-base-q5_1.bin',
+        'sha256': (
+            '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898'
+        ),
+        'bytes': 59_707_625,
+    },
+}
 # FFmpeg-Builds removed its Whisper filter from the security-floor archive.
 # Keep the media tool on that floor and provision the small, CPU-only
 # whisper.cpp CLI separately instead. The release asset is pinned by both tag
@@ -2075,24 +2095,104 @@ def provision_quickjs():
     return str(QUICKJS_PATH)
 
 
-def provision_whisper_model(progress_cb=None):
-    """Fetch and verify the pinned local Whisper model when requested."""
-    state = managed_binary_state(WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES)
+def chosen_whisper_model(config=None):
+    """The model key picked in Settings, or tiny for anything unknown."""
+    getter = getattr(config, 'get', None)
+    key = str(getter('TranscriptionModel', 'tiny') if callable(getter) else 'tiny')
+    return key if key in WHISPER_MODELS else 'tiny'
+
+
+def whisper_model_file(key):
+    """Where one offered model lives. Tiny keeps its historical path."""
+    if key == 'tiny' or key not in WHISPER_MODELS:
+        return WHISPER_MODEL_PATH
+    return WHISPER_MODEL_PATH.with_name(WHISPER_MODELS[key]['name'])
+
+
+def whisper_model_url(key):
+    """The pinned download URL for one offered model."""
+    if key == 'tiny' or key not in WHISPER_MODELS:
+        return WHISPER_MODEL_URL
+    return (
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/'
+        f"{WHISPER_MODEL_REVISION}/{WHISPER_MODELS[key]['name']}?download=true"
+    )
+
+
+def usable_whisper_model(config=None):
+    """The model transcription runs with.
+
+    The chosen one once it is on disk, otherwise whichever pinned model is
+    still there, so a switch whose fetch failed keeps transcribing with the
+    model it was meant to replace.
+    """
+    chosen = chosen_whisper_model(config)
+    for key in [chosen] + [key for key in WHISPER_MODELS if key != chosen]:
+        if managed_binary_state(whisper_model_file(key), WHISPER_MODEL_MIN_BYTES) == 'ok':
+            return key
+    return chosen
+
+
+def whisper_model_status(config=None):
+    """Which model is present and which was chosen, for the readiness row."""
+    chosen = chosen_whisper_model(config)
+    model = usable_whisper_model(config)
+    return {
+        'state': managed_binary_state(
+            whisper_model_file(model), WHISPER_MODEL_MIN_BYTES
+        ),
+        'model': model,
+        'chosen': chosen,
+        'bytes': WHISPER_MODELS[model]['bytes'],
+        'file': WHISPER_MODELS[model]['name'],
+    }
+
+
+def _retire_other_whisper_models(keep):
+    """Remove the models a verified switch replaced.
+
+    Only called once ``keep`` is on disk and has matched its digest. A file
+    that is locked (a transcription still reading it) stays for the next
+    setup run rather than failing this one.
+    """
+    for key in WHISPER_MODELS:
+        if key == keep:
+            continue
+        try:
+            whisper_model_file(key).unlink(missing_ok=True)
+        except OSError as error:
+            write_persistent_log(
+                f'Could not remove the replaced Whisper model {key}: {error}'
+            )
+
+
+def provision_whisper_model(progress_cb=None, model='tiny'):
+    """Fetch and verify the chosen Whisper model, then retire the old one.
+
+    The new file is fetched beside the old one and checked against its
+    pinned digest before anything is removed, so a failed or interrupted
+    fetch leaves the model already in use working.
+    """
+    key = model if model in WHISPER_MODELS else 'tiny'
+    spec = WHISPER_MODELS[key]
+    path = whisper_model_file(key)
+    state = managed_binary_state(path, WHISPER_MODEL_MIN_BYTES)
     if state == 'ok':
         try:
-            verify_file_sha256(WHISPER_MODEL_PATH, WHISPER_MODEL_SHA256)
-            return str(WHISPER_MODEL_PATH)
+            verify_file_sha256(path, spec['sha256'])
+            _retire_other_whisper_models(key)
+            return str(path)
         except RuntimeError as error:
             write_persistent_log(f'Whisper model checksum failed; refreshing: {error}')
             try:
-                WHISPER_MODEL_PATH.unlink(missing_ok=True)
+                path.unlink(missing_ok=True)
             except OSError:
                 # reason: a quarantined or locked model will be replaced if
                 # the next fetch can acquire the destination
                 pass
 
     space_failure = check_download_disk_space(
-        INSTALL_DIR, WHISPER_MODEL_MIN_BYTES,
+        INSTALL_DIR, max(WHISPER_MODEL_MIN_BYTES, spec['bytes']),
     )
     if space_failure:
         write_persistent_log(
@@ -2102,19 +2202,18 @@ def provision_whisper_model(progress_cb=None):
         return None
     try:
         download_verified_file_atomic(
-            WHISPER_MODEL_URL,
-            WHISPER_MODEL_PATH,
-            WHISPER_MODEL_SHA256,
+            whisper_model_url(key),
+            path,
+            spec['sha256'],
             timeout=120,
             chunk_size=65536,
             progress_cb=progress_cb,
             max_bytes=HELPER_DOWNLOAD_MAX_BYTES,
         )
-        if managed_binary_state(
-            WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES
-        ) != 'ok':
+        if managed_binary_state(path, WHISPER_MODEL_MIN_BYTES) != 'ok':
             raise RuntimeError('Downloaded Whisper model was smaller than expected.')
-        return str(WHISPER_MODEL_PATH)
+        _retire_other_whisper_models(key)
+        return str(path)
     except Exception as error:
         write_persistent_log(f'Whisper model provisioning failed: {error}')
         return None
@@ -5807,7 +5906,7 @@ class DownloadManager(DownloadManagerCore):
                 'WHISPER_BIN_MIN_BYTES': lambda: WHISPER_BIN_MIN_BYTES,
                 'WHISPER_BIN_PATH': lambda: WHISPER_BIN_PATH,
                 'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
-                'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
+                'WHISPER_MODEL_PATH': lambda: whisper_model_file(usable_whisper_model(config)),
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 '_build_subprocess_env': lambda *args, **kwargs: _build_subprocess_env(*args, **kwargs),
                 'allowed_output_roots': lambda *args, **kwargs: allowed_output_roots(*args, **kwargs),
@@ -6065,7 +6164,7 @@ class SetupWorker(SetupWorkerCore):
                 'INSTALL_DIR': lambda: INSTALL_DIR,
                 'is_portable_mode': lambda: is_portable_mode(),
                 'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
-                'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
+                'WHISPER_MODEL_PATH': lambda: whisper_model_file(chosen_whisper_model(config)),
                 'WHISPER_BIN_MIN_BYTES': lambda: WHISPER_BIN_MIN_BYTES,
                 'WHISPER_BIN_PATH': lambda: WHISPER_BIN_PATH,
                 'YTDLP_PATH': lambda: YTDLP_PATH,
@@ -6087,7 +6186,8 @@ class SetupWorker(SetupWorkerCore):
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
                 'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
                 'provision_whisper_runtime': lambda *args, **kwargs: provision_whisper_runtime(*args, **kwargs),
-                'provision_whisper_model': lambda *args, **kwargs: provision_whisper_model(*args, **kwargs),
+                'provision_whisper_model': lambda *args, **kwargs: provision_whisper_model(
+                    *args, model=chosen_whisper_model(config), **kwargs),
                 'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
                 'build_reveal_command': lambda *args, **kwargs: build_reveal_command(*args, **kwargs),
                 'spawn_detached': lambda *args, **kwargs: spawn_detached(*args, **kwargs),
@@ -6358,9 +6458,7 @@ class ReadinessProbe(_OwnedReadinessProbe):
             ),
             whisper_model_state=(
                 whisper_model_state
-                or (lambda: managed_binary_state(
-                    WHISPER_MODEL_PATH, WHISPER_MODEL_MIN_BYTES
-                ))
+                or (lambda: whisper_model_status())
             ),
             whisper_runtime_state=(
                 whisper_runtime_state
@@ -6441,7 +6539,9 @@ class MainWindow(MainWindowCore):
                 'SetupWorker': lambda *args, **kwargs: SetupWorker(*args, **kwargs),
                 'YTDLP_PATH': lambda: YTDLP_PATH,
                 'WHISPER_MODEL_MIN_BYTES': lambda: WHISPER_MODEL_MIN_BYTES,
-                'WHISPER_MODEL_PATH': lambda: WHISPER_MODEL_PATH,
+                'WHISPER_MODEL_PATH': lambda: whisper_model_file(chosen_whisper_model(config)),
+                'WHISPER_MODELS': lambda: WHISPER_MODELS,
+                'whisper_model_status': lambda *args, **kwargs: whisper_model_status(*args, **kwargs),
                 'WHISPER_BIN_MIN_BYTES': lambda: WHISPER_BIN_MIN_BYTES,
                 'WHISPER_BIN_PATH': lambda: WHISPER_BIN_PATH,
                 '_build_wsgi_server': lambda *args, **kwargs: _build_wsgi_server(*args, **kwargs),

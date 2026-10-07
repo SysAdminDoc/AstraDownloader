@@ -26,7 +26,7 @@ By default, each download uses its own staging folder. Finished output is moved 
 
 Choose creator subtitles, automatic captions, or creator subtitles with an automatic fallback. Select languages, normalize output to SRT, or download subtitle tracks without the video. You can set a delay between subtitle requests.
 
-Optional local transcription uses a pinned multilingual Whisper model. Opting in downloads the model and required tool. After a successful video download with no subtitle track, it can write an SRT beside the file. Audio-only and subtitle-only jobs don't invoke that fallback.
+Optional local transcription uses a pinned multilingual Whisper model. Settings offers Whisper tiny (about 31 MiB, the fastest) and Whisper base (about 57 MiB, more accurate and slower). Opting in downloads the chosen model and required tool when you save. Switching models keeps the old one in use until the new file has been downloaded and verified, so a failed download doesn't leave you without subtitles. After a successful video download with no subtitle track, it can write an SRT beside the file. Audio-only and subtitle-only jobs don't invoke that fallback.
 
 For a media archive, enable the sidecars you need: info JSON, descriptions, thumbnails or Kodi/Jellyfin NFO files. Channel folders can include `tvshow.nfo` and `season.nfo`. Chapter splitting and starting a supported live stream from its beginning are separate options. A retry interval is available for scheduled live events.
 

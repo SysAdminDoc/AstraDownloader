@@ -393,12 +393,28 @@ class SettingsPageMixin:
         )
         self.generate_subtitles_hint = make_label(
             tr(
-                "Uses the bundled multilingual Whisper model and the first "
-                "language in Subtitle languages. Setup downloads the model "
-                "when this option is enabled."
+                "Uses the chosen multilingual Whisper model and the first "
+                "language in Subtitle languages. Base is more accurate than "
+                "tiny and slower on the same computer. Setup downloads a newly "
+                "chosen model after you save, and the current one stays in use "
+                "until the new file is verified."
             ),
             "fieldHint", word_wrap=True,
         )
+        # Each choice names its file size, so trading disk for accuracy is a
+        # decision made in the open. Choosing only saves the setting.
+        self.cfg_transcription_model = QComboBox()
+        self.cfg_transcription_model.setAccessibleName(tr("Transcription model"))
+        for model_key in self._value('WHISPER_MODELS'):
+            self.cfg_transcription_model.addItem(
+                self._whisper_model_label(model_key), model_key
+            )
+        self.cfg_transcription_model.setCurrentIndex(max(
+            0,
+            self.cfg_transcription_model.findData(
+                self.config.get("TranscriptionModel", "tiny")
+            ),
+        ))
         self.cfg_keep_intermediates = QCheckBox(tr("Keep intermediate files"))
         self.cfg_keep_intermediates.setToolTip(tr(
             "Put .part, .f### and .ytdl files beside the output and keep them "
@@ -447,6 +463,13 @@ class SettingsPageMixin:
                   self.cfg_subs, self.cfg_generate_subtitles]:
             pp_l.addWidget(w)
         pp_l.addWidget(self.generate_subtitles_hint)
+        model_row = QHBoxLayout()
+        model_row.setSpacing(8)
+        model_row.addSpacing(28)
+        model_row.addWidget(make_label("Model", "fieldHint"))
+        model_row.addWidget(self.cfg_transcription_model)
+        model_row.addStretch(1)
+        pp_l.addLayout(model_row)
         # Which of the two catalogues to ask for. Measured against the
         # installed yt-dlp: sending both flags never yields two files for one
         # language — the creator's track wins — so "both" is a preference,

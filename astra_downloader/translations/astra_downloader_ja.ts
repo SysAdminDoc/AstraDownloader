@@ -1087,20 +1087,16 @@
       <translation>GitHub's anonymous budget is exhausted; retry after its reset.</translation>
     </message>
     <message>
+      <source>Repair needed</source>
+      <translation>Repair needed</translation>
+    </message>
+    <message>
       <source>Unpin</source>
       <translation>Unpin</translation>
     </message>
     <message>
       <source>Unavailable</source>
       <translation>Unavailable</translation>
-    </message>
-    <message>
-      <source>Ready</source>
-      <translation>Ready</translation>
-    </message>
-    <message>
-      <source>Local transcription is enabled and the pinned Whisper model and runtime are ready.</source>
-      <translation>Local transcription is enabled and the pinned Whisper model and runtime are ready.</translation>
     </message>
     <message>
       <source>Downloads use the web client with proof-of-origin tokens.</source>
@@ -1711,6 +1707,22 @@
       <translation>One check needs repair. Open the checks to see the fix.</translation>
     </message>
     <message>
+      <source>{chosen} is chosen but isn't downloaded yet, so {model} stays in use. Run setup to fetch it.</source>
+      <translation>{chosen} is chosen but isn't downloaded yet, so {model} stays in use. Run setup to fetch it.</translation>
+    </message>
+    <message>
+      <source>Local transcription is enabled. {model} and the whisper.cpp runtime are ready.</source>
+      <translation>Local transcription is enabled. {model} and the whisper.cpp runtime are ready.</translation>
+    </message>
+    <message>
+      <source>{model} or the whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</source>
+      <translation>{model} or the whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</translation>
+    </message>
+    <message>
+      <source>Run setup to download {model} and the whisper.cpp runtime before downloading.</source>
+      <translation>Run setup to download {model} and the whisper.cpp runtime before downloading.</translation>
+    </message>
+    <message>
       <source>{target} (unavailable)</source>
       <translation>{target} (unavailable)</translation>
     </message>
@@ -1745,18 +1757,6 @@
     <message>
       <source>Nothing has been replaced yet, so there is nothing to go back to.</source>
       <translation>Nothing has been replaced yet, so there is nothing to go back to.</translation>
-    </message>
-    <message>
-      <source>Repair needed</source>
-      <translation>Repair needed</translation>
-    </message>
-    <message>
-      <source>The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</source>
-      <translation>The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.</translation>
-    </message>
-    <message>
-      <source>Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.</source>
-      <translation>Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.</translation>
     </message>
     <message>
       <source>Security floor</source>
@@ -2081,6 +2081,10 @@
     <message>
       <source>Runtime floor</source>
       <translation>Runtime floor</translation>
+    </message>
+    <message>
+      <source>Ready</source>
+      <translation>Ready</translation>
     </message>
     <message>
       <source>Using site profile: {name}.</source>
@@ -3415,8 +3419,12 @@
       <translation>After a video download, use the locally provisioned Whisper model to write an SRT sidecar only when yt-dlp found no subtitle track.</translation>
     </message>
     <message>
-      <source>Uses the bundled multilingual Whisper model and the first language in Subtitle languages. Setup downloads the model when this option is enabled.</source>
-      <translation>Uses the bundled multilingual Whisper model and the first language in Subtitle languages. Setup downloads the model when this option is enabled.</translation>
+      <source>Uses the chosen multilingual Whisper model and the first language in Subtitle languages. Base is more accurate than tiny and slower on the same computer. Setup downloads a newly chosen model after you save, and the current one stays in use until the new file is verified.</source>
+      <translation>Uses the chosen multilingual Whisper model and the first language in Subtitle languages. Base is more accurate than tiny and slower on the same computer. Setup downloads a newly chosen model after you save, and the current one stays in use until the new file is verified.</translation>
+    </message>
+    <message>
+      <source>Transcription model</source>
+      <translation>Transcription model</translation>
     </message>
     <message>
       <source>Keep intermediate files</source>
@@ -3457,6 +3465,10 @@
     <message>
       <source>Live-video retry interval</source>
       <translation>Live-video retry interval</translation>
+    </message>
+    <message>
+      <source>Model</source>
+      <translation>Model</translation>
     </message>
     <message>
       <source>Tracks</source>

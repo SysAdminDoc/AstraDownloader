@@ -899,6 +899,8 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'WHISPER_BIN_MIN_BYTES',
     'WHISPER_BIN_PATH',
     'probe_whisper_runtime',
+    'WHISPER_MODELS',
+    'whisper_model_status',
     '_build_wsgi_server',
     '_ffmpeg_version_probe',
     '_run_ytdlp_self_update',
@@ -2639,6 +2641,8 @@ class MainWindowCore(
             ),
             'managed_binaries': lambda: self._dependencies[
                 'managed_binary_inventory'](self.config),
+            'whisper_model_state': lambda: self._dependencies[
+                'whisper_model_status'](self.config),
         }
         readiness_sink = getattr(self.dl_manager, 'update_readiness_snapshot', None)
         if callable(readiness_sink):
@@ -2654,6 +2658,50 @@ class MainWindowCore(
         self.readiness_thread.finished.connect(self.readiness_worker.deleteLater)
         self.readiness_thread.finished.connect(self._readiness_probe_finished)
         self.readiness_thread.start()
+
+    def _whisper_model_label(self, key):
+        """Name an offered model with its size on disk: "Whisper base · 57 MiB"."""
+        spec = self._value('WHISPER_MODELS').get(key) or {}
+        size = QLocale().formattedDataSize(int(spec.get('bytes') or 0), 0)
+        return f"Whisper {key} \u00b7 {size}"
+
+    def _apply_whisper_readiness(self, model, runtime):
+        """Say which model transcription will use, not a bare "Ready".
+
+        The probe reports the model on disk and the one chosen in Settings.
+        They differ after a switch whose fetch has not happened or failed,
+        and then the row says the old model is still the one in use.
+        """
+        info = model if isinstance(model, dict) else {"state": model}
+        state = info.get("state")
+        in_use = info.get("model") or info.get("chosen") or "tiny"
+        chosen = info.get("chosen") or in_use
+        label = self._whisper_model_label(in_use)
+        if state == "ok" and runtime.get("usable"):
+            if chosen != in_use:
+                self._set_readiness("whisper", label, "warning", tr_format(
+                    "{chosen} is chosen but isn't downloaded yet, so {model} "
+                    "stays in use. Run setup to fetch it.",
+                    chosen=self._whisper_model_label(chosen), model=label,
+                ))
+            else:
+                self._set_readiness("whisper", label, "success", tr_format(
+                    "Local transcription is enabled. {model} and the "
+                    "whisper.cpp runtime are ready.",
+                    model=label,
+                ))
+        elif state == "damaged" or runtime.get("state") == "damaged":
+            self._set_readiness("whisper", "Repair needed", "warning", tr_format(
+                "{model} or the whisper.cpp runtime is incomplete or damaged. "
+                "Run setup to fetch it again.",
+                model=label,
+            ))
+        else:
+            self._set_readiness("whisper", "Missing", "danger", tr_format(
+                "Run setup to download {model} and the whisper.cpp runtime "
+                "before downloading.",
+                model=self._whisper_model_label(chosen),
+            ))
 
     def _readiness_probe_finished(self):
         thread = self.readiness_thread
@@ -2833,23 +2881,9 @@ class MainWindowCore(
         self._set_tool_readiness("ffmpeg", ffmpeg, self._value('FFMPEG_PATH'))
 
         if subtitles_enabled:
-            whisper_state = payload.get("whisperModel")
-            whisper_runtime = payload.get("whisperRuntime") or {}
-            if whisper_state == "ok" and whisper_runtime.get("usable"):
-                self._set_readiness(
-                    "whisper", "Ready", "success",
-                    "Local transcription is enabled and the pinned Whisper model and runtime are ready.",
-                )
-            elif whisper_state == "damaged" or whisper_runtime.get("state") == "damaged":
-                self._set_readiness(
-                    "whisper", "Repair needed", "warning",
-                    "The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.",
-                )
-            else:
-                self._set_readiness(
-                    "whisper", "Missing", "danger",
-                    "Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.",
-                )
+            self._apply_whisper_readiness(
+                payload.get("whisperModel"), payload.get("whisperRuntime") or {}
+            )
         else:
             self._set_readiness("whisper", "Optional", "neutral")
 
@@ -2905,7 +2939,9 @@ class MainWindowCore(
             )
         elif provider.get("ok"):
             self._set_readiness(
-                "provider", provider.get("version") or "Ready", "success",
+                # tr() here also keeps "Ready" in the catalogue for the
+                # pre-flight rows, whose status table the extractor cannot see.
+                "provider", provider.get("version") or tr("Ready"), "success",
                 "Downloads use the web client with proof-of-origin tokens.",
             )
         else:
@@ -5789,6 +5825,7 @@ class MainWindowCore(
         ("cfg_force_ip_version", "ForceIPVersion", "combo"),
         ("cfg_subtitle_mode", "SubtitleMode", "combo"),
         ("cfg_subtitle_format", "SubtitleFormat", "combo"),
+        ("cfg_transcription_model", "TranscriptionModel", "combo"),
         ("cfg_theme", "Theme", "combo"),
         ("cfg_language", "Language", "combo"),
     )
@@ -7662,6 +7699,11 @@ class MainWindowCore(
             "EmbedSubs": self.cfg_subs.isChecked(),
             "GenerateSubtitles": checked_setting(
                 "cfg_generate_subtitles", "GenerateSubtitles"
+            ),
+            "TranscriptionModel": (
+                self.cfg_transcription_model.currentData()
+                if hasattr(self, "cfg_transcription_model")
+                else self.config.get("TranscriptionModel", "tiny")
             ),
             "KeepIntermediateFiles": self.cfg_keep_intermediates.isChecked(),
             "WriteInfoJson": checked_setting("cfg_write_info", "WriteInfoJson"),

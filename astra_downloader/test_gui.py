@@ -4412,6 +4412,54 @@ class SettingsFormReloadTests(unittest.TestCase):
         self.assertEqual(expected - written, set())
 
 
+class TranscriptionModelSettingTests(unittest.TestCase):
+    def test_choosing_a_model_waits_for_save_and_setup(self):
+        from PySide6.QtCore import QLocale
+
+        _get_qapp_or_skip(self)
+        setups = []
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({
+                "ServerToken": "a" * 32,
+                "DownloadPath": tmp,
+                "AudioDownloadPath": tmp,
+                "GenerateSubtitles": True,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                    mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                    mock.patch.object(ad.QSystemTrayIcon, "show"), \
+                    mock.patch.object(ad, "WHISPER_MODEL_PATH",
+                                      Path(tmp) / "ggml-tiny-q5_1.bin"), \
+                    mock.patch.object(ad, "provision_whisper_model") as fetch, \
+                    mock.patch.object(
+                        ad.MainWindow, "_run_setup",
+                        lambda window, *_args, **_kwargs: setups.append(
+                            window.config.get("TranscriptionModel"))):
+                window = ad.MainWindow(config, manager, FakeHistory())
+                try:
+                    setups.clear()
+                    combo = window.cfg_transcription_model
+                    self.assertEqual(
+                        [combo.itemData(index) for index in range(combo.count())],
+                        ["tiny", "base"],
+                    )
+                    # Each choice names its size on disk.
+                    self.assertEqual(
+                        combo.itemText(1),
+                        "Whisper base \u00b7 "
+                        + QLocale().formattedDataSize(59_707_625, 0),
+                    )
+                    combo.setCurrentIndex(combo.findData("base"))
+                    self.assertEqual(setups, [], "choosing alone fetches nothing")
+                    window._save_settings()
+                    self.assertEqual(config.get("TranscriptionModel"), "base")
+                    self.assertEqual(setups, ["base"], "saving hands the fetch to setup")
+                    fetch.assert_not_called()
+                finally:
+                    _retire_test_window(window)
+
+
 class SettingsNavigationTests(unittest.TestCase):
     def _window(self, config, subscriptions=None):
         manager = ad.DownloadManager(config, FakeHistory())

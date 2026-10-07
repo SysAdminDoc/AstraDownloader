@@ -71,6 +71,7 @@ __all__ = (
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES", "normalize_impersonate_target",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
+    "TRANSCRIPTION_MODEL_CHOICES",
     "SUBSCRIPTION_VIDEO_FORMATS", "SUBSCRIPTION_AUDIO_FORMATS",
     "SUBSCRIPTION_QUALITY_CHOICES", "sanitize_subscription_delivery",
     "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
@@ -100,6 +101,7 @@ _OWNED_EXPORTS = {
     "normalize_sponsorblock_categories", "SPONSORBLOCK_CATEGORIES",
     "normalize_subtitle_mode", "normalize_subtitle_format",
     "SUBTITLE_MODES", "SUBTITLE_FORMATS", "JAVASCRIPT_RUNTIME_CHOICES",
+    "TRANSCRIPTION_MODEL_CHOICES",
     "SUBSCRIPTION_VIDEO_FORMATS", "SUBSCRIPTION_AUDIO_FORMATS",
     "SUBSCRIPTION_QUALITY_CHOICES", "sanitize_subscription_delivery",
     "build_settings_bundle", "read_settings_bundle", "describe_bundle_changes",
@@ -249,6 +251,10 @@ DEFAULT_CONFIG = {
     # Local Whisper transcription is opt-in. When enabled, a successful
     # media download with no subtitle track is followed by an SRT sidecar.
     "GenerateSubtitles": False,
+    # Which pinned Whisper model local transcription uses. Choosing one only
+    # saves the setting. Setup fetches it, and the model in use stays until
+    # the new file is verified.
+    "TranscriptionModel": "tiny",
     # Archive sidecars and chapter/live capture are opt-in. They write beside
     # the finished media and deliberately do not alter the existing embed
     # switches above.
@@ -1067,6 +1073,9 @@ def normalize_sublangs(value):
 # ask for one kind only — a viewer who wants nothing but human-written
 # captions, or one who specifically wants the machine transcript.
 SUBTITLE_MODES = ("prefer-manual", "manual", "auto")
+# The Whisper models Settings offers. The composition root pins each one by
+# repository revision, file name and SHA-256 in WHISPER_MODELS.
+TRANSCRIPTION_MODEL_CHOICES = ("tiny", "base")
 
 # --convert-subs targets. Empty leaves the site's own format alone.
 SUBTITLE_FORMATS = ("", "srt", "vtt", "ass", "lrc")
@@ -2409,6 +2418,11 @@ def sanitize_config(raw):
     )
     data["SubtitleMode"] = normalize_subtitle_mode(data.get("SubtitleMode"))
     data["SubtitleFormat"] = normalize_subtitle_format(data.get("SubtitleFormat"))
+    transcription_model = clean_text(data.get("TranscriptionModel"), "tiny", 16).lower()
+    data["TranscriptionModel"] = (
+        transcription_model
+        if transcription_model in TRANSCRIPTION_MODEL_CHOICES else "tiny"
+    )
     data["SponsorBlockAction"] = "mark" if data.get("SponsorBlockAction") == "mark" else "remove"
     data["SponsorBlockCategories"] = normalize_sponsorblock_categories(
         data.get("SponsorBlockCategories")

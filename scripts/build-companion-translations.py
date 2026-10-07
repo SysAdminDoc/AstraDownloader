@@ -632,18 +632,10 @@ CATALOGS = {
             "Lokale Untertitel erzeugen, wenn keine Spur vorhanden ist",
         "After a video download, use the locally provisioned Whisper model to write an SRT sidecar only when yt-dlp found no subtitle track.":
             "Nach einem Videodownload das lokal bereitgestellte Whisper-Modell verwenden, um nur dann eine SRT-Begleitdatei zu schreiben, wenn yt-dlp keine Untertitelspur gefunden hat.",
-        "Uses the bundled multilingual Whisper model and the first language in Subtitle languages. Setup downloads the model when this option is enabled.":
-            "Verwendet das gebündelte mehrsprachige Whisper-Modell und die erste Sprache unter Untertitelsprachen. Beim Aktivieren dieser Option lädt die Einrichtung das Modell herunter.",
         "Ready":
             "Bereit",
-        "Local transcription is enabled and the pinned Whisper model and runtime are ready.":
-            "Lokale Transkription ist aktiviert und das festgelegte Whisper-Modell sowie die Laufzeit sind bereit.",
         "Repair needed":
             "Reparatur erforderlich",
-        "The local Whisper model or whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.":
-            "Das lokale Whisper-Modell oder die whisper.cpp-Laufzeit ist unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um sie abzurufen.",
-        "Run setup to provision the local Whisper model and whisper.cpp runtime before downloading.":
-            "Führen Sie die Einrichtung aus, um das lokale Whisper-Modell und die whisper.cpp-Laufzeit vor dem Download bereitzustellen.",
         "Keep intermediate files":
             "Zwischendateien behalten",
         "Tracks":
@@ -1619,6 +1611,20 @@ CATALOGS = {
             "Grund: {reason}",
         "If downloads fail too, choose Show checks under Download health.":
             "Wenn auch Downloads fehlschlagen, wählen Sie Prüfungen anzeigen unter Download-Bereitschaft.",
+        "Uses the chosen multilingual Whisper model and the first language in Subtitle languages. Base is more accurate than tiny and slower on the same computer. Setup downloads a newly chosen model after you save, and the current one stays in use until the new file is verified.":
+            "Verwendet das gewählte mehrsprachige Whisper-Modell und die erste Sprache unter Untertitelsprachen. Base ist genauer als Tiny und auf demselben Computer langsamer. Ein neu gewähltes Modell lädt die Einrichtung nach dem Speichern herunter, und das bisherige bleibt in Gebrauch, bis die neue Datei geprüft ist.",
+        "Transcription model":
+            "Transkriptionsmodell",
+        "Model":
+            "Modell",
+        "{chosen} is chosen but isn't downloaded yet, so {model} stays in use. Run setup to fetch it.":
+            "{chosen} ist gewählt, aber noch nicht heruntergeladen, daher bleibt {model} in Gebrauch. Führen Sie die Einrichtung aus, um es abzurufen.",
+        "Local transcription is enabled. {model} and the whisper.cpp runtime are ready.":
+            "Lokale Transkription ist aktiviert. {model} und die whisper.cpp-Laufzeit sind bereit.",
+        "{model} or the whisper.cpp runtime is incomplete or damaged. Run setup to fetch it again.":
+            "{model} oder die whisper.cpp-Laufzeit ist unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um sie abzurufen.",
+        "Run setup to download {model} and the whisper.cpp runtime before downloading.":
+            "Führen Sie die Einrichtung aus, um {model} und die whisper.cpp-Laufzeit vor dem Download herunterzuladen.",
     },
     "en": {},
     "es": {
