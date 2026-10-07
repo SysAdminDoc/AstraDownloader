@@ -3227,8 +3227,8 @@
       <translation>Filename template</translation>
     </message>
     <message>
-      <source>Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. Title and channel fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.</source>
-      <translation>Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. Title and channel fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.</translation>
+      <source>Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. A field some videos lack can carry a fallback, as in %(playlist_title|Singles)s. Text fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.</source>
+      <translation>Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. A field some videos lack can carry a fallback, as in %(playlist_title|Singles)s. Text fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.</translation>
     </message>
     <message>
       <source>Filename template preview</source>

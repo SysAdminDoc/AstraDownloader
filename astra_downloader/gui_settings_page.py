@@ -334,7 +334,9 @@ class SettingsPageMixin:
         paths_l.addWidget(make_label(
             "Optional yt-dlp output template, relative to the folder above "
             "(e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. "
-            "Title and channel fields are length-bounded on save so long "
+            "A field some videos lack can carry a fallback, as in "
+            "%(playlist_title|Singles)s. "
+            "Text fields are length-bounded on save so long "
             "titles cannot overrun the maximum path length. "
             "Blank uses the default.",
             "fieldHint", word_wrap=True,

@@ -904,20 +904,46 @@ def normalize_sponsorblock_categories(value):
     return ",".join(known)
 
 
-_SAFE_OUTPUT_FIELDS = frozenset({
-    "title", "id", "ext", "uploader", "uploader_id", "channel", "channel_id",
-    "upload_date", "release_date", "playlist_title", "playlist", "playlist_index",
-    "resolution", "height", "width", "fps", "format_id", "autonumber", "epoch",
-    "duration_string", "season_number", "episode_number", "view_count", "like_count",
-})
-_OUTPUT_FIELD_RE = re.compile(r"%\((\w+)")
+# Every allowlisted field is in exactly one of these two sets, and the split
+# is what keeps a rendered path bounded: a long-text field is rewritten to a
+# byte-bounded expansion that shares _OUTPUT_TEXT_BUDGET, and a short field
+# expands to an id, number, date or fixed name that cannot grow with the
+# uploader's text.
+#
 # Free-text fields whose expansion is attacker/uploader controlled in length.
-# Everything else in the allowlist expands to a short id, number, or date.
 _LONG_TEXT_OUTPUT_FIELDS = frozenset({
     "title", "uploader", "uploader_id", "channel", "channel_id",
     "playlist_title", "playlist",
+    # Music library naming.
+    "artist", "album", "album_artist", "track", "genre",
+    # Series naming.
+    "series", "season", "episode",
 })
-_OUTPUT_TOKEN_RE = re.compile(r"%\((\w+)\)(0?\d+)?(?:\.(\d+))?([sdBjlqDSU])")
+_SHORT_OUTPUT_FIELDS = frozenset({
+    "id", "ext", "upload_date", "release_date", "playlist_index",
+    "resolution", "height", "width", "fps", "format_id", "autonumber", "epoch",
+    "duration_string", "season_number", "episode_number", "view_count",
+    "like_count", "track_number", "disc_number", "release_year",
+    # The extractor's own short name ("youtube", "soundcloud"), never page text.
+    "extractor",
+})
+_SAFE_OUTPUT_FIELDS = _LONG_TEXT_OUTPUT_FIELDS | _SHORT_OUTPUT_FIELDS
+_OUTPUT_FIELD_RE = re.compile(r"%\((\w+)")
+# yt-dlp writes the text after "|" verbatim when the field is missing, in
+# place of its "NA" placeholder, and ignores the token's width and precision
+# when it does. One fallback per token, and only text yt-dlp's filename
+# sanitizer leaves alone: it starts with a letter or digit, ends with one (or
+# "]"), and has no separator, percent, parenthesis, "|", "," or "&". Those
+# last three are yt-dlp's own default, alternate and replacement syntax.
+_OUTPUT_FALLBACK_MAX_CHARS = 40
+_OUTPUT_FALLBACK_PATTERN = (
+    r"[A-Za-z0-9](?:[A-Za-z0-9 ._\-\[\]]{0,%d}[A-Za-z0-9\]])?"
+    % (_OUTPUT_FALLBACK_MAX_CHARS - 2)
+)
+_OUTPUT_TOKEN_RE = re.compile(
+    r"%\((\w+)(?:\|(" + _OUTPUT_FALLBACK_PATTERN + r"))?\)"
+    r"(0?\d+)?(?:\.(\d+))?([sdBjlqDSU])"
+)
 # Total bytes the free-text parts of a rendered template may consume. Windows
 # MAX_PATH is 260, so a template must leave room for the download root, the
 # separators, and the extension.
@@ -971,14 +997,17 @@ def bound_output_template_fields(template):
     budget = max(_OUTPUT_TEXT_FLOOR, _OUTPUT_TEXT_BUDGET // len(tokens))
 
     def rewrite(match):
-        field, pad, precision, conversion = match.groups()
+        field, fallback, pad, precision, conversion = match.groups()
         if field not in _LONG_TEXT_OUTPUT_FIELDS or conversion not in ("s", "B"):
             return match.group(0)
         limit = min(int(precision), budget) if precision else budget
         # Every free-text field becomes byte-bounded, including one the user
         # gave an explicit `.Ns`. A character precision is not a bound on a
         # title made of emoji, and the budget this splits is counted in bytes.
-        return f"%({field}){pad or ''}.{limit}B"
+        # A fallback needs no share of it: it is capped at
+        # _OUTPUT_FALLBACK_MAX_CHARS, which is no more than the floor.
+        key = field if fallback is None else f"{field}|{fallback}"
+        return f"%({key}){pad or ''}.{limit}B"
 
     return "%%".join(_OUTPUT_TOKEN_RE.sub(rewrite, segment) for segment in segments)
 
@@ -988,14 +1017,16 @@ def normalize_output_template(value):
     "" when empty/invalid. Rejects absolute paths, `..` traversal, unsafe
     characters, and any field outside the allowlist; requires `%(ext)s` so the
     extension is always preserved. This keeps a user-supplied template from
-    driving the output path with arbitrary fields (CVE-2024-38519 posture)."""
+    driving the output path with arbitrary fields (CVE-2024-38519 posture).
+    A token may carry one literal fallback, `%(album|Singles)s`, which yt-dlp
+    writes instead of "NA" when the field is missing."""
     tpl = clean_text(value, "", 300).strip()
     if not tpl:
         return ""
     norm = tpl.replace("\\", "/")
     if norm.startswith("/") or re.match(r"^[A-Za-z]:", norm) or ".." in norm.split("/"):
         return ""
-    if not re.fullmatch(r"[A-Za-z0-9 %()._\-/\[\]$]+", norm):
+    if not re.fullmatch(r"[A-Za-z0-9 %()._\-/\[\]$|]+", norm):
         return ""
     if "%(ext)s" not in norm:
         return ""
@@ -1003,13 +1034,24 @@ def normalize_output_template(value):
     if not fields or any(f not in _SAFE_OUTPUT_FIELDS for f in fields):
         return ""
     # Printf-syntax check: after removing literal %% and every well-formed
-    # %(field)[pad][.prec]conv token, no stray % may remain. Without this an
-    # unclosed "%(title" or a lone "50%" passed the charset/field checks and
-    # then failed EVERY download at yt-dlp startup with an opaque
-    # "Invalid output template" error.
-    stripped = re.sub(r"%\(\w+\)(?:0?\d+)?(?:\.\d+)?[sdBjlqDSU]", "", norm.replace("%%", ""))
+    # %(field[|fallback])[pad][.prec]conv token, no stray % may remain. Without
+    # this an unclosed "%(title" or a lone "50%" passed the charset/field
+    # checks and then failed EVERY download at yt-dlp startup with an opaque
+    # "Invalid output template" error. A fallback the token pattern refuses
+    # (a separator, a second "|", a stray percent) leaves its "%" behind too.
+    unescaped = norm.replace("%%", "")
+    stripped = _OUTPUT_TOKEN_RE.sub("", unescaped)
     if "%" in stripped:
         return ""
+    # "|" only means something inside a token. Outside one it is a literal
+    # Windows cannot store in a file name.
+    if "|" in stripped:
+        return ""
+    # A fallback is a path component when its field is missing, so it gets
+    # the same traversal rule as the template itself.
+    for match in _OUTPUT_TOKEN_RE.finditer(unescaped):
+        if ".." in (match.group(2) or ""):
+            return ""
     return bound_output_template_fields(norm)
 
 
@@ -1133,6 +1175,15 @@ _WINDOWS_RESERVED_NAMES = frozenset({
     *(f"LPT{index}" for index in range(1, 10)),
 })
 _OUTPUT_TEMPLATE_PREVIEW_DEFAULT = "%(title).200B.%(ext)s"
+# The example is a single video, because the configured template names single
+# downloads as well as playlist entries. A single video has no playlist, so
+# those fields are missing and render the way yt-dlp renders them: as "NA",
+# or as the token's fallback. Showing "1" for %(playlist_index)s here hid
+# exactly the NA a single download wrote to disk.
+_OUTPUT_TEMPLATE_PREVIEW_ABSENT = frozenset({
+    "playlist_title", "playlist", "playlist_index",
+})
+_OUTPUT_TEMPLATE_NA_PLACEHOLDER = "NA"
 _OUTPUT_TEMPLATE_PREVIEW_VALUES = {
     "title": "Example video",
     "id": "abc123",
@@ -1143,9 +1194,6 @@ _OUTPUT_TEMPLATE_PREVIEW_VALUES = {
     "channel_id": "astra",
     "upload_date": "20260809",
     "release_date": "20260809",
-    "playlist_title": "Example playlist",
-    "playlist": "Example playlist",
-    "playlist_index": "1",
     "resolution": "1920x1080",
     "height": "1080",
     "width": "1920",
@@ -1153,12 +1201,28 @@ _OUTPUT_TEMPLATE_PREVIEW_VALUES = {
     "format_id": "137",
     "autonumber": "1",
     "epoch": "1786300000",
-    "duration_string": "12:34",
+    # yt-dlp rebuilds duration_string with "-" in place of ":" when it is
+    # naming a file, so "12:34" here never matched what reached the disk.
+    "duration_string": "12-34",
     "season_number": "1",
     "episode_number": "1",
     "view_count": "1234",
     "like_count": "123",
+    "artist": "Example artist",
+    "album": "Example album",
+    "album_artist": "Example artist",
+    "track": "Example track",
+    "track_number": "1",
+    "disc_number": "1",
+    "genre": "Pop",
+    "release_year": "2026",
+    "series": "Example series",
+    "season": "Season 1",
+    "episode": "Episode 1",
+    "extractor": "youtube",
 }
+# yt-dlp widens a bare %(autonumber)s to five zero-padded digits.
+_OUTPUT_TEMPLATE_STRING_WIDTHS = {"autonumber": 5}
 
 
 def _render_output_template_preview(template):
@@ -1170,8 +1234,20 @@ def _render_output_template_preview(template):
     template = template.replace("%%", literal_percent)
 
     def replace(match):
-        field, pad, precision, conversion = match.groups()
-        value = str(_OUTPUT_TEMPLATE_PREVIEW_VALUES.get(field, field))
+        field, fallback, pad, precision, conversion = match.groups()
+        value = (
+            None if field in _OUTPUT_TEMPLATE_PREVIEW_ABSENT
+            else _OUTPUT_TEMPLATE_PREVIEW_VALUES.get(field)
+        )
+        if value is None or value == "":
+            # A missing field is written as the fallback or the placeholder,
+            # as plain text: yt-dlp drops the width and precision for it.
+            return _OUTPUT_TEMPLATE_NA_PLACEHOLDER if fallback is None else fallback
+        value = str(value)
+        if conversion == "s" and not pad and not precision:
+            width = _OUTPUT_TEMPLATE_STRING_WIDTHS.get(field)
+            if width:
+                value = value.rjust(width, "0")
         if precision:
             # `B` counts bytes, `s` counts characters. Reporting the character
             # cut for a byte-bounded field told the user a path was short

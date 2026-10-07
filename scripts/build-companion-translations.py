@@ -80,6 +80,8 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. A field some videos lack can carry a fallback, as in %(playlist_title|Singles)s. Text fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.":
+            "Optionale yt-dlp-Ausgabevorlage, relativ zum Ordner oben (z. B. %(uploader)s/%(title)s.%(ext)s). %(ext)s muss erhalten bleiben. Ein Feld, das manchen Videos fehlt, kann einen Ersatzwert tragen, etwa %(playlist_title|Singles)s. Textfelder werden beim Speichern in der Länge begrenzt, damit lange Titel die maximale Pfadlänge nicht überschreiten. Leer verwendet den Standard.",
         "The site would not hand over this video.":
             "Die Website gibt dieses Video nicht heraus.",
         "The video may be private, subscriber-only, deleted, or still being processed. Check the link plays in a browser, then retry.":
@@ -560,8 +562,6 @@ CATALOGS = {
             "Leer lassen, um den Videoordner zu verwenden.",
         "Filename template":
             "Dateinamenvorlage",
-        "Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. Title and channel fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.":
-            "Optionale yt-dlp-Ausgabevorlage, relativ zum Ordner oben (z. B. %(uploader)s/%(title)s.%(ext)s). %(ext)s muss erhalten bleiben. Titel- und Kanalfelder werden beim Speichern in der Länge begrenzt, damit lange Titel die maximale Pfadlänge nicht überschreiten. Leer verwendet den Standard.",
         "Embed metadata":
             "Metadaten einbetten",
         "Embed thumbnail":

@@ -1599,7 +1599,9 @@ class OutputTemplatePreviewHonoursPaddingTests(unittest.TestCase):
         self.assertTrue(report["relative"].endswith("Examp.mp4"))
 
     def test_a_zero_pad_previews_the_way_it_renders(self):
-        normalized = ad.normalize_output_template("%(playlist_index)03d.%(ext)s")
+        # The preview example is a single video, so it has no playlist index;
+        # a track number is a field it does carry.
+        normalized = ad.normalize_output_template("%(track_number)03d.%(ext)s")
         report = ad.output_template_preview(normalized, "C:/downloads")
         self.assertEqual(report["relative"], "001.mp4")
 
@@ -1617,6 +1619,182 @@ class OutputTemplatePreviewHonoursPaddingTests(unittest.TestCase):
             report["too_long"],
             "the length that decides this used to be the unpadded one",
         )
+
+
+class OutputTemplateFallbackTests(unittest.TestCase):
+    """Music, series and extractor fields, and yt-dlp's `%(field|fallback)s`."""
+
+    # Preview sample fields yt-dlp holds as numbers rather than strings.
+    _NUMERIC_FIELDS = frozenset({
+        "height", "width", "fps", "epoch", "season_number", "episode_number",
+        "view_count", "like_count", "track_number", "disc_number",
+        "release_year",
+    })
+
+    @staticmethod
+    def _config():
+        import config as config_module
+        return config_module
+
+    def _ytdlp(self, **params):
+        try:
+            import yt_dlp
+        except ImportError:
+            self.skipTest("the yt-dlp Python package is not installed")
+        ydl = yt_dlp.YoutubeDL({
+            "quiet": True, "no_warnings": True, "windowsfilenames": True,
+            **params,
+        })
+        # A real run counts the download before naming it; autonumber is 1.
+        ydl._num_downloads = 1
+        return ydl
+
+    def _sample_info(self):
+        """The preview's own example, shaped the way yt-dlp holds it."""
+        config_module = self._config()
+        info = {}
+        for field, value in config_module._OUTPUT_TEMPLATE_PREVIEW_VALUES.items():
+            info[field] = int(value) if field in self._NUMERIC_FIELDS else value
+        # yt-dlp derives duration_string from duration itself.
+        info.pop("duration_string")
+        info["duration"] = 12 * 60 + 34
+        return info
+
+    def test_every_allowlisted_field_is_classified_and_long_text_is_bounded(self):
+        config_module = self._config()
+        long_fields = config_module._LONG_TEXT_OUTPUT_FIELDS
+        short_fields = config_module._SHORT_OUTPUT_FIELDS
+        self.assertFalse(long_fields & short_fields)
+        self.assertEqual(config_module._SAFE_OUTPUT_FIELDS, long_fields | short_fields)
+        for field in ("artist", "album", "album_artist", "track", "genre",
+                      "series", "season", "episode"):
+            self.assertIn(field, long_fields)
+        for field in ("track_number", "disc_number", "release_year", "extractor"):
+            self.assertIn(field, short_fields)
+
+        n = ad.normalize_output_template
+        # A fallback keeps its place in the budget split and its own text.
+        self.assertEqual(
+            n("%(artist|Unknown artist)s/%(album|Singles)s/"
+              "%(track_number)02d - %(track)s.%(ext)s"),
+            "%(artist|Unknown artist).66B/%(album|Singles).66B/"
+            "%(track_number)02d - %(track).66B.%(ext)s",
+        )
+        self.assertEqual(
+            n("%(extractor)s/%(release_year)s.%(ext)s"),
+            "%(extractor)s/%(release_year)s.%(ext)s",
+        )
+        once = n("%(series|Other)s/%(episode)s.%(ext)s")
+        self.assertEqual(n(once), once, "normalization must stay idempotent")
+
+    def test_one_fallback_per_token_and_the_old_refusals_still_hold(self):
+        n = ad.normalize_output_template
+        self.assertEqual(
+            n("%(playlist_index|00)s - %(title)s.%(ext)s"),
+            "%(playlist_index|00)s - %(title).200B.%(ext)s",
+        )
+        refused = {
+            "unclosed token": "%(album|Singles/%(title)s.%(ext)s",
+            "stray percent": "%(album|50%)s/%(title)s.%(ext)s",
+            "forward separator": "%(album|a/b)s/%(title)s.%(ext)s",
+            "backslash separator": "%(album|a\\b)s/%(title)s.%(ext)s",
+            "absolute path": "C:/%(album|Singles)s/%(title)s.%(ext)s",
+            "traversal fallback": "%(album|..)s/%(title)s.%(ext)s",
+            "dotted traversal fallback": "%(album|a..b)s/%(title)s.%(ext)s",
+            "traversal": "../%(album|Singles)s/%(title)s.%(ext)s",
+            "second fallback": "%(album|a|b)s/%(title)s.%(ext)s",
+            "empty fallback": "%(album|)s/%(title)s.%(ext)s",
+            "bar outside a token": "a|b %(title)s.%(ext)s",
+            "yt-dlp alternates": "%(album,artist)s/%(title)s.%(ext)s",
+            "field outside the allowlist": "%(filepath|x)s.%(ext)s",
+        }
+        for reason, template in refused.items():
+            with self.subTest(reason):
+                self.assertEqual(n(template), "", template)
+
+    def test_settings_preview_renders_a_fallback_for_present_and_absent_fields(self):
+        def relative(template):
+            report = ad.output_template_preview(
+                ad.normalize_output_template(template), "C:/Videos",
+            )
+            self.assertTrue(report["valid"], template)
+            return report["relative"]
+
+        # The example is a single video: it has a title, it has no playlist.
+        self.assertEqual(
+            relative("%(playlist_title|Singles)s/%(title|Untitled)s.%(ext)s"),
+            "Singles\\Example video.mp4",
+        )
+        # The NA a single download used to write is now the fallback.
+        self.assertEqual(
+            relative("%(playlist_index)s - %(title)s.%(ext)s"),
+            "NA - Example video.mp4",
+        )
+        self.assertEqual(
+            relative("%(playlist_index|00)s - %(title)s.%(ext)s"),
+            "00 - Example video.mp4",
+        )
+
+    def test_ytdlp_renders_every_field_the_way_the_preview_does(self):
+        ydl = self._ytdlp()
+        info = self._sample_info()
+        config_module = self._config()
+        for field in sorted(config_module._SAFE_OUTPUT_FIELDS):
+            template = ad.normalize_output_template(f"%({field})s.%(ext)s")
+            with self.subTest(field):
+                self.assertTrue(template)
+                rendered = ydl.evaluate_outtmpl(template, dict(info), True)
+                preview = ad.output_template_preview(template, "C:/Videos")
+                self.assertEqual(preview["relative"], rendered.replace("/", "\\"))
+
+    def test_ytdlp_parses_the_accepted_fallback_grammar(self):
+        # Rendered by yt-dlp itself, offline, from a fake info dict: the
+        # grammar the normalizer accepts is the one yt-dlp reads.
+        ydl = self._ytdlp()
+        info = self._sample_info()
+        templates = (
+            "%(playlist_title|Singles)s/%(title|Untitled)s.%(ext)s",
+            "%(playlist_index|00)s - %(title)s.%(ext)s",
+            "%(artist|Unknown artist)s/%(album|Singles)s/"
+            "%(track_number|0)02d - %(track|Untitled [1])s.%(ext)s",
+            "%(series|Other)s/S%(season_number)02dE%(episode_number)02d.%(ext)s",
+        )
+        for raw in templates:
+            template = ad.normalize_output_template(raw)
+            with self.subTest(raw):
+                self.assertTrue(template)
+                rendered = ydl.evaluate_outtmpl(template, dict(info), True)
+                preview = ad.output_template_preview(template, "C:/Videos")
+                self.assertEqual(preview["relative"], rendered.replace("/", "\\"))
+
+        # A music field missing from the page takes its fallback, a present
+        # one keeps its value, and the old bare token still writes NA.
+        bare = dict(info)
+        for field in ("artist", "album", "track_number"):
+            bare.pop(field)
+        music = ad.normalize_output_template(templates[2])
+        self.assertEqual(
+            ydl.evaluate_outtmpl(music, bare, True),
+            "Unknown artist/Singles/0 - Example track.mp4",
+        )
+        self.assertEqual(
+            ydl.evaluate_outtmpl(
+                ad.normalize_output_template("%(album)s/%(title)s.%(ext)s"),
+                bare, True,
+            ),
+            "NA/Example video.mp4",
+        )
+
+        # The full path yt-dlp builds stays under the download root.
+        with tempfile.TemporaryDirectory() as root:
+            named = self._ytdlp(
+                outtmpl=ad.normalize_output_template(templates[0]),
+                paths={"home": root},
+            )
+            path = named.prepare_filename(dict(info))
+            self.assertEqual(
+                os.path.relpath(path, root), "Singles\\Example video.mp4",
+            )
 
 
 class HistoryDateFilterTests(unittest.TestCase):

@@ -15,6 +15,7 @@ repository's git log.
 ### Added
 
 - The test tools now live in a `test` dependency group in `pyproject.toml`, so `pip install -r astra_downloader/requirements.txt --group test` sets up a clean environment that runs the whole suite, and a fresh clone no longer errors on a missing `build` folder.
+- Filename templates can now use music and series fields (artist, album, track, track number, disc number, genre, release year, series, season, episode) plus the extractor name, and any field can carry a fallback like `%(playlist_title|Singles)s`. A single video downloaded with a playlist template used to land in a folder called NA. With a fallback it gets the name you chose, and the Settings preview shows which one you'll get.
 
 ### Changed
 
