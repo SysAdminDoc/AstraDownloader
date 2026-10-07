@@ -382,14 +382,17 @@ def evaluate_sabr_support(ytdlp_version):
 def missing_ffmpeg_filters(output, required=REQUIRED_FFMPEG_FILTERS):
     """Return required FFmpeg filters absent from ``-filters`` output.
 
-    FFmpeg prints a three-character capability flag followed by the filter
-    name. Parse only that stable table shape so banners, build metadata, and
-    arbitrary stderr text cannot accidentally count as a filter.
+    FFmpeg prints a capability flag column followed by the filter name.
+    Older builds print three flags (``T.C``); current ones dropped the
+    command-support column and print two (``TS``, ``..``). Requiring three
+    made every current build look like it was missing every filter. Parse
+    only that table shape so banners, build metadata, and arbitrary stderr
+    text cannot accidentally count as a filter.
     """
     available = set()
     for line in str(output or "").splitlines():
         fields = line.strip().split()
-        if len(fields) < 2 or not re.fullmatch(r"[TSC.]{3}", fields[0]):
+        if len(fields) < 2 or not re.fullmatch(r"[TSC.]{2,3}", fields[0]):
             continue
         name = fields[1].strip()
         if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name):
@@ -570,9 +573,16 @@ def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
     Callers own the slow probes and pass their bounded results here. The
     returned IDs and actions are stable API values; ``details`` contains only
     counts, versions, and booleans, never paths, site names, tokens, or cookie
-    contents. ``warning`` and ``unknown`` conditions are actionable but do
-    not block a download; ``error`` identifies a prerequisite that is known
-    to be unusable.
+    contents. ``warning`` and ``unknown`` conditions are actionable;
+    ``error`` identifies a prerequisite that is known to need a repair.
+
+    The whole result is advisory, and says so with ``advisory: True``.
+    Nothing refuses or pauses a download because of it: a security floor
+    that silently stopped a queue would be worse than the floor being
+    missed. The summary therefore never uses gate vocabulary. ``status`` is
+    ``ready``, ``attention`` or ``needs-repair``, and ``needsRepair`` lists
+    the ``error`` check IDs. Earlier builds called these ``blocked`` and
+    ``blocking``; no client read either, and the names invited one to.
     """
     today = _preflight_now_date(now)
     checks = []
@@ -937,14 +947,18 @@ def evaluate_preflight_checks(*, ytdlp_version=None, ffmpeg_capabilities=None,
                 offsetSeconds=int(offset),
             ))
 
-    blocking = [item["id"] for item in checks if item["status"] == "error"]
+    needs_repair = [item["id"] for item in checks if item["status"] == "error"]
     attention = [
         item["id"] for item in checks
         if item["status"] in {"warning", "unknown"}
     ]
     return {
-        "status": "blocked" if blocking else "attention" if attention else "ready",
-        "blocking": blocking,
+        "status": (
+            "needs-repair" if needs_repair
+            else "attention" if attention else "ready"
+        ),
+        "advisory": True,
+        "needsRepair": needs_repair,
         "attention": attention,
         "checks": checks,
     }

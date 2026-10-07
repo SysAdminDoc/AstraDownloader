@@ -17,14 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 ### P2
 
 
-- [ ] P2 | AD-124 | preflight blocking is not a usable signal
-  Why: ffmpeg-capabilities lands in blocking on ordinary working installs, so preflight status reads blocked for many users and nothing consumes it. Confirmed 2026-09-05: with a below-floor yt-dlp the health route reported status blocked and blocking naming both ytdlp-freshness and ffmpeg-capabilities, while POST /download accepted the request and start_download ran. That is the correct behaviour today, since a security floor should not silently stop a queue, but it means anything that later starts honouring blocking would refuse work on healthy installs.
-  Evidence: astra_downloader/health.py assembling blocking and the blocked summary; astra_downloader/routes.py never calling evaluate_preflight_checks outside the health closure; the /health and POST /download responses captured on 2026-09-05.
-  Touches: astra_downloader/health.py, astra_downloader/test_health.py.
-  Acceptance: Either ffmpeg-capabilities stops reporting error on an install that can actually download, or blocking is renamed and documented as advisory so no future consumer reads it as a gate. Whichever is chosen, a test pins the meaning.
-  Complexity: M
-
-
 - [ ] P2 | AD-62 | A rejected link's reason is translated around, not translated
   Why: `describe_rejected_links` wraps `{reason}` in a translated frame, but the reason itself comes from the URL policy untranslated. A German build shows a German sentence containing an English clause.
   Where: `astra_downloader/gui_support.py` `describe_rejected_links`; the reasons originate in `astra_downloader/config.py` `normalize_url` and its callers.

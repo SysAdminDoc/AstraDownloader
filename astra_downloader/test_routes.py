@@ -3313,7 +3313,18 @@ class PreflightHealthTests(unittest.TestCase):
         self.assertEqual(check['action'], 'retry-github')
         self.assertIn('github-api-budget', self._base(
             github_api_budget={'remaining': 0}
-        )['blocking'])
+        )['needsRepair'])
+
+    def test_the_summary_is_advisory_and_never_speaks_as_a_gate(self):
+        # Nothing refuses a download on the pre-flight, so the summary must
+        # not offer a field a future client could mistake for a gate.
+        result = self._base(ytdlp_version='2020.01.01')
+        self.assertIs(result['advisory'], True)
+        self.assertEqual(result['status'], 'needs-repair')
+        self.assertEqual(result['needsRepair'], ['ytdlp-freshness'])
+        self.assertNotIn('blocking', result)
+        self.assertNotIn('blocked', json.dumps(result))
+        self.assertIs(self._base()['advisory'], True)
 
     def test_failed_token_provider_names_the_sign_in_fallback(self):
         check = self._check(self._base(
@@ -3333,6 +3344,35 @@ class PreflightHealthTests(unittest.TestCase):
         self.assertEqual(
             ad.missing_ffmpeg_filters("Filters:\n  ... scale V->V Scale"),
             ['aformat'],
+        )
+
+    def test_filter_parser_reads_the_two_flag_table_current_ffmpeg_prints(self):
+        # Verbatim head of `ffmpeg -hide_banner -filters` from the managed
+        # N-126277 build (FFmpeg 8 and 9 print the same shape). The
+        # command-support column is gone, so the flags are two characters.
+        # A three-character-only parser called every working install broken.
+        output = (
+            "Filters:\n"
+            "  T.. = Timeline support\n"
+            "  .S. = Slice threading\n"
+            "  A = Audio input/output\n"
+            "  V = Video input/output\n"
+            "  N = Dynamic number and/or type of input/output\n"
+            "  | = Source or sink filter\n"
+            "  ------\n"
+            " TS aap               AA->A      Apply Affine Projection algorithm to first audio stream.\n"
+            " .. acopy             A->A       Copy the input audio unchanged to the output.\n"
+            " .. aformat           A->A       Convert the input audio to one of the specified formats.\n"
+        )
+        missing = ad.missing_ffmpeg_filters(output)
+        self.assertEqual(missing, [])
+        check = self._check(self._base(ffmpeg_capabilities={
+            'current': True, 'filterCheck': True, 'missingFilters': missing,
+        }), 'ffmpeg-capabilities')
+        self.assertEqual(check['status'], 'ok')
+        # The legend rows share the flag shape; "=" must never count.
+        self.assertEqual(
+            ad.missing_ffmpeg_filters(output, required=('=',)), ['='],
         )
 
     def test_output_folder_names_a_disconnected_drive_and_a_read_only_folder(self):
@@ -3593,7 +3633,7 @@ class PreflightHealthTests(unittest.TestCase):
         self.assertIn('preflight', body)
         self.assertEqual(
             body['preflight']['status'], 'ready',
-            f"blocking={body['preflight'].get('blocking')} "
+            f"needsRepair={body['preflight'].get('needsRepair')} "
             f"attention={body['preflight'].get('attention')}",
         )
         self.assertEqual(

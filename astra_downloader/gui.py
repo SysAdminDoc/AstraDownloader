@@ -261,7 +261,8 @@ class ReadinessProbe(QObject):
                     self._logger(f"Pre-flight evaluation failed: {error}")
                     preflight = {
                         "status": "unknown",
-                        "blocking": [],
+                        "advisory": True,
+                        "needsRepair": [],
                         "attention": [],
                         "checks": [],
                         "error": "preflight-evaluation-failed",
