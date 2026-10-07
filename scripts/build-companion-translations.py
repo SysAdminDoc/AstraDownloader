@@ -1651,6 +1651,10 @@ CATALOGS = {
             "{model} oder die whisper.cpp-Laufzeit ist unvollständig oder beschädigt. Führen Sie die Einrichtung erneut aus, um sie abzurufen.",
         "Run setup to download {model} and the whisper.cpp runtime before downloading.":
             "Führen Sie die Einrichtung aus, um {model} und die whisper.cpp-Laufzeit vor dem Download herunterzuladen.",
+        "SABR":
+            "SABR",
+        "PO provider":
+            "PO-Anbieter",
     },
     "en": {},
     "es": {

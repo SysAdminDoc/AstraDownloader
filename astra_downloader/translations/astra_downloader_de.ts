@@ -2623,6 +2623,18 @@
       <translation>Systemuhr</translation>
     </message>
     <message>
+      <source>SABR</source>
+      <translation>SABR</translation>
+    </message>
+    <message>
+      <source>PO provider</source>
+      <translation>PO-Anbieter</translation>
+    </message>
+    <message>
+      <source>Transcription model</source>
+      <translation>Transkriptionsmodell</translation>
+    </message>
+    <message>
       <source>refresh-ytdlp</source>
       <translation>yt-dlp aktualisieren</translation>
     </message>
@@ -3473,10 +3485,6 @@
     <message>
       <source>Uses the chosen multilingual Whisper model and the first language in Subtitle languages. Base is more accurate than tiny and slower on the same computer. Setup downloads a newly chosen model after you save, and the current one stays in use until the new file is verified.</source>
       <translation>Verwendet das gewählte mehrsprachige Whisper-Modell und die erste Sprache unter Untertitelsprachen. Base ist genauer als Tiny und auf demselben Computer langsamer. Ein neu gewähltes Modell lädt die Einrichtung nach dem Speichern herunter, und das bisherige bleibt in Gebrauch, bis die neue Datei geprüft ist.</translation>
-    </message>
-    <message>
-      <source>Transcription model</source>
-      <translation>Transkriptionsmodell</translation>
     </message>
     <message>
       <source>Keep intermediate files</source>

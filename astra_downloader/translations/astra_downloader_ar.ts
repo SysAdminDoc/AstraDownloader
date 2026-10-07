@@ -2623,6 +2623,18 @@
       <translation>System clock</translation>
     </message>
     <message>
+      <source>SABR</source>
+      <translation>SABR</translation>
+    </message>
+    <message>
+      <source>PO provider</source>
+      <translation>PO provider</translation>
+    </message>
+    <message>
+      <source>Transcription model</source>
+      <translation>Transcription model</translation>
+    </message>
+    <message>
       <source>refresh-ytdlp</source>
       <translation>refresh-ytdlp</translation>
     </message>
@@ -3473,10 +3485,6 @@
     <message>
       <source>Uses the chosen multilingual Whisper model and the first language in Subtitle languages. Base is more accurate than tiny and slower on the same computer. Setup downloads a newly chosen model after you save, and the current one stays in use until the new file is verified.</source>
       <translation>Uses the chosen multilingual Whisper model and the first language in Subtitle languages. Base is more accurate than tiny and slower on the same computer. Setup downloads a newly chosen model after you save, and the current one stays in use until the new file is verified.</translation>
-    </message>
-    <message>
-      <source>Transcription model</source>
-      <translation>Transcription model</translation>
     </message>
     <message>
       <source>Keep intermediate files</source>

@@ -2725,6 +2725,43 @@ class TranslationCoverageTests(unittest.TestCase):
         )
         self.assertEqual(planted, ["A planted sign-in note.", "A planted note."])
 
+    def test_every_readiness_row_label_reaches_german(self):
+        # The Download page lays its readiness rows out three to a line with
+        # `for index, (key, label, initial) in enumerate(rows[a:b])`. The
+        # extractor followed neither the slice, enumerate() nor the nested
+        # unpacking, so SABR and PO provider never reached a catalogue.
+        import importlib.util
+        import textwrap
+
+        import gui_download_page
+
+        builder = self._builder()
+        root = Path(ad.__file__).parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "extract_companion_strings",
+            root / "scripts" / "extract_companion_strings.py",
+        )
+        extractor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(extractor)
+        planted = extractor.extract_from_source(textwrap.dedent("""
+            rows = [("a", "A planted row", "x"), ("b", "Another row", "y")]
+            for start in range(0, len(rows), 3):
+                chunk = rows[start:start + 3]
+                for index, (key, label, initial) in enumerate(chunk):
+                    tr(label)
+        """))
+        self.assertEqual(planted, ["A planted row", "Another row"])
+
+        source = textwrap.dedent(inspect.getsource(
+            gui_download_page.DownloadPageMixin._build_download))
+        self.assertIn('("sabr", "SABR", "Limited")', source)
+        for label in ("SABR", "PO provider"):
+            with self.subTest(label=label):
+                self.assertIn(label, builder.SOURCE_STRINGS)
+                self.assertIn(label, builder.CATALOGS["de"])
+        for tool in ("yt-dlp", "FFmpeg"):
+            self.assertNotIn(tool, builder.SOURCE_STRINGS, "tool names stay as named")
+
     def test_an_undeclared_string_is_not_counted_as_translated(self):
         # The measurement itself: the builder writes a missing entry out as
         # its own English source, so only a declared key is coverage.

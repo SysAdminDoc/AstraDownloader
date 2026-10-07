@@ -51,6 +51,7 @@ repository's git log.
 - Three tests that drive PowerShell (the delayed install folder removal, the taskbar shortcut identity and the update helper parse check) no longer fail on a busy machine just because PowerShell took a while to start. They now wait for the result they check, and only give up after five minutes of nothing.
 - The local API answers requests sent to the IPv6 loopback address (`[::1]`) again. The release's web library refused them as an invalid host, and every other host is still turned away exactly as before.
 - A status message that changes from a plain hint to a warning or error now gets its proper spacing. Before, the colored bar beside it could cover the first letter.
+- The PO provider check on the Download page now shows its German name in the German interface. SABR stays as it is, since it's the name of a YouTube streaming format.
 
 ## [2.16.0] (2026-10-06)
 

@@ -25,9 +25,3 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Where: `astra_downloader/build.py`, the native-host block in `astra_downloader/astra_downloader.py`, the taskbar and jump-list block in `astra_downloader/gui.py`, the transcription block in `astra_downloader/download.py`.
 
 
-- [ ] P3 | AD-129 | Two readiness labels stay English in German
-  Why: the SABR and PO provider readiness rows render English labels in the German build while the rest of the Download page is translated.
-  Evidence: the German Download-page render; astra_downloader/health.py readiness labels.
-  Touches: astra_downloader/health.py or astra_downloader/gui_download_page.py, scripts/build-companion-translations.py, translation catalogues.
-  Acceptance: Both labels reach the catalogues through the extractor and German carries them; the German render shows no English readiness label.
-  Complexity: S

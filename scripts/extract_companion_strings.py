@@ -103,6 +103,10 @@ NOT_TRANSLATABLE = {
     # The product name. Translating a brand is how you get bug reports about
     # an app the user cannot find again.
     "ASTRA DOWNLOADER",
+    # Tool names on the readiness rows. They name programs a user installs,
+    # updates and searches for under exactly that name.
+    "yt-dlp",
+    "FFmpeg",
     # Status dots and separators. There is nothing to translate, and giving a
     # translator a bullet to render invites one that breaks the layout.
     "•",
@@ -264,6 +268,17 @@ def _static_sequence(node, assignments, seen=None):
             _static_sequence(node.body, assignments, seen.copy())
             + _static_sequence(node.orelse, assignments, seen.copy())
         )
+    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice):
+        # A slice holds some rows of its table. Any of them can come through,
+        # so every row is a candidate, as in a loop over the whole table. The
+        # Download page lays its readiness rows out three to a line this way.
+        return _static_sequence(node.value, assignments, seen)
+    if isinstance(node, ast.Call) and _called_name(node) == "enumerate" and node.args:
+        # enumerate() pairs each element with its index: (index, element).
+        return [
+            ast.Tuple(elts=[ast.Constant(value=None), element], ctx=ast.Load())
+            for element in _static_sequence(node.args[0], assignments, seen)
+        ]
     return []
 
 
@@ -293,6 +308,25 @@ def _static_string_values(node, assignments, seen=None):
     return []
 
 
+def _bind_loop_target(target, elements, assignments, bindings):
+    """Bind one ``for`` target, unpacking nested tuples like Python does."""
+    if isinstance(target, ast.Name):
+        values = []
+        for element in elements:
+            values.extend(_static_string_values(element, assignments))
+        if values:
+            bindings.setdefault(target.id, []).extend(values)
+        return
+    if not isinstance(target, (ast.Tuple, ast.List)):
+        return
+    for index, child in enumerate(target.elts):
+        parts = [
+            element.elts[index] for element in elements
+            if isinstance(element, (ast.Tuple, ast.List)) and index < len(element.elts)
+        ]
+        _bind_loop_target(child, parts, assignments, bindings)
+
+
 def _loop_string_bindings(tree, assignments):
     """Map simple ``for`` target names to their constant string choices."""
     bindings = {}
@@ -300,27 +334,7 @@ def _loop_string_bindings(tree, assignments):
         if not isinstance(node, (ast.For, ast.AsyncFor)):
             continue
         elements = _static_sequence(node.iter, assignments)
-        target = node.target
-        if isinstance(target, ast.Name):
-            values = []
-            for element in elements:
-                values.extend(_static_string_values(element, assignments))
-            if values:
-                bindings.setdefault(target.id, []).extend(values)
-            continue
-        if not isinstance(target, (ast.Tuple, ast.List)):
-            continue
-        for index, child in enumerate(target.elts):
-            if not isinstance(child, ast.Name):
-                continue
-            values = []
-            for element in elements:
-                if isinstance(element, (ast.Tuple, ast.List)) and index < len(element.elts):
-                    values.extend(
-                        _static_string_values(element.elts[index], assignments)
-                    )
-            if values:
-                bindings.setdefault(child.id, []).extend(values)
+        _bind_loop_target(node.target, elements, assignments, bindings)
     return bindings
 
 
