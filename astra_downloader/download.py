@@ -3219,6 +3219,7 @@ def describe_audio_language_outcome(requested, delivered, preference=None):
             if preference is not None and float(preference) >= AUDIO_LANGUAGE_ORIGINAL_PREFERENCE:
                 return ''
         except (TypeError, ValueError):
+            # reason: an unreadable preference means no track claimed original
             pass
         return (
             'No audio track was marked as the original language, so the '

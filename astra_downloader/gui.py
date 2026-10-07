@@ -1539,7 +1539,8 @@ class SubscriptionDeliveryDialog(QDialog):
             try:
                 signal.emit({"result": result or {}, "error": error or ""})
             except RuntimeError:
-                pass  # The dialog closed before the probe finished.
+                # reason: the dialog closed before the probe finished
+                pass
 
         threading.Thread(target=worker, name="subscription-preview", daemon=True).start()
 

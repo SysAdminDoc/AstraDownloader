@@ -836,6 +836,7 @@ class _TitleFilterWorker:
         try:
             process.start()
         except Exception:  # noqa: BLE001
+            # reason: search() turns a worker that can't start into filter-timeout
             parent.close()
             child.close()
             return None
@@ -845,6 +846,7 @@ class _TitleFilterWorker:
             if parent.poll(_TITLE_FILTER_WORKER_START_SECONDS) and parent.recv()[0] == "ready":
                 return parent
         except (EOFError, OSError, ValueError, TypeError, IndexError):
+            # reason: a worker that died before saying ready is stopped below
             pass
         self._stop()
         return None
