@@ -42,7 +42,47 @@ __all__ = (
     "_RETAINED_TEST_WINDOWS",
     "_qapp_singleton",
     "isolate_child_temp",
+    "POWERSHELL_GIVE_UP_SECONDS",
+    "run_powershell",
+    "wait_for",
 )
+
+
+# PowerShell can spend tens of seconds just starting on a saturated machine.
+# Under two parallel full-suite runs, three tests that gave it 15 to 60 s
+# raised TimeoutExpired and then passed alone. A test that waits on
+# PowerShell waits for the outcome it checks; this bound is only reached when
+# that outcome never comes.
+POWERSHELL_GIVE_UP_SECONDS = 300
+
+
+def run_powershell(command, *, give_up=POWERSHELL_GIVE_UP_SECONDS):
+    """Run one hidden ``powershell -Command`` to completion."""
+    return subprocess.run(
+        [ad.system32_command("powershell"), "-NoProfile", "-NonInteractive",
+         "-Command", command],
+        capture_output=True, text=True, timeout=give_up,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def wait_for(condition, *, process=None, give_up=POWERSHELL_GIVE_UP_SECONDS,
+             interval=0.05):
+    """Poll until ``condition()`` is true; return whether it became true.
+
+    Given the ``process`` expected to bring it about, stop as soon as that
+    process has exited with the condition still false, since nothing else
+    is coming, rather than sitting out the bound.
+    """
+    deadline = time.monotonic() + give_up
+    while True:
+        if condition():
+            return True
+        if process is not None and process.poll() is not None:
+            return bool(condition())
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval)
 
 
 class FakeConfig:

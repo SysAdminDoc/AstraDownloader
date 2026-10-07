@@ -25,9 +25,3 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Where: `astra_downloader/build.py`, the native-host block in `astra_downloader/astra_downloader.py`, the taskbar and jump-list block in `astra_downloader/gui.py`, the transcription block in `astra_downloader/download.py`.
 
 
-- [ ] P3 | AD-126 | Three PowerShell-spawning tests time out on a saturated machine
-  Why: test_delayed_install_dir_removal_actually_deletes_the_directory, test_a_shortcut_carries_the_taskbar_identity and test_windows_update_helper_contains_verified_backup_and_rollback_contract each wait 30 seconds on a powershell.exe child. On 2026-10-06, with two other test runs sharing the machine, all three raised subprocess.TimeoutExpired inside `npm run check` (suite time 290 s against a 41 s quiet baseline), then passed when rerun alone. Same family as AD-125 and AD-112: the clock decides the result.
-  Evidence: build/check-batch1b.log from 2026-10-06; astra_downloader/test_build.py UninstallCleanupTests, astra_downloader/test_gui.py WindowsShellIntegrationTests, astra_downloader/test_routes.py CompanionUpdateEndpointTests.
-  Touches: those three tests, and the helpers they call if a readiness signal is needed.
-  Acceptance: None of the three fails because PowerShell started slowly. Each either waits on the outcome it checks (the folder gone, the .lnk written, the parse result) with a give-up bound that only matters when the outcome never happens, or runs the PowerShell step once per session behind a fixture. A run of the full suite alongside a second full suite passes them.
-  Complexity: S

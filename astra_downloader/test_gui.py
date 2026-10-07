@@ -7594,21 +7594,16 @@ class WindowsShellIntegrationTests(unittest.TestCase):
         # writes every .lnk here — cannot set a property-store value.
         with tempfile.TemporaryDirectory() as tmpdir:
             lnk = Path(tmpdir) / "Astra Downloader.lnk"
-            subprocess.run(
-                [ad.system32_command("powershell"), "-NoProfile", "-Command",
-                 ad.build_shortcut_command(lnk, sys.executable, ["--start-server"])],
-                capture_output=True, timeout=60,
-            )
+            run_powershell(
+                ad.build_shortcut_command(lnk, sys.executable, ["--start-server"]))
             if not lnk.is_file():
                 self.skipTest("PowerShell did not write a shortcut here")
             self.assertTrue(ad.stamp_shortcut_app_user_model_id(lnk))
-            read_back = subprocess.run(
-                [ad.system32_command("powershell"), "-NoProfile", "-Command",
-                 "$s=New-Object -ComObject Shell.Application;"
-                 f"$f=$s.Namespace('{tmpdir}');"
-                 "$i=$f.ParseName('Astra Downloader.lnk');"
-                 "$i.ExtendedProperty('System.AppUserModel.ID')"],
-                capture_output=True, text=True, timeout=60,
+            read_back = run_powershell(
+                "$s=New-Object -ComObject Shell.Application;"
+                f"$f=$s.Namespace('{tmpdir}');"
+                "$i=$f.ParseName('Astra Downloader.lnk');"
+                "$i.ExtendedProperty('System.AppUserModel.ID')"
             )
             self.assertEqual(
                 (read_back.stdout or "").strip(), ad.APP_USER_MODEL_ID,

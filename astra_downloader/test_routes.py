@@ -4833,11 +4833,7 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
                     "[ref]$tokens, [ref]$errors) | Out-Null; "
                     "if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }"
                 )
-                parsed = subprocess.run(
-                    ['powershell', '-NoProfile', '-Command', parser_command],
-                    capture_output=True, text=True, timeout=15,
-                    creationflags=ad.CREATE_NO_WINDOW,
-                )
+                parsed = run_powershell(parser_command)
                 self.assertEqual(parsed.returncode, 0, parsed.stderr)
 
         self.assertTrue(result['scheduled'])

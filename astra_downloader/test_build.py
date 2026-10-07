@@ -540,9 +540,15 @@ class UninstallCleanupTests(unittest.TestCase):
                 self.assertTrue(ad.spawn_delayed_install_dir_removal(target))
 
             self.assertEqual(len(spawned), 1)
-            spawned[0].wait(timeout=30)
-            self.assertFalse(
-                target.exists(),
+            try:
+                # Wait for the folder to go, however slowly PowerShell starts;
+                # an exit that leaves it behind fails at once.
+                removed = wait_for(lambda: not target.exists(), process=spawned[0])
+            finally:
+                if spawned[0].poll() is None:
+                    spawned[0].kill()
+            self.assertTrue(
+                removed,
                 "the delayed removal reported success and left the install directory behind",
             )
 
