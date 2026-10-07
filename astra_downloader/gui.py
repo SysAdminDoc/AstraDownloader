@@ -1589,6 +1589,11 @@ class MainWindowCore(
     format_probe_finished = Signal(dict)
     site_catalog_ready = Signal(list)
 
+    # How long the instance listener waits for a connected client's one line.
+    # It serves one connection at a time, so a client that connects and says
+    # nothing must not hold the port for long.
+    INSTANCE_COMMAND_READ_SECONDS = 0.5
+
     def __init__(self, config, dl_manager, history, start_minimized=False,
                  first_run=False, *, dependencies):
         missing = sorted(set(_REQUIRED_MAIN_WINDOW_DEPENDENCIES) - set(dependencies))
@@ -8231,7 +8236,7 @@ class MainWindowCore(
                             raise
                         with conn:
                             try:
-                                conn.settimeout(0.5)
+                                conn.settimeout(self.INSTANCE_COMMAND_READ_SECONDS)
                                 raw = conn.recv(256)
                             except OSError:
                                 continue

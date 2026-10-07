@@ -277,6 +277,10 @@ class InstanceCommandTests(unittest.TestCase):
                 return persistent_log(message)
 
             window._dependencies['write_persistent_log'] = note_listener_start
+            # The listener drops a connection whose line takes longer than this
+            # to arrive. Production keeps it short; here a sender stalled by a
+            # busy machine between connect and send must not lose its line.
+            window.INSTANCE_COMMAND_READ_SECONDS = 30
             commands = []
             rejections = []
             unavailable = []
