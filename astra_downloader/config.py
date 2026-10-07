@@ -1282,15 +1282,25 @@ def output_template_preview(template, output_dir="", *, max_path=WINDOWS_MAX_PAT
     }
 
 
+# Why normalize_url refused a value. Like MEDIA_URL_BLOCK_MESSAGES below, these
+# stay English in logs and API responses. The GUI translates a reason where it
+# shows one, and scripts/extract_companion_strings.py reads both tables by
+# name, so every reason has a catalogue entry to translate from.
+_URL_INPUT_MESSAGES = {
+    "too-long": "URL is too long to download safely.",
+    "invalid-url": "Enter a valid http or https URL.",
+}
+
+
 def normalize_url(value):
     url, too_long = _normalize_long_text(value, "", 4096)
     if too_long:
-        return None, "URL is too long to download safely."
+        return None, _URL_INPUT_MESSAGES["too-long"]
     if not url or any(character.isspace() for character in url):
-        return None, "Enter a valid http or https URL."
+        return None, _URL_INPUT_MESSAGES["invalid-url"]
     parsed = urlparse(url)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-        return None, "Enter a valid http or https URL."
+        return None, _URL_INPUT_MESSAGES["invalid-url"]
     return url, None
 
 

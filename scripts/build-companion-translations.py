@@ -1517,6 +1517,16 @@ CATALOGS = {
             "Große Einträge können Hunderte Dateien enthalten. Rechnen Sie mit langen Warteschlangen.",
         "Not supported by yt-dlp; listed so the failure is not a mystery.":
             "Wird von yt-dlp nicht unterstützt. Aufgeführt, damit der Fehler kein Rätsel bleibt.",
+        "URL is too long to download safely.":
+            "Die URL ist zu lang, um sie sicher herunterzuladen.",
+        "Enter a valid http or https URL.":
+            "Geben Sie eine gültige http- oder https-URL ein.",
+        "URLs that embed a username or password are not accepted. Paste the plain video link instead.":
+            "URLs mit eingebettetem Benutzernamen oder Passwort werden nicht akzeptiert. Fügen Sie stattdessen den einfachen Videolink ein.",
+        "That address is on a private, loopback, or link-local network. Astra Downloader only downloads from public sites.":
+            "Diese Adresse liegt in einem privaten, Loopback- oder Link-Local-Netzwerk. Astra Downloader lädt nur von öffentlichen Websites herunter.",
+        "That host is not a public internet address. Paste a normal video link such as https://www.reddit.com/r/…":
+            "Dieser Host ist keine öffentliche Internetadresse. Fügen Sie einen normalen Videolink ein, etwa https://www.reddit.com/r/…",
     },
     "en": {},
     "es": {

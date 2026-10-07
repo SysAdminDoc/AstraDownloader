@@ -135,6 +135,13 @@ DOWNLOAD_PIPELINE_STEPS = (
 
 MAX_CONCURRENT = 3
 MAX_QUEUED_TOTAL = 200
+# The queue boundary's own refusal for a private-network URL. English here and
+# in API responses; the GUI translates it where it is shown, which is why
+# scripts/extract_companion_strings.py reads it by name.
+_PRIVATE_NETWORK_REFUSAL = (
+    'That address is on a private, loopback, or link-local network. '
+    'Astra Downloader only downloads from public sites.'
+)
 HOST_BACKOFF_BASE_SECONDS = 60
 HOST_BACKOFF_MAX_SECONDS = 30 * 60
 HOST_BACKOFF_MAX_ENTRIES = 64
@@ -4950,10 +4957,7 @@ class DownloadManagerCore:
         # private-network denylist is enforced once, at the queue boundary,
         # instead of once per caller.
         if not self._dependencies['is_supported_media_url'](url):
-            return None, (
-                'That address is on a private, loopback, or link-local network. '
-                'Astra Downloader only downloads from public sites.'
-            )
+            return None, _PRIVATE_NETWORK_REFUSAL
         # Normalized at the queue boundary, like the URL denylist above, so
         # every entry point (HTTP, GUI, clipboard, scheduler) gets the same
         # rejection instead of each caller remembering to ask.

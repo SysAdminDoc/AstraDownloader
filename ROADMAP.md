@@ -17,10 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 ### P2
 
 
-- [ ] P2 | AD-62 | A rejected link's reason is translated around, not translated
-  Why: `describe_rejected_links` wraps `{reason}` in a translated frame, but the reason itself comes from the URL policy untranslated. A German build shows a German sentence containing an English clause.
-  Where: `astra_downloader/gui_support.py` `describe_rejected_links`; the reasons originate in `astra_downloader/config.py` `normalize_url` and its callers.
-
 - [ ] P2 | AD-63 | Tray notifications raise no accessibility event
   Why: every status label in the app announces itself through `StatusLabel.setText` / `announce_status`. The five `QSystemTrayIcon.showMessage` balloons bypass that path entirely, so a completion or a failure that fires while the window is minimised is announced to nobody. That is exactly when the balloon is the only report.
   Where: `astra_downloader/gui.py`, the five `showMessage` call sites; `astra_downloader/gui_support.py` `announce_status`.

@@ -47,6 +47,7 @@ SOURCE_FILES = (
     ROOT / "astra_downloader" / "download.py",
     ROOT / "astra_downloader" / "health.py",
     ROOT / "astra_downloader" / "sites.py",
+    ROOT / "astra_downloader" / "config.py",
 )
 # Retain the old name for callers that used the extractor as a small library.
 GUI_SOURCES = SOURCE_FILES
@@ -81,7 +82,12 @@ RUNTIME_TEXT_ASSIGNMENTS = {
     "DOWNLOAD_FAILURE_RECOVERY",
     "SABR_LIMITED_NOTICE",
     "MANAGED_BINARY_ANTIVIRUS_ADVICE",
+    "_PRIVATE_NETWORK_REFUSAL",
 }
+# Dicts whose every string value is user-facing: the reasons a link is
+# rejected. They stay English in logs and API responses, and the GUI
+# translates one where it shows it (describe_rejected_links).
+RUNTIME_TEXT_TABLES = {"_URL_INPUT_MESSAGES", "MEDIA_URL_BLOCK_MESSAGES"}
 RUNTIME_TEXT_FIELDS = {"error", "advice", "next_action"}
 # Keyword arguments that carry user-facing text into a registry row. The
 # Sites page renders a profile's auth_note and notes through make_label, and a
@@ -190,6 +196,15 @@ def _runtime_literals(tree):
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if any(
+            isinstance(target, ast.Name) and target.id in RUNTIME_TEXT_TABLES
+            for target in targets
+        ) and isinstance(node.value, ast.Dict):
+            for child in node.value.values:
+                literal = _literal(child)
+                if literal:
+                    found.append(literal)
+            continue
         if not any(
             isinstance(target, ast.Name) and target.id in RUNTIME_TEXT_ASSIGNMENTS
             for target in targets

@@ -2346,6 +2346,42 @@ class QuickDownloadBatchTests(unittest.TestCase):
             window.quick_download_status.properties["tone"], "warning"
         )
 
+    def test_a_german_build_shows_rejection_reasons_in_german(self):
+        # The frame around a rejected link's reason was translated and the
+        # reason itself was not, so German showed an English clause. The
+        # reasons stay English at the source, for logs and the API.
+        from PySide6.QtCore import QCoreApplication, QTranslator
+
+        import download
+        import gui_support
+        import i18n as i18n_module
+
+        _get_qapp_or_skip(self)
+        reasons = [
+            ad.normalize_url("https://example.com/" + "a" * 5000)[1],
+            ad.normalize_url("not a url")[1],
+            *ad.MEDIA_URL_BLOCK_MESSAGES.values(),
+            download._PRIVATE_NETWORK_REFUSAL,
+        ]
+        self.assertIn("Enter a valid http or https URL.", reasons)
+        translator = QTranslator()
+        self.assertTrue(translator.load(str(
+            i18n_module.companion_translations_dir() / "astra_downloader_de.qm"
+        )))
+        QCoreApplication.installTranslator(translator)
+        self.addCleanup(QCoreApplication.removeTranslator, translator)
+        for reason in reasons:
+            with self.subTest(reason=reason):
+                german = translator.translate("AstraDownloader", reason)
+                self.assertTrue(german and german != reason, "no German entry")
+                text = gui_support.describe_rejected_links([("https://x", reason)])
+                self.assertEqual(text, f"1 Link abgelehnt: {german}")
+        text = gui_support.describe_rejected_links(
+            [("a", reasons[1]), ("b", download._PRIVATE_NETWORK_REFUSAL)]
+        )
+        self.assertNotIn(reasons[1], text)
+        self.assertIn("Geben Sie eine gültige http- oder https-URL ein.", text)
+
     def test_batch_pluralises_and_does_not_merge_distinct_reasons(self):
         window, calls = self._window(
             "https://vimeo.com/1 http://127.0.0.1/x http://nas/y",
@@ -2493,6 +2529,7 @@ class TranslationCoverageTests(unittest.TestCase):
                 "download.py",
                 "health.py",
                 "sites.py",
+                "config.py",
             },
         )
         strings = set(extractor.extract_all())

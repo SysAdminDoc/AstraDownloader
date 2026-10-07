@@ -34,6 +34,7 @@ repository's git log.
 - Importing a settings file whose format version is `true` instead of a number is now refused, the same way the app already treats its own config file.
 - The README test-count check skips cleanly on a Windows machine with no Python installed, where the Store's `python` shortcut used to make it fail.
 - The sign-in and site notes on the Sites page, and the note shown with a site's failure, now appear in German instead of staying in English.
+- When a pasted link is rejected, the German interface now gives the reason in German too, instead of a German sentence that ended in English.
 
 ## [2.16.0] (2026-10-06)
 

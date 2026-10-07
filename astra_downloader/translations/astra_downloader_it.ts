@@ -3803,6 +3803,10 @@
       <translation>Subtitle language</translation>
     </message>
     <message>
+      <source>That address is on a private, loopback, or link-local network. Astra Downloader only downloads from public sites.</source>
+      <translation>That address is on a private, loopback, or link-local network. Astra Downloader only downloads from public sites.</translation>
+    </message>
+    <message>
       <source>This video is encrypted with DRM, so no downloader can produce a file from it.</source>
       <translation>This video is encrypted with DRM, so no downloader can produce a file from it.</translation>
     </message>
@@ -4221,6 +4225,22 @@
     <message>
       <source>Not supported by yt-dlp; listed so the failure is not a mystery.</source>
       <translation>Not supported by yt-dlp; listed so the failure is not a mystery.</translation>
+    </message>
+    <message>
+      <source>URL is too long to download safely.</source>
+      <translation>URL is too long to download safely.</translation>
+    </message>
+    <message>
+      <source>Enter a valid http or https URL.</source>
+      <translation>Enter a valid http or https URL.</translation>
+    </message>
+    <message>
+      <source>URLs that embed a username or password are not accepted. Paste the plain video link instead.</source>
+      <translation>URLs that embed a username or password are not accepted. Paste the plain video link instead.</translation>
+    </message>
+    <message>
+      <source>That host is not a public internet address. Paste a normal video link such as https://www.reddit.com/r/…</source>
+      <translation>That host is not a public internet address. Paste a normal video link such as https://www.reddit.com/r/…</translation>
     </message>
   </context>
 </TS>

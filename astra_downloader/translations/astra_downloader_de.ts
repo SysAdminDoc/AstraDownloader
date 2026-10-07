@@ -3803,6 +3803,10 @@
       <translation>Untertitelsprache</translation>
     </message>
     <message>
+      <source>That address is on a private, loopback, or link-local network. Astra Downloader only downloads from public sites.</source>
+      <translation>Diese Adresse liegt in einem privaten, Loopback- oder Link-Local-Netzwerk. Astra Downloader lädt nur von öffentlichen Websites herunter.</translation>
+    </message>
+    <message>
       <source>This video is encrypted with DRM, so no downloader can produce a file from it.</source>
       <translation>Dieses Video ist mit DRM verschlüsselt, daher kann kein Downloader daraus eine Datei erzeugen.</translation>
     </message>
@@ -4221,6 +4225,22 @@
     <message>
       <source>Not supported by yt-dlp; listed so the failure is not a mystery.</source>
       <translation>Wird von yt-dlp nicht unterstützt. Aufgeführt, damit der Fehler kein Rätsel bleibt.</translation>
+    </message>
+    <message>
+      <source>URL is too long to download safely.</source>
+      <translation>Die URL ist zu lang, um sie sicher herunterzuladen.</translation>
+    </message>
+    <message>
+      <source>Enter a valid http or https URL.</source>
+      <translation>Geben Sie eine gültige http- oder https-URL ein.</translation>
+    </message>
+    <message>
+      <source>URLs that embed a username or password are not accepted. Paste the plain video link instead.</source>
+      <translation>URLs mit eingebettetem Benutzernamen oder Passwort werden nicht akzeptiert. Fügen Sie stattdessen den einfachen Videolink ein.</translation>
+    </message>
+    <message>
+      <source>That host is not a public internet address. Paste a normal video link such as https://www.reddit.com/r/…</source>
+      <translation>Dieser Host ist keine öffentliche Internetadresse. Fügen Sie einen normalen Videolink ein, etwa https://www.reddit.com/r/…</translation>
     </message>
   </context>
 </TS>

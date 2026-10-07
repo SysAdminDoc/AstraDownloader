@@ -625,9 +625,15 @@ def short_error_text(error, limit=SHORT_ERROR_LIMIT):
 
 
 def describe_rejected_links(failures):
-    """Describe rejected links without inventing a single shared cause."""
+    """Describe rejected links without inventing a single shared cause.
+
+    Each reason arrives in English from the URL policy or the queue, which is
+    what logs and API responses keep. It is translated here, where it is
+    shown, so a German sentence no longer carries an English clause.
+    """
     reasons = []
     for _url, reason in failures:
+        reason = tr(reason)
         if reason not in reasons:
             reasons.append(reason)
     noun = tr("link") if len(failures) == 1 else tr("links")
