@@ -16,9 +16,18 @@ The second check re-derives the real argument names from the installed
 extractor sources rather than trusting the copy in ``sites.py``, so the gate
 still catches a drift after a yt-dlp upgrade removes an option.
 
+The native source resolvers get the same treatment. Each one bypasses a
+yt-dlp extractor for a recorded reason, and nothing else would notice when
+that reason expires, so the gate fails when the installed extractor's source
+no longer matches the hash recorded beside the resolver, and when the
+resolvers' user agent has gone a year without review.
+
 Run directly, or through ``npm run check``.
 """
 
+import datetime
+import hashlib
+import inspect
 import pathlib
 import re
 import sys
@@ -27,7 +36,10 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "astra_downloader"))
 
-import sites  # noqa: E402  (path is set up immediately above)
+import native_sources  # noqa: E402  (path is set up immediately above)
+import sites  # noqa: E402
+
+USER_AGENT_REVIEW_DAYS = 365
 
 
 _CONFIGURATION_ARG = re.compile(
@@ -169,6 +181,53 @@ def check_extractor_args(failures, discovered):
             )
 
 
+def extractor_source_sha256(extractor_class):
+    """Hash an extractor class the way NATIVE_SOURCE_UPSTREAM records it."""
+    source = inspect.getsource(extractor_class).replace("\r\n", "\n")
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def installed_extractor_classes():
+    """Map IE_NAME to class for the installed yt-dlp, or None without it."""
+    try:
+        from yt_dlp.extractor import gen_extractor_classes
+    except ImportError:
+        return None
+    return {str(cls.IE_NAME): cls for cls in gen_extractor_classes()}
+
+
+def check_native_sources(failures, extractors, today=None,
+                         upstream=None, reviewed=None):
+    """A resolver's reason to exist must still match the installed yt-dlp."""
+    today = today or datetime.date.today()
+    reviewed = reviewed or native_sources.NATIVE_SOURCE_USER_AGENT_REVIEWED
+    age = (today - datetime.date.fromisoformat(reviewed)).days
+    if age > USER_AGENT_REVIEW_DAYS:
+        failures.append(
+            f"NATIVE_SOURCE_USER_AGENT was last reviewed {reviewed} ({age} days "
+            f"ago); match it to the newest Chrome profile the pinned curl_cffi "
+            f"impersonates and record the new date"
+        )
+    if extractors is None:
+        return
+    for record in upstream or native_sources.NATIVE_SOURCE_UPSTREAM:
+        name = record["extractor"]
+        extractor = extractors.get(name)
+        if extractor is None:
+            failures.append(
+                f"resolver {record['resolver']!r} stands in for yt-dlp's {name!r}, "
+                f"which the installed yt-dlp no longer has; check whether the "
+                f"resolver is still needed ({record['issue']})"
+            )
+        elif extractor_source_sha256(extractor) != record["extractor_sha256"]:
+            failures.append(
+                f"yt-dlp's {name!r} changed since {record['ytdlp_version']}, when "
+                f"resolver {record['resolver']!r} was last checked against it; "
+                f"test whether the extractor works again ({record['issue']}), "
+                f"then record the new hash in NATIVE_SOURCE_UPSTREAM"
+            )
+
+
 def main():
     failures = []
     discovered = discovered_extractor_args()
@@ -176,6 +235,8 @@ def main():
     check_round_trip(failures)
     check_declared_shape(failures)
     check_extractor_args(failures, discovered)
+    extractors = installed_extractor_classes()
+    check_native_sources(failures, extractors)
 
     if failures:
         print("[check-site-registry] FAILED")
@@ -192,7 +253,10 @@ def main():
     )
     print(
         f"[check-site-registry] OK - {curated} curated sites, "
-        f"{known} known extractor args, checked against {source}"
+        f"{known} known extractor args, checked against {source}; "
+        f"{len(native_sources.NATIVE_SOURCE_UPSTREAM)} native resolver(s) "
+        + ("match their recorded extractors" if extractors is not None
+           else "unverified without yt-dlp")
     )
     return 0
 

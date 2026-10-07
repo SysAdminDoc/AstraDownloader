@@ -6307,9 +6307,10 @@ class DownloadManagerCore:
             # A site whose yt-dlp extractor is known to be broken is resolved
             # here, immediately before the spawn, because the media URL it
             # yields can carry a short-lived session token. Everything the
-            # resolver refuses is a final answer from the site; everything it
-            # cannot reach is a network condition, and both are classified
-            # rather than left to an extractor already known to 404.
+            # resolver refuses is a final answer from the site and everything
+            # it cannot reach is a network condition; both are classified. A
+            # route the site has retired comes back as None, and the page URL
+            # goes to yt-dlp's own extractor.
             native = self._dependencies['resolve_native_source'](dl.url)
             target_url = dl.url
             if native:

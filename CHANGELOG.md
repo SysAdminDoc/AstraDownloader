@@ -16,6 +16,7 @@ repository's git log.
 
 - Two GUI tests that sometimes failed on a busy machine now drive their Qt timers by hand, so the progress-coalescing and History search checks no longer depend on how fast the machine is.
 - The instance listener test waits for the listener to say it has bound and has rejected the untokened command, instead of waiting a fixed few seconds, so a slow machine no longer fails it.
+- Kick VODs download again. Kick moved its video API back, so the playback route Astra used for them stopped answering, and every VOD failed with "no video with this id". When that route has nothing, Astra now hands the link to yt-dlp, which handles Kick VODs again.
 
 ## [2.16.0] (2026-10-06)
 

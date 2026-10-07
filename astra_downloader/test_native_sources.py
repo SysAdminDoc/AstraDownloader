@@ -7,8 +7,11 @@ success body Kick's player receives, the 200-with-`data` refusal, a plain
 because it depends on a VOD that will not exist forever.
 """
 
+import datetime
+import importlib.util
 import json
 import unittest
+from pathlib import Path
 
 try:
     from . import native_sources as ns
@@ -127,11 +130,14 @@ class KickResolutionTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "source-unavailable")
         self.assertIn("Forbidden", str(raised.exception))
 
-    def test_a_404_names_a_missing_video(self):
-        with self.assertRaises(ns.NativeSourceError) as raised:
-            ns.resolve_native_source(f"https://kick.com/loulz/videos/{VOD}", fetch=_Fetch(404, b"{}"))
-        self.assertEqual(raised.exception.code, "source-unavailable")
-        self.assertIn("no video with this id", str(raised.exception))
+    def test_a_404_hands_the_link_back_to_ytdlp(self):
+        # On 2026-10-06 the playback endpoint answered 404 for every VOD while
+        # yt-dlp's kick:vod extracted them again, so a 404 is a retired route,
+        # not a missing video.
+        body = json.dumps({"data": {"details": "Requested resource not found", "type": "NOT_FOUND"}}).encode()
+        self.assertIsNone(
+            ns.resolve_native_source(f"https://kick.com/loulz/videos/{VOD}", fetch=_Fetch(404, body))
+        )
 
     def test_an_unreachable_host_is_a_network_condition(self):
         fetch = _Fetch(error=OSError("connection reset"))
@@ -173,6 +179,51 @@ class ArgvTests(unittest.TestCase):
     def test_nothing_resolved_means_no_argv(self):
         self.assertEqual(ns.native_source_argv(None), [])
         self.assertEqual(ns.native_source_argv({"url": MANIFEST, "title": "", "headers": {}}), [])
+
+
+class _ChangedExtractor:
+    """Stands in for an upstream extractor whose source has moved on."""
+
+
+class UpstreamReasonGateTests(unittest.TestCase):
+    """scripts/check-site-registry.py re-checks why each resolver exists."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).resolve().parents[1] / "scripts" / "check-site-registry.py"
+        spec = importlib.util.spec_from_file_location("astra_check_site_registry", path)
+        cls.gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.gate)
+        cls.reviewed = datetime.date.fromisoformat(ns.NATIVE_SOURCE_USER_AGENT_REVIEWED)
+
+    def test_the_recorded_extractor_matches_the_installed_ytdlp(self):
+        extractors = self.gate.installed_extractor_classes()
+        if extractors is None:
+            self.skipTest("yt-dlp is not installed")
+        failures = []
+        self.gate.check_native_sources(
+            failures, extractors, today=self.reviewed, upstream=ns.NATIVE_SOURCE_UPSTREAM,
+        )
+        self.assertEqual(failures, [])
+
+    def test_a_changed_or_missing_extractor_is_reported(self):
+        for extractors in ({"kick:vod": _ChangedExtractor}, {}):
+            with self.subTest(names=sorted(extractors)):
+                failures = []
+                self.gate.check_native_sources(
+                    failures, extractors, today=self.reviewed, upstream=ns.NATIVE_SOURCE_UPSTREAM,
+                )
+                self.assertEqual(len(failures), 1)
+                self.assertIn("kick:vod", failures[0])
+
+    def test_the_user_agent_review_lapses_after_a_year(self):
+        for days, expected in ((365, 0), (366, 1)):
+            with self.subTest(days=days):
+                failures = []
+                self.gate.check_native_sources(
+                    failures, None, today=self.reviewed + datetime.timedelta(days=days),
+                )
+                self.assertEqual(len(failures), expected)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,20 @@ segments, so resolving immediately before the process is spawned is enough
 even for an eight-hour stream. The delivery host refuses a request with no
 User-Agent (it answers the manifest fetch with a JSON block instead of the
 playlist), so the resolver names the header the download must send.
+
+Kick has since swapped which door is open. On 2026-10-06 the v1 endpoint
+answered again and `kick:vod` extracted every VOD tried, while the playback
+endpoint answered 404 for all of them. A 404 here therefore hands the link
+back to yt-dlp's extractor instead of failing the download, so whichever of
+the two routes Kick keeps working is the one used.
+
+## Keeping the reason honest
+
+`NATIVE_SOURCE_UPSTREAM` records, per resolver, the yt-dlp extractor it
+stands in for, the issue it answers, and a hash of that extractor's source at
+the reviewed yt-dlp release. `scripts/check-site-registry.py` fails when the
+installed extractor no longer matches, which is the cue to test whether the
+resolver is still needed rather than keep assuming it.
 """
 
 import json
@@ -36,13 +50,34 @@ import urllib.request
 __all__ = (
     "NativeSourceError", "resolve_native_source", "native_source_argv",
     "is_native_source_url", "NATIVE_SOURCE_USER_AGENT",
+    "NATIVE_SOURCE_USER_AGENT_REVIEWED", "NATIVE_SOURCE_UPSTREAM",
     "KICK_VOD_URL_RE", "KICK_PLAYBACK_ENDPOINT",
 )
 
 
+# The browser the resolvers claim to be. It tracks the newest desktop Chrome
+# profile the pinned curl_cffi impersonates (chrome146 in 0.16.0), so a
+# resolved download and an impersonated one name the same browser. The site
+# registry gate fails once the review date is more than a year old: a frozen
+# fingerprint in a module whose premise is imitating the site's own player
+# goes stale quietly.
 NATIVE_SOURCE_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+)
+NATIVE_SOURCE_USER_AGENT_REVIEWED = "2026-10-06"
+
+# Why each resolver exists. `extractor_sha256` is the SHA-256 of
+# `inspect.getsource()` of the extractor class (LF line endings) in the yt-dlp
+# release named beside it; scripts/check-site-registry.py recomputes it.
+NATIVE_SOURCE_UPSTREAM = (
+    {
+        "resolver": "kick-vod",
+        "extractor": "kick:vod",
+        "issue": "https://github.com/yt-dlp/yt-dlp/issues/17284",
+        "ytdlp_version": "2026.08.19",
+        "extractor_sha256": "59f4a37e3e9e9c5f942ed12172036a8ed7f50b11f9ad1902c3bab761637e2b19",
+    },
 )
 NATIVE_SOURCE_TIMEOUT_SECONDS = 20
 # Playback responses are a few kilobytes; a cap keeps a misbehaving endpoint
@@ -133,10 +168,11 @@ def _resolve_kick_vod(match, fetch, timeout):
         ) from error
 
     if status == 404:
-        raise NativeSourceError(
-            "Kick has no video with this id. It may have been deleted, or the "
-            "link may be wrong."
-        )
+        # Kick has broken this endpoint and the one kick:vod reads in turn.
+        # A 404 here means this route has nothing, not that the video is
+        # gone, so yt-dlp's own extractor gets the link. A VOD that really
+        # was deleted fails there with yt-dlp's message.
+        return None
     if status >= 400:
         raise NativeSourceError(
             f"Kick refused the playback request (HTTP {status}). Retry later; "
@@ -194,10 +230,11 @@ def resolve_native_source(url, *, fetch=None, timeout=NATIVE_SOURCE_TIMEOUT_SECO
     """Return the media yt-dlp should be pointed at, or None for other sites.
 
     None is the answer for the whole rest of the web and means "hand the page
-    URL to yt-dlp as usual". A dict means yt-dlp gets `url` instead, with the
-    argv from `native_source_argv`. `NativeSourceError` means the site was
-    recognised and refused; the download should fail with that message rather
-    than fall back to an extractor already known to be broken for it.
+    URL to yt-dlp as usual". It is also the answer when a resolver's own route
+    answers 404, since that is how a route Kick has retired looks. A dict
+    means yt-dlp gets `url` instead, with the argv from `native_source_argv`.
+    `NativeSourceError` means the site was recognised and refused; the
+    download should fail with that message.
     """
     text = str(url or "").strip()
     match = KICK_VOD_URL_RE.match(text)
