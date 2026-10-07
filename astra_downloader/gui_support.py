@@ -21,7 +21,7 @@ __all__ = (
     "make_divider", "make_empty_state", "make_label", "make_line_icon", "make_section_label",
     "line_icon_glyph", "make_stat", "make_state_label", "make_status_badge",
     "make_vertical_divider",
-    "announce_status", "refresh_line_icons", "repolish", "sanitize_csv_cell",
+    "announce_status", "show_tray_message", "refresh_line_icons", "repolish", "sanitize_csv_cell",
     "short_error_text", "SHORT_ERROR_LIMIT",
     "set_gui_theme", "set_line_icon", "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
@@ -124,6 +124,24 @@ def announce_status(label):
         QAccessibleEvent(label, QAccessible.Event.Alert)
     )
     return True
+
+
+def show_tray_message(window, title, message, icon, msecs):
+    """Show a tray balloon and announce it the way a status label would.
+
+    QSystemTrayIcon.showMessage raises no accessibility event, and a balloon
+    is the only report while the window is minimised, which is exactly when a
+    screen-reader user needs it. The window's hidden ``tray_announcer`` label
+    takes the balloon's text and goes through announce_status, the path every
+    status label uses. A repeated balloon announces again: it is a new event,
+    not an unchanged label. Returns whether the Alert was posted.
+    """
+    window.tray.showMessage(title, message, icon, msecs)
+    announcer = getattr(window, "tray_announcer", None)
+    if not isinstance(announcer, QLabel):
+        return False
+    announcer.setText(f"{title}. {message}" if title else str(message))
+    return announce_status(announcer)
 
 
 class StatusLabel(QLabel):

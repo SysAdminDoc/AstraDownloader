@@ -119,7 +119,7 @@ try:
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
-        short_error_text,
+        short_error_text, show_tray_message,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 except ImportError:  # Flat source-path compatibility.
@@ -132,7 +132,7 @@ except ImportError:  # Flat source-path compatibility.
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
-        short_error_text,
+        short_error_text, show_tray_message,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 
@@ -1812,6 +1812,11 @@ class MainWindowCore(
         exit_action = tray_menu.addAction(tr("Quit Astra Downloader"))
         exit_action.triggered.connect(self._force_close)
         self.tray.setContextMenu(tray_menu)
+        # A balloon raises no accessibility event of its own. This hidden
+        # label carries each one's text to announce_status; see
+        # show_tray_message.
+        self.tray_announcer = QLabel(self)
+        self.tray_announcer.hide()
         self.tray.activated.connect(self._tray_activated)
         # A toast that cannot be acted on is just an interruption. Clicking
         # one reveals the download it announced.
@@ -5283,7 +5288,8 @@ class MainWindowCore(
                     heading = tr("Download complete")
                     body = title
                 try:
-                    self.tray.showMessage(
+                    show_tray_message(
+                        self,
                         heading, body,
                         QSystemTrayIcon.MessageIcon.Warning if skipped
                         else QSystemTrayIcon.MessageIcon.Information,
@@ -5312,7 +5318,8 @@ class MainWindowCore(
             if len(reason) > 240:
                 reason = reason[:237].rstrip() + "..."
             try:
-                self.tray.showMessage(
+                show_tray_message(
+                    self,
                     tr("Download failed"),
                     reason,
                     QSystemTrayIcon.MessageIcon.Warning,
@@ -7810,7 +7817,8 @@ class MainWindowCore(
         repolish(self.quick_download_status)
         self._append_log("Staged a copied video link for review.")
         if hasattr(self, "tray"):
-            self.tray.showMessage(
+            show_tray_message(
+                self,
                 self._value('APP_NAME'),
                 tr(
                     "Video link staged. Open Downloads to review it before adding it to the queue."
@@ -8181,7 +8189,8 @@ class MainWindowCore(
                 tr("Server failed to start. Check the log for details.")
             )
             if self.tray.isVisible():
-                self.tray.showMessage(
+                show_tray_message(
+                    self,
                     "Astra Downloader",
                     tr("Server failed to start. Check the log for details."),
                     QSystemTrayIcon.MessageIcon.Warning,
@@ -8392,7 +8401,8 @@ class MainWindowCore(
             event.ignore()
             self.hide()
             if not self._tray_hint_shown and self.tray.isVisible():
-                self.tray.showMessage(
+                show_tray_message(
+                    self,
                     self._value('APP_NAME'),
                     tr(
                         "Still running in the tray so Astra Deck can keep sending downloads."
@@ -8419,7 +8429,8 @@ class MainWindowCore(
                 # before the queue is cancelled, including for tray exit.
                 self._append_log(message)
                 if self.tray.isVisible():
-                    self.tray.showMessage(
+                    show_tray_message(
+                        self,
                         self._value('APP_NAME'),
                         message,
                         QSystemTrayIcon.MessageIcon.Warning,

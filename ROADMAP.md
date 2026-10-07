@@ -17,11 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 ### P2
 
 
-- [ ] P2 | AD-63 | Tray notifications raise no accessibility event
-  Why: every status label in the app announces itself through `StatusLabel.setText` / `announce_status`. The five `QSystemTrayIcon.showMessage` balloons bypass that path entirely, so a completion or a failure that fires while the window is minimised is announced to nobody. That is exactly when the balloon is the only report.
-  Where: `astra_downloader/gui.py`, the five `showMessage` call sites; `astra_downloader/gui_support.py` `announce_status`.
-
-
 - [ ] P2 | AD-77 | Turn the format probe into a truthful pre-download summary
   Why: The probe already returns title, duration, formats, and approximate sizes, but the GUI shows only maximum height and deliberately hides every lookup error.
   Evidence: astra_downloader/download.py summarize_ytdlp_formats; astra_downloader/gui.py _apply_format_probe; Parabolic 2026.4 preview work; ytDownloader issue 406.

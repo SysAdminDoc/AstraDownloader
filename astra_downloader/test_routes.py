@@ -2059,6 +2059,39 @@ for forbidden in (
         self.assertIs(event.object(), label)
         self.assertEqual(event.type(), gs.QAccessible.Event.Alert)
 
+    def test_a_tray_balloon_raises_the_same_alert_as_a_status_label(self):
+        # A balloon is the only report while the window is minimised, and
+        # showMessage raises no accessibility event, so it was heard by nobody.
+        import gui_support as gs
+        if _get_qapp_or_skip(self) is None:
+            return
+
+        shown = []
+        announcer = gs.QLabel()
+        announcer.hide()
+        self.addCleanup(announcer.deleteLater)
+        window = types.SimpleNamespace(
+            tray=types.SimpleNamespace(showMessage=lambda *args: shown.append(args)),
+            tray_announcer=announcer,
+        )
+        for _ in range(2):
+            with mock.patch.object(gs.QAccessible, "updateAccessibility") as posted:
+                self.assertTrue(gs.show_tray_message(
+                    window, "Download failed", "HTTP 403 from the site.", 2, 6000,
+                ))
+            self.assertEqual(posted.call_count, 1, "a repeated balloon still announces")
+            event = posted.call_args.args[0]
+            self.assertIs(event.object(), announcer)
+            self.assertEqual(event.type(), gs.QAccessible.Event.Alert)
+        self.assertEqual(announcer.text(), "Download failed. HTTP 403 from the site.")
+        self.assertEqual(len(shown), 2)
+
+        # Every balloon in the window goes through that helper.
+        source = (Path(ad.__file__).resolve().parent / "gui.py").read_text(encoding="utf-8")
+        self.assertNotIn("tray.showMessage(", source)
+        self.assertEqual(source.count("show_tray_message("), 6)
+        self.assertIn("self.tray_announcer = QLabel(self)", source)
+
     def test_repeating_the_same_status_says_nothing(self):
         # _update_output_template_preview runs on every keystroke of the output
         # template. Announcing an unchanged message would interrupt a screen
