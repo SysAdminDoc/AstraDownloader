@@ -9688,7 +9688,35 @@ class ScheduledStartTests(unittest.TestCase):
                 self.assertFalse(second.intake_paused)
                 arm.assert_called_once()
                 second._schedule()
+            # Starting it clears the schedule on disk too; let that write
+            # land before the folder goes.
+            second.flush_persistence()
             self.assertEqual([dl.id for dl in launched], [dl_id])
+
+    def test_a_scheduled_run_that_started_restores_as_interrupted_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({"DownloadPath": tmp})
+            queue_path = Path(tmp) / "download-queue.json"
+            first = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            with mock.patch.object(first, "_launch_workers"), \
+                    mock.patch.object(first, "_arm_host_backoff_wakeup"):
+                dl_id, error = first.start_download(
+                    "https://www.example.com/later", not_before_utc=self._iso(3600))
+                self.assertIsNone(error)
+                first.downloads[dl_id].not_before_utc = time.time() - 1
+                first._schedule()
+            self.assertEqual(first.downloads[dl_id].status, "queued")
+            first.flush_persistence()
+            on_disk = json.loads(queue_path.read_text(encoding="utf-8"))
+            self.assertIsNone(on_disk["downloads"][0].get("notBeforeUtc"))
+
+            # Closed mid-run: it comes back as interrupted work.
+            with mock.patch.object(ad.DownloadManager, "_arm_host_backoff_wakeup"):
+                second = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            restored = second.downloads[dl_id]
+            self.assertEqual(restored.status, "paused")
+            self.assertTrue(restored.resume_partial)
+            self.assertTrue(second.intake_paused)
 
 
 class AudioLanguageSelectionTests(unittest.TestCase):

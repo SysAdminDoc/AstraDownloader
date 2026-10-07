@@ -5250,6 +5250,7 @@ class DownloadManagerCore:
     def _schedule(self):
         to_start = []
         wake_delay = None
+        schedule_cleared = False
         with self._lock:
             if self._closing or self.intake_paused:
                 return
@@ -5298,11 +5299,19 @@ class DownloadManagerCore:
                             continue
                         running_per_profile[key] = running_per_profile.get(key, 0) + 1
                 dl.status = 'queued'
-                dl.not_before_utc = None
+                if dl.not_before_utc is not None:
+                    dl.not_before_utc = None
+                    schedule_cleared = True
                 self._running_ids.add(dl.id)
                 to_start.append(dl)
                 if len(to_start) >= available:
                     break
+            if schedule_cleared:
+                # On disk too. A snapshot still carrying the start time makes
+                # a run cut short by a close, crash or reboot restore as a
+                # never-run overdue item: restarted at once, intake left
+                # running, and its .part overwritten instead of resumed.
+                self._persist_async_locked()
         if wake_delay is not None:
             self._arm_host_backoff_wakeup(wake_delay)
         if to_start:
