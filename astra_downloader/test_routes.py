@@ -3609,7 +3609,16 @@ class PreflightHealthTests(unittest.TestCase):
             _retire_test_window(window)
 
     def test_health_exposes_preflight_without_network_or_site_metadata(self):
-        config = FakeConfig({'ServerToken': 'p' * 32})
+        # 'ready' needs an output folder that exists. FakeConfig's shared
+        # default is created by whichever test happens to run first and
+        # removed at session end, so run alone this read output-folder error.
+        download_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(download_dir.cleanup)
+        config = FakeConfig({
+            'ServerToken': 'p' * 32,
+            'DownloadPath': download_dir.name,
+            'AudioDownloadPath': download_dir.name,
+        })
         manager = ad.DownloadManager(config, FakeHistory())
         # The route reads the real clock, so the version must come from the
         # same clock. A literal here asserted 'ready' until the 30-day
