@@ -6281,8 +6281,15 @@ class SiteLoginDownloadTests(unittest.TestCase):
                 self.assertIsNone(error, error)
                 download = manager.downloads[dl_id]
                 deadline = time.time() + 10
-                while download.status not in ad.DOWNLOAD_TERMINAL_STATES and time.time() < deadline:
+                # The worker marks the item terminal before its finally block
+                # drops the credentials under the manager lock. Wait for it
+                # to leave the running set, then for that locked block to end,
+                # or a loaded machine reads the item in between.
+                while (download.status not in ad.DOWNLOAD_TERMINAL_STATES
+                       or dl_id in manager._running_ids) and time.time() < deadline:
                     time.sleep(0.05)
+                with manager._lock:
+                    pass
             argv = captured[-1] if captured else []
             jar_body = live_jar[-1] if live_jar else ''
             if not jar_body and '--cookies' in argv:
