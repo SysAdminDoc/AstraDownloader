@@ -5496,6 +5496,9 @@ class StylesheetContrastTests(unittest.TestCase):
         ('QPushButton[class="nav"]:focus', "border-left-color", "#0a0d12"),
         ('QPushButton[class="nav"][active="true"]:focus',
          "border-left-color", "#0a0d12"),
+        ("QScrollArea:focus", "border-color", "#0a0d12"),
+        ("QComboBox QAbstractItemView::item:selected", "border-left-color", "#242b35"),
+        ("QComboBox QAbstractItemView::item:selected", "border-left-color", "#11161d"),
     )
 
     def test_every_focus_ring_separates_from_what_is_behind_it(self):

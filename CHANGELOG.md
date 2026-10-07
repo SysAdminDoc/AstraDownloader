@@ -38,6 +38,7 @@ repository's git log.
 - The README test-count check skips cleanly on a Windows machine with no Python installed, where the Store's `python` shortcut used to make it fail.
 - The sign-in and site notes on the Sites page, and the note shown with a site's failure, now appear in German instead of staying in English.
 - When a pasted link is rejected, the German interface now gives the reason in German too, instead of a German sentence that ended in English.
+- Keyboard users can now see when a scrolling list has focus, and the highlighted choice in an open drop-down gets a clear accent bar in both themes.
 
 ## [2.16.0] (2026-10-06)
 

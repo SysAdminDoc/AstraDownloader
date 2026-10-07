@@ -5336,6 +5336,9 @@ QPushButton[class="nav"][active="true"] {
 QPushButton[class="nav"]:focus { background-color: #171d25; border-left-color: #697482; }
 QPushButton[class="nav"][active="true"]:focus { background-color: #242b35; border-left-color: #ff6552; }
 
+/* Keep a combo's popup a list view on every base style; a menu-style popup
+   ignores the ::item rules below. Its own block, ahead of the shared one. */
+QComboBox { combobox-popup: 0; }
 QLineEdit, QSpinBox, QComboBox {
     background-color: #11161d;
     color: #f0eeeb;
@@ -5371,6 +5374,14 @@ QComboBox QAbstractItemView {
     selection-color: #fff8f4;
     padding: 4px;
 }
+/* selection-background-color alone left the keyboard row inside an open
+   combo to the platform's own highlight over this custom background. The
+   rows get their own rules (combobox-popup: 0 above is what lets ::item
+   apply). The left bar is the indicator, so it is measured like a focus
+   ring. */
+QComboBox QAbstractItemView::item { min-height: 26px; padding: 2px 8px; border-left: 3px solid transparent; }
+QComboBox QAbstractItemView::item:hover { background: #171d25; }
+QComboBox QAbstractItemView::item:selected { background: #242b35; color: #fff8f4; border-left-color: #ff7664; }
 QSpinBox::up-button, QSpinBox::down-button { width: 18px; border: none; background: transparent; }
 QCheckBox { color: #d7dce2; font-size: 13px; spacing: 10px; min-height: 26px; }
 QCheckBox::indicator { width: 17px; height: 17px; border-radius: 4px; border: 1px solid #607080; background: transparent; }
@@ -5467,7 +5478,11 @@ QTextEdit {
 }
 QTextEdit:focus { border-color: #ff7664; background: #151b23; }
 QTextEdit[class="monospaceLog"] { background: #080b0f; color: #d8dde3; }
-QScrollArea { border: none; background: transparent; }
+/* A scroll area takes keyboard focus to scroll, so it needs a ring like any
+   other focus target. The border is always there, transparent, so focusing
+   one doesn't shift its content by a pixel. */
+QScrollArea { border: 1px solid transparent; background: transparent; }
+QScrollArea:focus { border-color: #ff7664; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; border: none; margin: 2px; }
 QScrollBar::handle:vertical { background: #394350; border-radius: 4px; min-height: 28px; }
