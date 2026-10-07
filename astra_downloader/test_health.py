@@ -171,8 +171,13 @@ class DiagnosticsBundleTests(unittest.TestCase):
             entries = ad.get_recent_log_entries()
             # write_persistent_log hands the file write to a writer thread, so
             # leaving this block can race the flush and fail the directory
-            # cleanup with WinError 145 instead of failing an assertion.
-            ad.flush_persistent_log()
+            # cleanup with WinError 145 instead of failing an assertion. The
+            # default 5 s budget ran out under a full parallel gate, and the
+            # unchecked False let the cleanup race the writer anyway.
+            self.assertTrue(
+                ad.flush_persistent_log(timeout=30),
+                "the log writer did not reach the queued lines",
+            )
 
         self.assertEqual(len(entries), ad.DIAGNOSTIC_LOG_ENTRY_LIMIT)
         bundle = ad.build_diagnostics_bundle(recent_logs=entries)
