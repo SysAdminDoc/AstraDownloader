@@ -119,7 +119,7 @@ try:
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
-        short_error_text, show_tray_message,
+        short_error_text, show_tray_message, history_file_state,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 except ImportError:  # Flat source-path compatibility.
@@ -132,7 +132,7 @@ except ImportError:  # Flat source-path compatibility.
         make_empty_state, make_label, make_line_icon, make_section_label,
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
-        short_error_text, show_tray_message,
+        short_error_text, show_tray_message, history_file_state,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 
@@ -1699,6 +1699,7 @@ class MainWindowCore(
     site_login_test_finished = Signal(dict)
     format_probe_finished = Signal(dict)
     site_catalog_ready = Signal(list)
+    history_file_states_ready = Signal(int, object)
 
     # How long the instance listener waits for a connected client's one line.
     # It serves one connection at a time, so a client that connects and says
@@ -1754,6 +1755,9 @@ class MainWindowCore(
         self.site_login_test_finished.connect(self._finish_site_login_test)
         self.format_probe_finished.connect(self._apply_format_probe)
         self.site_catalog_ready.connect(self._on_site_catalog_ready)
+        self.history_file_states_ready.connect(self._apply_history_file_states)
+        self._history_file_rows = {}
+        self._history_file_check_generation = 0
         # Format probing: the URL whose probe is currently reflected in the
         # quality picker, and a generation counter so a probe that lands
         # after the user has typed on is discarded rather than applied.
@@ -3709,19 +3713,9 @@ class MainWindowCore(
             path = str(item.get("filePath") or "")
             if not path:
                 continue
-            try:
-                # `os.stat`, not `Path.is_file()`: is_file swallows the
-                # "drive exists but is not ready" error and answers False, so
-                # an ejected USB stick would be reported as a deleted file —
-                # the one claim this must never make. Only FileNotFoundError
-                # is a deletion.
-                os.stat(path)
-                item["fileMissing"] = False
-            except FileNotFoundError:
-                item["fileMissing"] = True
-            except OSError:
-                # reason: an unreachable drive is not proof the file was deleted
-                item["fileMissing"] = False
+            # An unreachable drive is not proof the file was deleted, so only
+            # "missing" counts; history_file_state explains why it uses stat.
+            item["fileMissing"] = history_file_state(path) == "missing"
 
         def forget(key):
             try:
@@ -6419,6 +6413,10 @@ class MainWindowCore(
         self.btn_history_next.setEnabled(False)
         self.btn_export_history.setEnabled(False)
         self._clear_layout(self.history_container)
+        # A file check still running for the rows just cleared must not touch
+        # the new ones.
+        self._history_file_check_generation += 1
+        self._history_file_rows = {}
 
         load_error = None
         try:
@@ -6522,6 +6520,9 @@ class MainWindowCore(
                 file_copy.addWidget(
                     make_label(str(h["error"]), "errorCallout", word_wrap=True)
                 )
+            file_state = make_label("", "fieldHint", word_wrap=True)
+            file_state.hide()
+            file_copy.addWidget(file_state)
             card_l.addLayout(file_copy, 4)
             not_set = tr("Not set")
             values = (
@@ -6539,10 +6540,54 @@ class MainWindowCore(
                     "Show", "ghost", Path(filename).name)
                 btn_show.clicked.connect(lambda checked=False, path=filename: self._show_download_location(path))
                 card_l.addWidget(btn_show)
+                self._history_file_rows.setdefault(filename, []).append(
+                    (btn_show, file_state))
             else:
                 card_l.addSpacing(54)
             self.history_container.addWidget(card)
         self.history_container.addStretch()
+        self._check_history_files()
+
+    def _check_history_files(self):
+        """Ask whether each file on the visible History page is still there.
+
+        Only this page's rows, and never on the GUI thread: a stat against a
+        sleeping network drive can block for seconds. The answer only changes
+        what Show offers. The stored row, search and export are untouched,
+        and the next refresh asks again, so a file that comes back gets its
+        Show button back.
+        """
+        paths = list(self._history_file_rows)
+        if not paths:
+            return
+        generation = self._history_file_check_generation
+
+        def check():
+            states = {path: history_file_state(path) for path in paths}
+            try:
+                self.history_file_states_ready.emit(generation, states)
+            except RuntimeError:
+                # reason: the window closed while the check ran
+                pass
+
+        threading.Thread(target=check, name="history-file-check", daemon=True).start()
+
+    def _apply_history_file_states(self, generation, states):
+        if generation != self._history_file_check_generation:
+            return
+        notes = {
+            "missing": tr("File missing. The history record is kept."),
+            "unavailable": tr("File unavailable. Its drive or folder can't be reached right now."),
+        }
+        for path, state in dict(states or {}).items():
+            note = notes.get(state)
+            if not note:
+                continue
+            for button, label in self._history_file_rows.get(path, ()):
+                button.setEnabled(False)
+                button.setToolTip(note)
+                label.setText(note)
+                label.show()
 
     def _clear_history(self):
         snapshot = self.history_mgr.load()

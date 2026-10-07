@@ -898,6 +898,100 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
             finally:
                 _retire_test_window(window)
 
+    def test_history_marks_missing_and_unreachable_files_without_dropping_rows(self):
+        import threading
+        import time
+
+        import gui_support
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        gui_module = gui_module_for_tests()
+        folder = Path(tempfile.mkdtemp(prefix="astra-history-files-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        present, missing, offline, off_page = (
+            str(folder / name) for name in ("here.mp4", "gone.mp4", "nas.mp4", "later.mp4"))
+        Path(present).write_bytes(b"x")
+        Path(offline).write_bytes(b"x")
+        rows = [
+            {"id": f"h{index}", "url": f"https://example.com/{index}",
+             "title": f"Video {index}", "filename": path, "format": "mp4",
+             "status": "complete", "date": f"2026-08-0{9 - index} 10:00:00"}
+            for index, path in enumerate((present, missing, offline, off_page))
+        ]
+
+        class FourRowHistory(FakeHistory):
+            def load(self):
+                return [dict(row) for row in rows]
+
+        checked = []
+        real_state = gui_support.history_file_state
+        real_stat = os.stat
+
+        def recording_state(path):
+            checked.append((path, threading.current_thread() is threading.main_thread()))
+            return real_state(path)
+
+        def stat(path, *args, **kwargs):
+            # A drive that exists but is not ready: an OSError that is not
+            # FileNotFoundError, and not proof of deletion.
+            if str(path) == offline:
+                raise OSError(21, "The device is not ready")
+            return real_stat(path, *args, **kwargs)
+
+        def settle(window, marks):
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                QApplication.processEvents()
+                shown = [label for pairs in window._history_file_rows.values()
+                         for _button, label in pairs if label.text()]
+                if len(shown) >= marks:
+                    return
+                time.sleep(0.02)
+            self.fail("the History file check never reported back")
+
+        history = FourRowHistory()
+        manager = ad.DownloadManager(FakeConfig(), history)
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"), \
+                mock.patch.object(gui_support.os, "stat", side_effect=stat), \
+                mock.patch.object(gui_module, "history_file_state", side_effect=recording_state):
+            window = ad.MainWindow(FakeConfig(), manager, history)
+            try:
+                window._history_page_size = 3
+                window._refresh_history()
+                settle(window, 2)
+                rows_by_path = {
+                    path: pairs[0] for path, pairs in window._history_file_rows.items()
+                }
+                self.assertEqual(sorted(path for path, _ in checked),
+                                 sorted([present, missing, offline]),
+                                 "only the visible page is checked")
+                self.assertNotIn(True, [main for _, main in checked],
+                                 "file checks run off the GUI thread")
+                button, note = rows_by_path[present]
+                self.assertTrue(button.isEnabled())
+                self.assertEqual(note.text(), "")
+                button, note = rows_by_path[missing]
+                self.assertFalse(button.isEnabled())
+                self.assertIn("missing", note.text())
+                button, note = rows_by_path[offline]
+                self.assertFalse(button.isEnabled())
+                self.assertIn("unavailable", note.text())
+                self.assertNotIn("missing", note.text())
+                self.assertEqual(len(history.load()), 4, "no stored row is dropped")
+
+                # The file comes back: the next refresh offers Show again.
+                Path(missing).write_bytes(b"x")
+                window._refresh_history()
+                settle(window, 1)
+                button, note = window._history_file_rows[missing][0]
+                self.assertTrue(button.isEnabled())
+                self.assertEqual(note.text(), "")
+            finally:
+                _retire_test_window(window)
+
     def test_a_saved_date_the_filter_cannot_read_is_marked_and_explained(self):
         from PySide6.QtWidgets import QApplication
 

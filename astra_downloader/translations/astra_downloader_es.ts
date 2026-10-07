@@ -739,6 +739,14 @@
       <translation>Not set</translation>
     </message>
     <message>
+      <source>File missing. The history record is kept.</source>
+      <translation>File missing. The history record is kept.</translation>
+    </message>
+    <message>
+      <source>File unavailable. Its drive or folder can't be reached right now.</source>
+      <translation>File unavailable. Its drive or folder can't be reached right now.</translation>
+    </message>
+    <message>
       <source>Download history is already clear.</source>
       <translation>Download history is already clear.</translation>
     </message>

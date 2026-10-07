@@ -5,6 +5,8 @@ their state from ``MainWindowCore`` and use these small, dependency-neutral
 builders for the common visual language.
 """
 
+import os
+
 from PySide6.QtCore import QCoreApplication, QSize, Qt
 from PySide6.QtGui import (
     QAccessible, QAccessibleEvent, QColor, QIcon, QPainter, QPen, QPixmap,
@@ -21,7 +23,7 @@ __all__ = (
     "make_divider", "make_empty_state", "make_label", "make_line_icon", "make_section_label",
     "line_icon_glyph", "make_stat", "make_state_label", "make_status_badge",
     "make_vertical_divider",
-    "announce_status", "show_tray_message", "refresh_line_icons", "repolish", "sanitize_csv_cell",
+    "announce_status", "show_tray_message", "history_file_state", "refresh_line_icons", "repolish", "sanitize_csv_cell",
     "short_error_text", "SHORT_ERROR_LIMIT",
     "set_gui_theme", "set_line_icon", "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
@@ -124,6 +126,23 @@ def announce_status(label):
         QAccessibleEvent(label, QAccessible.Event.Alert)
     )
     return True
+
+
+def history_file_state(path):
+    """Say whether a stored download is "present", "missing" or "unavailable".
+
+    `os.stat`, not `Path.is_file()`: is_file swallows the "drive exists but is
+    not ready" error and answers False, so an ejected USB stick would be
+    reported as a deleted file, the one claim this must never make. Only
+    FileNotFoundError is a deletion. Any other OSError is "unavailable".
+    """
+    try:
+        os.stat(path)
+    except FileNotFoundError:
+        return "missing"
+    except OSError:
+        return "unavailable"
+    return "present"
 
 
 def show_tray_message(window, title, message, icon, msecs):

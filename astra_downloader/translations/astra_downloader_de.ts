@@ -739,6 +739,14 @@
       <translation>Nicht festgelegt</translation>
     </message>
     <message>
+      <source>File missing. The history record is kept.</source>
+      <translation>Datei fehlt. Der Verlaufseintrag bleibt erhalten.</translation>
+    </message>
+    <message>
+      <source>File unavailable. Its drive or folder can't be reached right now.</source>
+      <translation>Datei nicht verfügbar. Ihr Laufwerk oder Ordner ist gerade nicht erreichbar.</translation>
+    </message>
+    <message>
       <source>Download history is already clear.</source>
       <translation>Der Downloadverlauf ist bereits leer.</translation>
     </message>

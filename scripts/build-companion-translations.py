@@ -1583,6 +1583,10 @@ CATALOGS = {
             "{count} Videos eingereiht; der Rest wurde abgelehnt: {reason}",
         "The source no longer lists this item.":
             "Die Quelle führt diesen Eintrag nicht mehr.",
+        "File missing. The history record is kept.":
+            "Datei fehlt. Der Verlaufseintrag bleibt erhalten.",
+        "File unavailable. Its drive or folder can't be reached right now.":
+            "Datei nicht verfügbar. Ihr Laufwerk oder Ordner ist gerade nicht erreichbar.",
     },
     "en": {},
     "es": {
