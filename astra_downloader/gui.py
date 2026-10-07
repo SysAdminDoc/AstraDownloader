@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QByteArray, QCoreApplication, QEasingCurve, QObject, QPropertyAnimation, QSize,
+    QByteArray, QCoreApplication, QEasingCurve, QLocale, QObject, QPropertyAnimation, QSize,
     QThread, QTimer, Qt, Signal,
 )
 from PySide6.QtGui import QIcon, QTextCursor
@@ -120,6 +120,7 @@ try:
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
         short_error_text, show_tray_message, history_file_state,
+        sanitize_display_title, break_long_words,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 except ImportError:  # Flat source-path compatibility.
@@ -133,6 +134,7 @@ except ImportError:  # Flat source-path compatibility.
         make_stat, make_state_label, make_status_badge, make_vertical_divider,
         refresh_line_icons, repolish, sanitize_csv_cell, set_gui_theme,
         short_error_text, show_tray_message, history_file_state,
+        sanitize_display_title, break_long_words,
         set_line_icon, set_status_tone, tr, tr_format,
     )
 
@@ -913,6 +915,9 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'is_playlist_url',
     'is_youtube_url',
     'probed_video_heights',
+    'estimate_download_bytes',
+    'classify_download_failure',
+    'DOWNLOAD_FAILURE_RECOVERY',
     'describe_sabr_voided_options',
     'sabr_only_formats',
     'SABR_LIMITED_NOTICE',
@@ -1766,6 +1771,8 @@ class MainWindowCore(
         self._format_probe_generation = 0
         self._format_probe_summary = {}
         self._format_probe_summary_url = ""
+        # A failed probe's warning, kept with the URL it describes.
+        self._format_probe_warning = ("", "")
         self._format_probe_in_flight = False
         self._format_probe_request_url = ""
 
@@ -7881,11 +7888,13 @@ class MainWindowCore(
     def _reset_quality_choices(self):
         self._format_probe_summary = {}
         self._format_probe_summary_url = ""
+        self._format_probe_warning = ("", "")
         self._format_probe_in_flight = False
         self._format_probe_request_url = ""
         if hasattr(self, "quick_download_status"):
             self.quick_download_status.clear()
             self.quick_download_status.hide()
+        self._render_probe_summary()
         if not self._probed_format_url:
             return
         self._probed_format_url = ""
@@ -7942,37 +7951,125 @@ class MainWindowCore(
             return
         if payload.get("generation") != self._format_probe_generation:
             # The user typed on while this probe ran; it describes a URL that
-            # is no longer in the box. A newer probe owns in-flight state.
+            # is no longer in the box. A newer probe owns in-flight state, and
+            # the card shows only what still matches the box.
+            self._render_probe_summary()
             return
         self._format_probe_in_flight = False
         self._format_probe_request_url = ""
         if payload.get("url") != self.quick_download_url.text().strip():
+            self._render_probe_summary()
             return
+        self.quick_download_status.clear()
+        self.quick_download_status.hide()
         if payload.get("error"):
             # A probe failure is not a download failure: the fixed ladder is
-            # still a usable offer, so it stays and nothing is said.
+            # still a usable offer and Add to queue stays available. The card
+            # says the preview is missing and what to check, and nothing more.
             self._format_probe_summary = {}
             self._format_probe_summary_url = ""
-            self.quick_download_status.clear()
-            self.quick_download_status.hide()
+            self._format_probe_warning = (
+                payload.get("url") or "",
+                self._describe_probe_failure(payload.get("error")),
+            )
+            self._render_probe_summary()
             return
         summary = payload.get("summary")
         self._format_probe_summary = summary if isinstance(summary, dict) else {}
         self._format_probe_summary_url = payload.get("url") or ""
+        self._format_probe_warning = ("", "")
         self._apply_sabr_limits(self._dependencies['sabr_only_formats'](summary))
         heights = self._dependencies['probed_video_heights'](summary)
-        if not heights:
-            self.quick_download_status.clear()
-            self.quick_download_status.hide()
+        if heights:
+            self._probed_format_url = payload.get("url") or ""
+            self._set_quality_choices(
+                self._dependencies['quality_choices_for_heights'](heights)
+            )
+        self._render_probe_summary()
+
+    def _render_probe_summary(self, *_args):
+        """Show the link card for the link in the box, or hide it.
+
+        Wired to every change of the box, the type and the quality, so the
+        card never describes a link that is gone (cleared after queueing,
+        replaced by a dropped batch) and its size follows the current choice.
+        """
+        label = getattr(self, "quick_download_probe_summary", None)
+        if label is None:
             return
-        self._probed_format_url = payload.get("url") or ""
-        self._set_quality_choices(
-            self._dependencies['quality_choices_for_heights'](heights)
-        )
-        self._set_quick_download_status(
-            tr("This link tops out at {height}p.").format(height=max(heights)),
-            "neutral",
-        )
+        current = self.quick_download_url.text().strip()
+        warning_url, warning = getattr(self, "_format_probe_warning", ("", ""))
+        summary = getattr(self, "_format_probe_summary", None) or {}
+        text, tone = "", "neutral"
+        if warning and warning_url == current:
+            text, tone = warning, "warning"
+        elif summary and getattr(self, "_format_probe_summary_url", "") == current:
+            text = self._describe_probe_summary(summary)
+        if not text:
+            label.clear()
+            label.hide()
+            return
+        label.setText(text)
+        set_status_tone(label, tone)
+        repolish(label)
+        label.show()
+
+    def _describe_probe_summary(self, summary):
+        """The probed link in plain words: its title, then length, ceiling, size.
+
+        Only what the probe reported is said. A missing title, length or size
+        is left out rather than guessed. The size is the disk preflight's
+        estimate for the type and quality chosen right now, which takes the
+        larger of the paths yt-dlp might pick, so it is worded as a ceiling.
+        """
+        lines = []
+        title = break_long_words(sanitize_display_title(summary.get("title")))
+        if title:
+            lines.append(title)
+        facts = []
+        duration = format_duration(summary.get("duration"))
+        if duration:
+            facts.append(tr_format("Length {duration}", duration=duration))
+        heights = self._dependencies['probed_video_heights'](summary)
+        if heights:
+            facts.append(tr_format("Up to {height}p", height=max(heights)))
+        kind = self.quick_download_type.currentData()
+        if kind != "subtitles":
+            size = self._dependencies['estimate_download_bytes'](
+                summary,
+                audio_only=kind == "audio",
+                quality=self.quick_download_quality.currentData() or "best",
+            )
+            if size and size > 0:
+                facts.append(tr_format(
+                    "At most about {size} for this choice",
+                    size=QLocale().formattedDataSize(int(size), 1),
+                ))
+        if facts:
+            lines.append(" \u00b7 ".join(facts))
+        return "\n".join(lines)
+
+    def _describe_probe_failure(self, error):
+        """A bounded warning for a lookup that failed, with the next step.
+
+        A failure the download taxonomy recognises gets its own explanation
+        and fix, which is where sign-in and runtime problems are named.
+        Anything else gets a one-line reason and a pointer to Download health.
+        """
+        code = self._dependencies['classify_download_failure'](str(error or ""))
+        recovery = self._value('DOWNLOAD_FAILURE_RECOVERY').get(code) if code else None
+        lines = [tr("Couldn't preview this link. You can still add it to the queue.")]
+        if recovery:
+            lines.append(tr(recovery.get("error", "")))
+            lines.append(tr(recovery.get("advice", "")))
+        else:
+            lines.append(tr_format(
+                "Reason: {reason}", reason=break_long_words(short_error_text(error))
+            ))
+            lines.append(tr(
+                "If downloads fail too, choose Show checks under Download health."
+            ))
+        return "\n".join(line for line in lines if line)
 
     def _handle_clipboard_change(self, clipboard_text=None):
         """Stage a copied media URL for review without starting a download."""

@@ -6,6 +6,7 @@ builders for the common visual language.
 """
 
 import os
+import unicodedata
 
 from PySide6.QtCore import QCoreApplication, QSize, Qt
 from PySide6.QtGui import (
@@ -24,7 +25,8 @@ __all__ = (
     "line_icon_glyph", "make_stat", "make_state_label", "make_status_badge",
     "make_vertical_divider",
     "announce_status", "show_tray_message", "history_file_state", "refresh_line_icons", "repolish", "sanitize_csv_cell",
-    "short_error_text", "SHORT_ERROR_LIMIT",
+    "short_error_text", "SHORT_ERROR_LIMIT", "sanitize_display_title",
+    "break_long_words",
     "set_gui_theme", "set_line_icon", "set_status_tone",
     "SUBTITLE_LANGUAGE_CHOICES", "tr", "tr_format",
 )
@@ -126,6 +128,44 @@ def announce_status(label):
         QAccessibleEvent(label, QAccessible.Event.Alert)
     )
     return True
+
+
+def sanitize_display_title(value, limit=120):
+    """Make a site-supplied title safe to show on one card.
+
+    The title comes from the page, not from the user. Control and format
+    characters go (a right-to-left override would flip the rest of the card,
+    and a stray newline would push the facts off it), whitespace collapses,
+    and the length is bounded so a padded title cannot take the card over.
+    """
+    text = "".join(
+        char for char in str(value or "")
+        if char.isspace()
+        or unicodedata.category(char) not in ("Cc", "Cf", "Cs", "Co", "Cn")
+    )
+    text = " ".join(text.split())
+    limit = max(16, int(limit))
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "\u2026"
+
+
+def break_long_words(text, width=32):
+    """Give word wrap somewhere to fold a token longer than ``width``.
+
+    A long URL or an unspaced run in a yt-dlp line is one word to Qt, so a
+    wrapped label cannot fold it and pushes past its card instead, which in
+    a right-to-left layout cuts off the start of every line. A zero-width
+    space every ``width`` characters lets it fold without changing the text.
+    """
+    def fold(word):
+        if len(word) <= width:
+            return word
+        return "\u200b".join(
+            word[start:start + width] for start in range(0, len(word), width)
+        )
+
+    return " ".join(fold(word) for word in str(text or "").split(" "))
 
 
 def history_file_state(path):

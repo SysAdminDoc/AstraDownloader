@@ -3247,10 +3247,15 @@ class FormatProbeTests(unittest.TestCase):
             self.enabled = bool(value)
 
     def _window(self, url_text="https://vimeo.com/1", probed=""):
+        kinds = self._Combo()
+        for kind in ("video", "audio", "subtitles"):
+            kinds.addItem(kind.title(), kind)
         window = types.SimpleNamespace(
             quick_download_url=QuickDownloadBatchTests._TextWidget(url_text),
             quick_download_quality=self._Combo(),
+            quick_download_type=kinds,
             quick_download_status=QuickDownloadBatchTests._TextWidget(),
+            quick_download_probe_summary=QuickDownloadBatchTests._TextWidget(),
             quick_download_start=self._Field(),
             quick_download_end=self._Field(),
             # The real label is built carrying this text, so the harness
@@ -3273,6 +3278,9 @@ class FormatProbeTests(unittest.TestCase):
                 "sabr_only_formats": ad.sabr_only_formats,
                 "describe_sabr_voided_options": ad.describe_sabr_voided_options,
                 "SABR_LIMITED_NOTICE": lambda: ad.SABR_LIMITED_NOTICE,
+                "estimate_download_bytes": ad.estimate_download_bytes,
+                "classify_download_failure": ad.classify_download_failure,
+                "DOWNLOAD_FAILURE_RECOVERY": lambda: ad.DOWNLOAD_FAILURE_RECOVERY,
             },
         )
         core = gui_module_for_tests().MainWindowCore
@@ -3280,7 +3288,8 @@ class FormatProbeTests(unittest.TestCase):
             "_value", "_set_quality_choices", "_reset_quality_choices",
             "_schedule_format_probe", "_apply_format_probe",
             "_probe_quick_download_formats", "_set_quick_download_status",
-            "_apply_sabr_limits",
+            "_apply_sabr_limits", "_render_probe_summary",
+            "_describe_probe_summary", "_describe_probe_failure",
         ):
             setattr(window, name, types.MethodType(getattr(core, name), window))
         window._set_quality_choices(ad.QUALITY_LADDER)
@@ -3320,20 +3329,51 @@ class FormatProbeTests(unittest.TestCase):
 
     # ── What the picker does with it ─────────────────────────────────────
 
-    def test_probe_narrows_the_picker_and_names_the_ceiling(self):
+    def test_a_probe_shows_title_length_ceiling_and_size_for_the_choice(self):
+        from PySide6.QtCore import QLocale
+
         window = self._window()
         self.assertIn("2160", window.quick_download_quality.values())
+        mib = 1024 * 1024
+        summary = {
+            # A right-to-left override and a newline come from the page, and
+            # neither may reach the card.
+            "title": "Launch\u202e day\nrecap",
+            "duration": 754,
+            "formats": [
+                {"has_video": True, "has_audio": False, "height": 720,
+                 "filesize": 50 * mib},
+                {"has_video": False, "has_audio": True, "height": 0,
+                 "filesize": 5 * mib},
+            ],
+        }
+        card = window.quick_download_probe_summary
         with mock.patch.object(gui_module_for_tests(), "repolish"):
             window._apply_format_probe({
                 "generation": 0,
                 "url": "https://vimeo.com/1",
-                "summary": {"formats": [{"has_video": True, "height": 720}]},
+                "summary": summary,
                 "error": "",
             })
-        self.assertEqual(
-            window.quick_download_quality.values(), ["best", "720", "480"]
-        )
-        self.assertIn("720p", window.quick_download_status.text())
+            self.assertEqual(
+                window.quick_download_quality.values(), ["best", "720", "480"]
+            )
+            self.assertTrue(card.visible)
+            title, facts = card.text().split("\n")
+            self.assertEqual(title, "Launch day recap")
+            self.assertIn("Length 12m 34s", facts)
+            self.assertIn("Up to 720p", facts)
+            self.assertIn(QLocale().formattedDataSize(55 * mib, 1), facts)
+            self.assertEqual(window.quick_download_status.text(), "")
+
+            # The size follows the choice without asking yt-dlp again.
+            kinds = window.quick_download_type
+            kinds.setCurrentIndex(kinds.findData("audio"))
+            window._render_probe_summary()
+            self.assertIn(QLocale().formattedDataSize(5 * mib, 1), card.text())
+            kinds.setCurrentIndex(kinds.findData("subtitles"))
+            window._render_probe_summary()
+            self.assertNotIn("At most", card.text())
 
     def test_a_probe_the_user_typed_past_is_discarded(self):
         window = self._window()
@@ -3362,22 +3402,98 @@ class FormatProbeTests(unittest.TestCase):
             ["best"] + list(ad.QUALITY_LADDER),
         )
 
-    def test_a_failed_probe_leaves_the_offer_alone(self):
+    def test_a_failed_probe_leaves_the_offer_and_warns_with_a_next_step(self):
         # The summary is deliberately populated: an error outranks whatever
         # partial table came back with it, so the guard — not an empty
         # summary — has to be what leaves the ladder intact.
         window = self._window()
-        window._apply_format_probe({
-            "generation": 0,
-            "url": "https://vimeo.com/1",
-            "summary": {"formats": [{"has_video": True, "height": 480}]},
-            "error": "yt-dlp could not list formats.",
-        })
-        self.assertEqual(
-            window.quick_download_quality.values(),
-            ["best"] + list(ad.QUALITY_LADDER),
+        card = window.quick_download_probe_summary
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {"formats": [{"has_video": True, "height": 480}]},
+                "error": "yt-dlp could not list formats. " + "x" * 600,
+            })
+            self.assertEqual(
+                window.quick_download_quality.values(),
+                ["best"] + list(ad.QUALITY_LADDER),
+            )
+            self.assertEqual(window.quick_download_status.text(), "")
+            self.assertTrue(card.visible)
+            self.assertEqual(card.properties.get("tone"), "warning")
+            self.assertIn("You can still add it to the queue", card.text())
+            self.assertIn("Download health", card.text())
+            self.assertLess(len(card.text()), 400, "a long yt-dlp line is bounded")
+
+            # A failure the taxonomy knows names its own fix: the sign-in.
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {},
+                "error": "ERROR: [vimeo] 1: Sign in to confirm you're not a bot",
+            })
+        self.assertIn(
+            ad.DOWNLOAD_FAILURE_RECOVERY["sign-in-required"]["advice"], card.text()
         )
-        self.assertEqual(window.quick_download_status.text(), "")
+        self.assertNotIn("Download health", card.text())
+
+    def test_editing_a_batch_or_a_stale_probe_clears_the_card(self):
+        window = self._window()
+        window._format_probe_timer = types.SimpleNamespace(start=lambda: None)
+        card = window.quick_download_probe_summary
+
+        def probe():
+            return {
+                "generation": window._format_probe_generation,
+                "url": "https://vimeo.com/1",
+                "summary": {"title": "First",
+                            "formats": [{"has_video": True, "height": 720}]},
+                "error": "",
+            }
+
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe(probe())
+            self.assertIn("First", card.text())
+            stale = probe()
+            # Editing the link clears it, and the old answer landing late
+            # paints nothing.
+            window.quick_download_url.setText("https://vimeo.com/12")
+            window._schedule_format_probe()
+            self.assertEqual((card.text(), card.visible), ("", False))
+            window._apply_format_probe(stale)
+            self.assertEqual(card.text(), "")
+
+            # A batch paste clears it.
+            window.quick_download_url.setText("https://vimeo.com/1")
+            window._apply_format_probe(probe())
+            self.assertIn("First", card.text())
+            window.quick_download_url.setText("https://vimeo.com/1 https://vimeo.com/2")
+            window._schedule_format_probe()
+            self.assertEqual(card.text(), "")
+
+            # So does the box being emptied after queueing, which arrives as
+            # a text change rather than an edit.
+            window.quick_download_url.setText("https://vimeo.com/1")
+            window._apply_format_probe(probe())
+            window.quick_download_url.setText("")
+            window._render_probe_summary()
+            self.assertEqual(card.text(), "")
+
+    def test_a_site_title_is_cleaned_and_bounded(self):
+        import gui_support
+
+        self.assertEqual(
+            gui_support.sanitize_display_title("\u2066Clip\u0007 \t one\u2069"),
+            "Clip one",
+        )
+        bounded = gui_support.sanitize_display_title("a" * 500)
+        self.assertEqual(len(bounded), 120)
+        self.assertTrue(bounded.endswith("\u2026"))
+        # An unspaced run gets places to fold, so it cannot push past the card.
+        folded = gui_support.break_long_words("see " + "x" * 70)
+        self.assertEqual(folded.replace("\u200b", ""), "see " + "x" * 70)
+        self.assertEqual(folded.count("\u200b"), 2)
 
     def test_a_narrowed_picker_keeps_a_choice_that_survives(self):
         window = self._window()

@@ -47,6 +47,8 @@ CAPTURE_NAMES = (
     "downloads-paused-intake",
     "downloads-queue-full",
     "downloads-format-probe",
+    "downloads-probe-summary-german",
+    "downloads-probe-warning-arabic-rtl",
     "history-populated",
     "history-light-theme",
     "history-cleared-undo",
@@ -131,6 +133,8 @@ SCENARIO_LOCALES = {
     "dashboard-german": "de",
     "downloads-health-german": "de",
     "downloads-arabic-rtl": "ar",
+    "downloads-probe-summary-german": "de",
+    "downloads-probe-warning-arabic-rtl": "ar",
     **LOCALE_SCENARIOS,
     **PAGE_LOCALE_SCENARIOS,
 }
@@ -856,6 +860,96 @@ def main():
                     f"{button.width()}px button"
                 )
 
+        def show_probe_card(window):
+            """Land a probe result on the card at the 900x620 minimum."""
+            window.resize(900, 620)
+            app.processEvents()
+            url = "https://www.youtube.com/watch?v=probecard01"
+            window.quick_download_url.setText(url)
+            payload = {
+                "generation": window._format_probe_generation,
+                "url": url,
+                "summary": {},
+                "error": "",
+            }
+            if scenario == "downloads-probe-summary-german":
+                mib = 1024 * 1024
+                payload["summary"] = {
+                    # Long enough to wrap, with a bidi override the card
+                    # must drop.
+                    "title": (
+                        "Werkstattbericht \u202eaus dem Maschinenraum: "
+                        "Wie eine Fertigungsstraße in drei Wochen umgebaut "
+                        "wurde, mit allen Zwischenschritten und Messungen"
+                    ),
+                    "duration": 3754,
+                    "formats": [
+                        {"has_video": True, "has_audio": False, "height": 1080,
+                         "filesize": 412 * mib},
+                        {"has_video": True, "has_audio": False, "height": 720,
+                         "filesize": 198 * mib},
+                        {"has_video": False, "has_audio": True, "height": 0,
+                         "filesize": 61 * mib},
+                    ],
+                }
+            else:
+                payload["error"] = (
+                    "ERROR: [youtube] probecard01: Unable to extract the "
+                    "player response " + "x" * 400
+                )
+            window._apply_format_probe(payload)
+            app.processEvents()
+            scroll_current_page_to_top(window)
+            app.processEvents()
+            card = window.quick_download_probe_summary
+            if window.size().width() != 900 or window.size().height() != 620:
+                raise RuntimeError("Probe card fixture did not reach 900x620")
+            if not card.isVisible() or not card.wordWrap():
+                raise RuntimeError("Probe card is hidden or does not wrap")
+            name = QCoreApplication.translate("AstraDownloader", "Link summary")
+            if card.accessibleName() != name or name == "Link summary" and (
+                    scenario.endswith("-german")):
+                raise RuntimeError(
+                    f"Probe card has the wrong accessible name: {card.accessibleName()!r}"
+                )
+            if card.heightForWidth(card.width()) > card.height() + 2:
+                raise RuntimeError(
+                    f"Probe card text is clipped: needs "
+                    f"{card.heightForWidth(card.width())}px, has {card.height()}px"
+                )
+            # Word wrap cannot fold one long token, and a word wider than the
+            # card overflows it (in RTL, off the start of every line).
+            room = card.contentsRect().width()
+            widest = max(
+                (card.fontMetrics().horizontalAdvance(word)
+                 for word in card.text().replace(chr(0x200B), " ").split()),
+                default=0,
+            )
+            if widest > room:
+                raise RuntimeError(
+                    f"A word on the probe card needs {widest}px, the card has {room}px"
+                )
+            right = card.mapTo(window, QPoint(card.width(), 0)).x()
+            if card.mapTo(window, QPoint(0, 0)).x() < 0 or right > window.width():
+                raise RuntimeError("Probe card runs past the window edge")
+            if "\u202e" in card.text():
+                raise RuntimeError("Probe card kept a bidi override from the title")
+            if scenario == "downloads-probe-summary-german":
+                for fact in ("Länge", "Bis zu 1080p", "Höchstens etwa"):
+                    if fact not in card.text():
+                        raise RuntimeError(
+                            f"Probe card fact is untranslated: {fact!r} not in {card.text()!r}"
+                        )
+            else:
+                if app.layoutDirection() != Qt.LayoutDirection.RightToLeft:
+                    raise RuntimeError("Probe warning fixture did not flip to RTL")
+                if card.property("tone") != "warning":
+                    raise RuntimeError("Failed probe is not shown as a warning")
+                if len(card.text()) > 400:
+                    raise RuntimeError("Probe warning is not bounded")
+                if not window.btn_quick_download.isEnabled():
+                    raise RuntimeError("A failed probe disabled adding the link")
+
         def capture_download_state(window, manager):
             seed_download_matrix(manager)
             if scenario == "downloads-clipboard-staged":
@@ -1019,6 +1113,10 @@ def main():
                         window,
                         {"One check needs repair. Open the checks to see the fix."},
                     )
+            elif scenario in (
+                    "downloads-probe-summary-german",
+                    "downloads-probe-warning-arabic-rtl"):
+                show_probe_card(window)
             elif scenario == "downloads-subtitles-only":
                 # Subtitles is a third download type, not a settings toggle.
                 # Neither picker beside it describes a subtitle, so both are

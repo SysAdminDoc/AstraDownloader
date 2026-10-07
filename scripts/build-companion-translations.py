@@ -910,8 +910,6 @@ CATALOGS = {
             "Fügen Sie oben einen Videolink ein, um zu beginnen. Downloads aus der Astra-Deck-Browsererweiterung erscheinen ebenfalls hier.",
         "Paste a link":
             "Link einfügen",
-        "This link tops out at {height}p.":
-            "Dieser Link bietet höchstens {height}p.",
         "page":
             "Seite",
         "Open":
@@ -1595,6 +1593,20 @@ CATALOGS = {
             "Datei fehlt. Der Verlaufseintrag bleibt erhalten.",
         "File unavailable. Its drive or folder can't be reached right now.":
             "Datei nicht verfügbar. Ihr Laufwerk oder Ordner ist gerade nicht erreichbar.",
+        "Link summary":
+            "Link-Übersicht",
+        "Length {duration}":
+            "Länge {duration}",
+        "Up to {height}p":
+            "Bis zu {height}p",
+        "At most about {size} for this choice":
+            "Höchstens etwa {size} für diese Auswahl",
+        "Couldn't preview this link. You can still add it to the queue.":
+            "Für diesen Link gibt es keine Vorschau. Sie können ihn trotzdem zur Warteschlange hinzufügen.",
+        "Reason: {reason}":
+            "Grund: {reason}",
+        "If downloads fail too, choose Show checks under Download health.":
+            "Wenn auch Downloads fehlschlagen, wählen Sie Prüfungen anzeigen unter Download-Bereitschaft.",
     },
     "en": {},
     "es": {

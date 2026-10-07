@@ -931,6 +931,10 @@
       <translation>Looking up available formats…</translation>
     </message>
     <message>
+      <source>Couldn't preview this link. You can still add it to the queue.</source>
+      <translation>Couldn't preview this link. You can still add it to the queue.</translation>
+    </message>
+    <message>
       <source>Copied video link staged. Review the options, then choose Add to queue.</source>
       <translation>Copied video link staged. Review the options, then choose Add to queue.</translation>
     </message>
@@ -1575,6 +1579,22 @@
       <translation>Clip ranges apply to a single link.</translation>
     </message>
     <message>
+      <source>Length {duration}</source>
+      <translation>Length {duration}</translation>
+    </message>
+    <message>
+      <source>Up to {height}p</source>
+      <translation>Up to {height}p</translation>
+    </message>
+    <message>
+      <source>Reason: {reason}</source>
+      <translation>Reason: {reason}</translation>
+    </message>
+    <message>
+      <source>If downloads fail too, choose Show checks under Download health.</source>
+      <translation>If downloads fail too, choose Show checks under Download health.</translation>
+    </message>
+    <message>
       <source>Video link staged. Open Downloads to review it before adding it to the queue.</source>
       <translation>Video link staged. Open Downloads to review it before adding it to the queue.</translation>
     </message>
@@ -1979,8 +1999,8 @@
       <translation>Settings status: {message}</translation>
     </message>
     <message>
-      <source>This link tops out at {height}p.</source>
-      <translation>This link tops out at {height}p.</translation>
+      <source>At most about {size} for this choice</source>
+      <translation>At most about {size} for this choice</translation>
     </message>
     <message>
       <source>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</source>
@@ -2341,6 +2361,10 @@
     <message>
       <source>Preview and select videos in this playlist before downloading.</source>
       <translation>Preview and select videos in this playlist before downloading.</translation>
+    </message>
+    <message>
+      <source>Link summary</source>
+      <translation>Link summary</translation>
     </message>
     <message>
       <source>One-link video password</source>

@@ -155,6 +155,16 @@ class DownloadPageMixin:
         self.btn_quick_download.clicked.connect(self._start_quick_download)
         url_row.addWidget(self.btn_quick_download)
         quick_layout.addLayout(url_row)
+        # What the pasted link is before it is queued: title, length, ceiling
+        # and an approximate size, or why the lookup failed. Word-wrapped,
+        # because a long title or a German warning must not clip at 900x620.
+        self.quick_download_probe_summary = make_label(
+            "", "fieldHint", word_wrap=True, status=True
+        )
+        self.quick_download_probe_summary.setAccessibleName(tr("Link summary"))
+        self.quick_download_probe_summary.hide()
+        quick_layout.addWidget(self.quick_download_probe_summary)
+        self.quick_download_url.textChanged.connect(self._render_probe_summary)
 
         # Keep the landing state focused on the link and output choice. The
         # password, clipping, and custom-name controls are valuable, but they
@@ -215,6 +225,9 @@ class DownloadPageMixin:
         self.quick_download_type.currentIndexChanged.connect(
             self._sync_quick_download_options
         )
+        self.quick_download_type.currentIndexChanged.connect(
+            self._render_probe_summary
+        )
         profile_row.addWidget(self.quick_download_type)
         profile_row.addStretch(1)
         options_layout.addWidget(profile_row_widget)
@@ -231,6 +244,9 @@ class DownloadPageMixin:
         self.quick_download_quality.setAccessibleName(tr("Download quality"))
         self.quick_download_quality.setMinimumWidth(100)
         self._set_quality_choices(self._value('QUALITY_LADDER'))
+        self.quick_download_quality.currentIndexChanged.connect(
+            self._render_probe_summary
+        )
         media_row.addWidget(self.quick_download_quality)
         # A pasted link is probed for the formats it really has, so the picker
         # stops offering 2160p on a 720p video. Debounced, because a paste

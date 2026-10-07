@@ -931,6 +931,10 @@
       <translation>Verfügbare Formate werden gesucht…</translation>
     </message>
     <message>
+      <source>Couldn't preview this link. You can still add it to the queue.</source>
+      <translation>Für diesen Link gibt es keine Vorschau. Sie können ihn trotzdem zur Warteschlange hinzufügen.</translation>
+    </message>
+    <message>
       <source>Copied video link staged. Review the options, then choose Add to queue.</source>
       <translation>Kopierter Videolink vorgemerkt. Prüfen Sie die Optionen und wählen Sie Zur Warteschlange hinzufügen.</translation>
     </message>
@@ -1575,6 +1579,22 @@
       <translation>Ausschnitte gelten nur für einen einzelnen Link.</translation>
     </message>
     <message>
+      <source>Length {duration}</source>
+      <translation>Länge {duration}</translation>
+    </message>
+    <message>
+      <source>Up to {height}p</source>
+      <translation>Bis zu {height}p</translation>
+    </message>
+    <message>
+      <source>Reason: {reason}</source>
+      <translation>Grund: {reason}</translation>
+    </message>
+    <message>
+      <source>If downloads fail too, choose Show checks under Download health.</source>
+      <translation>Wenn auch Downloads fehlschlagen, wählen Sie Prüfungen anzeigen unter Download-Bereitschaft.</translation>
+    </message>
+    <message>
       <source>Video link staged. Open Downloads to review it before adding it to the queue.</source>
       <translation>Videolink vorgemerkt. Öffnen Sie Downloads, um ihn vor dem Einreihen zu prüfen.</translation>
     </message>
@@ -1979,8 +1999,8 @@
       <translation>Einstellungsstatus: {message}</translation>
     </message>
     <message>
-      <source>This link tops out at {height}p.</source>
-      <translation>Dieser Link bietet höchstens {height}p.</translation>
+      <source>At most about {size} for this choice</source>
+      <translation>Höchstens etwa {size} für diese Auswahl</translation>
     </message>
     <message>
       <source>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</source>
@@ -2341,6 +2361,10 @@
     <message>
       <source>Preview and select videos in this playlist before downloading.</source>
       <translation>Videos dieser Playlist vor dem Herunterladen ansehen und auswählen.</translation>
+    </message>
+    <message>
+      <source>Link summary</source>
+      <translation>Link-Übersicht</translation>
     </message>
     <message>
       <source>One-link video password</source>
