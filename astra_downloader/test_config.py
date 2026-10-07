@@ -96,6 +96,19 @@ class ExecutionFloorPolicyTests(unittest.TestCase):
             "an ignored test path must disable the full-suite floor",
         )
 
+    def test_a_fresh_checkout_gets_the_basetemp_parent_folder(self):
+        suite_policy = sys.modules["conftest"]
+        with tempfile.TemporaryDirectory() as root:
+            basetemp = Path(root) / "build" / "pytest"
+            config = types.SimpleNamespace(
+                option=types.SimpleNamespace(basetemp=str(basetemp))
+            )
+            suite_policy.pytest_configure(config)
+            self.assertTrue(basetemp.parent.is_dir())
+            self.assertFalse(
+                basetemp.exists(), "pytest owns the basetemp folder itself"
+            )
+
 
 class NormalizationTests(unittest.TestCase):
     def test_normalize_url_rejects_invalid_or_ambiguous_values(self):

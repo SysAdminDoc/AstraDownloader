@@ -12,6 +12,10 @@ repository's git log.
 
 ## Unreleased
 
+### Added
+
+- The test tools now live in a `test` dependency group in `pyproject.toml`, so `pip install -r astra_downloader/requirements.txt --group test` sets up a clean environment that runs the whole suite, and a fresh clone no longer errors on a missing `build` folder.
+
 ### Changed
 
 - An ETA that can't be estimated reads "ETA unknown" on the download card, and the Uptime stat says "Off" while the local API is stopped. Both used to show dashes.

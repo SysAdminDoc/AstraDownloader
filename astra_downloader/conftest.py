@@ -109,6 +109,15 @@ def _execution_floor_message(executed, minimum, skipped):
     )
 
 
+def pytest_configure(config):
+    # pytest.ini passes --basetemp=build/pytest, and pytest creates only the
+    # last level of it. A fresh clone has no build/ folder, so every test
+    # errored at its first temporary path until something else made one.
+    basetemp = getattr(config.option, "basetemp", None)
+    if basetemp:
+        Path(basetemp).resolve().parent.mkdir(parents=True, exist_ok=True)
+
+
 def pytest_sessionstart(session):
     del session
     _executed_nodeids.clear()
