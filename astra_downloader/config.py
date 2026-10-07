@@ -15,6 +15,7 @@ import shutil
 import threading
 import time
 import uuid
+from datetime import date as _calendar_date
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -642,6 +643,64 @@ def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
         # so it remains an explicit opt-in.
         "upgradeIfBetter": boolean(raw.get("upgradeIfBetter"), False),
     }
+
+
+# Schema-3 subscription filters. Like delivery, they are sanitised here so the
+# durable store and the settings bundle cannot disagree about what is valid.
+SUBSCRIPTION_FILTER_FIELDS = ("includeTitleRegex", "excludeTitleRegex", "uploadedAfter")
+SUBSCRIPTION_FILTER_REGEX_MAX = 200
+_SUBSCRIPTION_FILTER_LABELS = {
+    "includeTitleRegex": "include",
+    "excludeTitleRegex": "exclude",
+}
+
+
+def sanitize_subscription_filters(raw):
+    """Return ``(filters, error)`` for a subscription's title and date filters.
+
+    Patterns are Python regular expressions matched case-insensitively
+    anywhere in the title. ``uploadedAfter`` accepts YYYY-MM-DD or YYYYMMDD,
+    means "on or after" (yt-dlp's --dateafter reads the same way) and is
+    stored as YYYYMMDD. Empty means no filter. An invalid value is an error,
+    not a silent blank, because a dropped include filter would queue the
+    whole channel.
+    """
+    raw = raw if isinstance(raw, dict) else {}
+    filters = {}
+    for key, label in _SUBSCRIPTION_FILTER_LABELS.items():
+        value = raw.get(key)
+        pattern = "" if value is None else str(value).strip()
+        if len(pattern) > SUBSCRIPTION_FILTER_REGEX_MAX:
+            return None, (
+                f"The {label} title pattern is too long. Keep it under "
+                f"{SUBSCRIPTION_FILTER_REGEX_MAX} characters."
+            )
+        if pattern:
+            try:
+                re.compile(pattern, re.IGNORECASE)
+            except re.error as error:
+                return None, (
+                    f"The {label} title pattern is not a valid regular "
+                    f"expression: {error}."
+                )
+        filters[key] = pattern
+    value = raw.get("uploadedAfter")
+    text = "" if value is None else str(value).strip()
+    if text:
+        digits = text.replace("-", "")
+        valid = bool(re.fullmatch(r"\d{8}", digits)) and (
+            len(text) == 8 or re.fullmatch(r"\d{4}-\d{2}-\d{2}", text)
+        )
+        if valid:
+            try:
+                _calendar_date(int(digits[:4]), int(digits[4:6]), int(digits[6:]))
+            except ValueError:
+                valid = False
+        if not valid:
+            return None, "Use a date such as 2026-01-31 for uploaded after."
+        text = digits
+    filters["uploadedAfter"] = text
+    return filters, None
 
 
 def normalize_site_profile_domain(value):
@@ -1999,6 +2058,9 @@ def build_settings_bundle(config, subscriptions=(), site_logins=(), *,
             field: delivery[field]
             for field in _BUNDLE_SUBSCRIPTION_DELIVERY_FIELDS
         }
+        filters, _filter_error = sanitize_subscription_filters(record)
+        if filters and any(filters.values()):
+            exported["filters"] = filters
         exported_subscriptions.append(exported)
     names = []
     for entry in site_logins or ():
@@ -2118,6 +2180,16 @@ def read_settings_bundle(payload, current_site_profiles=None):
                 else:
                     delivery["outputDir"] = str(resolved)
             imported["delivery"] = delivery
+        if record.get("filters") is not None:
+            filters, filter_error = sanitize_subscription_filters(record.get("filters"))
+            if filter_error:
+                if len(warnings) < 5:
+                    warnings.append(
+                        f'The filters for subscription "{title or url}" were '
+                        f"not imported: {filter_error}"
+                    )
+            else:
+                imported["filters"] = filters
         subscriptions.append(imported)
     raw_profiles = payload.get("siteProfiles")
     if raw_profiles is not None:

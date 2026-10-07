@@ -1227,6 +1227,48 @@ class SubscriptionTests(unittest.TestCase):
             )
             self.assertEqual(patched.status_code, 400, patched.get_json())
 
+    def test_the_api_saves_filters_and_previews_them_without_queueing(self):
+        token = "s" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({"ServerToken": token, "DownloadPath": tmp})
+            store = self._store(Path(tmp) / "subscriptions.json")
+            queued = []
+            manager = ad.SubscriptionManager(
+                store=store,
+                probe=lambda _url: ([
+                    {"id": "keep000001a", "title": "Tutorial one"},
+                    {"id": "skip000001a", "title": "Vlog"},
+                ], None),
+                enqueue=lambda *args: (queued.append(args), ("dl", None))[1],
+            )
+            client = ad.create_api(
+                config, ad.DownloadManager(config, FakeHistory()), FakeHistory(),
+                subscriptions=manager,
+            ).test_client()
+            headers = {"X-Auth-Token": token, "Host": "127.0.0.1"}
+
+            created = client.post("/subscriptions", json={
+                "url": "https://www.youtube.com/@astra-channel",
+                "includeTitleRegex": "tutorial",
+            }, headers=headers)
+            self.assertEqual(created.status_code, 201, created.get_json())
+            sub_id = created.get_json()["id"]
+            self.assertEqual(created.get_json()["includeTitleRegex"], "tutorial")
+
+            preview = client.post(
+                f"/subscriptions/{sub_id}/preview", json={}, headers=headers)
+            self.assertEqual(preview.status_code, 200, preview.get_json())
+            body = preview.get_json()
+            self.assertEqual([item["title"] for item in body["matched"]], ["Tutorial one"])
+            self.assertEqual(body["skipped"][0]["reason"], "title-not-included")
+            self.assertEqual(queued, [])
+
+            bad = client.patch(f"/subscriptions/{sub_id}", json={
+                "excludeTitleRegex": "(unclosed",
+            }, headers=headers)
+            self.assertEqual(bad.status_code, 400, bad.get_json())
+            self.assertEqual(store.get_subscription(sub_id)["excludeTitleRegex"], "")
+
     def test_subscription_scan_endpoint_is_rate_limited(self):
         token = "s" * 32
 
@@ -2015,7 +2057,43 @@ class SubscriptionArchiveManagerTests(unittest.TestCase):
             self.assertFalse(record["audioOnly"])
             self.assertFalse(record["upgradeIfBetter"])
             self.assertEqual(
-                subscriptions_module().SUBSCRIPTION_SCHEMA_VERSION, 2)
+                subscriptions_module().SUBSCRIPTION_SCHEMA_VERSION, 3)
+
+    def test_a_schema_two_record_migrates_to_three_with_no_filters(self):
+        schema_two = {
+            "schemaVersion": 2,
+            "subscriptions": [{
+                "id": "sub_schema2000000001",
+                "url": "https://www.youtube.com/@two",
+                "title": "Two", "intervalMinutes": 60, "enabled": True,
+                "createdAt": 1.0, "updatedAt": 1.0, "lastScanAt": None,
+                "nextScanAt": None, "lastError": "", "lastQueued": 0,
+                "lastSkipped": 0, "format": "mkv", "audioOnly": False,
+            }],
+            "archive": {},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = self._store(tmpdir, schema_two)
+            record = store.get_subscription("sub_schema2000000001")
+            self.assertEqual(record["format"], "mkv")
+            for field in ("includeTitleRegex", "excludeTitleRegex", "uploadedAfter"):
+                self.assertEqual(record[field], "", field)
+            updated, error = store.update_subscription(
+                record["id"], filters={"uploadedAfter": "2026-01-31"})
+            self.assertIsNone(error)
+            self.assertEqual(updated["uploadedAfter"], "20260131")
+            on_disk = json.loads(
+                (Path(tmpdir) / "subscriptions.json").read_text(encoding="utf-8"))
+            self.assertEqual(on_disk["schemaVersion"], 3)
+            self.assertEqual(on_disk["subscriptions"][0]["format"], "mkv")
+
+            _, error = store.update_subscription(
+                record["id"], filters={"excludeTitleRegex": "(unclosed"})
+            self.assertIn("not a valid regular expression", error)
+            self.assertEqual(
+                store.get_subscription(record["id"])["excludeTitleRegex"], "",
+                "a refused pattern leaves the stored filters alone",
+            )
 
     def test_the_archive_view_lists_what_was_captured(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2217,6 +2295,91 @@ class SubscriptionArchiveManagerTests(unittest.TestCase):
         enqueue_fn({"id": "sub_2"}, {"url": "https://x.test/v"}, "k")
         for field in ("fmt", "quality", "output_dir", "output_template"):
             self.assertIsNone(queued[0][field], field)
+
+
+class SubscriptionFilterTests(unittest.TestCase):
+    """One evaluator decides for the preview, a manual scan and a scheduled scan."""
+
+    FILTERS = {
+        "includeTitleRegex": "tutorial",
+        "excludeTitleRegex": r"\bshorts?\b",
+        "uploadedAfter": "2026-01-01",
+    }
+    ENTRIES = [
+        {"id": "keep000001a", "title": "Tutorial one", "upload_date": "20260210"},
+        {"id": "excl000001a", "title": "Tutorial #shorts", "upload_date": "20260210"},
+        {"id": "inc0000001a", "title": "Vlog day", "upload_date": "20260210"},
+        {"id": "old0000001a", "title": "Tutorial old", "upload_date": "20251231"},
+        {"id": "nodate0001a", "title": "TUTORIAL undated"},
+    ]
+    EXPECTED_MATCHED = {"Tutorial one", "TUTORIAL undated"}
+    EXPECTED_SKIPPED = {
+        "Tutorial #shorts": "title-excluded",
+        "Vlog day": "title-not-included",
+        "Tutorial old": "uploaded-before",
+    }
+
+    def _manager(self, tmpdir, queued):
+        store = SubscriptionArchiveManagerTests._store(self, tmpdir)
+        record, error = store.add_subscription(
+            "https://www.youtube.com/@filters", filters=self.FILTERS, now=1000)
+        self.assertIsNone(error)
+
+        def enqueue(_subscription, candidate, _key):
+            queued.append(candidate["title"])
+            return f"dl-{len(queued)}", None
+
+        manager = subscriptions_module().SubscriptionManager(
+            store=store,
+            probe=lambda _url: ([dict(entry) for entry in self.ENTRIES], None),
+            enqueue=enqueue,
+        )
+        return store, manager, record["id"]
+
+    def test_preview_manual_and_scheduled_scans_make_the_same_decisions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            queued = []
+            store, manager, sub_id = self._manager(tmpdir, queued)
+            path = Path(tmpdir) / "subscriptions.json"
+            before = path.read_text(encoding="utf-8")
+
+            preview, error = manager.preview_scan(sub_id)
+            self.assertIsNone(error)
+            self.assertEqual(
+                {item["title"] for item in preview["matched"]}, self.EXPECTED_MATCHED)
+            self.assertEqual(
+                {item["title"]: item["reason"] for item in preview["skipped"]},
+                self.EXPECTED_SKIPPED,
+            )
+            # Nothing moved: no queue entry, reservation, archive or schedule.
+            self.assertEqual(queued, [])
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+            manual = manager.scan_subscription(sub_id, now=2000, manual=True)
+            self.assertEqual(set(queued), self.EXPECTED_MATCHED)
+            self.assertEqual(manual["skipped"], len(self.EXPECTED_SKIPPED))
+            # Filtered items never reached the archive, so they stay open.
+            self.assertEqual(len(store.archive_entries()), len(self.EXPECTED_MATCHED))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            queued = []
+            _store, manager, sub_id = self._manager(tmpdir, queued)
+            manager.scan_due(now=2000)
+            self.assertEqual(set(queued), self.EXPECTED_MATCHED)
+
+    def test_a_preview_can_try_unsaved_filters_and_refuses_a_bad_pattern(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _store, manager, sub_id = self._manager(tmpdir, [])
+            preview, error = manager.preview_scan(
+                sub_id, filters={"includeTitleRegex": "", "uploadedAfter": ""})
+            self.assertIsNone(error)
+            self.assertEqual(
+                {item["title"] for item in preview["matched"]},
+                {"Tutorial one", "Vlog day", "Tutorial old", "TUTORIAL undated"},
+            )
+            _preview, error = manager.preview_scan(
+                sub_id, filters={"includeTitleRegex": "[unclosed"})
+            self.assertIn("not a valid regular expression", error)
 
 
 if __name__ == "__main__":

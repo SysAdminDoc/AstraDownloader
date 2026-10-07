@@ -25,7 +25,9 @@ try:
         SUBSCRIPTION_AUDIO_FORMATS,
         SUBSCRIPTION_QUALITY_CHOICES,
         SUBSCRIPTION_VIDEO_FORMATS,
+        SUBSCRIPTION_FILTER_FIELDS,
         sanitize_subscription_delivery,
+        sanitize_subscription_filters,
     )
 except ImportError:  # Flat source-path compatibility.
     from config import (
@@ -33,7 +35,9 @@ except ImportError:  # Flat source-path compatibility.
         SUBSCRIPTION_AUDIO_FORMATS,
         SUBSCRIPTION_QUALITY_CHOICES,
         SUBSCRIPTION_VIDEO_FORMATS,
+        SUBSCRIPTION_FILTER_FIELDS,
         sanitize_subscription_delivery,
+        sanitize_subscription_filters,
     )
 
 
@@ -57,13 +61,17 @@ __all__ = (
     "SubscriptionManager",
     "normalize_subscription_candidate",
     "subscription_archive_key",
+    "SUBSCRIPTION_FILTER_FIELDS", "sanitize_subscription_filters",
+    "evaluate_subscription_filters", "subscription_filters",
 )
 
 
 # 2 adds the per-subscription delivery fields below. A version-1 file loads
 # unchanged: every new field has a default that means "use the global
 # setting", which is exactly what a version-1 record did.
-SUBSCRIPTION_SCHEMA_VERSION = 2
+# 3 adds the title and upload-date filters. A schema-2 record has none, which
+# loads as "no filter": every candidate matches, as before.
+SUBSCRIPTION_SCHEMA_VERSION = 3
 
 # How many uploads one scan asks for. Declared here as well as in the
 # composition root's probe because the scheduler has to know whether a scan
@@ -254,6 +262,58 @@ def normalize_subscription_candidate(
         "channel": channel,
         "uploadDate": upload_date,
     }
+
+
+def subscription_filters(record):
+    """The filter fields of a stored record, one key each, "" when unset."""
+    record = record if isinstance(record, dict) else {}
+    return {field: str(record.get(field) or "") for field in SUBSCRIPTION_FILTER_FIELDS}
+
+
+_FILTER_PATTERN_CACHE = {}
+
+
+def _filter_pattern(pattern):
+    compiled = _FILTER_PATTERN_CACHE.get(pattern)
+    if compiled is None:
+        if len(_FILTER_PATTERN_CACHE) > 256:
+            _FILTER_PATTERN_CACHE.clear()
+        compiled = re.compile(pattern, re.IGNORECASE)
+        _FILTER_PATTERN_CACHE[pattern] = compiled
+    return compiled
+
+
+def evaluate_subscription_filters(candidate, filters):
+    """Decide one normalized candidate: ``("matched", "")`` or ``("skipped", reason)``.
+
+    Pure, and the only place the decision is made, so a preview, a manual
+    scan and a scheduled scan cannot disagree. It runs before any archive
+    reservation. Reasons are stable codes: ``title-not-included``,
+    ``title-excluded`` and ``uploaded-before``. A candidate whose upload
+    date is unknown passes the date filter: flat channel listings often
+    carry no date, and a filter that dropped every undated entry would
+    quietly empty the subscription.
+    """
+    candidate = candidate if isinstance(candidate, dict) else {}
+    filters = filters if isinstance(filters, dict) else {}
+    title = str(candidate.get("title") or "")
+    include = str(filters.get("includeTitleRegex") or "")
+    exclude = str(filters.get("excludeTitleRegex") or "")
+    after = str(filters.get("uploadedAfter") or "")
+    try:
+        if include and not _filter_pattern(include).search(title):
+            return "skipped", "title-not-included"
+        if exclude and _filter_pattern(exclude).search(title):
+            return "skipped", "title-excluded"
+    except re.error:
+        # Only reachable through a hand-edited state file. Skipping is the
+        # safe reading of a filter that cannot be applied.
+        return "skipped", "invalid-filter"
+    if after:
+        uploaded = re.sub(r"\D", "", str(candidate.get("uploadDate") or ""))[:8]
+        if len(uploaded) == 8 and uploaded < after:
+            return "skipped", "uploaded-before"
+    return "matched", ""
 
 
 def subscription_archive_key(candidate):
@@ -485,7 +545,28 @@ class SubscriptionStore:
             **sanitize_subscription_delivery(
                 raw, clean_text=self._clean, coerce_bool=self._coerce_bool,
             ),
+            **self._load_filters(raw, sub_id),
         }
+
+    def _load_filters(self, raw, sub_id):
+        """Filters from a stored record; schema 2 has none, which is valid."""
+        filters, error = sanitize_subscription_filters(raw)
+        if not error:
+            return filters
+        # A hand-edited file. Each field is checked on its own so one bad
+        # value does not take the others with it; a bad include pattern
+        # becomes an exclude-everything state rather than a match-everything
+        # one, because queueing a whole channel is the harder mistake to undo.
+        kept = {}
+        for field in SUBSCRIPTION_FILTER_FIELDS:
+            single, single_error = sanitize_subscription_filters({field: raw.get(field)})
+            kept[field] = single[field] if not single_error else ""
+            if single_error and field == "includeTitleRegex":
+                kept[field] = "(?!)"
+        self._logger(
+            f"Subscription {sub_id} had an invalid filter and it was reset: {error}"
+        )
+        return kept
 
     # Everything an archive entry carries beyond the schema-1 set. Written
     # verbatim by `_write_locked`, so a field missing from `_sanitize_archive`
@@ -755,10 +836,13 @@ class SubscriptionStore:
             return _copy(record), None
 
     def add_subscription(self, url, *, interval_minutes=60, enabled=True,
-                         title="", delivery=None, now=None):
+                         title="", delivery=None, filters=None, now=None):
         url, error = self._normalize_url(url)
         if error or not url or not self._is_youtube_url(url):
             return None, "Subscriptions must use a YouTube channel or playlist URL."
+        clean_filters, filter_error = sanitize_subscription_filters(filters)
+        if filter_error:
+            return None, filter_error
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             if not self._compatible:
@@ -790,6 +874,7 @@ class SubscriptionStore:
                     delivery, clean_text=self._clean,
                     coerce_bool=self._coerce_bool,
                 ),
+                **clean_filters,
             }
             self._data["subscriptions"].append(record)
             if not self._save_locked():
@@ -798,7 +883,8 @@ class SubscriptionStore:
             return _copy(record), None
 
     def update_subscription(self, sub_id, *, url=None, interval_minutes=None,
-                            enabled=None, title=None, delivery=None, now=None):
+                            enabled=None, title=None, delivery=None,
+                            filters=None, now=None):
         now = _finite_timestamp(now, self._clock()) or self._clock()
         with self._lock:
             if not self._compatible:
@@ -806,6 +892,21 @@ class SubscriptionStore:
             record = self._find_locked(str(sub_id))
             if record is None:
                 return None, "Subscription no longer exists."
+            clean_filters = None
+            if filters is not None:
+                # Partial updates merge over what is stored, then the whole
+                # set is checked; an invalid pattern is refused before any
+                # field of the record changes.
+                merged_filters = subscription_filters(record)
+                merged_filters.update({
+                    key: value for key, value in dict(filters).items()
+                    if key in SUBSCRIPTION_FILTER_FIELDS and value is not None
+                })
+                clean_filters, filter_error = sanitize_subscription_filters(
+                    merged_filters
+                )
+                if filter_error:
+                    return None, filter_error
             before = _copy(record)
             if url is not None:
                 normalized, error = self._normalize_url(url)
@@ -847,6 +948,8 @@ class SubscriptionStore:
                     merged, clean_text=self._clean,
                     coerce_bool=self._coerce_bool,
                 ))
+            if clean_filters is not None:
+                record.update(clean_filters)
             record["updatedAt"] = now
             if record["enabled"] and not was_enabled:
                 record["nextScanAt"] = now
@@ -1475,13 +1578,14 @@ class SubscriptionManager:
         }
 
     def add_subscription(self, url, interval_minutes=60, enabled=True,
-                         title="", delivery=None):
+                         title="", delivery=None, filters=None):
         return self.store.add_subscription(
             url,
             interval_minutes=interval_minutes,
             enabled=enabled,
             title=title,
             delivery=delivery,
+            filters=filters,
         )
 
     def get_subscription(self, sub_id):
@@ -1500,7 +1604,8 @@ class SubscriptionManager:
         return self.store.remove_subscription_with_undo(str(sub_id))
 
     def update_subscription(self, sub_id, **fields):
-        allowed = {"url", "interval_minutes", "enabled", "title", "delivery"}
+        allowed = {"url", "interval_minutes", "enabled", "title", "delivery",
+                   "filters"}
         values = {key: value for key, value in fields.items() if key in allowed}
         return self.store.update_subscription(str(sub_id), **values)
 
@@ -1757,43 +1862,31 @@ class SubscriptionManager:
                 message = self._persistence_message()
                 self.store.finish_scan(sub_id, error=message, now=now)
                 return {"id": sub_id, "queued": 0, "skipped": 0, "error": message}
-            try:
-                probe_result = self._probe(started["url"])
-                if isinstance(probe_result, tuple):
-                    entries, probe_error = probe_result
-                else:
-                    entries, probe_error = probe_result, None
-            except Exception as error:  # noqa: BLE001
-                entries, probe_error = [], str(error)
+            candidates, complete_listing, probe_error = self._probe_candidates(
+                started["url"]
+            )
             if probe_error:
                 message = str(probe_error)[:500]
                 self.store.finish_scan(sub_id, error=message, now=now)
                 return {"id": sub_id, "queued": 0, "skipped": 0, "error": message}
 
-            raw_entries = list(entries) if isinstance(entries, (list, tuple)) else []
-            # The probe asks for one more than its limit, so "fewer than the
-            # limit came back" and "the source has exactly the limit" stop
-            # being the same observation. Judged on the RAW count: a single
-            # unusable entry dropped below would otherwise turn a truncated
-            # window into a claim that the whole source was seen.
-            complete_listing = len(raw_entries) <= self._probe_limit
-            candidates = []
-            for entry in raw_entries[:self._probe_limit]:
-                candidate = normalize_subscription_candidate(
-                    entry,
-                    normalize_url=self.store._normalize_url,
-                    is_youtube_url=self.store._is_youtube_url,
-                    clean_text=self.store._clean_text,
-                )
-                if candidate:
-                    candidates.append(candidate)
+            # Filters decide before anything is reserved, so a skipped item
+            # leaves no archive entry and is reconsidered if the filter
+            # changes. The preview runs the same evaluator on the same list.
+            filters = subscription_filters(started)
+            matched = [
+                candidate for candidate in candidates
+                if evaluate_subscription_filters(candidate, filters)[0] == "matched"
+            ]
+            filtered_out = len(candidates) - len(matched)
 
             # Two coalesced persists for the whole candidate loop instead of
             # two per candidate; _claim_candidates explains why it is two and
             # not one.
             queued, skipped, errors = self._claim_candidates(
-                started, sub_id, candidates, now,
+                started, sub_id, matched, now,
             )
+            skipped += filtered_out
 
 
             # Identical failures repeat once per candidate; the user needs
@@ -1839,6 +1932,94 @@ class SubscriptionManager:
                     self._logger(f"Could not release subscription activity: {error}")
             with self._lock:
                 self._scan_ids.discard(sub_id)
+
+    def _probe_candidates(self, url):
+        """Probe a source and normalise its entries: (candidates, complete, error)."""
+        try:
+            probe_result = self._probe(url)
+            if isinstance(probe_result, tuple):
+                entries, probe_error = probe_result
+            else:
+                entries, probe_error = probe_result, None
+        except Exception as error:  # noqa: BLE001
+            entries, probe_error = [], str(error)
+        if probe_error:
+            return [], False, str(probe_error)
+        raw_entries = list(entries) if isinstance(entries, (list, tuple)) else []
+        # The probe asks for one more than its limit, so "fewer than the
+        # limit came back" and "the source has exactly the limit" stop
+        # being the same observation. Judged on the RAW count: a single
+        # unusable entry dropped below would otherwise turn a truncated
+        # window into a claim that the whole source was seen.
+        complete_listing = len(raw_entries) <= self._probe_limit
+        candidates = []
+        for entry in raw_entries[:self._probe_limit]:
+            candidate = normalize_subscription_candidate(
+                entry,
+                normalize_url=self.store._normalize_url,
+                is_youtube_url=self.store._is_youtube_url,
+                clean_text=self.store._clean_text,
+            )
+            if candidate:
+                candidates.append(candidate)
+        return candidates, complete_listing, None
+
+    @staticmethod
+    def check_filters(filters):
+        """The save-time error for these filter fields, or None."""
+        _clean, error = sanitize_subscription_filters(filters)
+        return error
+
+    def preview_scan(self, sub_id, filters=None):
+        """What a scan would do with these filters, changing nothing.
+
+        No begin_scan, no reservation, no archive or nextScanAt write and no
+        queue entry: the source is probed and every candidate is put through
+        the same evaluator a real scan uses. ``filters`` previews unsaved
+        values from an editor; None uses the stored ones. Returns
+        ``(result, error)``.
+        """
+        record = self.store.get_subscription(str(sub_id))
+        if not record:
+            return None, self.store.persistence_error() or "Subscription no longer exists."
+        stored = subscription_filters(record)
+        if filters is not None:
+            stored.update({
+                key: value for key, value in dict(filters).items()
+                if key in SUBSCRIPTION_FILTER_FIELDS and value is not None
+            })
+        clean_filters, filter_error = sanitize_subscription_filters(stored)
+        if filter_error:
+            return None, filter_error
+        # Bounded the way scans are: a preview is a probe like any other.
+        self._scan_gate.acquire()
+        try:
+            candidates, complete_listing, probe_error = self._probe_candidates(
+                record["url"]
+            )
+        finally:
+            self._scan_gate.release()
+        if probe_error:
+            return None, probe_error[:500]
+        matched, skipped = [], []
+        for candidate in candidates:
+            decision, reason = evaluate_subscription_filters(candidate, clean_filters)
+            item = {
+                "title": candidate.get("title") or "",
+                "url": candidate.get("url") or "",
+                "uploadDate": candidate.get("uploadDate") or "",
+            }
+            if decision == "matched":
+                matched.append(item)
+            else:
+                skipped.append(dict(item, reason=reason))
+        return {
+            "id": str(sub_id),
+            "filters": clean_filters,
+            "matched": matched,
+            "skipped": skipped,
+            "completeListing": complete_listing,
+        }, None
 
     def handle_download_completed(self, download_id):
         status = self._status_reader(download_id)

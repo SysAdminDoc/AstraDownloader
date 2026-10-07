@@ -80,6 +80,44 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "the title does not match the include pattern":
+            "der Titel passt nicht zum Einschlussmuster",
+        "the title matches the exclude pattern":
+            "der Titel passt zum Ausschlussmuster",
+        "uploaded before the date":
+            "vor dem Datum hochgeladen",
+        "a filter could not be read":
+            "ein Filter konnte nicht gelesen werden",
+        "Only download videos whose title":
+            "Nur Videos herunterladen, deren Titel",
+        "matches, for example tutorial|review":
+            "passt, zum Beispiel tutorial|review",
+        "Include titles matching":
+            "Passende Titel einschließen",
+        "does not match, for example #shorts":
+            "nicht passt, zum Beispiel #shorts",
+        "Skip titles matching":
+            "Passende Titel überspringen",
+        "Uploaded on or after":
+            "Hochgeladen am oder nach",
+        "Any date, or 2026-01-31":
+            "Beliebiges Datum oder 2026-01-31",
+        "Preview scan":
+            "Scan-Vorschau",
+        "List what a scan with these filters would download and skip. Nothing is queued or recorded.":
+            "Zeigt, was ein Scan mit diesen Filtern herunterladen und überspringen würde. Nichts wird eingereiht oder vermerkt.",
+        "Patterns are regular expressions matched anywhere in the title, ignoring case. Videos a filter skips stay unrecorded, so loosening it later lets them through.":
+            "Muster sind reguläre Ausdrücke, die irgendwo im Titel gesucht werden, ohne auf Groß- und Kleinschreibung zu achten. Von einem Filter übersprungene Videos werden nicht vermerkt. Lockern Sie ihn später, kommen sie also durch.",
+        "Preview scan result":
+            "Ergebnis der Scan-Vorschau",
+        "Checking the source. This can take a moment.":
+            "Die Quelle wird geprüft. Das kann einen Moment dauern.",
+        "A scan would download {matched} and skip {skipped}.":
+            "Ein Scan würde {matched} herunterladen und {skipped} überspringen.",
+        "Would download ({count})":
+            "Würde herunterladen ({count})",
+        "Would skip ({count})":
+            "Würde überspringen ({count})",
         "One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. DownloadFolder puts the site's files in a folder inside the download folder, and MaxConcurrent limits how many of its downloads run at once. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.":
             "Ein JSON-Objekt pro Profil. Ordnen Sie automatisch eine Domain zu oder wählen Sie ein Profil für einen einzelnen Download im Eingabefeld. Unterstützte Vorgaben umfassen Downloadtyp, Format, Qualität, Proxy, Impersonation und Anfragepausen. DownloadFolder legt die Dateien der Website in einem Ordner innerhalb des Downloadordners ab, und MaxConcurrent begrenzt, wie viele ihrer Downloads gleichzeitig laufen. Eine Vorgabe greift, wenn die Anfrage das Feld nicht selbst setzt, sodass auch ein Download über die Browsererweiterung oder ein Abonnement sie verwendet; speichern Sie hier keine Cookies oder Passwörter.",
         "Optional yt-dlp output template, relative to the folder above (e.g. %(uploader)s/%(title)s.%(ext)s). Must keep %(ext)s. A field some videos lack can carry a fallback, as in %(playlist_title|Singles)s. Text fields are length-bounded on save so long titles cannot overrun the maximum path length. Blank uses the default.":

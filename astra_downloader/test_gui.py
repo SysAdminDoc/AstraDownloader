@@ -1010,8 +1010,48 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
                         saved[0]["delivery"]["outputDir"], target,
                         "a usable folder is stored resolved",
                     )
+                    self.assertEqual(
+                        set(saved[0]["filters"]),
+                        {"includeTitleRegex", "excludeTitleRegex", "uploadedAfter"},
+                    )
             finally:
                 _retire_test_window(window)
+
+    def test_the_delivery_dialog_previews_filters_off_the_gui_thread(self):
+        import time
+        from PySide6.QtWidgets import QApplication
+
+        _get_qapp_or_skip(self)
+        calls = []
+
+        def previewer(filters):
+            calls.append((threading.current_thread().name, dict(filters)))
+            return {
+                "matched": [{"title": "Tutorial one"}],
+                "skipped": [{"title": "Vlog", "reason": "title-not-included"}],
+            }, None
+
+        dialog = ad.SubscriptionDeliveryDialog(
+            None,
+            {"id": "s", "includeTitleRegex": "tutorial", "uploadedAfter": "20260101"},
+            previewer=previewer,
+        )
+        try:
+            self.assertEqual(dialog.uploaded_after.text(), "2026-01-01")
+            dialog.exclude_title.setText("#shorts")
+            dialog.preview_button.click()
+            deadline = time.monotonic() + 5
+            while dialog.preview_output.isHidden() and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.01)
+            self.assertEqual(calls[0][0], "subscription-preview")
+            self.assertEqual(calls[0][1]["excludeTitleRegex"], "#shorts")
+            text = dialog.preview_output.toPlainText()
+            self.assertIn("Would download (1)", text)
+            self.assertIn("Vlog (the title does not match the include pattern)", text)
+            self.assertTrue(dialog.preview_button.isEnabled())
+        finally:
+            dialog.deleteLater()
 
     def test_a_terminal_card_offers_its_menu_without_a_right_click(self):
         from PySide6.QtCore import Qt
@@ -3861,6 +3901,28 @@ class SettingsBundleTests(unittest.TestCase):
             "audioOnly": True,
             "upgradeIfBetter": True,
         })
+
+    def test_subscription_filters_round_trip_and_a_bad_pattern_stays_behind(self):
+        settings = ad.sanitize_config({})
+        subscription = dict(
+            self.SUBSCRIPTION,
+            includeTitleRegex="tutorial", excludeTitleRegex="",
+            uploadedAfter="20260131",
+        )
+        exported = ad.build_settings_bundle(settings, [subscription])
+        self.assertEqual(exported["subscriptions"][0]["filters"]["uploadedAfter"], "20260131")
+        imported, error = ad.read_settings_bundle(json.loads(json.dumps(exported)))
+        self.assertIsNone(error)
+        self.assertEqual(imported["subscriptions"][0]["filters"], {
+            "includeTitleRegex": "tutorial", "excludeTitleRegex": "",
+            "uploadedAfter": "20260131",
+        })
+
+        exported["subscriptions"][0]["filters"]["includeTitleRegex"] = "(unclosed"
+        imported, error = ad.read_settings_bundle(exported)
+        self.assertIsNone(error)
+        self.assertNotIn("filters", imported["subscriptions"][0])
+        self.assertTrue(any("filters" in warning for warning in imported["warnings"]))
 
     def test_schema_one_subscription_migrates_without_delivery_overrides(self):
         imported, error = ad.read_settings_bundle({

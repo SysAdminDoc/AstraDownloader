@@ -1141,6 +1141,18 @@ def _register_subscriptions_routes(api, context, dependencies):
         "upgradeIfBetter",
     )
 
+    # Schema 3 title and date filters, flat on the wire like delivery. An
+    # absent field keeps the stored value, an empty string clears it.
+    SUBSCRIPTION_FILTER_WIRE_FIELDS = (
+        "includeTitleRegex", "excludeTitleRegex", "uploadedAfter",
+    )
+
+    def _subscription_filters(body):
+        present = {
+            key: body[key] for key in SUBSCRIPTION_FILTER_WIRE_FIELDS if key in body
+        }
+        return present or None
+
     def _subscription_delivery(body):
         """The delivery fields present in a body, with the folder checked.
 
@@ -1174,7 +1186,7 @@ def _register_subscriptions_routes(api, context, dependencies):
         if body_error:
             return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
         allowed = {"url", "intervalMinutes", "enabled", "title",
-                   *SUBSCRIPTION_DELIVERY_FIELDS}
+                   *SUBSCRIPTION_DELIVERY_FIELDS, *SUBSCRIPTION_FILTER_WIRE_FIELDS}
         unknown = sorted(set(body) - allowed)
         if unknown:
             return cors_response({
@@ -1195,6 +1207,7 @@ def _register_subscriptions_routes(api, context, dependencies):
             enabled=body.get("enabled", True),
             title=body.get("title", ""),
             delivery=delivery,
+            filters=_subscription_filters(body),
         )
         if error:
             status = 409 if "already configured" in error.lower() else 400
@@ -1212,13 +1225,14 @@ def _register_subscriptions_routes(api, context, dependencies):
         if body_error:
             return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
         allowed = {"url", "intervalMinutes", "enabled", "title",
-                   *SUBSCRIPTION_DELIVERY_FIELDS}
+                   *SUBSCRIPTION_DELIVERY_FIELDS, *SUBSCRIPTION_FILTER_WIRE_FIELDS}
         unknown = sorted(set(body) - allowed)
         if unknown or not body:
             return cors_response({
                 "error": (
-                    "Provide only url, intervalMinutes, enabled, title, or a "
-                    "delivery field (" + ", ".join(SUBSCRIPTION_DELIVERY_FIELDS) + ")."
+                    "Provide only url, intervalMinutes, enabled, title, a "
+                    "delivery field (" + ", ".join(SUBSCRIPTION_DELIVERY_FIELDS) + ") "
+                    "or a filter field (" + ", ".join(SUBSCRIPTION_FILTER_WIRE_FIELDS) + ")."
                 ),
                 "code": "invalid-subscription-field",
             }, 400)
@@ -1239,6 +1253,9 @@ def _register_subscriptions_routes(api, context, dependencies):
             }, 400)
         if delivery is not None:
             fields["delivery"] = delivery
+        filters = _subscription_filters(body)
+        if filters is not None:
+            fields["filters"] = filters
         record, error = manager.update_subscription(subscription_id, **fields)
         if error:
             status = 404 if "no longer exists" in error.lower() else 400
@@ -1316,6 +1333,50 @@ def _register_subscriptions_routes(api, context, dependencies):
         if error:
             return _subscription_error(error, "subscription-scan-rejected", 404)
         return cors_response(result, 202)
+
+    @api.route('/subscriptions/<subscription_id>/preview', methods=['POST'])
+    def subscriptions_preview(subscription_id):
+        """List what a scan would queue and skip, changing nothing.
+
+        The body may carry unsaved filter fields to try before saving them.
+        It shares the scan rate limit because it probes the source the same
+        way a scan does.
+        """
+        if not check_auth():
+            return cors_response({"error": "Astra Downloader rejected the request. Refresh the private token in Astra Deck."}, 401)
+        manager, response = _subscription_manager_or_error()
+        if response is not None:
+            return response
+        body, body_error = request_json_object()
+        if body_error:
+            return cors_response({"error": body_error, "code": "invalid-request-body"}, 400)
+        unknown = sorted(set(body) - set(SUBSCRIPTION_FILTER_WIRE_FIELDS))
+        if unknown:
+            return cors_response({
+                "error": "Unsupported preview field(s): " + ", ".join(unknown),
+                "code": "invalid-subscription-field",
+            }, 400)
+        allowed, retry_after = subscription_scan_rate_limiter.allow('subscription-scan')
+        if not allowed:
+            return cors_response(
+                {
+                    "error": "Too many subscription scans in a short period. Please wait a moment.",
+                    "code": "subscription-scan-rate-limited",
+                },
+                429,
+                extra_headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+        if manager.store.get_subscription(subscription_id) is None:
+            return _subscription_error(
+                "Subscription no longer exists.", "subscription-preview-rejected", 404)
+        filters = _subscription_filters(body)
+        filter_error = manager.check_filters(filters) if filters else None
+        if filter_error:
+            return _subscription_error(filter_error, "invalid-subscription-filter", 400)
+        result, error = manager.preview_scan(subscription_id, filters=filters)
+        if error:
+            return _subscription_error(error, "subscription-preview-failed", 502)
+        return cors_response(result)
 
 
 def _register_site_logins_routes(api, context, dependencies):

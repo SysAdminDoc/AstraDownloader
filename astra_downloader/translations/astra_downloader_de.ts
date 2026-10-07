@@ -7,6 +7,10 @@
       <translation>{count} Videos</translation>
     </message>
     <message>
+      <source>Patterns are regular expressions matched anywhere in the title, ignoring case. Videos a filter skips stay unrecorded, so loosening it later lets them through.</source>
+      <translation>Muster sind reguläre Ausdrücke, die irgendwo im Titel gesucht werden, ohne auf Groß- und Kleinschreibung zu achten. Von einem Filter übersprungene Videos werden nicht vermerkt. Lockern Sie ihn später, kommen sie also durch.</translation>
+    </message>
+    <message>
       <source>Allow again</source>
       <translation>Erneut zulassen</translation>
     </message>
@@ -363,8 +367,76 @@
       <translation>Eine yt-dlp-Ausgabevorlage, relativ zum Ordner oben. Es werden nur die erlaubten Felder akzeptiert, und %(ext)s muss erhalten bleiben.</translation>
     </message>
     <message>
+      <source>Only download videos whose title</source>
+      <translation>Nur Videos herunterladen, deren Titel</translation>
+    </message>
+    <message>
+      <source>matches, for example tutorial|review</source>
+      <translation>passt, zum Beispiel tutorial|review</translation>
+    </message>
+    <message>
+      <source>Include titles matching</source>
+      <translation>Passende Titel einschließen</translation>
+    </message>
+    <message>
+      <source>does not match, for example #shorts</source>
+      <translation>nicht passt, zum Beispiel #shorts</translation>
+    </message>
+    <message>
+      <source>Skip titles matching</source>
+      <translation>Passende Titel überspringen</translation>
+    </message>
+    <message>
+      <source>Uploaded on or after</source>
+      <translation>Hochgeladen am oder nach</translation>
+    </message>
+    <message>
+      <source>Any date, or 2026-01-31</source>
+      <translation>Beliebiges Datum oder 2026-01-31</translation>
+    </message>
+    <message>
+      <source>Preview scan</source>
+      <translation>Scan-Vorschau</translation>
+    </message>
+    <message>
+      <source>List what a scan with these filters would download and skip. Nothing is queued or recorded.</source>
+      <translation>Zeigt, was ein Scan mit diesen Filtern herunterladen und überspringen würde. Nichts wird eingereiht oder vermerkt.</translation>
+    </message>
+    <message>
+      <source>Preview scan result</source>
+      <translation>Ergebnis der Scan-Vorschau</translation>
+    </message>
+    <message>
       <source>Save</source>
       <translation>Speichern</translation>
+    </message>
+    <message>
+      <source>Checking the source. This can take a moment.</source>
+      <translation>Die Quelle wird geprüft. Das kann einen Moment dauern.</translation>
+    </message>
+    <message>
+      <source>A scan would download {matched} and skip {skipped}.</source>
+      <translation>Ein Scan würde {matched} herunterladen und {skipped} überspringen.</translation>
+    </message>
+    <message>
+      <source>Would download ({count})</source>
+      <translation>Würde herunterladen ({count})</translation>
+    </message>
+    <message>
+      <source>Would skip ({count})</source>
+      <translation>Würde überspringen ({count})</translation>
+    </message>
+    <message>
+      <source>the title does not match the include pattern</source>
+      <translation>der Titel passt nicht zum Einschlussmuster</translation>
+    </message>
+    <message>
+      <source>the title matches the exclude pattern</source>
+      <translation>der Titel passt zum Ausschlussmuster</translation>
+    </message>
+    <message>
+      <source>uploaded before the date</source>
+      <translation>vor dem Datum hochgeladen</translation>
     </message>
     <message>
       <source>Subscription archive</source>
@@ -921,6 +993,10 @@
     <message>
       <source>A subscription scan already captured this video. Tick it to download it again.</source>
       <translation>Ein Abonnement-Scan hat dieses Video bereits erfasst. Ankreuzen, um es erneut zu laden.</translation>
+    </message>
+    <message>
+      <source>a filter could not be read</source>
+      <translation>ein Filter konnte nicht gelesen werden</translation>
     </message>
     <message>
       <source>{count} captured</source>

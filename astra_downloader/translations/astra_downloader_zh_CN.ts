@@ -7,6 +7,10 @@
       <translation>{count} videos</translation>
     </message>
     <message>
+      <source>Patterns are regular expressions matched anywhere in the title, ignoring case. Videos a filter skips stay unrecorded, so loosening it later lets them through.</source>
+      <translation>Patterns are regular expressions matched anywhere in the title, ignoring case. Videos a filter skips stay unrecorded, so loosening it later lets them through.</translation>
+    </message>
+    <message>
       <source>Allow again</source>
       <translation>Allow again</translation>
     </message>
@@ -363,8 +367,76 @@
       <translation>A yt-dlp output template, relative to the folder above. Only the allowed fields are accepted, and it must keep %(ext)s.</translation>
     </message>
     <message>
+      <source>Only download videos whose title</source>
+      <translation>Only download videos whose title</translation>
+    </message>
+    <message>
+      <source>matches, for example tutorial|review</source>
+      <translation>matches, for example tutorial|review</translation>
+    </message>
+    <message>
+      <source>Include titles matching</source>
+      <translation>Include titles matching</translation>
+    </message>
+    <message>
+      <source>does not match, for example #shorts</source>
+      <translation>does not match, for example #shorts</translation>
+    </message>
+    <message>
+      <source>Skip titles matching</source>
+      <translation>Skip titles matching</translation>
+    </message>
+    <message>
+      <source>Uploaded on or after</source>
+      <translation>Uploaded on or after</translation>
+    </message>
+    <message>
+      <source>Any date, or 2026-01-31</source>
+      <translation>Any date, or 2026-01-31</translation>
+    </message>
+    <message>
+      <source>Preview scan</source>
+      <translation>Preview scan</translation>
+    </message>
+    <message>
+      <source>List what a scan with these filters would download and skip. Nothing is queued or recorded.</source>
+      <translation>List what a scan with these filters would download and skip. Nothing is queued or recorded.</translation>
+    </message>
+    <message>
+      <source>Preview scan result</source>
+      <translation>Preview scan result</translation>
+    </message>
+    <message>
       <source>Save</source>
       <translation>Save</translation>
+    </message>
+    <message>
+      <source>Checking the source. This can take a moment.</source>
+      <translation>Checking the source. This can take a moment.</translation>
+    </message>
+    <message>
+      <source>A scan would download {matched} and skip {skipped}.</source>
+      <translation>A scan would download {matched} and skip {skipped}.</translation>
+    </message>
+    <message>
+      <source>Would download ({count})</source>
+      <translation>Would download ({count})</translation>
+    </message>
+    <message>
+      <source>Would skip ({count})</source>
+      <translation>Would skip ({count})</translation>
+    </message>
+    <message>
+      <source>the title does not match the include pattern</source>
+      <translation>the title does not match the include pattern</translation>
+    </message>
+    <message>
+      <source>the title matches the exclude pattern</source>
+      <translation>the title matches the exclude pattern</translation>
+    </message>
+    <message>
+      <source>uploaded before the date</source>
+      <translation>uploaded before the date</translation>
     </message>
     <message>
       <source>Subscription archive</source>
@@ -921,6 +993,10 @@
     <message>
       <source>A subscription scan already captured this video. Tick it to download it again.</source>
       <translation>A subscription scan already captured this video. Tick it to download it again.</translation>
+    </message>
+    <message>
+      <source>a filter could not be read</source>
+      <translation>a filter could not be read</translation>
     </message>
     <message>
       <source>{count} captured</source>

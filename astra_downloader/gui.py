@@ -1313,10 +1313,15 @@ class SubscriptionDeliveryDialog(QDialog):
         ("Best", "best"), ("2160p", "2160"), ("1440p", "1440"),
         ("1080p", "1080"), ("720p", "720"), ("480p", "480"),
     )
+    preview_finished = Signal(dict)
 
-    def __init__(self, parent, record):
+    def __init__(self, parent, record, previewer=None):
         super().__init__(parent)
         self.record = record or {}
+        # previewer(filters) -> (result, error), run off the GUI thread
+        # because it probes the source the way a scan does.
+        self._previewer = previewer
+        self.preview_finished.connect(self._show_preview)
         self.setWindowTitle(tr("Subscription delivery"))
         self.setModal(True)
         self.setMinimumWidth(560)
@@ -1395,6 +1400,51 @@ class SubscriptionDeliveryDialog(QDialog):
         ))
         layout.addWidget(self.output_template)
 
+        layout.addWidget(make_label("Only download videos whose title", "fieldLabel"))
+        filter_row = QHBoxLayout()
+        self.include_title = QLineEdit(str(self.record.get("includeTitleRegex") or ""))
+        self.include_title.setPlaceholderText(tr("matches, for example tutorial|review"))
+        self.include_title.setAccessibleName(tr("Include titles matching"))
+        filter_row.addWidget(self.include_title, 1)
+        self.exclude_title = QLineEdit(str(self.record.get("excludeTitleRegex") or ""))
+        self.exclude_title.setPlaceholderText(tr("does not match, for example #shorts"))
+        self.exclude_title.setAccessibleName(tr("Skip titles matching"))
+        filter_row.addWidget(self.exclude_title, 1)
+        layout.addLayout(filter_row)
+        date_row = QHBoxLayout()
+        date_row.addWidget(make_label("Uploaded on or after", "fieldLabel"))
+        stored_date = str(self.record.get("uploadedAfter") or "")
+        if len(stored_date) == 8 and stored_date.isdigit():
+            stored_date = f"{stored_date[:4]}-{stored_date[4:6]}-{stored_date[6:]}"
+        self.uploaded_after = QLineEdit(stored_date)
+        self.uploaded_after.setPlaceholderText(tr("Any date, or 2026-01-31"))
+        self.uploaded_after.setAccessibleName(tr("Uploaded on or after"))
+        date_row.addWidget(self.uploaded_after, 1)
+        self.preview_button = QPushButton(tr("Preview scan"))
+        self.preview_button.setProperty("class", "ghost")
+        self.preview_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.preview_button.setToolTip(tr(
+            "List what a scan with these filters would download and skip. "
+            "Nothing is queued or recorded."
+        ))
+        self.preview_button.setEnabled(self._previewer is not None)
+        self.preview_button.clicked.connect(self._start_preview)
+        date_row.addWidget(self.preview_button)
+        layout.addLayout(date_row)
+        self.filter_hint = make_label(
+            "Patterns are regular expressions matched anywhere in the title, "
+            "ignoring case. Videos a filter skips stay unrecorded, so loosening "
+            "it later lets them through.",
+            "fieldHint", word_wrap=True, status=True,
+        )
+        layout.addWidget(self.filter_hint)
+        self.preview_output = QTextEdit()
+        self.preview_output.setReadOnly(True)
+        self.preview_output.setAccessibleName(tr("Preview scan result"))
+        self.preview_output.setMinimumHeight(140)
+        self.preview_output.hide()
+        layout.addWidget(self.preview_output)
+
         buttons = QHBoxLayout()
         cancel = QPushButton(tr("Cancel"))
         cancel.setProperty("class", "secondary")
@@ -1442,6 +1492,67 @@ class SubscriptionDeliveryDialog(QDialog):
             "audioOnly": self.audio_only.isChecked(),
             "upgradeIfBetter": self.upgrade_if_better.isChecked(),
         }
+
+    def filters(self):
+        return {
+            "includeTitleRegex": self.include_title.text().strip(),
+            "excludeTitleRegex": self.exclude_title.text().strip(),
+            "uploadedAfter": self.uploaded_after.text().strip(),
+        }
+
+    def _start_preview(self):
+        if self._previewer is None:
+            return
+        self.preview_button.setEnabled(False)
+        self.filter_hint.setText(tr("Checking the source. This can take a moment."))
+        filters = self.filters()
+        previewer = self._previewer
+        signal = self.preview_finished
+
+        def worker():
+            try:
+                result, error = previewer(filters)
+            except Exception as exc:  # noqa: BLE001
+                result, error = None, str(exc)
+            try:
+                signal.emit({"result": result or {}, "error": error or ""})
+            except RuntimeError:
+                pass  # The dialog closed before the probe finished.
+
+        threading.Thread(target=worker, name="subscription-preview", daemon=True).start()
+
+    def _show_preview(self, payload):
+        self.preview_button.setEnabled(self._previewer is not None)
+        error = str(payload.get("error") or "")
+        if error:
+            self.filter_hint.setText(tr(error))
+            set_status_tone(self.filter_hint, "danger")
+            repolish(self.filter_hint)
+            return
+        set_status_tone(self.filter_hint, "neutral")
+        repolish(self.filter_hint)
+        result = payload.get("result") or {}
+        matched = list(result.get("matched") or [])
+        skipped = list(result.get("skipped") or [])
+        self.filter_hint.setText(tr_format(
+            "A scan would download {matched} and skip {skipped}.",
+            matched=len(matched), skipped=len(skipped),
+        ))
+        lines = [tr_format("Would download ({count})", count=len(matched))]
+        lines.extend(f"  {item.get('title') or item.get('url')}" for item in matched)
+        lines.append("")
+        lines.append(tr_format("Would skip ({count})", count=len(skipped)))
+        reasons = {
+            "title-not-included": tr("the title does not match the include pattern"),
+            "title-excluded": tr("the title matches the exclude pattern"),
+            "uploaded-before": tr("uploaded before the date"),
+        }
+        for item in skipped:
+            reason = reasons.get(
+                str(item.get("reason") or ""), tr("a filter could not be read"))
+            lines.append(f"  {item.get('title') or item.get('url')} ({reason})")
+        self.preview_output.setPlainText("\n".join(lines))
+        self.preview_output.show()
 
 
 class SubscriptionArchiveDialog(QDialog):
@@ -3532,10 +3643,17 @@ class MainWindowCore(
             self._show_subscription_status(
                 tr("That subscription no longer exists."), "danger")
             return False
-        dialog = SubscriptionDeliveryDialog(self, record)
+        manager = self._subscription_manager()
+        preview_scan = getattr(manager, "preview_scan", None)
+        previewer = (
+            (lambda filters: preview_scan(sub_id, filters=filters))
+            if callable(preview_scan) else None
+        )
+        dialog = SubscriptionDeliveryDialog(self, record, previewer=previewer)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
         delivery = dialog.delivery()
+        filters = dialog.filters()
         # The folder is checked here rather than at download time. Stored
         # unchecked, an unusable path did not fail until the next scan, and
         # then once per video: the subscription looked configured and simply
@@ -3554,10 +3672,9 @@ class MainWindowCore(
                 self._show_subscription_status(tr(str(folder_error)), "danger")
                 return False
             delivery["outputDir"] = resolved
-        manager = self._subscription_manager()
         try:
             updated, error = manager.update_subscription(
-                sub_id, delivery=delivery)
+                sub_id, delivery=delivery, filters=filters)
         except Exception as exc:  # noqa: BLE001
             updated, error = None, str(exc)
         if error or not updated:
@@ -6042,6 +6159,7 @@ class MainWindowCore(
                 enabled=record["enabled"],
                 title=record["title"],
                 delivery=record.get("delivery"),
+                filters=record.get("filters"),
             )
             if add_error:
                 # A subscription already present is the ordinary case when
