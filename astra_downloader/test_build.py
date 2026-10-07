@@ -465,6 +465,31 @@ class UninstallCleanupTests(unittest.TestCase):
             ):
                 self.assertFalse((install / name).exists(), name)
 
+    def test_portable_state_sweep_removes_every_offered_whisper_model(self):
+        planted = {"name": "ggml-planted-q5_1.bin", "sha256": "0" * 64, "bytes": 1}
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.dict(ad.WHISPER_MODELS, {"planted": planted}):
+            install = Path(tmp) / "AstraDownloader"
+            install.mkdir()
+            executable = install / "AstraDownloader.exe"
+            executable.write_bytes(b"portable")
+            names = [spec["name"] for spec in ad.WHISPER_MODELS.values()]
+            self.assertIn("ggml-base-q5_1.bin", names)
+            for name in names:
+                (install / name).write_bytes(b"model")
+                # A download interrupted mid-write leaves its temp file.
+                (install / f".{name}.deadbeef.tmp").write_bytes(b"partial")
+
+            with mock.patch.object(ad, "INSTALL_DIR", install), \
+                 mock.patch.object(ad, "current_executable_path", return_value=executable), \
+                 mock.patch.object(ad, "write_persistent_log"):
+                ad.remove_portable_state()
+
+            self.assertTrue(executable.exists())
+            for name in names:
+                self.assertFalse((install / name).exists(), name)
+                self.assertFalse((install / f".{name}.deadbeef.tmp").exists(), name)
+
     def test_uninstall_removes_the_integration_stamp(self):
         deleted = []
 

@@ -6410,10 +6410,13 @@ def _portable_state_paths(root=None):
     root_file_names = {
         Path(path).name for path in (
             CONFIG_PATH, HISTORY_PATH, DOWNLOAD_QUEUE_PATH, SUBSCRIPTIONS_PATH,
-            LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH,
-            WHISPER_MODEL_PATH, ICON_PATH,
+            LOG_PATH, CRASH_LOG_PATH, YTDLP_PATH, FFMPEG_PATH, ICON_PATH,
         )
     }
+    # Every Whisper model Settings offers, read from the model table. A user
+    # who picked base has ggml-base-q5_1.bin (about 57 MiB) instead of, or
+    # beside, tiny, and a model added to the table later is covered too.
+    root_file_names.update(spec['name'] for spec in WHISPER_MODELS.values())
     # One-step recovery journals live beside the state files and are owned by
     # the same portable instance. Leaving them behind can resurrect an action
     # after uninstall, and can also expose stale settings to a later install.
