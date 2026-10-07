@@ -168,7 +168,7 @@ class ExtensionPageMixin:
         self._stat_frame_active, self.stat_active = make_stat("Active", "0", "In progress")
         self.stat_active.setProperty("tone", "accent")
         self._stat_frame_completed, self.stat_completed = make_stat("Completed", "0", "This session")
-        self._stat_frame_uptime, self.stat_uptime = make_stat("Uptime", "--", "Since launch")
+        self._stat_frame_uptime, self.stat_uptime = make_stat("Uptime", tr("Off"), "Since launch")
         self._stat_frame_port, self.stat_port = make_stat("Port", str(self.config.get("ServerPort", self._value('SERVER_PORT'))), "Local API")
         for frame in (self._stat_frame_active, self._stat_frame_completed,
                       self._stat_frame_uptime, self._stat_frame_port):

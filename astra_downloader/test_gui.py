@@ -1302,6 +1302,37 @@ class DragAndDropTests(unittest.TestCase):
             _retire_test_window(window)
 
 
+class EmptyStateWordingTests(unittest.TestCase):
+    """An unknown value reads as a word, the way every other empty state does."""
+
+    def test_a_punctuation_eta_reads_as_unknown(self):
+        gui = gui_module_for_tests()
+        window = types.SimpleNamespace(_value=lambda name: getattr(ad, name))
+        for eta, expected in (("--:--", "ETA unknown"), ("00:18", "ETA 00:18")):
+            with self.subTest(eta=eta):
+                download = ad.Download("dl_eta", "https://example.com/video", title="Clip")
+                download.status = "downloading"
+                download.eta = eta
+                text = gui.MainWindowCore._download_meta_text(window, download)
+                self.assertIn(expected, text)
+                self.assertNotIn("--", text)
+
+    def test_uptime_reads_off_while_the_server_is_stopped(self):
+        _get_qapp_or_skip(self)
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+        try:
+            self.assertEqual(window.stat_uptime.text(), "Off")
+            window.server_start_time = None
+            window._update_ui()
+            self.assertEqual(window.stat_uptime.text(), "Off")
+        finally:
+            _retire_test_window(window)
+
+
 class DownloadCardFocusTests(unittest.TestCase):
     def test_focus_survives_a_card_rebuild_on_status_change(self):
         from PySide6.QtCore import Qt

@@ -12,6 +12,10 @@ repository's git log.
 
 ## Unreleased
 
+### Changed
+
+- An ETA that can't be estimated reads "ETA unknown" on the download card, and the Uptime stat says "Off" while the local API is stopped. Both used to show dashes.
+
 ### Fixed
 
 - Two GUI tests that sometimes failed on a busy machine now drive their Qt timers by hand, so the progress-coalescing and History search checks no longer depend on how fast the machine is.

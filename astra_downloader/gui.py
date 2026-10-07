@@ -4901,8 +4901,13 @@ class MainWindowCore(
             meta_parts.append(f"{dl.progress:.1f}%")
         if dl.speed:
             meta_parts.append(dl.speed)
-        if dl.eta:
-            meta_parts.append(tr_format("ETA {eta}", eta=dl.eta))
+        eta = str(dl.eta or "").strip()
+        if eta:
+            # A progress line can carry its unknown ETA as bare punctuation
+            # ("--:--"); every other empty state in the app is a word.
+            if not eta.strip("-:. "):
+                eta = tr("unknown")
+            meta_parts.append(tr_format("ETA {eta}", eta=eta))
         if dl.format:
             meta_parts.append(dl.format.upper())
         if dl.quality:
@@ -5359,7 +5364,7 @@ class MainWindowCore(
             else:
                 self.stat_uptime.setText(f"{elapsed:.0f}s")
         else:
-            self.stat_uptime.setText("--")
+            self.stat_uptime.setText(tr("Off"))
 
         # Downloads tab
         downloads = self.dl_manager.snapshot()
