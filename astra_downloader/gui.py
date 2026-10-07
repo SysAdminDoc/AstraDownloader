@@ -1571,6 +1571,7 @@ class SubscriptionDeliveryDialog(QDialog):
             "already-captured": tr("already captured"),
             "waiting-to-retry": tr("failed earlier, waiting to retry"),
             "gave-up": tr("stopped retrying after repeated failures"),
+            "filter-timeout": tr("the filter took too long on this title"),
         }
         for item in skipped:
             reason = reasons.get(

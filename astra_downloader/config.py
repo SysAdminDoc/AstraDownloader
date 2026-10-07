@@ -720,10 +720,16 @@ _SUBSCRIPTION_FILTER_LABELS = {
 # with each extra character, and even a flat "\w*\w*\w*!" takes seconds on a
 # long one. A filter is parsed with the re module's own parser, then run on a
 # small Thompson NFA whose cost is the title length times the program size,
-# whatever the pattern. Features that need backtracking (backreferences,
-# lookarounds, possessive and atomic groups) are refused when the filter is
-# saved, as is a program too large to keep that product small.
+# whatever the pattern. A pattern the NFA can't express (backreferences,
+# lookarounds, possessive and atomic groups, scoped flags, (?a), a program
+# too large to keep that product small) is still accepted exactly as Python's
+# re accepts it: it runs under re in a worker process with a time budget per
+# title, and a title that runs out of budget is skipped, never queued.
 TITLE_FILTER_PROGRAM_LIMIT = 256
+TITLE_FILTER_TIME_BUDGET_SECONDS = 1.0
+# Starting the worker is not part of any title's budget; a spawned interpreter
+# can take seconds on a busy machine.
+_TITLE_FILTER_WORKER_START_SECONDS = 60.0
 _RE = re._constants
 _TITLE_FILTER_ANCHORS = frozenset({
     _RE.AT_BEGINNING, _RE.AT_BEGINNING_STRING, _RE.AT_END, _RE.AT_END_STRING,
@@ -742,8 +748,133 @@ _TITLE_FILTER_CATEGORIES = {
 
 
 class TitleFilterError(ValueError):
-    """A title pattern the filter matcher refuses; the text completes
+    """A title pattern Python's re refuses; the text completes
     "The include title pattern ..."."""
+
+
+class TitleFilterTimeout(Exception):
+    """A backtracking pattern ran out of time on one title. The caller fails
+    closed: the candidate is skipped, never queued."""
+
+
+class _LinearUnsupported(Exception):
+    """The pattern needs the backtracking evaluator."""
+
+
+def _title_filter_worker(conn):
+    """Child process: answer ``(pattern, title)`` with re.search, nothing else."""
+    cache = {}
+    try:
+        conn.send(("ready", None))
+    except (OSError, ValueError):
+        return
+    while True:
+        try:
+            pattern, title = conn.recv()
+        except (EOFError, OSError):
+            return
+        try:
+            compiled = cache.get(pattern)
+            if compiled is None:
+                if len(cache) > 64:
+                    cache.clear()
+                compiled = cache[pattern] = re.compile(pattern, re.IGNORECASE)
+            reply = ("ok", compiled.search(title) is not None)
+        except Exception as error:  # noqa: BLE001
+            reply = ("error", str(error)[:200])
+        try:
+            conn.send(reply)
+        except (OSError, ValueError):
+            return
+
+
+class _TitleFilterWorker:
+    """One reusable worker process for the patterns the NFA can't run.
+
+    A thread can't stop a runaway re.search, which holds the GIL for seconds
+    at a time, so the match runs in a child process the caller can kill when
+    the budget is spent. The next title starts a fresh one.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._process = None
+        self._conn = None
+
+    def search(self, pattern, title, budget):
+        with self._lock:
+            conn = self._connection()
+            if conn is None:
+                raise TitleFilterTimeout("the filter worker could not start")
+            reply = None
+            try:
+                conn.send((pattern, title))
+                if conn.poll(budget):
+                    reply = conn.recv()
+            except (EOFError, OSError, ValueError, TypeError):
+                reply = None
+            if reply is None:
+                self._stop()
+                raise TitleFilterTimeout("the filter ran out of time on this title")
+        kind, value = reply
+        if kind != "ok":
+            raise TitleFilterError(f"is not a valid regular expression: {value}")
+        return bool(value)
+
+    def _connection(self):
+        if self._process is not None and self._process.is_alive():
+            return self._conn
+        self._stop()
+        import multiprocessing
+
+        context = multiprocessing.get_context("spawn")
+        parent, child = context.Pipe()
+        process = context.Process(
+            target=_title_filter_worker, args=(child,),
+            name="astra-title-filter", daemon=True,
+        )
+        try:
+            process.start()
+        except Exception:  # noqa: BLE001
+            parent.close()
+            child.close()
+            return None
+        child.close()
+        self._process, self._conn = process, parent
+        try:
+            if parent.poll(_TITLE_FILTER_WORKER_START_SECONDS) and parent.recv()[0] == "ready":
+                return parent
+        except (EOFError, OSError, ValueError, TypeError, IndexError):
+            pass
+        self._stop()
+        return None
+
+    def _stop(self):
+        process, conn = self._process, self._conn
+        self._process = self._conn = None
+        if conn is not None:
+            conn.close()
+        if process is not None:
+            if process.is_alive():
+                process.kill()
+            process.join(timeout=5)
+
+
+_TITLE_FILTER_WORKER = _TitleFilterWorker()
+
+
+class _BacktrackingTitleFilter:
+    """A pattern only Python's re can run, evaluated off-thread with a budget."""
+
+    __slots__ = ("pattern",)
+
+    def __init__(self, pattern):
+        self.pattern = pattern
+
+    def search(self, text):
+        return _TITLE_FILTER_WORKER.search(
+            self.pattern, str(text or ""), TITLE_FILTER_TIME_BUDGET_SECONDS,
+        )
 
 
 def _title_char_forms(ch):
@@ -858,9 +989,7 @@ class _TitleFilterProgram:
 def _emit_title_filter(items, program):
     for op, av in items:
         if len(program) > TITLE_FILTER_PROGRAM_LIMIT:
-            raise TitleFilterError(
-                "is too complex. Use fewer or smaller repeat counts"
-            )
+            raise _LinearUnsupported
         if op is _RE.LITERAL:
             program.append(("char", frozenset(_title_char_forms(chr(av)))))
         elif op is _RE.NOT_LITERAL:
@@ -879,7 +1008,7 @@ def _emit_title_filter(items, program):
                 elif item is _RE.CATEGORY and value in _TITLE_FILTER_CATEGORIES:
                     categories.append(_TITLE_FILTER_CATEGORIES[value])
                 else:
-                    raise TitleFilterError("uses a character class title filters can't read")
+                    raise _LinearUnsupported
             program.append(
                 ("set", negate, frozenset(chars), tuple(ranges), tuple(categories))
             )
@@ -888,7 +1017,7 @@ def _emit_title_filter(items, program):
         elif op is _RE.SUBPATTERN:
             _group, add_flags, del_flags, body = av
             if add_flags or del_flags:
-                raise TitleFilterError("uses a scoped flag group, which title filters don't support")
+                raise _LinearUnsupported
             _emit_title_filter(body, program)
         elif op is _RE.BRANCH:
             alternatives = av[1]
@@ -923,34 +1052,34 @@ def _emit_title_filter(items, program):
                     program.append(None)
                     _emit_title_filter(body, program)
                     program[split] = ("split", split + 1, len(program))
-        elif op is _RE.GROUPREF or op is _RE.GROUPREF_EXISTS:
-            raise TitleFilterError("uses a backreference, which title filters don't support")
-        elif op is _RE.ASSERT or op is _RE.ASSERT_NOT:
-            raise TitleFilterError(
-                "uses a lookahead or lookbehind, which title filters don't support"
-            )
-        elif op is _RE.POSSESSIVE_REPEAT or op is _RE.ATOMIC_GROUP:
-            raise TitleFilterError(
-                "uses a possessive or atomic group, which title filters don't support"
-            )
         else:
-            raise TitleFilterError("uses regular expression syntax title filters don't support")
+            # Backreferences, lookarounds, possessive and atomic groups.
+            raise _LinearUnsupported
     if len(program) > TITLE_FILTER_PROGRAM_LIMIT:
-        raise TitleFilterError("is too complex. Use fewer or smaller repeat counts")
+        raise _LinearUnsupported
 
 
 def compile_title_filter(pattern):
-    """Compile a case-insensitive title pattern, or raise TitleFilterError."""
+    """Compile a case-insensitive title pattern, or raise TitleFilterError.
+
+    Accepts exactly what ``re.compile(pattern, re.IGNORECASE)`` accepts. The
+    result's ``search(title)`` returns a bool, or raises TitleFilterTimeout
+    for a backtracking pattern that ran out of time on that title.
+    """
     text = str(pattern or "")
     try:
+        re.compile(text, re.IGNORECASE)
         parsed = re._parser.parse(text, re.IGNORECASE)
-    except re.error as error:
+    except (re.error, OverflowError, RecursionError) as error:
         raise TitleFilterError(f"is not a valid regular expression: {error}") from None
     flags = parsed.state.flags
-    if flags & re.ASCII:
-        raise TitleFilterError("uses the ASCII flag, which title filters don't support")
-    program = []
-    _emit_title_filter(parsed, program)
+    try:
+        if flags & re.ASCII:
+            raise _LinearUnsupported
+        program = []
+        _emit_title_filter(parsed, program)
+    except _LinearUnsupported:
+        return _BacktrackingTitleFilter(text)
     program.append(("match",))
     return _TitleFilterProgram(text, tuple(program), flags)
 
@@ -959,7 +1088,7 @@ def sanitize_subscription_filters(raw):
     """Return ``(filters, error)`` for a subscription's title and date filters.
 
     Patterns are Python regular expressions matched case-insensitively
-    anywhere in the title, less the features compile_title_filter refuses. ``uploadedAfter`` accepts YYYY-MM-DD or YYYYMMDD,
+    anywhere in the title, stored exactly as typed. ``uploadedAfter`` accepts YYYY-MM-DD or YYYYMMDD,
     means "on or after" (yt-dlp's --dateafter reads the same way) and is
     stored as YYYYMMDD. Empty means no filter. An invalid value is an error,
     not a silent blank, because a dropped include filter would queue the

@@ -467,6 +467,10 @@
       <translation>stopped retrying after repeated failures</translation>
     </message>
     <message>
+      <source>the filter took too long on this title</source>
+      <translation>the filter took too long on this title</translation>
+    </message>
+    <message>
       <source>Subscription archive</source>
       <translation>Subscription archive</translation>
     </message>

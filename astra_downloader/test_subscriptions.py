@@ -2410,6 +2410,53 @@ class SubscriptionFilterTests(unittest.TestCase):
                 sub_id, filters={"includeTitleRegex": "[unclosed"})
             self.assertIn("not a valid regular expression", error)
 
+    def test_a_pattern_python_accepted_is_kept_everywhere_and_still_decides(self):
+        # Lookarounds, backreferences, scoped flags, (?a) and large repeats
+        # were valid before the linear matcher. Refusing them reset a saved
+        # exclude to nothing and dropped the filters from every export.
+        module = subscriptions_module()
+        both = r"(?=.*foo)(?=.*bar)"
+        for pattern in (both, r"(\w)\1", r"(?-i:Live)", r"(?a)\w+", r"a{300}", "(?!)"):
+            with self.subTest(pattern):
+                kept, error = module.sanitize_subscription_filters(
+                    {"includeTitleRegex": pattern})
+                self.assertIsNone(error)
+                self.assertEqual(kept["includeTitleRegex"], pattern)
+        self.assertEqual(module.evaluate_subscription_filters(
+            {"title": "Bar then Foo"}, {"includeTitleRegex": both}), ("matched", ""))
+        self.assertEqual(module.evaluate_subscription_filters(
+            {"title": "foo alone"}, {"includeTitleRegex": both}),
+            ("skipped", "title-not-included"))
+        exported = ad.build_settings_bundle(ad.sanitize_config({}), [dict(
+            id="sub_1", url="https://www.youtube.com/@c", title="c", enabled=True,
+            intervalMinutes=60, includeTitleRegex=both, excludeTitleRegex=r"(?<!no )shorts",
+        )])
+        imported, error = ad.read_settings_bundle(json.loads(json.dumps(exported)))
+        self.assertIsNone(error)
+        self.assertEqual(imported["subscriptions"][0]["filters"]["includeTitleRegex"], both)
+        self.assertEqual(
+            imported["subscriptions"][0]["filters"]["excludeTitleRegex"], r"(?<!no )shorts")
+
+    def test_a_backtracking_pattern_runs_out_of_time_closed(self):
+        module = subscriptions_module()
+        # Python's re needs minutes here, and the lookahead keeps it off the
+        # linear matcher. Skipped, never queued, and well inside the bound.
+        slow = r"(?=x|)^(\w+\s?)*$"
+        started = time.perf_counter()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        with mock.patch.object(config_module, "TITLE_FILTER_TIME_BUDGET_SECONDS", 0.5):
+            for field, title in (("includeTitleRegex", "a" * 40 + "!"),
+                                 ("excludeTitleRegex", "b" * 40 + "!")):
+                with self.subTest(field):
+                    self.assertEqual(
+                        module.evaluate_subscription_filters({"title": title}, {field: slow}),
+                        ("skipped", "filter-timeout"),
+                    )
+            # The worker restarts after a kill and answers the next title.
+            self.assertEqual(module.evaluate_subscription_filters(
+                {"title": "word word"}, {"includeTitleRegex": slow}), ("matched", ""))
+        self.assertLess(time.perf_counter() - started, 120)
+
     def test_a_backtracking_pattern_cannot_stall_the_scan_thread(self):
         module = subscriptions_module()
         nested = {"includeTitleRegex": r"^(\w+\s?)*$"}
@@ -2423,9 +2470,6 @@ class SubscriptionFilterTests(unittest.TestCase):
             module.evaluate_subscription_filters({"title": "Part 12 tutorial"}, nested),
             ("matched", ""),
         )
-        _filters, error = module.sanitize_subscription_filters(
-            {"includeTitleRegex": r"(a)\1"})
-        self.assertIn("backreference", error)
 
 
 if __name__ == "__main__":

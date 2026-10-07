@@ -467,6 +467,10 @@
       <translation>nach wiederholten Fehlern aufgegeben</translation>
     </message>
     <message>
+      <source>the filter took too long on this title</source>
+      <translation>der Filter brauchte für diesen Titel zu lange</translation>
+    </message>
+    <message>
       <source>Subscription archive</source>
       <translation>Abonnementarchiv</translation>
     </message>

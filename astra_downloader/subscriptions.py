@@ -29,6 +29,7 @@ try:
         sanitize_subscription_delivery,
         sanitize_subscription_filters,
         compile_title_filter,
+        TitleFilterTimeout,
     )
 except ImportError:  # Flat source-path compatibility.
     from config import (
@@ -40,6 +41,7 @@ except ImportError:  # Flat source-path compatibility.
         sanitize_subscription_delivery,
         sanitize_subscription_filters,
         compile_title_filter,
+        TitleFilterTimeout,
     )
 
 
@@ -299,7 +301,10 @@ def evaluate_subscription_filters(candidate, filters):
     Pure, and the only place the decision is made, so a preview, a manual
     scan and a scheduled scan cannot disagree. It runs before any archive
     reservation. Reasons are stable codes: ``title-not-included``,
-    ``title-excluded`` and ``uploaded-before``. A candidate whose upload
+    ``title-excluded``, ``uploaded-before``, ``filter-timeout`` (a
+    backtracking pattern ran out of time on this title, so the candidate is
+    skipped rather than let through; the next scan tries it again) and
+    ``invalid-filter``. A candidate whose upload
     date is unknown passes the date filter: flat channel listings often
     carry no date, and a filter that dropped every undated entry would
     quietly empty the subscription.
@@ -315,6 +320,9 @@ def evaluate_subscription_filters(candidate, filters):
             return "skipped", "title-not-included"
         if exclude and _filter_pattern(exclude).search(title):
             return "skipped", "title-excluded"
+    except TitleFilterTimeout:
+        # Closed, not open: an exclude that didn't finish might have matched.
+        return "skipped", "filter-timeout"
     except ValueError:
         # Only reachable through a hand-edited state file. Skipping is the
         # safe reading of a filter that cannot be applied.

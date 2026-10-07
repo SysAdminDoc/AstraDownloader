@@ -80,6 +80,8 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "the filter took too long on this title":
+            "der Filter brauchte für diesen Titel zu lange",
         "already captured":
             "bereits erfasst",
         "failed earlier, waiting to retry":
