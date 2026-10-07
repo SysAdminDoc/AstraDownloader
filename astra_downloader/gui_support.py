@@ -8,7 +8,7 @@ builders for the common visual language.
 import os
 import unicodedata
 
-from PySide6.QtCore import QCoreApplication, QSize, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
 from PySide6.QtGui import (
     QAccessible, QAccessibleAnnouncementEvent, QColor, QIcon, QPainter, QPen,
     QPixmap,
@@ -110,8 +110,19 @@ def sanitize_csv_cell(value):
 
 
 def repolish(widget):
-    widget.style().unpolish(widget)
-    widget.style().polish(widget)
+    """Re-apply the stylesheet after a dynamic property (tone, state) changed.
+
+    unpolish and polish re-read the rules but send no StyleChange, and a
+    QFrame (every QLabel is one) re-measures its frame only on StyleChange.
+    A label whose new tone brings a border and padding kept the frame of its
+    old tone, so the tone bar was drawn over the first letter. Sending the
+    event is what setStyleSheet does after its own polish.
+    """
+    style = widget.style()
+    style.unpolish(widget)
+    style.polish(widget)
+    if isinstance(widget, QWidget):
+        QCoreApplication.sendEvent(widget, QEvent(QEvent.Type.StyleChange))
     widget.update()
 
 

@@ -25,13 +25,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Where: `astra_downloader/build.py`, the native-host block in `astra_downloader/astra_downloader.py`, the taskbar and jump-list block in `astra_downloader/gui.py`, the transcription block in `astra_downloader/download.py`.
 
 
-- [ ] P3 | AD-128 | A tone label loses its padding when its tone changes
-  Why: repolish (unpolish then polish) never delivers a StyleChange event, so a label whose tone changes keeps the frame width of its previous tone. It shows most in the high-contrast fixture, where the dashed warning bar overlaps the first letter, and in the RTL probe warning.
-  Evidence: astra_downloader/gui_support.py repolish; the downloads-high-contrast-black and RTL probe-warning renders from 2026-10-06.
-  Touches: astra_downloader/gui_support.py, astra_downloader/test_gui.py.
-  Acceptance: Changing a label's tone recomputes its frame, pinned by a test that measures contentsRect before and after a tone change, and the two renders show no overlap.
-  Complexity: S
-
 - [ ] P3 | AD-129 | Two readiness labels stay English in German
   Why: the SABR and PO provider readiness rows render English labels in the German build while the rest of the Download page is translated.
   Evidence: the German Download-page render; astra_downloader/health.py readiness labels.

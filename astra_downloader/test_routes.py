@@ -2354,6 +2354,36 @@ for forbidden in (
             ("tone", "danger"), ("tone", "success"), ("tone", "neutral"),
         ])
 
+    def test_a_tone_change_remeasures_the_label_frame(self):
+        # The warning tone adds a 2px bar and 7px 10px padding. Without a
+        # StyleChange the label kept its untoned zero frame, and the bar
+        # overlapped the first letter.
+        import gui_support as gs
+        from PySide6.QtWidgets import QWidget
+
+        if _get_qapp_or_skip(self) is None:
+            return
+        host = QWidget()
+        self.addCleanup(host.deleteLater)
+        host.setStyleSheet(ad.STYLESHEET)
+        label = gs.make_label("Couldn't preview this link.", "fieldHint", word_wrap=True)
+        label.setParent(host)
+        label.resize(400, 80)
+        label.ensurePolished()
+        plain = label.contentsRect()
+
+        gs.set_status_tone(label, "warning", announce=False)
+        gs.repolish(label)
+        toned = label.contentsRect()
+        self.assertEqual(
+            (toned.left(), toned.top(), toned.right(), toned.bottom()),
+            (plain.left() + 12, plain.top() + 7, plain.right() - 10, plain.bottom() - 7),
+        )
+
+        gs.set_status_tone(label, "neutral", announce=False)
+        gs.repolish(label)
+        self.assertEqual(label.contentsRect(), plain)
+
     def test_gui_boundary_imports_pyqt_without_creating_application(self):
         script = r'''
 import importlib
