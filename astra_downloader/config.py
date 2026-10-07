@@ -1752,8 +1752,11 @@ def normalize_output_template(value):
     # checks and then failed EVERY download at yt-dlp startup with an opaque
     # "Invalid output template" error. A fallback the token pattern refuses
     # (a separator, a second "|", a stray percent) leaves its "%" behind too.
-    unescaped = norm.replace("%%", "")
-    stripped = _OUTPUT_TOKEN_RE.sub("", unescaped)
+    # Tokens are matched between the %% escapes, never across them: deleting
+    # %% first glued "%(title)%%s" into a valid-looking "%(title)s", which
+    # yt-dlp then rejected on every download.
+    segments = norm.split("%%")
+    stripped = "".join(_OUTPUT_TOKEN_RE.sub("", segment) for segment in segments)
     if "%" in stripped:
         return ""
     # "|" only means something inside a token. Outside one it is a literal
@@ -1762,12 +1765,25 @@ def normalize_output_template(value):
         return ""
     # A fallback is a path component when its field is missing, so it gets
     # the same traversal rule as the template itself.
-    for match in _OUTPUT_TOKEN_RE.finditer(unescaped):
-        if ".." in (match.group(2) or ""):
-            return ""
-        # Nor may it be a name Windows reserves (CON, NUL, COM1): Explorer
-        # can't open or delete a folder called that.
-        if _windows_reserved_output_component(match.group(2) or ""):
+    for segment in segments:
+        for match in _OUTPUT_TOKEN_RE.finditer(segment):
+            if ".." in (match.group(2) or ""):
+                return ""
+    # No component may render as a name Windows reserves (CON, NUL, COM1):
+    # Explorer can't open or delete a folder called that. Literal parts and
+    # fallbacks glued to them ("%(playlist_title|CO)sN") both count, so each
+    # component is rendered with every field present and with every field
+    # missing. A present field renders as "_" and a missing one without a
+    # fallback as "NA", and neither can be part of a reserved name, so a
+    # mix of the two cases adds nothing these two don't cover.
+    for missing in (False, True):
+        def render(match, missing=missing):
+            if not missing:
+                return "_"
+            return match.group(2) if match.group(2) is not None else "NA"
+
+        rendered = "%".join(_OUTPUT_TOKEN_RE.sub(render, segment) for segment in segments)
+        if any(_windows_reserved_output_component(part) for part in rendered.split("/")):
             return ""
     return bound_output_template_fields(norm)
 

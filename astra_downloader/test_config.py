@@ -558,10 +558,11 @@ class NormalizationTests(unittest.TestCase):
         self.assertFalse(normal["reserved"])
         self.assertFalse(normal["too_long"])
 
+        # A reserved name is refused outright, so it never reaches a preview.
         reserved = config_module.output_template_preview(
             "CON.%(ext)s", r"C:\Videos"
         )
-        self.assertEqual(reserved["reserved"], ("CON",))
+        self.assertFalse(reserved["valid"])
 
         long_path = config_module.output_template_preview(
             "folder/" + ("x" * 250) + ".%(ext)s", r"C:\Videos"
@@ -584,14 +585,15 @@ class NormalizationTests(unittest.TestCase):
             report = config_module.output_template_preview(
                 reserved_name + ".%(ext)s", r"C:\Videos"
             )
-            self.assertEqual(report["reserved"], (reserved_name,))
+            self.assertFalse(report["valid"], reserved_name)
 
-        safe = config_module.output_template_preview(
+        # yt-dlp's --windows-filenames replaces characters, not reserved
+        # names, so the option doesn't make one safe.
+        refused = config_module.output_template_preview(
             "CONIN$.%(ext)s", r"C:\Videos", windows_filenames=True
         )
-        self.assertEqual(safe["relative"], "_CONIN$.mp4")
-        self.assertFalse(safe["reserved"])
-        self.assertTrue(safe["windowsFilenames"])
+        self.assertFalse(refused["valid"])
+        self.assertTrue(refused["windowsFilenames"])
 
     def test_output_template_preview_checks_the_staging_prefix(self):
         import config as config_module
@@ -1840,6 +1842,26 @@ class OutputTemplateFallbackTests(unittest.TestCase):
             with self.subTest(template):
                 self.assertEqual(ad.normalize_output_template(template), "")
         self.assertTrue(ad.normalize_output_template("%(album|CONcerts)s.%(ext)s"))
+
+    def test_a_literal_reserved_windows_name_is_refused(self):
+        for template in ("CON/%(title)s.%(ext)s", "x/aux.%(title)s.%(ext)s"):
+            with self.subTest(template):
+                self.assertEqual(ad.normalize_output_template(template), "")
+        self.assertTrue(ad.normalize_output_template("CONcerts/%(title)s.%(ext)s"))
+
+    def test_a_fallback_glued_into_a_reserved_name_is_refused(self):
+        # playlist_title missing renders "CO" + "N": a CON folder.
+        for template in ("%(playlist_title|CO)sN/%(title)s.%(ext)s",
+                         "LP%(album|T1)s/%(title)s.%(ext)s"):
+            with self.subTest(template):
+                self.assertEqual(ad.normalize_output_template(template), "")
+        self.assertTrue(ad.normalize_output_template("%(album|CO)sNcerts/%(title)s.%(ext)s"))
+
+    def test_a_token_glued_across_an_escaped_percent_is_refused(self):
+        # Reading "%(title)%%s" with %% deleted gave "%(title)s", and yt-dlp
+        # raised on every download.
+        self.assertEqual(ad.normalize_output_template("%(title)%%s.%(ext)s"), "")
+        self.assertTrue(ad.normalize_output_template("%(title)s 100%%.%(ext)s"))
 
     def test_settings_preview_renders_a_fallback_for_present_and_absent_fields(self):
         def relative(template):
