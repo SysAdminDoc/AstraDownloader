@@ -1805,6 +1805,13 @@ class OutputTemplateFallbackTests(unittest.TestCase):
             "100%% %(title).200B.%(ext)s",
         )
 
+    def test_a_reserved_windows_name_is_refused_as_a_fallback(self):
+        for template in ("%(album|CON)s/%(title)s.%(ext)s",
+                         "%(album|NUL)s.%(ext)s", "%(album|com1)s.%(ext)s"):
+            with self.subTest(template):
+                self.assertEqual(ad.normalize_output_template(template), "")
+        self.assertTrue(ad.normalize_output_template("%(album|CONcerts)s.%(ext)s"))
+
     def test_settings_preview_renders_a_fallback_for_present_and_absent_fields(self):
         def relative(template):
             report = ad.output_template_preview(

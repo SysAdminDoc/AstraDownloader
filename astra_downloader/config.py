@@ -1363,6 +1363,10 @@ def normalize_output_template(value):
     for match in _OUTPUT_TOKEN_RE.finditer(unescaped):
         if ".." in (match.group(2) or ""):
             return ""
+        # Nor may it be a name Windows reserves (CON, NUL, COM1): Explorer
+        # can't open or delete a folder called that.
+        if _windows_reserved_output_component(match.group(2) or ""):
+            return ""
     return bound_output_template_fields(norm)
 
 
