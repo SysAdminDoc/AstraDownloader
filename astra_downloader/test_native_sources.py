@@ -130,14 +130,35 @@ class KickResolutionTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "source-unavailable")
         self.assertIn("Forbidden", str(raised.exception))
 
-    def test_a_404_hands_the_link_back_to_ytdlp(self):
+    def test_an_http_error_hands_the_canonical_page_to_ytdlp(self):
         # On 2026-10-06 the playback endpoint answered 404 for every VOD while
-        # yt-dlp's kick:vod extracted them again, so a 404 is a retired route,
-        # not a missing video.
+        # yt-dlp's kick:vod extracted them again, so an HTTP error is a retired
+        # route, not a missing video. The page goes over in the one shape
+        # kick:vod accepts: as typed, the other permalink shapes reach
+        # kick:live and record whatever the channel is streaming.
         body = json.dumps({"data": {"details": "Requested resource not found", "type": "NOT_FOUND"}}).encode()
-        self.assertIsNone(
-            ns.resolve_native_source(f"https://kick.com/loulz/videos/{VOD}", fetch=_Fetch(404, body))
+        cases = (
+            (f"https://kick.com/loulz/videos/{VOD}", 404, f"https://kick.com/loulz/videos/{VOD}"),
+            (f"https://www.kick.com/loulz/video/{VOD.upper()}", 503, f"https://kick.com/loulz/videos/{VOD}"),
+            (f"https://kick.com/videos/{VOD}", 403, f"https://kick.com/video/videos/{VOD}"),
+            (f"https://kick.com/lou.lz/videos/{VOD}", 410, f"https://kick.com/video/videos/{VOD}"),
         )
+        for url, status, page in cases:
+            with self.subTest(url=url, status=status):
+                resolved = ns.resolve_native_source(url, fetch=_Fetch(status, body))
+                self.assertEqual(resolved["url"], page)
+                self.assertEqual(ns.native_source_argv(resolved), [])
+
+    def test_the_canonical_page_is_one_ytdlp_hands_to_kick_vod(self):
+        try:
+            from yt_dlp.extractor import gen_extractor_classes
+        except ImportError:
+            self.skipTest("yt-dlp is not installed")
+        for slug in ("loulz", "video"):
+            page = f"https://kick.com/{slug}/videos/{VOD}"
+            with self.subTest(page=page):
+                first = next(cls.IE_NAME for cls in gen_extractor_classes() if cls.suitable(page))
+                self.assertEqual(first, "kick:vod")
 
     def test_an_unreachable_host_is_a_network_condition(self):
         fetch = _Fetch(error=OSError("connection reset"))
@@ -205,6 +226,11 @@ class UpstreamReasonGateTests(unittest.TestCase):
             failures, extractors, today=self.reviewed, upstream=ns.NATIVE_SOURCE_UPSTREAM,
         )
         self.assertEqual(failures, [])
+        # gen_extractor_classes() yields lazy-loader stubs that carry only a
+        # name and a URL pattern; a hash of one would never see a fix land.
+        hashed = self.gate.real_extractor_class(extractors["kick:vod"])
+        self.assertNotIn("lazy_extractors", hashed.__module__)
+        self.assertIn("_real_extract", vars(hashed))
 
     def test_a_changed_or_missing_extractor_is_reported(self):
         for extractors in ({"kick:vod": _ChangedExtractor}, {}):

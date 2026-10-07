@@ -28,15 +28,17 @@ playlist), so the resolver names the header the download must send.
 
 Kick has since swapped which door is open. On 2026-10-06 the v1 endpoint
 answered again and `kick:vod` extracted every VOD tried, while the playback
-endpoint answered 404 for all of them. A 404 here therefore hands the link
-back to yt-dlp's extractor instead of failing the download, so whichever of
-the two routes Kick keeps working is the one used.
+endpoint answered 404 for all of them. An HTTP error from the playback
+route therefore hands the VOD's page, in the shape kick:vod accepts, to
+yt-dlp instead of failing the download, so whichever of the two routes Kick
+keeps working is the one used.
 
 ## Keeping the reason honest
 
 `NATIVE_SOURCE_UPSTREAM` records, per resolver, the yt-dlp extractor it
-stands in for, the issue it answers, and a hash of that extractor's source at
-the reviewed yt-dlp release. `scripts/check-site-registry.py` fails when the
+stands in for, the issue it answers, and a hash of that extractor's source
+(the real class and its bases up to InfoExtractor, not the lazy-loader stub)
+at the reviewed yt-dlp release. `scripts/check-site-registry.py` fails when the
 installed extractor no longer matches, which is the cue to test whether the
 resolver is still needed rather than keep assuming it.
 """
@@ -67,16 +69,17 @@ NATIVE_SOURCE_USER_AGENT = (
 )
 NATIVE_SOURCE_USER_AGENT_REVIEWED = "2026-10-06"
 
-# Why each resolver exists. `extractor_sha256` is the SHA-256 of
-# `inspect.getsource()` of the extractor class (LF line endings) in the yt-dlp
-# release named beside it; scripts/check-site-registry.py recomputes it.
+# Why each resolver exists. `extractor_sha256` is the SHA-256 of the
+# `inspect.getsource()` text (LF line endings) of the real extractor class and
+# each base below InfoExtractor, in MRO order, in the yt-dlp release named
+# beside it; scripts/check-site-registry.py recomputes it.
 NATIVE_SOURCE_UPSTREAM = (
     {
         "resolver": "kick-vod",
         "extractor": "kick:vod",
         "issue": "https://github.com/yt-dlp/yt-dlp/issues/17284",
         "ytdlp_version": "2026.08.19",
-        "extractor_sha256": "59f4a37e3e9e9c5f942ed12172036a8ed7f50b11f9ad1902c3bab761637e2b19",
+        "extractor_sha256": "1367aa980bb87481005c4d934627350c6ee596baef419b7004f9dc90649a10f4",
     },
 )
 NATIVE_SOURCE_TIMEOUT_SECONDS = 20
@@ -145,6 +148,28 @@ def _decode_json(body):
         return None
 
 
+def _kick_vod_page(match, video_id):
+    """The VOD's page in the one shape yt-dlp's kick:vod accepts.
+
+    The resolver takes slugless, singular and dotted-slug permalinks that
+    kick:vod's pattern does not, and handed over as typed they would reach
+    kick:live instead, which records whatever that channel is streaming now.
+    kick:vod reads only the id, so a slug it cannot parse is replaced.
+    """
+    slug = match.group("slug") or ""
+    if not re.fullmatch(r"[\w-]+", slug, re.ASCII):
+        slug = "video"
+    return {
+        "site": "kick",
+        "id": video_id,
+        "url": f"https://kick.com/{slug}/videos/{video_id}",
+        "title": "",
+        "duration": 0,
+        "channel": "",
+        "headers": {},
+    }
+
+
 def _resolve_kick_vod(match, fetch, timeout):
     video_id = match.group("id").lower()
     headers = {
@@ -167,17 +192,12 @@ def _resolve_kick_vod(match, fetch, timeout):
             code="network-unreachable",
         ) from error
 
-    if status == 404:
-        # Kick has broken this endpoint and the one kick:vod reads in turn.
-        # A 404 here means this route has nothing, not that the video is
-        # gone, so yt-dlp's own extractor gets the link. A VOD that really
-        # was deleted fails there with yt-dlp's message.
-        return None
     if status >= 400:
-        raise NativeSourceError(
-            f"Kick refused the playback request (HTTP {status}). Retry later; "
-            "if it keeps failing the video may be private or subscriber-only."
-        )
+        # Kick has broken this endpoint and the one kick:vod reads in turn,
+        # so an HTTP error here says this route has nothing, not that the
+        # video is gone. yt-dlp's own extractor gets the page instead, and a
+        # VOD that really was deleted fails there with yt-dlp's message.
+        return _kick_vod_page(match, video_id)
 
     payload = _decode_json(body)
     if not isinstance(payload, dict):
@@ -230,9 +250,10 @@ def resolve_native_source(url, *, fetch=None, timeout=NATIVE_SOURCE_TIMEOUT_SECO
     """Return the media yt-dlp should be pointed at, or None for other sites.
 
     None is the answer for the whole rest of the web and means "hand the page
-    URL to yt-dlp as usual". It is also the answer when a resolver's own route
-    answers 404, since that is how a route Kick has retired looks. A dict
-    means yt-dlp gets `url` instead, with the argv from `native_source_argv`.
+    URL to yt-dlp as usual". A dict means yt-dlp gets `url` instead, with the
+    argv from `native_source_argv`; when the resolver's own route answers with
+    an HTTP error, that `url` is the page in the shape yt-dlp's extractor
+    accepts and the argv is empty.
     `NativeSourceError` means the site was recognised and refused; the
     download should fail with that message.
     """

@@ -6382,8 +6382,8 @@ class DownloadManagerCore:
             # yields can carry a short-lived session token. Everything the
             # resolver refuses is a final answer from the site and everything
             # it cannot reach is a network condition; both are classified. A
-            # route the site has retired comes back as None, and the page URL
-            # goes to yt-dlp's own extractor.
+            # route the site has retired comes back as the page itself, in the
+            # shape yt-dlp's own extractor accepts.
             native = self._dependencies['resolve_native_source'](dl.url)
             target_url = dl.url
             if native:

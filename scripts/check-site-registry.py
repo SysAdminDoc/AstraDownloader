@@ -27,6 +27,7 @@ Run directly, or through ``npm run check``.
 
 import datetime
 import hashlib
+import importlib
 import inspect
 import pathlib
 import re
@@ -181,10 +182,29 @@ def check_extractor_args(failures, discovered):
             )
 
 
+def real_extractor_class(extractor_class):
+    """Return the extractor itself rather than yt-dlp's lazy-loader stub.
+
+    gen_extractor_classes() hands back stubs from lazy_extractors.py that carry
+    only the name and URL pattern, so hashing one says nothing about how the
+    extractor fetches. The stub names the module the real class lives in.
+    """
+    module = getattr(extractor_class, "_module", None)
+    if module:
+        return getattr(importlib.import_module(module), extractor_class.__name__)
+    return extractor_class
+
+
 def extractor_source_sha256(extractor_class):
-    """Hash an extractor class the way NATIVE_SOURCE_UPSTREAM records it."""
-    source = inspect.getsource(extractor_class).replace("\r\n", "\n")
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+    """Hash an extractor the way NATIVE_SOURCE_UPSTREAM records it."""
+    from yt_dlp.extractor.common import InfoExtractor
+
+    digest = hashlib.sha256()
+    for cls in real_extractor_class(extractor_class).__mro__:
+        if cls is InfoExtractor or cls is object:
+            break
+        digest.update(inspect.getsource(cls).replace("\r\n", "\n").encode("utf-8"))
+    return digest.hexdigest()
 
 
 def installed_extractor_classes():
