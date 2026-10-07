@@ -63,6 +63,7 @@ __all__ = (
     "clamp_int", "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_webhook_url",
+    "normalize_audio_language", "AUDIO_LANGUAGE_ORIGINAL",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "normalize_managed_binary_pins", "MANAGED_BINARY_PIN_NAMES",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
@@ -93,6 +94,7 @@ _OWNED_EXPORTS = {
     "normalize_rate_limit", "normalize_proxy",
     "normalize_force_ip_version", "normalize_source_address", "normalize_xff",
     "normalize_webhook_url",
+    "normalize_audio_language", "AUDIO_LANGUAGE_ORIGINAL",
     "normalize_site_profile_domain", "normalize_site_profiles",
     "normalize_managed_binary_pins", "MANAGED_BINARY_PIN_NAMES",
     "validate_site_profiles", "SITE_PROFILE_OVERRIDE_KEYS",
@@ -144,7 +146,7 @@ HISTORY_RETENTION_MAX = 100000
 DOWNLOAD_REQUEST_ALLOWED_FIELDS = frozenset({
     "url", "audioOnly", "format", "quality", "outputDir", "title",
     "referer", "cookies", "section", "playlistItems", "videoPassword",
-    "outputName", "notBeforeUtc",
+    "outputName", "notBeforeUtc", "audioLanguage",
 })
 _MAX_VIDEO_PASSWORD_BYTES = 4096
 DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS = frozenset({
@@ -622,6 +624,47 @@ _SUBSCRIPTION_CLEAN_TEXT = clean_text
 _SUBSCRIPTION_COERCE_BOOL = coerce_bool
 
 
+# Explicit audio-language choice. Empty is automatic (yt-dlp's own ranking,
+# which already prefers the original track softly). "original" asks for the
+# track the site marks as the original language. Anything else is a BCP 47
+# style code as yt-dlp reports it in a format's `language` field.
+AUDIO_LANGUAGE_ORIGINAL = "original"
+_AUDIO_LANGUAGE_RE = re.compile(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}")
+_AUDIO_LANGUAGE_ERROR = (
+    "Use automatic, original or a language code such as en or es-419 for the "
+    "audio language."
+)
+
+
+def normalize_audio_language(value):
+    """Return ``(choice, error)``: "", "original" or a canonical language code.
+
+    Codes are canonicalised the way yt-dlp writes them (es-US, zh-Hant, es-419)
+    because its format filter compares the text exactly.
+    """
+    if value is None:
+        return "", None
+    if not isinstance(value, str):
+        return None, _AUDIO_LANGUAGE_ERROR
+    text = value.strip()
+    if not text or text.lower() in {"auto", "automatic"}:
+        return "", None
+    if text.lower() == AUDIO_LANGUAGE_ORIGINAL:
+        return AUDIO_LANGUAGE_ORIGINAL, None
+    if len(text) > 20 or not _AUDIO_LANGUAGE_RE.fullmatch(text.replace("_", "-")):
+        return None, _AUDIO_LANGUAGE_ERROR
+    parts = text.replace("_", "-").split("-")
+    canonical = [parts[0].lower()]
+    for part in parts[1:]:
+        if len(part) == 2 and part.isalpha():
+            canonical.append(part.upper())
+        elif len(part) == 4 and part.isalpha():
+            canonical.append(part.title())
+        else:
+            canonical.append(part)
+    return "-".join(canonical), None
+
+
 def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
     """Reduce a delivery override to the fields a subscription may carry.
 
@@ -644,6 +687,9 @@ def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
     quality = clean(raw.get("quality"), "", 8).lower()
     if quality not in SUBSCRIPTION_QUALITY_CHOICES:
         quality = ""
+    audio_language, language_error = normalize_audio_language(raw.get("audioLanguage"))
+    if language_error:
+        audio_language = ""
     return {
         "outputDir": clean(raw.get("outputDir"), "", 4096),
         "format": fmt,
@@ -653,6 +699,7 @@ def sanitize_subscription_delivery(raw, *, clean_text=None, coerce_bool=None):
         # This costs a metadata fetch for each archived video during a scan,
         # so it remains an explicit opt-in.
         "upgradeIfBetter": boolean(raw.get("upgradeIfBetter"), False),
+        "audioLanguage": audio_language,
     }
 
 
@@ -922,6 +969,13 @@ def validate_site_profiles(value, download_root=None, output_template=""):
                 return None, error
             if normalized:
                 entry[key] = normalized
+        audio_language, language_error = normalize_audio_language(
+            _site_profile_value(item, "AudioLanguage", "") or ""
+        )
+        if language_error:
+            return None, f"Site profile {index} has an invalid AudioLanguage."
+        if audio_language:
+            entry["AudioLanguage"] = audio_language
 
         for key, normalizer in (
             ("ImpersonateTarget", normalize_impersonate_target),
@@ -1916,6 +1970,10 @@ def validate_download_request_body(body):
         return None, "Download format must be a string.", "invalid-download-format"
     if "quality" in body and not isinstance(body["quality"], str):
         return None, "Download quality must be a string.", "invalid-download-quality"
+    if "audioLanguage" in body:
+        _language, language_error = normalize_audio_language(body["audioLanguage"])
+        if language_error:
+            return None, language_error, "invalid-audio-language"
     # The time itself is parsed at the queue boundary, which every entry
     # point shares. Here only the shape is refused, with its own code.
     if "notBeforeUtc" in body and not (
@@ -2078,7 +2136,7 @@ _BUNDLE_SUBSCRIPTION_FIELDS = (
 )
 _BUNDLE_SUBSCRIPTION_DELIVERY_FIELDS = (
     "outputDir", "format", "quality", "outputTemplate",
-    "audioOnly", "upgradeIfBetter",
+    "audioOnly", "upgradeIfBetter", "audioLanguage",
 )
 
 
@@ -2698,6 +2756,14 @@ def sanitize_history_entries(raw, limit=500):
         }
         if section:
             entry["section"] = section
+        requested_language, _language_error = normalize_audio_language(
+            item.get("audioLanguage")
+        )
+        if requested_language:
+            entry["audioLanguage"] = requested_language
+        delivered_language = clean_text(item.get("deliveredLanguage"), "", 40)
+        if delivered_language and re.fullmatch(r"[A-Za-z0-9+-]{2,40}", delivered_language):
+            entry["deliveredLanguage"] = delivered_language
         entries.append(entry)
     return entries
 

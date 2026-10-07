@@ -956,6 +956,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'normalize_source_address',
     'normalize_xff',
     'normalize_webhook_url',
+    'normalize_audio_language',
     'normalize_rate_limit',
     'select_site_profile',
     'validate_site_profiles',
@@ -1408,6 +1409,18 @@ class SubscriptionDeliveryDialog(QDialog):
         ))
         layout.addWidget(self.output_template)
 
+        layout.addWidget(make_label("Audio language", "fieldLabel"))
+        self.audio_language = QLineEdit(str(self.record.get("audioLanguage") or ""))
+        self.audio_language.setPlaceholderText(
+            tr("Automatic, or original, or a code such as es")
+        )
+        self.audio_language.setAccessibleName(tr("Subscription audio language"))
+        self.audio_language.setToolTip(tr(
+            "When a video has several audio tracks. A missing one falls back to "
+            "the default track, and the download says so."
+        ))
+        layout.addWidget(self.audio_language)
+
         layout.addWidget(make_label("Only download videos whose title", "fieldLabel"))
         filter_row = QHBoxLayout()
         self.include_title = QLineEdit(str(self.record.get("includeTitleRegex") or ""))
@@ -1499,6 +1512,7 @@ class SubscriptionDeliveryDialog(QDialog):
             "outputTemplate": self.output_template.text().strip(),
             "audioOnly": self.audio_only.isChecked(),
             "upgradeIfBetter": self.upgrade_if_better.isChecked(),
+            "audioLanguage": self.audio_language.text().strip(),
         }
 
     def filters(self):
@@ -3147,6 +3161,9 @@ class MainWindowCore(
         # output format come from Settings, which the hint below names.
         self.quick_download_format.setEnabled(not subtitles_only)
         self.quick_download_quality.setEnabled(not (audio_only or subtitles_only))
+        language_combo = getattr(self, "quick_download_audio_language", None)
+        if language_combo is not None:
+            language_combo.setEnabled(not subtitles_only)
         if hasattr(self, "quick_download_subs_hint"):
             self.quick_download_subs_hint.setText(
                 self._describe_subtitle_request() if subtitles_only else ""
@@ -3312,6 +3329,12 @@ class MainWindowCore(
         profile_name = (
             profile_widget.currentData() if profile_widget is not None else None
         )
+        language_widget = getattr(self, "quick_download_audio_language", None)
+        # Automatic passes None so a site profile's AudioLanguage still applies.
+        audio_language = (
+            (language_widget.currentData() or None)
+            if language_widget is not None and kind != "subtitles" else None
+        )
         for url in urls:
             dl_id, error = self.dl_manager.start_download(
                 url=url,
@@ -3328,6 +3351,7 @@ class MainWindowCore(
                 output_name=output_name or None,
                 format_summary=format_summary,
                 not_before_utc=not_before_utc,
+                audio_language=audio_language,
             )
             if error:
                 failures.append((url, error))
@@ -3723,6 +3747,17 @@ class MainWindowCore(
             return False
         delivery = dialog.delivery()
         filters = dialog.filters()
+        _language, language_error = self._dependencies['normalize_audio_language'](
+            delivery.get("audioLanguage")
+        )
+        if language_error:
+            # Refused here rather than blanked by the store, which would
+            # quietly turn a typo into "automatic".
+            self._show_subscription_status(tr(
+                "Use automatic, original or a language code such as en or "
+                "es-419 for the audio language."
+            ), "danger")
+            return False
         # The folder is checked here rather than at download time. Stored
         # unchecked, an unusable path did not fail until the next scan, and
         # then once per video: the subscription looked configured and simply
@@ -5120,6 +5155,8 @@ class MainWindowCore(
                         duration=format_duration(seconds)
                     )
                 )
+        if getattr(dl, "audio_language_note", ""):
+            meta_parts.append(dl.audio_language_note)
         if dl.error:
             meta_parts.append(dl.error)
         elif dl.filename:
@@ -7921,6 +7958,26 @@ class MainWindowCore(
         combo.setCurrentIndex(restored if restored >= 0 else 0)
         combo.blockSignals(False)
 
+    def _set_audio_language_choices(self, languages=(), original=""):
+        """Rebuild the audio-language picker, keeping a choice that survives."""
+        combo = getattr(self, "quick_download_audio_language", None)
+        if combo is None:
+            return
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(tr("Automatic audio"), "")
+        combo.addItem(tr("Original audio"), "original")
+        for code in languages or ():
+            label = (
+                tr_format("{code} (original)", code=code)
+                if code == original else str(code)
+            )
+            combo.addItem(label, str(code))
+        restored = combo.findData(current)
+        combo.setCurrentIndex(restored if restored >= 0 else 0)
+        combo.blockSignals(False)
+
     def _apply_sabr_limits(self, limited):
         """Disable what a SABR-only link cannot honour, and say why.
 
@@ -7965,6 +8022,7 @@ class MainWindowCore(
         self._format_probe_timer.start()
 
     def _reset_quality_choices(self):
+        self._set_audio_language_choices()
         self._format_probe_summary = {}
         self._format_probe_summary_url = ""
         self._format_probe_warning = ("", "")
@@ -8057,6 +8115,10 @@ class MainWindowCore(
         self._format_probe_summary = summary if isinstance(summary, dict) else {}
         self._format_probe_summary_url = payload.get("url") or ""
         self._format_probe_warning = ("", "")
+        self._set_audio_language_choices(
+            self._format_probe_summary.get("audioLanguages") or (),
+            self._format_probe_summary.get("originalLanguage") or "",
+        )
         self._apply_sabr_limits(self._dependencies['sabr_only_formats'](summary))
         heights = self._dependencies['probed_video_heights'](summary)
         if heights:

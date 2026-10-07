@@ -248,7 +248,7 @@ class SettingsPageMixin:
         profiles_l.addWidget(make_label(
             "One JSON object per profile. Match a domain automatically, or "
             "choose a profile for one download in the paste box. Supported "
-            "defaults include download type, format, quality, proxy, "
+            "defaults include download type, format, quality, audio language, proxy, "
             "impersonation and request pacing. DownloadFolder puts the "
             "site's files in a folder inside the download folder, and "
             "MaxConcurrent limits how many of its downloads run at once. "

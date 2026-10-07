@@ -9684,5 +9684,118 @@ class ScheduledStartTests(unittest.TestCase):
             self.assertEqual([dl.id for dl in launched], [dl_id])
 
 
+class AudioLanguageSelectionTests(unittest.TestCase):
+    """AD-83: an explicit audio track, checked against the installed yt-dlp."""
+
+    @staticmethod
+    def _format(fid, *, v=None, a=None, h=None, lang=None, pref=None, ext="mp4"):
+        return {
+            "format_id": fid, "url": f"https://example.invalid/{fid}",
+            "protocol": "https", "ext": ext, "vcodec": v or "none",
+            "acodec": a or "none", "height": h, "language": lang,
+            "language_preference": pref, "tbr": 100,
+        }
+
+    def _formats(self):
+        # Worst first, the order yt-dlp hands a selector after sorting.
+        return [
+            self._format("a-es", a="mp4a.40.2", lang="es-US", pref=-1, ext="m4a"),
+            self._format("a-de", a="mp4a.40.2", lang="de", pref=5, ext="m4a"),
+            self._format("a-en", a="mp4a.40.2", lang="en", pref=10, ext="m4a"),
+            self._format("v720", v="avc1.4d401f", h=720),
+            self._format("v1080", v="avc1.640028", h=1080),
+        ]
+
+    def _select(self, spec):
+        import yt_dlp
+
+        selector = yt_dlp.YoutubeDL({"quiet": True}).build_format_selector(spec)
+        chosen = list(selector({
+            "formats": [dict(entry) for entry in self._formats()],
+            "has_merged_format": False, "incomplete_formats": False,
+        }))
+        self.assertEqual(len(chosen), 1, spec)
+        return chosen[0]["format_id"]
+
+    def test_each_choice_compiles_to_a_rule_the_installed_yt_dlp_honours(self):
+        for choice, quality, expected in (
+            ("", "best", "v1080+a-en"),
+            ("original", "best", "v1080+a-en"),
+            ("es", "best", "v1080+a-es"),       # a base code takes its regions
+            ("es-US", "720", "v720+a-es"),      # the height cap still holds
+            ("de", "best", "v1080+a-de"),
+            ("fr", "best", "v1080+a-en"),       # missing: the automatic pick
+        ):
+            with self.subTest(choice=choice):
+                args = ad.build_video_format_args(
+                    "mp4", quality, avoid_upscaled=True, audio_language=choice)
+                self.assertEqual(self._select(args[args.index("-f") + 1]), expected)
+        self.assertEqual(self._select(ad.build_audio_format_selector("de")), "a-de")
+        self.assertEqual(self._select(ad.build_audio_format_selector("fr")), "a-en")
+
+    def test_discovery_lists_bounded_languages_with_the_original_first(self):
+        formats = [
+            {"format_id": f"a{index}", "acodec": "opus", "vcodec": "none",
+             "language": f"x{chr(97 + index % 26)}{chr(97 + index // 26)}"}
+            for index in range(30)
+        ]
+        formats.append({"format_id": "v", "vcodec": "avc1", "acodec": "none",
+                        "language": "zz", "height": 720})
+        formats.append({"format_id": "orig", "acodec": "opus", "vcodec": "none",
+                        "language": "ja", "language_preference": 10})
+        summary = ad.summarize_ytdlp_formats({"id": "x", "formats": formats})
+        self.assertEqual(summary["originalLanguage"], "ja")
+        self.assertEqual(summary["audioLanguages"][0], "ja")
+        self.assertEqual(len(summary["audioLanguages"]), 24)
+        self.assertNotIn("zz", summary["audioLanguages"], "a video track is not audio")
+
+    def test_the_choice_travels_and_a_fallback_is_explained_and_recorded(self):
+        history = FakeHistory()
+        manager = ad.DownloadManager(FakeConfig({"SiteProfiles": [
+            {"Name": "Dubs", "Domain": "example.com", "AudioLanguage": "original"},
+        ]}), history)
+        manager.pause_intake()
+        profiled, _error = manager.start_download("https://www.example.com/a")
+        chosen, _error = manager.start_download(
+            "https://www.example.com/b", audio_language="ES-us")
+        _none, error = manager.start_download(
+            "https://www.example.com/c", audio_language="english!!")
+        self.assertIn("audio language", error)
+        self.assertEqual(manager.downloads[profiled].audio_language, "original")
+        dl = manager.downloads[chosen]
+        self.assertEqual(dl.audio_language, "es-US")
+        store = ad.DownloadQueueStore(
+            path=Path("unused.json"), reader=lambda *_a: None,
+            writer=lambda *_a: None, logger=lambda *_a: None,
+            clean_text=ad.clean_text, clean_path_text=ad.clean_path_text,
+        )
+        record = store.serialize([dl])["downloads"][0]
+        self.assertEqual(record["audioLanguage"], "es-US")
+
+        class Proc:
+            stdout = iter([
+                'MDLP_LANGUAGE "en"\n',
+                "MDLP_LANGPREF 10\n",
+            ])
+
+        dl.status = "downloading"
+        manager._consume_ytdlp_output(dl, Proc(), {"at": 0.0})
+        self.assertEqual(dl.delivered_language, "en")
+        dl.audio_language_note = ad.describe_audio_language_outcome(
+            dl.audio_language, dl.delivered_language, dl.delivered_language_preference)
+        self.assertIn("es-US audio track was not offered", dl.audio_language_note)
+        self.assertEqual(ad.describe_audio_language_outcome("es", "en+es-419", -1), "")
+        self.assertEqual(ad.describe_audio_language_outcome("original", "en", 10), "")
+        self.assertIn("original", ad.describe_audio_language_outcome("original", "en", 5))
+
+        dl.status = "complete"
+        with mock.patch.object(manager, "_arm_host_backoff_wakeup"):
+            manager._record_terminal_download(dl)
+        entry = history.entries[-1]
+        kept = ad.sanitize_history_entries([entry])[0]
+        self.assertEqual(kept["audioLanguage"], "es-US")
+        self.assertEqual(kept["deliveredLanguage"], "en")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1345,6 +1345,20 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(accepted.get_json()["notBeforeUtc"], start)
         self.assertEqual(accepted.get_json()["status"], "pending")
 
+    def test_download_endpoint_refuses_an_unreadable_audio_language(self):
+        token = "w" * 32
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        response = ad.create_api(config, manager, FakeHistory()).test_client().post(
+            "/download",
+            json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                  "audioLanguage": "english!!"},
+            headers={"X-Auth-Token": token},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["code"], "invalid-audio-language")
+        self.assertEqual(manager.downloads, {})
+
     def test_download_endpoint_rejects_ytdlp_args_before_queueing(self):
         token = "h" * 32
         config = FakeConfig({"ServerToken": token})

@@ -733,6 +733,7 @@ def _register_download_routes(api, context, dependencies):
             video_password=body.get('videoPassword'),
             probe_size=True,
             not_before_utc=body.get('notBeforeUtc'),
+            audio_language=body.get('audioLanguage'),
         )
         if err:
             error_code = getattr(err, 'error_code', '')
@@ -1145,7 +1146,7 @@ def _register_subscriptions_routes(api, context, dependencies):
     # schema 2.
     SUBSCRIPTION_DELIVERY_FIELDS = (
         "outputDir", "format", "quality", "outputTemplate", "audioOnly",
-        "upgradeIfBetter",
+        "upgradeIfBetter", "audioLanguage",
     )
 
     # Schema 3 title and date filters, flat on the wire like delivery. An

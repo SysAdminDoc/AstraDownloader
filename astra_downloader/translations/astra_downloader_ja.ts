@@ -367,6 +367,22 @@
       <translation>A yt-dlp output template, relative to the folder above. Only the allowed fields are accepted, and it must keep %(ext)s.</translation>
     </message>
     <message>
+      <source>Audio language</source>
+      <translation>Audio language</translation>
+    </message>
+    <message>
+      <source>Automatic, or original, or a code such as es</source>
+      <translation>Automatic, or original, or a code such as es</translation>
+    </message>
+    <message>
+      <source>Subscription audio language</source>
+      <translation>Subscription audio language</translation>
+    </message>
+    <message>
+      <source>When a video has several audio tracks. A missing one falls back to the default track, and the download says so.</source>
+      <translation>When a video has several audio tracks. A missing one falls back to the default track, and the download says so.</translation>
+    </message>
+    <message>
       <source>Only download videos whose title</source>
       <translation>Only download videos whose title</translation>
     </message>
@@ -927,6 +943,14 @@
       <translation>Best</translation>
     </message>
     <message>
+      <source>Automatic audio</source>
+      <translation>Automatic audio</translation>
+    </message>
+    <message>
+      <source>Original audio</source>
+      <translation>Original audio</translation>
+    </message>
+    <message>
       <source>Looking up available formats…</source>
       <translation>Looking up available formats…</translation>
     </message>
@@ -1205,6 +1229,10 @@
     <message>
       <source>That subscription no longer exists.</source>
       <translation>That subscription no longer exists.</translation>
+    </message>
+    <message>
+      <source>Use automatic, original or a language code such as en or es-419 for the audio language.</source>
+      <translation>Use automatic, original or a language code such as en or es-419 for the audio language.</translation>
     </message>
     <message>
       <source>Add a site sign-in</source>
@@ -1573,6 +1601,10 @@
     <message>
       <source>{quality}p</source>
       <translation>{quality}p</translation>
+    </message>
+    <message>
+      <source>{code} (original)</source>
+      <translation>{code} (original)</translation>
     </message>
     <message>
       <source>Clip ranges apply to a single link.</source>
@@ -2413,6 +2445,10 @@
     <message>
       <source>Subtitles</source>
       <translation>Subtitles</translation>
+    </message>
+    <message>
+      <source>Which audio track to download when a video has several. Automatic lets yt-dlp choose.</source>
+      <translation>Which audio track to download when a video has several. Automatic lets yt-dlp choose.</translation>
     </message>
     <message>
       <source>Download format</source>
@@ -3335,8 +3371,8 @@
       <translation>Named site profiles</translation>
     </message>
     <message>
-      <source>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. DownloadFolder puts the site's files in a folder inside the download folder, and MaxConcurrent limits how many of its downloads run at once. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.</source>
-      <translation>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, proxy, impersonation and request pacing. DownloadFolder puts the site's files in a folder inside the download folder, and MaxConcurrent limits how many of its downloads run at once. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.</translation>
+      <source>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, audio language, proxy, impersonation and request pacing. DownloadFolder puts the site's files in a folder inside the download folder, and MaxConcurrent limits how many of its downloads run at once. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.</source>
+      <translation>One JSON object per profile. Match a domain automatically, or choose a profile for one download in the paste box. Supported defaults include download type, format, quality, audio language, proxy, impersonation and request pacing. DownloadFolder puts the site's files in a folder inside the download folder, and MaxConcurrent limits how many of its downloads run at once. A default applies when the request does not set that field itself, so a browser-extension or subscription download for the domain uses it too; do not put cookies or passwords here.</translation>
     </message>
     <message>
       <source>Example: [{"Name":"YouTube archive","Domain":"youtube.com","VideoFormat":"mp4","Quality":"1080"}]</source>

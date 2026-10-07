@@ -3290,6 +3290,7 @@ class FormatProbeTests(unittest.TestCase):
             "_probe_quick_download_formats", "_set_quick_download_status",
             "_apply_sabr_limits", "_render_probe_summary",
             "_describe_probe_summary", "_describe_probe_failure",
+            "_set_audio_language_choices",
         ):
             setattr(window, name, types.MethodType(getattr(core, name), window))
         window._set_quality_choices(ad.QUALITY_LADDER)
@@ -3328,6 +3329,26 @@ class FormatProbeTests(unittest.TestCase):
             )
 
     # ── What the picker does with it ─────────────────────────────────────
+
+    def test_a_probe_offers_automatic_original_and_the_languages_it_found(self):
+        window = self._window()
+        window.quick_download_audio_language = self._Combo()
+        window._set_audio_language_choices()
+        self.assertEqual(window.quick_download_audio_language.values(), ["", "original"])
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._apply_format_probe({
+                "generation": 0,
+                "url": "https://vimeo.com/1",
+                "summary": {
+                    "formats": [{"has_video": True, "height": 720}],
+                    "audioLanguages": ["en", "es-US"],
+                    "originalLanguage": "en",
+                },
+                "error": "",
+            })
+        combo = window.quick_download_audio_language
+        self.assertEqual(combo.values(), ["", "original", "en", "es-US"])
+        self.assertEqual(combo.items[2][0], "en (original)")
 
     def test_a_probe_shows_title_length_ceiling_and_size_for_the_choice(self):
         from PySide6.QtCore import QLocale
@@ -4091,6 +4112,7 @@ class SettingsBundleTests(unittest.TestCase):
                 outputTemplate="%(channel)s/%(title)s.%(ext)s",
                 audioOnly=True,
                 upgradeIfBetter=True,
+                audioLanguage="es-us",
             )
 
             exported = ad.build_settings_bundle(settings, [subscription])
@@ -4110,6 +4132,7 @@ class SettingsBundleTests(unittest.TestCase):
             "outputTemplate": "%(channel)s/%(title)s.%(ext)s",
             "audioOnly": True,
             "upgradeIfBetter": True,
+            "audioLanguage": "es-US",
         })
 
     def test_subscription_filters_round_trip_and_a_bad_pattern_stays_behind(self):

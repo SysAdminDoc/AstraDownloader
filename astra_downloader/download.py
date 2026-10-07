@@ -35,12 +35,14 @@ try:
         DurableUndoStore, default_download_path, redact_proxy_url,
         SITE_PROFILE_OVERRIDE_KEYS,
         normalize_sublangs,
+        normalize_audio_language, AUDIO_LANGUAGE_ORIGINAL,
     )
 except ImportError:  # Flat source-path compatibility.
     from config import (
         DurableUndoStore, default_download_path, redact_proxy_url,
         SITE_PROFILE_OVERRIDE_KEYS,
         normalize_sublangs,
+        normalize_audio_language, AUDIO_LANGUAGE_ORIGINAL,
     )
 
 try:
@@ -2831,8 +2833,15 @@ def group_playlist_selection(selection):
     return groups
 
 
-def build_video_format_args(container, quality, *, avoid_upscaled=False):
-    """Return editor-compatible yt-dlp format selection arguments."""
+def build_video_format_args(container, quality, *, avoid_upscaled=False,
+                            audio_language=''):
+    """Return editor-compatible yt-dlp format selection arguments.
+
+    An explicit audio language puts the same chain, with the audio half
+    filtered to that track, in front of the unfiltered chain. A missing track
+    therefore falls back to exactly what an automatic download would fetch,
+    and describe_audio_language_outcome says so afterwards.
+    """
     height_filter = '' if quality == 'best' else f'[height<={quality}]'
     if container == 'mp4':
         v_pref, a_pref = '[vcodec^=avc1]', '[ext=m4a]'
@@ -2867,7 +2876,17 @@ def build_video_format_args(container, quality, *, avoid_upscaled=False):
     # comes before the uncapped last-resort tiers, or asking for 1080p on a
     # site whose only 1080p rendition is upscaled would fetch the 2160p
     # native one instead and silently exceed the cap.
-    selector = capped_tiers(NATIVE_SOURCE_FILTER) if avoid_upscaled else []
+    selector = []
+    for language in audio_language_filters(audio_language):
+        # A merged pair carries the language on its audio half; a single-file
+        # format carries it itself.
+        for tier in (capped_tiers(NATIVE_SOURCE_FILTER) if avoid_upscaled else []) + capped_tiers(''):
+            if '+bestaudio' in tier:
+                video, audio = tier.split('+', 1)
+                selector.append(f'{video}+{audio}{language}')
+            else:
+                selector.append(f'{tier}{language}')
+    selector += capped_tiers(NATIVE_SOURCE_FILTER) if avoid_upscaled else []
     selector += capped_tiers('')
     if avoid_upscaled:
         selector.append(f'best{NATIVE_SOURCE_FILTER}')
@@ -3118,13 +3137,109 @@ def summarize_ytdlp_formats(info):
             # Carried so a SABR-only URL can be recognised before a run
             # starts, rather than after the options it voids are ignored.
             'protocol': (f.get('protocol') or '')[:32],
+            'language': (str(f.get('language') or ''))[:20],
         })
+    languages, original = probed_audio_languages(info.get('formats') or [])
     return {
         'id': str(info.get('id') or ''),
         'title': (info.get('title') or '')[:300],
         'duration': info.get('duration') or 0,
         'formats': out,
+        'audioLanguages': languages,
+        'originalLanguage': original,
     }
+
+
+AUDIO_LANGUAGE_LIST_LIMIT = 24
+# yt-dlp's YouTube extractor marks the original track with 10 and the
+# default dub with 5; other extractors leave it unset.
+AUDIO_LANGUAGE_ORIGINAL_PREFERENCE = 10
+
+
+def probed_audio_languages(formats, limit=AUDIO_LANGUAGE_LIST_LIMIT):
+    """Return ``(codes, original)`` for the audio tracks a format list offers.
+
+    Bounded, de-duplicated and in the order yt-dlp listed them, with the
+    original-language track first when the site marks one.
+    """
+    codes, original = [], ''
+    for entry in formats or []:
+        if not isinstance(entry, dict) or (entry.get('acodec') or 'none') == 'none':
+            continue
+        code, error = normalize_audio_language(entry.get('language'))
+        if error or not code or code == AUDIO_LANGUAGE_ORIGINAL:
+            continue
+        try:
+            preference = float(entry.get('language_preference') or 0)
+        except (TypeError, ValueError):
+            preference = 0
+        if preference >= AUDIO_LANGUAGE_ORIGINAL_PREFERENCE and not original:
+            original = code
+        if code not in codes:
+            codes.append(code)
+    if original:
+        codes.remove(original)
+        codes.insert(0, original)
+    return codes[:max(0, int(limit))], original
+
+
+def audio_language_filters(choice):
+    """The yt-dlp format filters that express one audio-language choice.
+
+    An exact code also tries its regional variants (es matches es-US and
+    es-419), never the reverse, so asking for es-419 does not fetch es-ES.
+    """
+    if not choice:
+        return []
+    if choice == AUDIO_LANGUAGE_ORIGINAL:
+        return [f'[language_preference>={AUDIO_LANGUAGE_ORIGINAL_PREFERENCE}]']
+    filters = [f'[language={choice}]']
+    if '-' not in choice:
+        filters.append(f'[language^={choice}-]')
+    return filters
+
+
+def build_audio_format_selector(audio_language=''):
+    """`-f` for an audio-only run: the chosen track first, then any."""
+    tiers = [f'bestaudio{flt}' for flt in audio_language_filters(audio_language)]
+    return '/'.join(tiers + ['bestaudio'])
+
+
+def describe_audio_language_outcome(requested, delivered, preference=None):
+    """Why the delivered audio is not the requested one, or "".
+
+    Read from what yt-dlp printed after the move: a chosen language that is
+    missing silently falls through the selector to the default track, and
+    this is the only place that becomes visible.
+    """
+    if not requested:
+        return ''
+    if requested == AUDIO_LANGUAGE_ORIGINAL:
+        try:
+            if preference is not None and float(preference) >= AUDIO_LANGUAGE_ORIGINAL_PREFERENCE:
+                return ''
+        except (TypeError, ValueError):
+            pass
+        return (
+            'No audio track was marked as the original language, so the '
+            'default track was downloaded.'
+        )
+    parts = [part for part in str(delivered or '').split('+') if part]
+    wanted = requested.casefold()
+    if any(
+        part.casefold() == wanted or part.casefold().startswith(wanted + '-')
+        for part in parts
+    ):
+        return ''
+    if parts:
+        return (
+            f'The {requested} audio track was not offered, so the '
+            f'{"+".join(parts)} track was downloaded.'
+        )
+    return (
+        f'The {requested} audio track was not offered, so the default track '
+        'was downloaded.'
+    )
 
 
 # The quality picker's fixed ladder, highest first. A probe narrows it; it is
@@ -3622,8 +3737,16 @@ class Download:
                  requires_auth=False, created_at=None, queue_order=0, section=None,
                  playlist_items=None, subscription_id=None, archive_key=None,
                  subtitles_only=False, clock=None, profile_name=None,
-                 output_name=None, output_template=None, not_before_utc=None):
+                 output_name=None, output_template=None, not_before_utc=None,
+                 audio_language=''):
         self._clock = clock or time.time
+        # "", "original" or a language code; see normalize_audio_language.
+        self.audio_language = str(audio_language or '')
+        # What this run's yt-dlp reported after the move, and why it differs
+        # from the request when it does. Per-run, like delivered_height.
+        self.delivered_language = ''
+        self.delivered_language_preference = None
+        self.audio_language_note = ''
         # Wall-clock epoch seconds before which the scheduler leaves this
         # pending item alone, or None. Cleared when a run starts, so a record
         # that still carries one on disk has never run.
@@ -3766,6 +3889,12 @@ class Download:
         if self.not_before_utc is not None:
             payload["notBeforeUtc"] = format_not_before_utc(self.not_before_utc)
             payload["scheduled"] = self.is_scheduled()
+        if self.audio_language:
+            payload["audioLanguage"] = self.audio_language
+        if self.delivered_language:
+            payload["deliveredLanguage"] = self.delivered_language
+        if self.audio_language_note:
+            payload["audioLanguageNote"] = self.audio_language_note
         return payload
 
     def is_scheduled(self, now=None):
@@ -3793,6 +3922,7 @@ RETRY_ROLLBACK_FIELDS = (
     'finished_time', 'start_time', 'queue_order',
     'requires_auth', '_cookies', 'resume_partial', 'subtitle_retry',
     'sabr_capped_warning', 'subtitle_written', 'delivered_height',
+    'delivered_language', 'delivered_language_preference', 'audio_language_note',
 )
 # start_download() reuses an existing needs-auth record rather than queueing a
 # duplicate, so it overwrites the whole request and must be able to put the
@@ -3805,6 +3935,7 @@ AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'subscription_id', 'archive_key', 'requires_auth', 'status',
     'filename', 'error', 'error_code', 'error_advice', 'error_action',
     '_credentials', '_video_password', 'profile_name', 'not_before_utc',
+    'audio_language',
 )
 
 
@@ -3907,6 +4038,8 @@ class DownloadQueueStore:
                if getattr(download, 'profile_name', None) is not None else {}),
             **({'notBeforeUtc': format_not_before_utc(download.not_before_utc)}
                if getattr(download, 'not_before_utc', None) is not None else {}),
+            **({'audioLanguage': download.audio_language}
+               if getattr(download, 'audio_language', '') else {}),
             'createdAt': float(download.start_time),
             'order': int(download.queue_order),
         } for download in unfinished]
@@ -4408,6 +4541,11 @@ class DownloadManagerCore:
                 output_name=self._dependencies['normalize_output_name'](
                     item.get('outputName')
                 ),
+                # Re-checked like the template: a hand-edited value must not
+                # reach the format selector.
+                audio_language=normalize_audio_language(
+                    item.get('audioLanguage')
+                )[0] or '',
             )
             dl.subtitle_retry = self._dependencies['coerce_bool'](
                 item.get('subtitleRetry'), False
@@ -5196,10 +5334,14 @@ class DownloadManagerCore:
                        archive_key=None, subtitles_only=None, video_password=None,
                        profile_name=None, output_name=None,
                        output_template=None, format_summary=None,
-                       probe_size=False, not_before_utc=None):
+                       probe_size=False, not_before_utc=None,
+                       audio_language=None):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
+        requested_language, language_error = normalize_audio_language(audio_language)
+        if language_error:
+            return None, language_error
         not_before, not_before_error = parse_not_before_utc(not_before_utc)
         if not_before_error:
             return None, not_before_error
@@ -5235,6 +5377,10 @@ class DownloadManagerCore:
         # audio-only or subtitles-only choice the user had set for that site.
         # Overriding a stated type instead would silently change what the
         # caller asked for, and a subscription carries its own audio mode.
+        if audio_language is None and selected_profile:
+            # Like DownloadType below: a profile fills in only what the
+            # caller left unsaid.
+            requested_language = str(selected_profile.get('AudioLanguage') or '')
         unstated = audio_only in (None, '') and subtitles_only in (None, '')
         if unstated and selected_profile:
             kind = str(selected_profile.get('DownloadType') or '').strip().lower()
@@ -5424,6 +5570,7 @@ class DownloadManagerCore:
                 dl.output_name = output_name
                 dl.output_template = str(output_template or "")
                 dl.not_before_utc = not_before
+                dl.audio_language = requested_language
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
                 dl._credentials = None
@@ -5463,6 +5610,7 @@ class DownloadManagerCore:
                     output_name=output_name,
                     output_template=output_template,
                     not_before_utc=not_before,
+                    audio_language=requested_language,
                 )
                 dl._cookies = list(cookies) if cookies else None
                 dl._video_password = video_password
@@ -5679,6 +5827,27 @@ class DownloadManagerCore:
                     # reason: an audio-only or malformed height is simply not recorded
                     pass
                 continue
+            if line.startswith('MDLP_LANGUAGE '):
+                try:
+                    language = json.loads(line[len('MDLP_LANGUAGE '):])
+                except Exception:
+                    # reason: a malformed line leaves the language unreported
+                    language = None
+                language = str(language or '')[:40]
+                dl.delivered_language = (
+                    language if re.fullmatch(r'[A-Za-z0-9+-]{2,40}', language) else ''
+                )
+                continue
+            if line.startswith('MDLP_LANGPREF '):
+                try:
+                    preference = json.loads(line[len('MDLP_LANGPREF '):])
+                    dl.delivered_language_preference = (
+                        float(preference) if preference is not None else None
+                    )
+                except Exception:
+                    # reason: an unreported preference reads as "not original"
+                    dl.delivered_language_preference = None
+                continue
             if line.startswith('MDLP_FILEPATH '):
                 _mark_live_transfer_started()
                 try:
@@ -5829,6 +5998,11 @@ class DownloadManagerCore:
         dl.status = "complete"
         dl.step = "complete"
         dl.progress = 100
+        dl.audio_language_note = describe_audio_language_outcome(
+            getattr(dl, 'audio_language', ''),
+            getattr(dl, 'delivered_language', ''),
+            getattr(dl, 'delivered_language_preference', None),
+        )
 
     def _download_intermediate_dir(self, dl):
         """Return the stable, app-owned staging directory for one download.
@@ -6233,6 +6407,12 @@ class DownloadManagerCore:
             "status": dl.status,
             "errorCode": dl.error_code,
             "error": dl.error,
+            # The choice and what yt-dlp reported it delivered, so History
+            # can show a fallback after the queue has forgotten the item.
+            **({"audioLanguage": dl.audio_language}
+               if getattr(dl, 'audio_language', '') else {}),
+            **({"deliveredLanguage": dl.delivered_language}
+               if getattr(dl, 'delivered_language', '') else {}),
         })
         with self._lock:
             if recorded:
@@ -6448,7 +6628,14 @@ class DownloadManagerCore:
                 # asked for. A subscription that only re-fetches on a strict
                 # upgrade has to compare against what is on disk, and
                 # "requested 1080p" says nothing about what YouTube served.
-                '--print', 'after_move:MDLP_HEIGHT %(height)j']
+                '--print', 'after_move:MDLP_HEIGHT %(height)j',
+                # The audio half of a merged pair is the last requested
+                # format; a single-file download carries the fields itself.
+                '--print',
+                'after_move:MDLP_LANGUAGE %(requested_formats.-1.language,language)j',
+                '--print',
+                'after_move:MDLP_LANGPREF '
+                '%(requested_formats.-1.language_preference,language_preference)j']
         if effective_config.get("WindowsFilenames", True):
             args.append('--windows-filenames')
 
@@ -6596,8 +6783,10 @@ class DownloadManagerCore:
             args.append('--no-playlist')
 
         # Format selection
+        audio_language = getattr(dl, 'audio_language', '')
         if dl.audio_only:
-            args += ['-f', 'bestaudio', '--extract-audio',
+            args += ['-f', build_audio_format_selector(audio_language),
+                     '--extract-audio',
                      '--audio-format', dl.format, '--audio-quality', '0']
         else:
             args += build_video_format_args(
@@ -6605,6 +6794,7 @@ class DownloadManagerCore:
                 avoid_upscaled=bool(
                     effective_config.get('PreferOriginalOverUpscaled', True)
                 ),
+                audio_language=audio_language,
             )
         args += build_format_sort_args(effective_config)
 
@@ -7281,6 +7471,9 @@ class DownloadManagerCore:
         dl.sabr_capped_warning = False
         dl.subtitle_written = False
         dl.delivered_height = 0
+        dl.delivered_language = ''
+        dl.delivered_language_preference = None
+        dl.audio_language_note = ''
 
     def _retry_locked(self, dl, cookies, subtitle_retry):
         """Apply a validated retry while ``self._lock`` is held."""

@@ -229,6 +229,17 @@ class DownloadPageMixin:
             self._render_probe_summary
         )
         profile_row.addWidget(self.quick_download_type)
+        # Automatic and Original always; the languages a probe finds join
+        # them once the link has been looked up.
+        self.quick_download_audio_language = QComboBox()
+        self.quick_download_audio_language.setAccessibleName(tr("Audio language"))
+        self.quick_download_audio_language.setToolTip(tr(
+            "Which audio track to download when a video has several. "
+            "Automatic lets yt-dlp choose."
+        ))
+        self.quick_download_audio_language.setMinimumWidth(150)
+        self._set_audio_language_choices()
+        profile_row.addWidget(self.quick_download_audio_language)
         profile_row.addStretch(1)
         options_layout.addWidget(profile_row_widget)
 
