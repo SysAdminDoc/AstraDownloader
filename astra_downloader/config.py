@@ -1291,7 +1291,8 @@ def merge_imported_site_profiles(imported, current):
 
     A profile with the same name keeps this machine's network identity
     fields, which the bundle never carries. Profiles the bundle does not
-    name are kept rather than deleted.
+    name are kept rather than deleted. The result can pass the profile
+    limit; the caller refuses that rather than dropping profiles.
     """
     local = {}
     for profile in normalize_site_profiles(current):
@@ -1310,7 +1311,7 @@ def merge_imported_site_profiles(imported, current):
                 entry[name] = local[key][name]
         merged.append(entry)
     merged.extend(profile for key, profile in local.items() if key not in seen)
-    return merged[:_SITE_PROFILE_MAX]
+    return merged
 
 
 def normalize_site_profiles(value):
@@ -2592,13 +2593,30 @@ def read_settings_bundle(payload, current_site_profiles=None):
                 } if isinstance(item, dict) else item
                 for item in raw_profiles
             ]
-        imported_profiles, profile_error = validate_site_profiles(portable)
+        # The Settings save's preflight, against the download folder this
+        # import puts in effect: each profile folder has to sit inside it,
+        # take a write, have free space and leave room under the path limit.
+        imported_profiles, profile_error = validate_site_profiles(
+            portable,
+            download_root=settings.get("DownloadPath") or None,
+            output_template=settings.get("OutputTemplate") or "",
+        )
         if profile_error:
             warnings.append(f"Site profiles were not imported: {profile_error}")
         else:
-            settings["SiteProfiles"] = merge_imported_site_profiles(
+            merged_profiles = merge_imported_site_profiles(
                 imported_profiles, current_site_profiles,
             )
+            if len(merged_profiles) > _SITE_PROFILE_MAX:
+                # Refused whole: trimming the list would delete this
+                # computer's own profiles without a word.
+                return None, (
+                    f"Importing this bundle would leave {len(merged_profiles)} "
+                    f"site profiles, more than the {_SITE_PROFILE_MAX} allowed. "
+                    "Remove some on this computer or from the bundle, then "
+                    "import again."
+                )
+            settings["SiteProfiles"] = merged_profiles
     sites = []
     for site in (payload.get("siteLoginSites") or []):
         site = clean_text(site, "", 253)

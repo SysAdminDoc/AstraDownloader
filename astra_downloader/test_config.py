@@ -442,6 +442,35 @@ class NormalizationTests(unittest.TestCase):
             {"Name": "Local only", "Domain": "vimeo.com"},
         ])
 
+    def test_an_imported_profile_folder_gets_the_settings_save_preflight(self):
+        with tempfile.TemporaryDirectory() as root:
+            # A file where the profile needs a folder: nothing can be created.
+            (Path(root) / "Music").write_text("not a folder", encoding="utf-8")
+            bundle = ad.build_settings_bundle(FakeConfig({
+                "DownloadPath": root,
+                "SiteProfiles": [{"Name": "Music", "Domain": "soundcloud.com",
+                                  "DownloadFolder": "Music/YouTube"}],
+            }))
+            imported, error = ad.read_settings_bundle(
+                json.loads(json.dumps(bundle)), current_site_profiles=[])
+        self.assertIsNone(error)
+        self.assertNotIn("SiteProfiles", imported["settings"])
+        self.assertTrue(any("DownloadFolder" in warning for warning in imported["warnings"]))
+
+    def test_an_import_past_the_profile_limit_is_refused_not_trimmed(self):
+        bundle = ad.build_settings_bundle(FakeConfig({"SiteProfiles": [
+            {"Name": f"Shared {index}", "Domain": f"s{index}.example.com"}
+            for index in range(3)
+        ]}))
+        local = [
+            {"Name": f"Local {index}", "Domain": f"l{index}.example.com"}
+            for index in range(30)
+        ]
+        imported, error = ad.read_settings_bundle(
+            json.loads(json.dumps(bundle)), current_site_profiles=local)
+        self.assertIsNone(imported)
+        self.assertIn("33 site profiles, more than the 32 allowed", error)
+
     def test_output_template_bounds_split_long_text_and_preserve_literals(self):
         import config as config_module
 
