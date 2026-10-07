@@ -6764,6 +6764,46 @@ class PlaylistStagingDialogTests(unittest.TestCase):
         options.update(kwargs)
         return ad.PlaylistStagingDialog(None, self._PREVIEW, **options)
 
+    def test_each_dialog_names_its_rows_with_one_noun(self):
+        # The playlist review said "video" in one string and "item" in the
+        # next, and the subscription archive did the reverse. The playlist
+        # flow says video (Video), the archive says item (Eintrag).
+        import ast
+        import importlib.util
+        import re
+        import textwrap
+
+        root = Path(ad.__file__).parents[1]
+        loaded = {}
+        for name, file_name in (
+            ("extractor", "extract_companion_strings.py"),
+            ("builder", "build-companion-translations.py"),
+        ):
+            spec = importlib.util.spec_from_file_location(
+                f"_ad69_{name}", root / "scripts" / file_name)
+            loaded[name] = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(loaded[name])
+        german = loaded["builder"].CATALOGS["de"]
+        source = (root / "astra_downloader" / "gui.py").read_text(encoding="utf-8")
+        nodes = {
+            node.name: node for node in ast.walk(ast.parse(source))
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef))
+        }
+        surfaces = (
+            (("PlaylistStagingDialog", "_open_playlist_staging"), r"\bitems?\b", "Eintr"),
+            (("SubscriptionArchiveDialog",), r"\bvideos?\b", "Video"),
+        )
+        for names, english_other, german_other in surfaces:
+            strings = []
+            for name in names:
+                segment = textwrap.dedent(ast.get_source_segment(source, nodes[name]))
+                strings.extend(loaded["extractor"].extract_from_source(segment))
+            self.assertGreater(len(strings), 5, names)
+            for text in strings:
+                with self.subTest(surface=names[0], text=text):
+                    self.assertNotRegex(text, re.compile(english_other, re.I))
+                    self.assertNotIn(german_other, german.get(text, ""))
+
     def test_an_archived_item_is_flagged_and_starts_unselected(self):
         _get_qapp_or_skip(self)
         dialog = self._dialog(archived_indices={2})
@@ -6903,7 +6943,7 @@ class PlaylistStagingDialogTests(unittest.TestCase):
                      for call in calls],
                     [([1], "mp4", None), ([2], "mkv", None), ([3], "mp4", "Finale")],
                 )
-                self.assertIn("Queued 3 items", window.quick_download_status.text())
+                self.assertIn("Queued 3 videos", window.quick_download_status.text())
             finally:
                 _retire_test_window(window)
 

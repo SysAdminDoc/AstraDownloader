@@ -1177,7 +1177,7 @@ class PlaylistStagingDialog(QDialog):
         dur = format_duration(item.get("duration", 0))
         cb.setAccessibleName(
             tr_format(
-                "Select playlist item {index}: {title}",
+                "Select playlist video {index}: {title}",
                 index=idx,
                 title=item_title,
             )
@@ -1212,7 +1212,7 @@ class PlaylistStagingDialog(QDialog):
         name_field = QLineEdit()
         name_field.setPlaceholderText(tr("Use the naming template"))
         name_field.setAccessibleName(
-            tr_format("File name for playlist item {index}", index=idx)
+            tr_format("File name for playlist video {index}", index=idx)
         )
         name_field.setToolTip(tr(
             "Leave empty to name this file the way every other download is "
@@ -1221,12 +1221,12 @@ class PlaylistStagingDialog(QDialog):
         edits.addWidget(name_field, 1)
         format_combo = self._make_choice_combo(
             self._format_choices, self._default_format,
-            tr_format("Format for playlist item {index}", index=idx),
+            tr_format("Format for playlist video {index}", index=idx),
         )
         edits.addWidget(format_combo)
         quality_combo = self._make_choice_combo(
             self._quality_choices, self._default_quality,
-            tr_format("Quality for playlist item {index}", index=idx),
+            tr_format("Quality for playlist video {index}", index=idx),
         )
         edits.addWidget(quality_combo)
         row_layout.addLayout(edits)
@@ -1523,7 +1523,7 @@ class SubscriptionArchiveDialog(QDialog):
         copy_layout.addWidget(make_label(detail, "toolbarMeta", word_wrap=True))
         notes = []
         if item.get("missingUpstream"):
-            notes.append(tr("The source no longer lists this video."))
+            notes.append(tr("The source no longer lists this item."))
         if item.get("fileMissing"):
             notes.append(tr("The file is no longer on this machine."))
         if notes:
@@ -6792,7 +6792,7 @@ class MainWindowCore(
             self._set_quick_download_status(tr("Enter a playlist URL to review."), "error")
             return
 
-        self._set_quick_download_status(tr("Scanning playlist items…"), "neutral")
+        self._set_quick_download_status(tr("Scanning playlist videos…"), "neutral")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             preview, err = self.dl_manager.preview_playlist(url)
@@ -6817,7 +6817,7 @@ class MainWindowCore(
             return
         selection = dialog.get_selection()
         if not selection:
-            self._set_quick_download_status(tr("No playlist items selected."), "warning")
+            self._set_quick_download_status(tr("No playlist videos selected."), "warning")
             return
         # Two rows given the same name would write the same file twice, and
         # the second would silently replace the first. Say so instead.
@@ -6860,14 +6860,14 @@ class MainWindowCore(
         if failure:
             self._set_quick_download_status(
                 tr_format(
-                    "Queued {count} items; the rest were refused: {reason}",
+                    "Queued {count} videos; the rest were refused: {reason}",
                     count=queued, reason=failure,
                 ),
                 "warning",
             )
         else:
             self._set_quick_download_status(
-                tr_format("Queued {count} items from playlist.", count=queued),
+                tr_format("Queued {count} videos from playlist.", count=queued),
                 "success",
             )
         self.quick_download_url.clear()

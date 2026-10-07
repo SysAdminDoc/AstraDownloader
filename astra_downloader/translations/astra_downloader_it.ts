@@ -231,8 +231,8 @@
       <translation>(untitled)</translation>
     </message>
     <message>
-      <source>Select playlist item {index}: {title}</source>
-      <translation>Select playlist item {index}: {title}</translation>
+      <source>Select playlist video {index}: {title}</source>
+      <translation>Select playlist video {index}: {title}</translation>
     </message>
     <message>
       <source>Duration {duration}</source>
@@ -251,20 +251,20 @@
       <translation>Use the naming template</translation>
     </message>
     <message>
-      <source>File name for playlist item {index}</source>
-      <translation>File name for playlist item {index}</translation>
+      <source>File name for playlist video {index}</source>
+      <translation>File name for playlist video {index}</translation>
     </message>
     <message>
       <source>Leave empty to name this file the way every other download is named. A name here applies to this video only.</source>
       <translation>Leave empty to name this file the way every other download is named. A name here applies to this video only.</translation>
     </message>
     <message>
-      <source>Format for playlist item {index}</source>
-      <translation>Format for playlist item {index}</translation>
+      <source>Format for playlist video {index}</source>
+      <translation>Format for playlist video {index}</translation>
     </message>
     <message>
-      <source>Quality for playlist item {index}</source>
-      <translation>Quality for playlist item {index}</translation>
+      <source>Quality for playlist video {index}</source>
+      <translation>Quality for playlist video {index}</translation>
     </message>
     <message>
       <source>Applied to {count} videos</source>
@@ -747,8 +747,8 @@
       <translation>Copy command status</translation>
     </message>
     <message>
-      <source>Scanning playlist items…</source>
-      <translation>Scanning playlist items…</translation>
+      <source>Scanning playlist videos…</source>
+      <translation>Scanning playlist videos…</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -927,8 +927,8 @@
       <translation>{count} captured</translation>
     </message>
     <message>
-      <source>The source no longer lists this video.</source>
-      <translation>The source no longer lists this video.</translation>
+      <source>The source no longer lists this item.</source>
+      <translation>The source no longer lists this item.</translation>
     </message>
     <message>
       <source>The file is no longer on this machine.</source>
@@ -1431,20 +1431,20 @@
       <translation>Enter a playlist URL to review.</translation>
     </message>
     <message>
-      <source>No playlist items selected.</source>
-      <translation>No playlist items selected.</translation>
+      <source>No playlist videos selected.</source>
+      <translation>No playlist videos selected.</translation>
     </message>
     <message>
       <source>More than one video is named {name}. Give each a different name, or leave the name empty.</source>
       <translation>More than one video is named {name}. Give each a different name, or leave the name empty.</translation>
     </message>
     <message>
-      <source>Queued {count} items; the rest were refused: {reason}</source>
-      <translation>Queued {count} items; the rest were refused: {reason}</translation>
+      <source>Queued {count} videos; the rest were refused: {reason}</source>
+      <translation>Queued {count} videos; the rest were refused: {reason}</translation>
     </message>
     <message>
-      <source>Queued {count} items from playlist.</source>
-      <translation>Queued {count} items from playlist.</translation>
+      <source>Queued {count} videos from playlist.</source>
+      <translation>Queued {count} videos from playlist.</translation>
     </message>
     <message>
       <source>yt-dlp {version} is ready.</source>

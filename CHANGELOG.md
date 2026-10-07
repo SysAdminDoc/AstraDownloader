@@ -23,6 +23,7 @@ repository's git log.
 - Settings writes every time unit the same way. The live-video retry interval said "seconds" while the subtitle pause beside it said "s", and both now use "s" like the "min" and "MB" fields do.
 - `npm run check` collects the Python suite once instead of twice. The README test count is now checked against the suite run itself.
 - The check behind `npm run check` now fails if the Python suite gate is narrowed with a flag like `-k`, `--ignore` or `-x`, and names the flag it found.
+- The playlist review now calls every row a video, from the checkboxes to the confirmation, and the subscription archive calls every row an item, in English and German.
 
 ### Fixed
 

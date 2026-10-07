@@ -231,8 +231,8 @@
       <translation>(ohne Titel)</translation>
     </message>
     <message>
-      <source>Select playlist item {index}: {title}</source>
-      <translation>Playlist-Eintrag {index} auswählen: {title}</translation>
+      <source>Select playlist video {index}: {title}</source>
+      <translation>Playlist-Video {index} auswählen: {title}</translation>
     </message>
     <message>
       <source>Duration {duration}</source>
@@ -251,20 +251,20 @@
       <translation>Namensvorlage verwenden</translation>
     </message>
     <message>
-      <source>File name for playlist item {index}</source>
-      <translation>Dateiname für Playlist-Eintrag {index}</translation>
+      <source>File name for playlist video {index}</source>
+      <translation>Dateiname für Playlist-Video {index}</translation>
     </message>
     <message>
       <source>Leave empty to name this file the way every other download is named. A name here applies to this video only.</source>
       <translation>Leer lassen, damit diese Datei wie jeder andere Download benannt wird. Ein Name hier gilt nur für dieses Video.</translation>
     </message>
     <message>
-      <source>Format for playlist item {index}</source>
-      <translation>Format für Playlist-Eintrag {index}</translation>
+      <source>Format for playlist video {index}</source>
+      <translation>Format für Playlist-Video {index}</translation>
     </message>
     <message>
-      <source>Quality for playlist item {index}</source>
-      <translation>Qualität für Playlist-Eintrag {index}</translation>
+      <source>Quality for playlist video {index}</source>
+      <translation>Qualität für Playlist-Video {index}</translation>
     </message>
     <message>
       <source>Applied to {count} videos</source>
@@ -747,8 +747,8 @@
       <translation>Status beim Kopieren des Befehls</translation>
     </message>
     <message>
-      <source>Scanning playlist items…</source>
-      <translation>Playlist-Einträge werden gelesen...</translation>
+      <source>Scanning playlist videos…</source>
+      <translation>Playlist-Videos werden gelesen…</translation>
     </message>
     <message>
       <source>Save changes</source>
@@ -927,8 +927,8 @@
       <translation>{count} erfasst</translation>
     </message>
     <message>
-      <source>The source no longer lists this video.</source>
-      <translation>Die Quelle führt dieses Video nicht mehr.</translation>
+      <source>The source no longer lists this item.</source>
+      <translation>Die Quelle führt diesen Eintrag nicht mehr.</translation>
     </message>
     <message>
       <source>The file is no longer on this machine.</source>
@@ -1431,20 +1431,20 @@
       <translation>Zum Überprüfen eine Playlist-URL eingeben.</translation>
     </message>
     <message>
-      <source>No playlist items selected.</source>
-      <translation>Keine Playlist-Einträge ausgewählt.</translation>
+      <source>No playlist videos selected.</source>
+      <translation>Keine Playlist-Videos ausgewählt.</translation>
     </message>
     <message>
       <source>More than one video is named {name}. Give each a different name, or leave the name empty.</source>
       <translation>Mehrere Videos heißen {name}. Geben Sie jedem einen anderen Namen oder lassen Sie das Feld leer.</translation>
     </message>
     <message>
-      <source>Queued {count} items; the rest were refused: {reason}</source>
-      <translation>{count} Einträge eingereiht; der Rest wurde abgelehnt: {reason}</translation>
+      <source>Queued {count} videos; the rest were refused: {reason}</source>
+      <translation>{count} Videos eingereiht; der Rest wurde abgelehnt: {reason}</translation>
     </message>
     <message>
-      <source>Queued {count} items from playlist.</source>
-      <translation>{count} Einträge aus der Playlist eingereiht.</translation>
+      <source>Queued {count} videos from playlist.</source>
+      <translation>{count} Videos aus der Playlist eingereiht.</translation>
     </message>
     <message>
       <source>yt-dlp {version} is ready.</source>

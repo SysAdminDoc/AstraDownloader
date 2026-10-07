@@ -1527,6 +1527,24 @@ CATALOGS = {
             "Diese Adresse liegt in einem privaten, Loopback- oder Link-Local-Netzwerk. Astra Downloader lädt nur von öffentlichen Websites herunter.",
         "That host is not a public internet address. Paste a normal video link such as https://www.reddit.com/r/…":
             "Dieser Host ist keine öffentliche Internetadresse. Fügen Sie einen normalen Videolink ein, etwa https://www.reddit.com/r/…",
+        "Select playlist video {index}: {title}":
+            "Playlist-Video {index} auswählen: {title}",
+        "File name for playlist video {index}":
+            "Dateiname für Playlist-Video {index}",
+        "Format for playlist video {index}":
+            "Format für Playlist-Video {index}",
+        "Quality for playlist video {index}":
+            "Qualität für Playlist-Video {index}",
+        "Scanning playlist videos…":
+            "Playlist-Videos werden gelesen…",
+        "No playlist videos selected.":
+            "Keine Playlist-Videos ausgewählt.",
+        "Queued {count} videos from playlist.":
+            "{count} Videos aus der Playlist eingereiht.",
+        "Queued {count} videos; the rest were refused: {reason}":
+            "{count} Videos eingereiht; der Rest wurde abgelehnt: {reason}",
+        "The source no longer lists this item.":
+            "Die Quelle führt diesen Eintrag nicht mehr.",
     },
     "en": {},
     "es": {
@@ -2253,8 +2271,6 @@ CATALOGS["de"].update({
     "Invert": "Umkehren",
     "Select unselected videos and clear selected videos.":
         "Nicht ausgewählte Videos auswählen und ausgewählte Videos abwählen.",
-    "Select playlist item {index}: {title}":
-        "Playlist-Eintrag {index} auswählen: {title}",
     "Duration {duration}": "Dauer {duration}",
     "No videos found": "Keine Videos gefunden",
     "This playlist did not return any videos. Close this review and try the link again.":
@@ -2304,8 +2320,6 @@ CATALOGS["de"].update({
     "Archive action result": "Ergebnis der Archivaktion",
     "{count} captured": "{count} erfasst",
     "Nothing captured yet": "Noch nichts erfasst",
-    "The source no longer lists this video.":
-        "Die Quelle führt dieses Video nicht mehr.",
     "The file is no longer on this machine.":
         "Die Datei ist auf diesem Rechner nicht mehr vorhanden.",
     "Items appear here after this subscription's first scan queues something.":
@@ -2365,11 +2379,6 @@ CATALOGS["de"].update({
     "Leave empty to name this file the way every other download is named. A name here applies to this video only.":
         "Leer lassen, damit diese Datei wie jeder andere Download benannt wird. "
         "Ein Name hier gilt nur für dieses Video.",
-    "File name for playlist item {index}": "Dateiname für Playlist-Eintrag {index}",
-    "Format for playlist item {index}": "Format für Playlist-Eintrag {index}",
-    "Quality for playlist item {index}": "Qualität für Playlist-Eintrag {index}",
-    "Queued {count} items; the rest were refused: {reason}":
-        "{count} Einträge eingereiht; der Rest wurde abgelehnt: {reason}",
     "Close the playlist review without adding anything to the queue.":
         "Playlist-Prüfung schließen, ohne etwas zur Warteschlange hinzuzufügen.",
     "Add the selected playlist videos to the download queue.":
@@ -2378,7 +2387,6 @@ CATALOGS["de"].update({
     "Review redacted yt-dlp command": "Geschwärzten yt-dlp-Befehl prüfen",
     "Review or copy the redacted command used for this download.":
         "Den für diesen Download verwendeten geschwärzten Befehl prüfen oder kopieren.",
-    "Scanning playlist items…": "Playlist-Einträge werden gelesen...",
     "(untitled)": "(ohne Titel)",
     "View yt-dlp command": "yt-dlp-Befehl anzeigen",
     "Command for {title}": "Befehl für {title}",
@@ -2395,8 +2403,6 @@ CATALOGS["de"].update({
     "Security floor": "Sicherheitsuntergrenze",
     "Fetching metadata": "Metadaten werden abgerufen",
     "Could not preview playlist.": "Playlist-Vorschau nicht möglich.",
-    "No playlist items selected.": "Keine Playlist-Einträge ausgewählt.",
-    "Queued {count} items from playlist.": "{count} Einträge aus der Playlist eingereiht.",
     "Runtime floor": "Laufzeituntergrenze",
     "Embedding metadata": "Metadaten werden eingebettet",
     "{runtime} {version} is below the security floor {floor}; update it before downloading.":
