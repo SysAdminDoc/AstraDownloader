@@ -1,4 +1,4 @@
-# Building and checking Astra Downloader v2.16.0
+# Building and checking Astra Downloader v2.17.0
 
 [Back to the project](../README.md)
 
@@ -41,7 +41,7 @@ While a virtual environment is active, `npm run check` runs the Python gates and
 
 ```powershell
 npm test
-py -3.13 -m pytest -rs       # 1371 tests collected; the gate verifies this count
+py -3.13 -m pytest -rs       # 1417 tests collected; the gate verifies this count
 npm run check
 npm run smoke:gui
 ```
