@@ -1453,6 +1453,70 @@ CATALOGS = {
             "Der Import wurde nur teilweise angewendet, weil sein Rückgängig-Schnappschuss nicht gespeichert werden konnte.",
         "Undo defaults":
             "Standards rückgängig",
+        "Public videos need no sign-in. Age-restricted, members-only and private videos do.":
+            "Öffentliche Videos brauchen keine Anmeldung. Altersbeschränkte, Mitglieder- und private Videos schon.",
+        "Extractor arguments for YouTube are built separately so the plugin-free token-exempt client chain stays in one place.":
+            "Die Extractor-Argumente für YouTube werden separat erstellt, damit die Client-Kette ohne Plugin und ohne Token an einer Stelle bleibt.",
+        "Private, password-protected and unlisted videos need a sign-in.":
+            "Private, passwortgeschützte und nicht gelistete Videos brauchen eine Anmeldung.",
+        "Embed-restricted videos only resolve when the request carries a referer the video is allowed to play under.":
+            "Videos mit Einbettungsbeschränkung lassen sich nur abrufen, wenn die Anfrage einen Referer mitsendet, unter dem das Video abgespielt werden darf.",
+        "Fronted by a bot check that reads the TLS fingerprint.":
+            "Vorgeschaltet ist eine Bot-Prüfung, die den TLS-Fingerabdruck liest.",
+        "Community and restricted videos need a sign-in.":
+            "Community- und eingeschränkte Videos brauchen eine Anmeldung.",
+        "1080p and above are only offered to signed-in accounts.":
+            "1080p und mehr werden nur angemeldeten Konten angeboten.",
+        "Region-locked titles also need an exit inside mainland China.":
+            "Regional gesperrte Titel brauchen zusätzlich einen Ausgangspunkt in Festlandchina.",
+        "Niconico serves video only to a signed-in account.":
+            "Niconico liefert Videos nur an ein angemeldetes Konto.",
+        "Subscriber-only VODs and some channels need a sign-in.":
+            "VODs nur für Abonnenten und einige Kanäle brauchen eine Anmeldung.",
+        "Live captures start from the current segment; past VODs download whole. Mid-roll ad segments can leave gaps in a live capture.":
+            "Live-Aufnahmen beginnen beim aktuellen Segment, frühere VODs werden vollständig heruntergeladen. Werbeunterbrechungen können Lücken in einer Live-Aufnahme hinterlassen.",
+        "Behind a bot check that inspects the TLS fingerprint, so a plain request is refused before the extractor is reached.":
+            "Hinter einer Bot-Prüfung, die den TLS-Fingerabdruck untersucht. Eine einfache Anfrage wird abgelehnt, bevor sie den Extractor erreicht.",
+        "X stopped serving video to signed-out clients, so a sign-in is needed for almost every post.":
+            "X liefert keine Videos mehr an abgemeldete Clients, daher ist fast für jeden Beitrag eine Anmeldung nötig.",
+        "Reels, stories and most posts are only served to a signed-in session.":
+            "Reels, Storys und die meisten Beiträge werden nur an eine angemeldete Sitzung geliefert.",
+        "Stories expire, so a stored sign-in goes stale quickly.":
+            "Storys laufen ab, daher veraltet eine gespeicherte Anmeldung schnell.",
+        "Most videos, and every private or group post, need a sign-in.":
+            "Die meisten Videos und jeder private oder Gruppenbeitrag brauchen eine Anmeldung.",
+        "Region-limited and age-gated posts need a sign-in.":
+            "Regional beschränkte und altersbeschränkte Beiträge brauchen eine Anmeldung.",
+        "NSFW and quarantined subreddits need a sign-in.":
+            "NSFW- und unter Quarantäne gestellte Subreddits brauchen eine Anmeldung.",
+        "Reddit has no username and password path for yt-dlp; sign in with cookies.":
+            "Reddit bietet yt-dlp keinen Weg über Benutzername und Passwort. Melden Sie sich mit Cookies an.",
+        "Threads serves media to signed-in sessions only.":
+            "Threads liefert Medien nur an angemeldete Sitzungen.",
+        "LinkedIn video needs a signed-in session.":
+            "LinkedIn-Videos brauchen eine angemeldete Sitzung.",
+        "Sign in with cookies; LinkedIn has no credential path here.":
+            "Melden Sie sich mit Cookies an. Für LinkedIn gibt es hier keinen Weg über Zugangsdaten.",
+        "Private and subscriber-only tracks need a sign-in.":
+            "Private Titel und Titel nur für Abonnenten brauchen eine Anmeldung.",
+        "Only podcast episodes resolve. Spotify music is DRM-protected and cannot be downloaded.":
+            "Nur Podcast-Folgen lassen sich abrufen. Musik auf Spotify ist DRM-geschützt und kann nicht heruntergeladen werden.",
+        "Course video is served only to enrolled accounts.":
+            "Kursvideos werden nur an eingeschriebene Konten geliefert.",
+        "Course video needs a signed-in account that owns the course.":
+            "Kursvideos brauchen ein angemeldetes Konto, das den Kurs besitzt.",
+        "Posts are served only to a signed-in supporting account.":
+            "Beiträge werden nur an ein angemeldetes unterstützendes Konto geliefert.",
+        "Nebula is subscription-only.":
+            "Nebula gibt es nur im Abonnement.",
+        "Crunchyroll serves streams only to a signed-in account.":
+            "Crunchyroll liefert Streams nur an ein angemeldetes Konto.",
+        "Premium titles are DRM-protected and will not produce a file even with a valid sign-in.":
+            "Premium-Titel sind DRM-geschützt und ergeben auch mit gültiger Anmeldung keine Datei.",
+        "Large items can carry hundreds of files; expect long queues.":
+            "Große Einträge können Hunderte Dateien enthalten. Rechnen Sie mit langen Warteschlangen.",
+        "Not supported by yt-dlp; listed so the failure is not a mystery.":
+            "Wird von yt-dlp nicht unterstützt. Aufgeführt, damit der Fehler kein Rätsel bleibt.",
     },
     "en": {},
     "es": {

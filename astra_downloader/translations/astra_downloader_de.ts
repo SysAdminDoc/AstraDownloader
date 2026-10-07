@@ -4094,5 +4094,133 @@
       <source>Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.</source>
       <translation>Antivirensoftware hat die Datei möglicherweise entfernt oder gekürzt. Fügen Sie eine Ausnahme für {path} hinzu und lassen Sie die Einrichtung sie erneut abrufen.</translation>
     </message>
+    <message>
+      <source>Public videos need no sign-in. Age-restricted, members-only and private videos do.</source>
+      <translation>Öffentliche Videos brauchen keine Anmeldung. Altersbeschränkte, Mitglieder- und private Videos schon.</translation>
+    </message>
+    <message>
+      <source>Extractor arguments for YouTube are built separately so the plugin-free token-exempt client chain stays in one place.</source>
+      <translation>Die Extractor-Argumente für YouTube werden separat erstellt, damit die Client-Kette ohne Plugin und ohne Token an einer Stelle bleibt.</translation>
+    </message>
+    <message>
+      <source>Private, password-protected and unlisted videos need a sign-in.</source>
+      <translation>Private, passwortgeschützte und nicht gelistete Videos brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>Embed-restricted videos only resolve when the request carries a referer the video is allowed to play under.</source>
+      <translation>Videos mit Einbettungsbeschränkung lassen sich nur abrufen, wenn die Anfrage einen Referer mitsendet, unter dem das Video abgespielt werden darf.</translation>
+    </message>
+    <message>
+      <source>Fronted by a bot check that reads the TLS fingerprint.</source>
+      <translation>Vorgeschaltet ist eine Bot-Prüfung, die den TLS-Fingerabdruck liest.</translation>
+    </message>
+    <message>
+      <source>Community and restricted videos need a sign-in.</source>
+      <translation>Community- und eingeschränkte Videos brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>1080p and above are only offered to signed-in accounts.</source>
+      <translation>1080p und mehr werden nur angemeldeten Konten angeboten.</translation>
+    </message>
+    <message>
+      <source>Region-locked titles also need an exit inside mainland China.</source>
+      <translation>Regional gesperrte Titel brauchen zusätzlich einen Ausgangspunkt in Festlandchina.</translation>
+    </message>
+    <message>
+      <source>Niconico serves video only to a signed-in account.</source>
+      <translation>Niconico liefert Videos nur an ein angemeldetes Konto.</translation>
+    </message>
+    <message>
+      <source>Subscriber-only VODs and some channels need a sign-in.</source>
+      <translation>VODs nur für Abonnenten und einige Kanäle brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>Live captures start from the current segment; past VODs download whole. Mid-roll ad segments can leave gaps in a live capture.</source>
+      <translation>Live-Aufnahmen beginnen beim aktuellen Segment, frühere VODs werden vollständig heruntergeladen. Werbeunterbrechungen können Lücken in einer Live-Aufnahme hinterlassen.</translation>
+    </message>
+    <message>
+      <source>Behind a bot check that inspects the TLS fingerprint, so a plain request is refused before the extractor is reached.</source>
+      <translation>Hinter einer Bot-Prüfung, die den TLS-Fingerabdruck untersucht. Eine einfache Anfrage wird abgelehnt, bevor sie den Extractor erreicht.</translation>
+    </message>
+    <message>
+      <source>X stopped serving video to signed-out clients, so a sign-in is needed for almost every post.</source>
+      <translation>X liefert keine Videos mehr an abgemeldete Clients, daher ist fast für jeden Beitrag eine Anmeldung nötig.</translation>
+    </message>
+    <message>
+      <source>Reels, stories and most posts are only served to a signed-in session.</source>
+      <translation>Reels, Storys und die meisten Beiträge werden nur an eine angemeldete Sitzung geliefert.</translation>
+    </message>
+    <message>
+      <source>Stories expire, so a stored sign-in goes stale quickly.</source>
+      <translation>Storys laufen ab, daher veraltet eine gespeicherte Anmeldung schnell.</translation>
+    </message>
+    <message>
+      <source>Most videos, and every private or group post, need a sign-in.</source>
+      <translation>Die meisten Videos und jeder private oder Gruppenbeitrag brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>Region-limited and age-gated posts need a sign-in.</source>
+      <translation>Regional beschränkte und altersbeschränkte Beiträge brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>NSFW and quarantined subreddits need a sign-in.</source>
+      <translation>NSFW- und unter Quarantäne gestellte Subreddits brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>Reddit has no username and password path for yt-dlp; sign in with cookies.</source>
+      <translation>Reddit bietet yt-dlp keinen Weg über Benutzername und Passwort. Melden Sie sich mit Cookies an.</translation>
+    </message>
+    <message>
+      <source>Threads serves media to signed-in sessions only.</source>
+      <translation>Threads liefert Medien nur an angemeldete Sitzungen.</translation>
+    </message>
+    <message>
+      <source>LinkedIn video needs a signed-in session.</source>
+      <translation>LinkedIn-Videos brauchen eine angemeldete Sitzung.</translation>
+    </message>
+    <message>
+      <source>Sign in with cookies; LinkedIn has no credential path here.</source>
+      <translation>Melden Sie sich mit Cookies an. Für LinkedIn gibt es hier keinen Weg über Zugangsdaten.</translation>
+    </message>
+    <message>
+      <source>Private and subscriber-only tracks need a sign-in.</source>
+      <translation>Private Titel und Titel nur für Abonnenten brauchen eine Anmeldung.</translation>
+    </message>
+    <message>
+      <source>Only podcast episodes resolve. Spotify music is DRM-protected and cannot be downloaded.</source>
+      <translation>Nur Podcast-Folgen lassen sich abrufen. Musik auf Spotify ist DRM-geschützt und kann nicht heruntergeladen werden.</translation>
+    </message>
+    <message>
+      <source>Course video is served only to enrolled accounts.</source>
+      <translation>Kursvideos werden nur an eingeschriebene Konten geliefert.</translation>
+    </message>
+    <message>
+      <source>Course video needs a signed-in account that owns the course.</source>
+      <translation>Kursvideos brauchen ein angemeldetes Konto, das den Kurs besitzt.</translation>
+    </message>
+    <message>
+      <source>Posts are served only to a signed-in supporting account.</source>
+      <translation>Beiträge werden nur an ein angemeldetes unterstützendes Konto geliefert.</translation>
+    </message>
+    <message>
+      <source>Nebula is subscription-only.</source>
+      <translation>Nebula gibt es nur im Abonnement.</translation>
+    </message>
+    <message>
+      <source>Crunchyroll serves streams only to a signed-in account.</source>
+      <translation>Crunchyroll liefert Streams nur an ein angemeldetes Konto.</translation>
+    </message>
+    <message>
+      <source>Premium titles are DRM-protected and will not produce a file even with a valid sign-in.</source>
+      <translation>Premium-Titel sind DRM-geschützt und ergeben auch mit gültiger Anmeldung keine Datei.</translation>
+    </message>
+    <message>
+      <source>Large items can carry hundreds of files; expect long queues.</source>
+      <translation>Große Einträge können Hunderte Dateien enthalten. Rechnen Sie mit langen Warteschlangen.</translation>
+    </message>
+    <message>
+      <source>Not supported by yt-dlp; listed so the failure is not a mystery.</source>
+      <translation>Wird von yt-dlp nicht unterstützt. Aufgeführt, damit der Fehler kein Rätsel bleibt.</translation>
+    </message>
   </context>
 </TS>

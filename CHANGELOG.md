@@ -33,6 +33,7 @@ repository's git log.
 - The FFmpeg check on the Download page no longer says the transcription filter is missing on current FFmpeg builds. Newer FFmpeg prints its filter list in a slightly different shape, and the check misread every filter as absent, so working installs showed a repair warning they did not need. The local API's readiness summary now also says plainly that it's advice and never stops a download.
 - Importing a settings file whose format version is `true` instead of a number is now refused, the same way the app already treats its own config file.
 - The README test-count check skips cleanly on a Windows machine with no Python installed, where the Store's `python` shortcut used to make it fail.
+- The sign-in and site notes on the Sites page, and the note shown with a site's failure, now appear in German instead of staying in English.
 
 ## [2.16.0] (2026-10-06)
 

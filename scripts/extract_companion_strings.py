@@ -7,8 +7,9 @@ tuple to the code, so every string added after it was written simply never
 reached a translator, while the catalogues still reported themselves whole.
 
 This walks the GUI's syntax tree instead and also reads the marked recovery
-catalogues owned by the download and health modules. Those modules must not
-depend on Qt, so their literals are translated at the GUI boundary.
+catalogues owned by the download and health modules, and the notes in the
+site registry. Those modules must not depend on Qt, so their literals are
+translated at the GUI boundary.
 
 The part that matters is that the set of translating calls is DISCOVERED, not
 listed. `tr()` and `make_label()` are the roots, but most strings never touch
@@ -45,6 +46,7 @@ SOURCE_FILES = (
     ROOT / "astra_downloader" / "gui_settings_page.py",
     ROOT / "astra_downloader" / "download.py",
     ROOT / "astra_downloader" / "health.py",
+    ROOT / "astra_downloader" / "sites.py",
 )
 # Retain the old name for callers that used the extractor as a small library.
 GUI_SOURCES = SOURCE_FILES
@@ -81,6 +83,12 @@ RUNTIME_TEXT_ASSIGNMENTS = {
     "MANAGED_BINARY_ANTIVIRUS_ADVICE",
 }
 RUNTIME_TEXT_FIELDS = {"error", "advice", "next_action"}
+# Keyword arguments that carry user-facing text into a registry row. The
+# Sites page renders a profile's auth_note and notes through make_label, and a
+# failure shows a profile's note through tr(), but sites.py is a stdlib-only
+# leaf, so neither call is visible here. Without this every note rendered
+# English inside an otherwise translated page.
+RUNTIME_TEXT_KEYWORDS = {"_profile": {"auth_note", "notes"}}
 
 # Literals that reach Qt but must not be translated, and why. Kept explicit
 # rather than filtered by a rule, so adding one is a decision someone made
@@ -172,6 +180,13 @@ def _runtime_literals(tree):
     """Return marked user-facing literals owned by non-GUI modules."""
     found = []
     for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            keywords = RUNTIME_TEXT_KEYWORDS.get(_called_name(node), ())
+            for keyword in node.keywords:
+                literal = _literal(keyword.value) if keyword.arg in keywords else None
+                if literal and literal.strip():
+                    found.append(literal)
+            continue
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]

@@ -4094,5 +4094,133 @@
       <source>Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.</source>
       <translation>Antivirus software may have removed or truncated it. Add an exclusion for {path} and let setup fetch it again.</translation>
     </message>
+    <message>
+      <source>Public videos need no sign-in. Age-restricted, members-only and private videos do.</source>
+      <translation>Public videos need no sign-in. Age-restricted, members-only and private videos do.</translation>
+    </message>
+    <message>
+      <source>Extractor arguments for YouTube are built separately so the plugin-free token-exempt client chain stays in one place.</source>
+      <translation>Extractor arguments for YouTube are built separately so the plugin-free token-exempt client chain stays in one place.</translation>
+    </message>
+    <message>
+      <source>Private, password-protected and unlisted videos need a sign-in.</source>
+      <translation>Private, password-protected and unlisted videos need a sign-in.</translation>
+    </message>
+    <message>
+      <source>Embed-restricted videos only resolve when the request carries a referer the video is allowed to play under.</source>
+      <translation>Embed-restricted videos only resolve when the request carries a referer the video is allowed to play under.</translation>
+    </message>
+    <message>
+      <source>Fronted by a bot check that reads the TLS fingerprint.</source>
+      <translation>Fronted by a bot check that reads the TLS fingerprint.</translation>
+    </message>
+    <message>
+      <source>Community and restricted videos need a sign-in.</source>
+      <translation>Community and restricted videos need a sign-in.</translation>
+    </message>
+    <message>
+      <source>1080p and above are only offered to signed-in accounts.</source>
+      <translation>1080p and above are only offered to signed-in accounts.</translation>
+    </message>
+    <message>
+      <source>Region-locked titles also need an exit inside mainland China.</source>
+      <translation>Region-locked titles also need an exit inside mainland China.</translation>
+    </message>
+    <message>
+      <source>Niconico serves video only to a signed-in account.</source>
+      <translation>Niconico serves video only to a signed-in account.</translation>
+    </message>
+    <message>
+      <source>Subscriber-only VODs and some channels need a sign-in.</source>
+      <translation>Subscriber-only VODs and some channels need a sign-in.</translation>
+    </message>
+    <message>
+      <source>Live captures start from the current segment; past VODs download whole. Mid-roll ad segments can leave gaps in a live capture.</source>
+      <translation>Live captures start from the current segment; past VODs download whole. Mid-roll ad segments can leave gaps in a live capture.</translation>
+    </message>
+    <message>
+      <source>Behind a bot check that inspects the TLS fingerprint, so a plain request is refused before the extractor is reached.</source>
+      <translation>Behind a bot check that inspects the TLS fingerprint, so a plain request is refused before the extractor is reached.</translation>
+    </message>
+    <message>
+      <source>X stopped serving video to signed-out clients, so a sign-in is needed for almost every post.</source>
+      <translation>X stopped serving video to signed-out clients, so a sign-in is needed for almost every post.</translation>
+    </message>
+    <message>
+      <source>Reels, stories and most posts are only served to a signed-in session.</source>
+      <translation>Reels, stories and most posts are only served to a signed-in session.</translation>
+    </message>
+    <message>
+      <source>Stories expire, so a stored sign-in goes stale quickly.</source>
+      <translation>Stories expire, so a stored sign-in goes stale quickly.</translation>
+    </message>
+    <message>
+      <source>Most videos, and every private or group post, need a sign-in.</source>
+      <translation>Most videos, and every private or group post, need a sign-in.</translation>
+    </message>
+    <message>
+      <source>Region-limited and age-gated posts need a sign-in.</source>
+      <translation>Region-limited and age-gated posts need a sign-in.</translation>
+    </message>
+    <message>
+      <source>NSFW and quarantined subreddits need a sign-in.</source>
+      <translation>NSFW and quarantined subreddits need a sign-in.</translation>
+    </message>
+    <message>
+      <source>Reddit has no username and password path for yt-dlp; sign in with cookies.</source>
+      <translation>Reddit has no username and password path for yt-dlp; sign in with cookies.</translation>
+    </message>
+    <message>
+      <source>Threads serves media to signed-in sessions only.</source>
+      <translation>Threads serves media to signed-in sessions only.</translation>
+    </message>
+    <message>
+      <source>LinkedIn video needs a signed-in session.</source>
+      <translation>LinkedIn video needs a signed-in session.</translation>
+    </message>
+    <message>
+      <source>Sign in with cookies; LinkedIn has no credential path here.</source>
+      <translation>Sign in with cookies; LinkedIn has no credential path here.</translation>
+    </message>
+    <message>
+      <source>Private and subscriber-only tracks need a sign-in.</source>
+      <translation>Private and subscriber-only tracks need a sign-in.</translation>
+    </message>
+    <message>
+      <source>Only podcast episodes resolve. Spotify music is DRM-protected and cannot be downloaded.</source>
+      <translation>Only podcast episodes resolve. Spotify music is DRM-protected and cannot be downloaded.</translation>
+    </message>
+    <message>
+      <source>Course video is served only to enrolled accounts.</source>
+      <translation>Course video is served only to enrolled accounts.</translation>
+    </message>
+    <message>
+      <source>Course video needs a signed-in account that owns the course.</source>
+      <translation>Course video needs a signed-in account that owns the course.</translation>
+    </message>
+    <message>
+      <source>Posts are served only to a signed-in supporting account.</source>
+      <translation>Posts are served only to a signed-in supporting account.</translation>
+    </message>
+    <message>
+      <source>Nebula is subscription-only.</source>
+      <translation>Nebula is subscription-only.</translation>
+    </message>
+    <message>
+      <source>Crunchyroll serves streams only to a signed-in account.</source>
+      <translation>Crunchyroll serves streams only to a signed-in account.</translation>
+    </message>
+    <message>
+      <source>Premium titles are DRM-protected and will not produce a file even with a valid sign-in.</source>
+      <translation>Premium titles are DRM-protected and will not produce a file even with a valid sign-in.</translation>
+    </message>
+    <message>
+      <source>Large items can carry hundreds of files; expect long queues.</source>
+      <translation>Large items can carry hundreds of files; expect long queues.</translation>
+    </message>
+    <message>
+      <source>Not supported by yt-dlp; listed so the failure is not a mystery.</source>
+      <translation>Not supported by yt-dlp; listed so the failure is not a mystery.</translation>
+    </message>
   </context>
 </TS>

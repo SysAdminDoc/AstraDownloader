@@ -116,10 +116,3 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 
-- [ ] P3 | AD-111 | Site registry notes never reach the translation catalogues
-  Why: the Sites page renders auth_note and notes through make_label, which calls tr, and a failure now renders the failure note the same way, but scripts/extract_companion_strings.py does not scan astra_downloader/sites.py. Every note is therefore a tr call whose string is in no catalogue, so it renders English in all eleven locales while the text around it is translated. Pre-existing rather than introduced by AD-105, which only made a second surface show one.
-  Evidence: scripts/extract_companion_strings.py SOURCE_FILES, which lists the gui modules plus download.py and health.py but not sites.py; astra_downloader/gui_sites_page.py rendering auth_note and notes through make_label; astra_downloader/gui.py _download_recovery_text rendering the failure note through tr.
-  Touches: scripts/extract_companion_strings.py, scripts/build-companion-translations.py, astra_downloader/sites.py, translation catalogues.
-  Acceptance: The extractor reaches the auth_note and notes literals in the site registry, by whichever shape suits its existing runtime-literal handling, and the translation gate counts them. German carries all of them. A note added to a profile without a German entry fails the gate rather than silently rendering English.
-  Complexity: M
-

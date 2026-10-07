@@ -2492,6 +2492,7 @@ class TranslationCoverageTests(unittest.TestCase):
                 "gui_settings_page.py",
                 "download.py",
                 "health.py",
+                "sites.py",
             },
         )
         strings = set(extractor.extract_all())
@@ -2519,6 +2520,39 @@ class TranslationCoverageTests(unittest.TestCase):
         ):
             with self.subTest(data=data):
                 self.assertNotIn(data, strings)
+
+    def test_every_site_registry_note_reaches_german(self):
+        # The Sites page renders auth_note and notes through make_label, but
+        # sites.py has no Qt calls for the extractor to follow, so every note
+        # rendered English in all eleven locales.
+        import sites
+
+        builder = self._builder()
+        notes = {
+            text
+            for profile in sites.SITE_PROFILES.values()
+            for text in (profile["auth_note"], profile["notes"])
+            if text
+        }
+        self.assertGreater(len(notes), 20)
+        self.assertEqual(sorted(notes - set(builder.SOURCE_STRINGS)), [])
+        self.assertEqual(sorted(notes - set(builder.CATALOGS["de"])), [])
+        # A note added to a profile is extracted, so the reference-locale
+        # check fails until it has a German entry.
+        import importlib.util
+
+        root = Path(ad.__file__).parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "extract_companion_strings",
+            root / "scripts" / "extract_companion_strings.py",
+        )
+        extractor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(extractor)
+        planted = extractor.extract_from_source(
+            'SITE_PROFILES = {"x.example": _profile('
+            '"X", auth_note="A planted sign-in note.", notes="A planted note.")}'
+        )
+        self.assertEqual(planted, ["A planted sign-in note.", "A planted note."])
 
     def test_an_undeclared_string_is_not_counted_as_translated(self):
         # The measurement itself: the builder writes a missing entry out as
