@@ -235,6 +235,46 @@ test('the build guide describes the gate set npm run check actually runs', () =>
 // The gate named for a suite has to run it. "unit tests" once meant only the
 // six Node files, so a red Python suite of 1,262 tests sat behind an "all
 // gates passed" line for as long as nobody ran pytest by hand.
+// A gate narrowed with -k, --ignore or --deselect still runs pytest and still
+// goes green, over a fraction of the suite. conftest.py's execution floor
+// notices that in a direct run; this catches it in the gate's own argv.
+const NARROWING_LONG = new Set([
+    '--ignore', '--ignore-glob', '--deselect', '--lf', '--last-failed', '--ff',
+    '--failed-first', '--nf', '--new-first', '--exitfirst', '--maxfail', '--sw',
+    '--stepwise', '--sw-skip', '--stepwise-skip',
+]);
+const NARROWING_SHORT = new Set(['k', 'm', 'x']);
+// Short options that take a value end a cluster: `-kfoo` is -k with "foo".
+const VALUE_SHORT = new Set(['c', 'k', 'm', 'n', 'o', 'p', 'r', 'W']);
+
+function narrowingFlag(args) {
+    // Only what follows `pytest`: the `-m` in `py -3.13 -m pytest` is Python's.
+    const start = args.indexOf('pytest');
+    for (const token of start >= 0 ? args.slice(start + 1) : args) {
+        if (token.startsWith('--')) {
+            const name = token.split('=')[0];
+            if (NARROWING_LONG.has(name)) return name;
+        } else if (/^-[A-Za-z]/.test(token)) {
+            for (const letter of token.slice(1)) {
+                if (NARROWING_SHORT.has(letter)) return `-${letter}`;
+                if (VALUE_SHORT.has(letter)) break;
+            }
+        } else if (token.includes('::') || /\.py$/.test(token)) {
+            return token;
+        }
+    }
+    return null;
+}
+
+function assertRunsWholeSuite(label, args) {
+    assert.ok(
+        !args.includes('--collect-only') && !args.includes('--co'),
+        `the ${label} gate collects the suite instead of running it`,
+    );
+    const flag = narrowingFlag(args);
+    assert.equal(flag, null, `the ${label} gate narrows the suite with ${flag}`);
+}
+
 test('npm run check actually executes the Python suite', () => {
     const { GATES } = require(path.join(repoRoot, 'scripts', 'run-checks.js'));
     const pytestGates = GATES.filter(
@@ -246,12 +286,34 @@ test('npm run check actually executes the Python suite', () => {
         JSON.stringify(GATES.map(([label]) => label)),
     );
     const [label, , args] = pytestGates[0];
-    assert.ok(
-        !args.includes('--collect-only'),
-        `the ${label} gate collects the suite instead of running it`,
-    );
+    assertRunsWholeSuite(label, args);
     assert.ok(
         !GATES.some(([name]) => name === 'unit tests'),
         'a gate called "unit tests" hides which suite it runs; name the suite',
     );
+});
+
+test('a python suite gate narrowed by any selection flag fails, naming the flag', () => {
+    const gate = ['-3.13', '-m', 'pytest', '-q'];
+    const planted = [
+        [['-k', 'download'], '-k'],
+        [['-kdownload'], '-k'],
+        [['-m', 'not slow'], '-m'],
+        [['--ignore', 'astra_downloader/test_gui.py'], '--ignore'],
+        [['--ignore=astra_downloader/test_gui.py'], '--ignore'],
+        [['--deselect', 'astra_downloader/test_gui.py::X'], '--deselect'],
+        [['--lf'], '--lf'],
+        [['--ff'], '--ff'],
+        [['-x'], '-x'],
+        [['-qx'], '-x'],
+        [['astra_downloader/test_sites.py'], 'astra_downloader/test_sites.py'],
+    ];
+    for (const [extra, flag] of planted) {
+        assert.throws(
+            () => assertRunsWholeSuite('python suite', [...gate, ...extra]),
+            (error) => error.message.includes(`narrows the suite with ${flag}`),
+            `planting ${extra.join(' ')} must fail the gate check`,
+        );
+    }
+    assert.doesNotThrow(() => assertRunsWholeSuite('python suite', [...gate, '-p', 'no:cacheprovider', '-n', '4', '-rs']));
 });

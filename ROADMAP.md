@@ -116,13 +116,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 
-- [ ] P3 | AD-100 | The pytest gate assertion cannot tell a narrowed run from a full one
-  Why: documentation-facts.test.js asserts exactly one gate's args contain `pytest` and not `--collect-only`. A gate narrowed with `-k`, `--ignore` or `--deselect` satisfies every assertion while running almost nothing, which is the same class of green-but-empty gate the Python-suite gate was added to close.
-  Evidence: tests/documentation-facts.test.js, the pytest-gate test; conftest.py MIN_FULL_SUITE_EXECUTED_TESTS, which already solves this problem for a direct pytest run and is not consulted by the gate assertion.
-  Touches: tests/documentation-facts.test.js.
-  Acceptance: The assertion rejects a python-suite gate carrying any selection-narrowing flag (-k, -m, --ignore, --deselect, --lf, --ff, -x), naming the flag it found. A test plants each flag and confirms the assertion fails, so the check cannot pass by finding nothing.
-  Complexity: S
-
 - [ ] P3 | AD-111 | Site registry notes never reach the translation catalogues
   Why: the Sites page renders auth_note and notes through make_label, which calls tr, and a failure now renders the failure note the same way, but scripts/extract_companion_strings.py does not scan astra_downloader/sites.py. Every note is therefore a tr call whose string is in no catalogue, so it renders English in all eleven locales while the text around it is translated. Pre-existing rather than introduced by AD-105, which only made a second surface show one.
   Evidence: scripts/extract_companion_strings.py SOURCE_FILES, which lists the gui modules plus download.py and health.py but not sites.py; astra_downloader/gui_sites_page.py rendering auth_note and notes through make_label; astra_downloader/gui.py _download_recovery_text rendering the failure note through tr.
