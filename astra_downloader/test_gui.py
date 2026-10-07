@@ -6114,6 +6114,113 @@ class StylesheetContrastTests(unittest.TestCase):
         self.assertRegex(body, r"border-color: #[0-9a-fA-F]{6}")
 
 
+def _contrast_theme_palette(window, text, highlight, highlight_text, gray):
+    """A Windows contrast theme as Qt reports it: a handful of system colours."""
+    from PySide6.QtGui import QColor, QPalette
+
+    roles = QPalette.ColorRole
+    palette = QPalette()
+    for role, value in (
+            (roles.Window, window), (roles.Base, window), (roles.Button, window),
+            (roles.ToolTipBase, window), (roles.WindowText, text),
+            (roles.Text, text), (roles.ButtonText, text),
+            (roles.ToolTipText, text), (roles.Highlight, highlight),
+            (roles.HighlightedText, highlight_text)):
+        palette.setColor(role, QColor(value))
+    for role in (roles.WindowText, roles.Text, roles.ButtonText):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(gray))
+    return palette
+
+
+class ContrastThemeTests(unittest.TestCase):
+    """A Windows contrast theme restyles Astra live, from system colours only."""
+
+    BLACK = ("#000000", "#ffffff", "#1aebff", "#000000", "#3ff23f")
+    WHITE = ("#ffffff", "#000000", "#37006e", "#ffffff", "#600000")
+
+    def test_the_contrast_sheet_draws_every_state_from_system_colours(self):
+        if _get_qapp_or_skip(self) is None:
+            return
+        tokens = ad.contrast_tokens(_contrast_theme_palette(*self.BLACK))
+        sheet = ad.contrast_stylesheet(tokens)
+        # Nothing authored survives to override the theme.
+        self.assertTrue(set(re.findall(r"#[0-9a-f]{6}", sheet)) <= set(tokens.values()))
+        rules = StylesheetContrastTests._stylesheet_rules(sheet)
+        self.assertEqual(set(rules), set(StylesheetContrastTests._stylesheet_rules()))
+
+        def colour(selector, *properties):
+            return StylesheetContrastTests._declared_colour(rules[selector], properties)
+
+        # Focus: the ring is the highlight, and the text colour around a
+        # control that is itself filled with the highlight.
+        self.assertEqual(colour("QLineEdit:focus", "border-color"), tokens["highlight"])
+        self.assertEqual(
+            colour('QPushButton[class="primary"]:focus', "border-color"), tokens["text"])
+        # Selection and the active page: highlight with its own text colour,
+        # including a menu row that sets no text colour of its own.
+        item = "QComboBox QAbstractItemView::item:selected"
+        self.assertEqual(colour(item, "background"), tokens["highlight"])
+        self.assertEqual(colour(item, "color"), tokens["highlight_text"])
+        self.assertEqual(colour("QMenu::item:selected", "color"), tokens["highlight_text"])
+        # Disabled controls take the theme's gray text.
+        self.assertEqual(colour("QPushButton:disabled", "color"), tokens["disabled_text"])
+        self.assertNotEqual(tokens["disabled_text"], tokens["text"])
+        # Status tones keep apart by line style once colour is gone.
+        bars = {
+            tone: re.search(
+                r"border-left:\s*([^;]+)", rules[f'QLabel[class="fieldHint"][tone="{tone}"]']
+            ).group(1)
+            for tone in ("success", "warning", "danger")
+        }
+        self.assertEqual(len({value.split()[1] for value in bars.values()}), 3, bars)
+
+    def test_turning_a_contrast_theme_on_and_off_restyles_the_running_app(self):
+        from PySide6.QtCore import Qt
+        import gui_support as gs
+
+        app = _get_qapp_or_skip(self)
+        if app is None:
+            return
+        original = (app.palette(), app.styleSheet(), gs._ICON_THEME)
+
+        def restore():
+            app.setPalette(original[0])
+            app.setStyleSheet(original[1])
+            gui_module_for_tests().set_gui_theme(original[2])
+
+        self.addCleanup(restore)
+        prefers = {"contrast": False}
+
+        def announce(preference):
+            app.styleHints().accessibility().contrastPreferenceChanged.emit(preference)
+
+        with mock.patch.object(ad, "system_prefers_contrast", lambda: prefers["contrast"]):
+            ad.apply_application_theme("dark")
+            self.assertEqual(app.styleSheet(), ad.STYLESHEET)
+            app.setPalette(_contrast_theme_palette(*self.BLACK))
+            self.assertEqual(
+                app.styleSheet(), ad.STYLESHEET,
+                "a palette change outside a contrast theme keeps the authored sheet",
+            )
+
+            prefers["contrast"] = True
+            announce(Qt.ContrastPreference.HighContrast)
+            black = ad.contrast_tokens(_contrast_theme_palette(*self.BLACK))
+            self.assertEqual(app.styleSheet(), ad.contrast_stylesheet(black))
+            self.assertEqual(gs._ICON_STROKE_OVERRIDE, black["button_text"])
+
+            # Swapping one contrast theme for another changes only the palette.
+            app.setPalette(_contrast_theme_palette(*self.WHITE))
+            white = ad.contrast_tokens(_contrast_theme_palette(*self.WHITE))
+            self.assertEqual(app.styleSheet(), ad.contrast_stylesheet(white))
+            self.assertEqual(gs._ICON_THEME, "light")
+
+            prefers["contrast"] = False
+            announce(Qt.ContrastPreference.NoPreference)
+            self.assertEqual(app.styleSheet(), ad.STYLESHEET)
+            self.assertIsNone(gs._ICON_STROKE_OVERRIDE)
+
+
 class DownloadPageFeedbackTests(unittest.TestCase):
     """Download-page controls report where the user is standing."""
 

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import json
+import re
 import time
 import traceback
 from pathlib import Path
@@ -49,6 +50,7 @@ CAPTURE_NAMES = (
     "downloads-format-probe",
     "downloads-probe-summary-german",
     "downloads-probe-warning-arabic-rtl",
+    "downloads-high-contrast-black",
     "history-populated",
     "history-light-theme",
     "history-cleared-undo",
@@ -95,6 +97,7 @@ CAPTURE_NAMES = (
     "settings-focus-125x",
     "settings-german",
     "settings-arabic-rtl",
+    "settings-high-contrast-white",
     "reflow-900x620-hidpi-large-font",
     "diagnostics-review",
     "diagnostics-review-light-theme",
@@ -138,6 +141,40 @@ SCENARIO_LOCALES = {
     **LOCALE_SCENARIOS,
     **PAGE_LOCALE_SCENARIOS,
 }
+
+# Windows contrast themes, as (theme, how it arrives). "switch" turns the
+# theme on under an open window; "start" has it on before Astra starts.
+CONTRAST_SCENARIOS = {
+    "downloads-high-contrast-black": ("black", "switch"),
+    "settings-high-contrast-white": ("white", "start"),
+}
+
+# Window, text, highlight, highlighted text and gray text of the classic
+# High Contrast Black and High Contrast White themes.
+CONTRAST_THEME_COLOURS = {
+    "black": ("#000000", "#ffffff", "#1aebff", "#000000", "#3ff23f"),
+    "white": ("#ffffff", "#000000", "#37006e", "#ffffff", "#600000"),
+}
+
+
+def contrast_palette(theme):
+    """The palette Qt reports while a Windows contrast theme is on."""
+    from PySide6.QtGui import QColor, QPalette
+
+    window, text, highlight, highlight_text, gray = CONTRAST_THEME_COLOURS[theme]
+    roles = QPalette.ColorRole
+    palette = QPalette()
+    for role, value in (
+            (roles.Window, window), (roles.Base, window), (roles.Button, window),
+            (roles.ToolTipBase, window), (roles.WindowText, text),
+            (roles.Text, text), (roles.ButtonText, text),
+            (roles.ToolTipText, text), (roles.Highlight, highlight),
+            (roles.HighlightedText, highlight_text)):
+        palette.setColor(role, QColor(value))
+    for role in (roles.WindowText, roles.Text, roles.ButtonText):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(gray))
+    return palette
+
 
 SCALE_SCENARIOS = {
     "downloads-focus-1x": 1.0,
@@ -222,7 +259,19 @@ def main():
         default_font = QFont("Segoe UI", 9)
         app.setFont(default_font)
         render_theme = "light" if scenario.endswith("-light-theme") else "dark"
+        contrast = CONTRAST_SCENARIOS.get(scenario)
+        contrast_state = {"on": False}
+        if contrast:
+            # Offscreen Qt reports no contrast preference, so the fixture
+            # stands in for Windows: the palette, then the preference.
+            app_module.system_prefers_contrast = lambda: contrast_state["on"]
+            if contrast[1] == "start":
+                app.setPalette(contrast_palette(contrast[0]))
+                contrast_state["on"] = True
         app_module.apply_application_theme(render_theme)
+        if contrast and contrast[1] == "start" and not getattr(
+                app, "_astra_contrast_active", False):
+            raise RuntimeError("Starting in a contrast theme kept the authored colours")
         if app_module.ICON_PATH.exists():
             app.setWindowIcon(QIcon(str(app_module.ICON_PATH)))
         retained_windows = []
@@ -950,6 +999,81 @@ def main():
                 if not window.btn_quick_download.isEnabled():
                     raise RuntimeError("A failed probe disabled adding the link")
 
+        def assert_contrast_render(window):
+            """Every colour on screen comes from the contrast theme."""
+            tokens = app_module.contrast_tokens(app.palette())
+            if app.styleSheet() != app_module.contrast_stylesheet(tokens):
+                raise RuntimeError("The sheet on screen is not built from the contrast palette")
+            window.repaint()
+            app.processEvents()
+            QTest.qWait(80)
+            image = window.grab().toImage()
+            focus = app.focusWidget()
+            if focus is None or focus.window() is not window or not focus.isVisible():
+                raise RuntimeError("The contrast fixture has no visible keyboard focus")
+            origin = focus.mapTo(window, QPoint(0, 0))
+            column = origin.x() + focus.width() // 2
+            ring = {
+                image.pixelColor(column, row).name()
+                for row in range(max(0, origin.y() - 1), origin.y() + 3)
+            }
+            if tokens["highlight"] not in ring:
+                raise RuntimeError(
+                    f"The focus ring is not drawn in the highlight colour: {sorted(ring)}"
+                )
+            authored = set(re.findall(
+                r"#[0-9a-f]{6}",
+                (app_module.STYLESHEET + app_module.LIGHT_STYLESHEET).lower(),
+            )) - set(tokens.values())
+            # The brand mark is artwork, not chrome.
+            logo = QRect(
+                window.brand_widget.mapTo(window, QPoint(0, 0)),
+                window.brand_widget.size(),
+            )
+            leaked = {
+                image.pixelColor(x, y).name()
+                for y in range(0, image.height(), 2)
+                for x in range(0, image.width(), 2)
+                if not logo.contains(x, y)
+            } & authored
+            if leaked:
+                raise RuntimeError(
+                    f"Authored colours leaked into the contrast theme: {sorted(leaked)}"
+                )
+
+        def switch_to_contrast_live(window):
+            """Turn a contrast theme on under the open window, as Windows would."""
+            before = app.styleSheet()
+            app.setPalette(contrast_palette(CONTRAST_SCENARIOS[scenario][0]))
+            contrast_state["on"] = True
+            app.styleHints().accessibility().contrastPreferenceChanged.emit(
+                Qt.ContrastPreference.HighContrast
+            )
+            app.processEvents()
+            if app.styleSheet() == before or not getattr(app, "_astra_contrast_active", False):
+                raise RuntimeError("Turning a contrast theme on did not restyle the open window")
+            # One of each state the theme has to keep apart: disabled pickers,
+            # a warning, a failed and a finished download, and keyboard focus.
+            combo = window.quick_download_type
+            combo.setCurrentIndex(combo.findData("subtitles"))
+            window._sync_quick_download_options()
+            url = "https://www.youtube.com/watch?v=contrast01"
+            window.quick_download_url.setText(url)
+            window._apply_format_probe({
+                "generation": window._format_probe_generation,
+                "url": url,
+                "summary": {},
+                "error": "ERROR: [youtube] contrast01: Unable to extract the player response",
+            })
+            window.quick_download_url.setFocus(Qt.FocusReason.OtherFocusReason)
+            app.processEvents()
+            scroll_current_page_to_top(window)
+            if window.quick_download_quality.isEnabled():
+                raise RuntimeError("The contrast fixture lost its disabled picker")
+            if window.quick_download_probe_summary.property("tone") != "warning":
+                raise RuntimeError("The contrast fixture lost its warning")
+            assert_contrast_render(window)
+
         def capture_download_state(window, manager):
             seed_download_matrix(manager)
             if scenario == "downloads-clipboard-staged":
@@ -1018,6 +1142,11 @@ def main():
                 manager.downloads = {
                     dl_id: manager.downloads[dl_id]
                     for dl_id in ("active", "needsauth", "failed", "complete")
+                }
+            elif scenario == "downloads-high-contrast-black":
+                manager.downloads = {
+                    dl_id: manager.downloads[dl_id]
+                    for dl_id in ("active", "failed", "complete")
                 }
             window._downloads_signature = None
             window._update_ui()
@@ -1117,6 +1246,8 @@ def main():
                     "downloads-probe-summary-german",
                     "downloads-probe-warning-arabic-rtl"):
                 show_probe_card(window)
+            elif scenario == "downloads-high-contrast-black":
+                switch_to_contrast_live(window)
             elif scenario == "downloads-subtitles-only":
                 # Subtitles is a third download type, not a settings toggle.
                 # Neither picker beside it describes a subtitle, so both are
@@ -1440,7 +1571,7 @@ def main():
             if scenario == "settings-dirty":
                 window.cfg_dl_path.setText(str(Path(temp_dir) / "Videos" / "Edited"))
                 expected = "Unsaved changes"
-            elif scenario == "settings-light-theme":
+            elif scenario in ("settings-light-theme", "settings-high-contrast-white"):
                 expected = "Settings"
             elif scenario == "settings-pacing-guidance":
                 window.cfg_sleep_interval.setValue(5)
@@ -1697,11 +1828,14 @@ def main():
                         )
             elif scenario in PAGE_LOCALE_SCENARIOS:
                 pass
-            elif scenario not in ("settings-subtitles", "settings-bundle-imported"):
+            elif scenario not in ("settings-subtitles", "settings-bundle-imported",
+                                  "settings-high-contrast-white"):
                 # That scenario already scrolled to the controls it exists to
                 # show; scrolling to the bottom here would hide them again.
                 scroll_current_page_to_bottom(window)
             assert_visible_text(window, {expected})
+            if scenario in CONTRAST_SCENARIOS:
+                assert_contrast_render(window)
             if scenario in PAGE_LOCALE_SCENARIOS:
                 assert_locale_page_layout(window, "Settings")
             capture_window(

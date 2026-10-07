@@ -70,7 +70,7 @@ try:
         QDialogButtonBox
     )
     from PySide6.QtCore import Qt, QTimer, Signal, QObject, QThread, QSize, QPropertyAnimation, QEasingCurve
-    from PySide6.QtGui import QIcon, QFont, QTextCursor
+    from PySide6.QtGui import QColor, QIcon, QFont, QPalette, QTextCursor
     import requests as http_requests
 except ImportError as exc:
     raise ImportError(source_dependency_error(exc)) from exc
@@ -5709,6 +5709,152 @@ def stylesheet_for_theme(theme):
     return LIGHT_STYLESHEET if str(theme or "").strip().lower() == "light" else STYLESHEET
 
 
+# Windows contrast themes (Settings > Accessibility > Contrast themes) hand
+# every app a few system colours and expect them used as given. Both authored
+# sheets are fixed hex values, so while a contrast theme is on the sheet is
+# rebuilt from the live palette instead: each colour in STYLESHEET becomes the
+# system colour its rule plays (text, field, button, selection, focus,
+# disabled), and no authored colour is left to override it. A contrast theme
+# has no green or amber to spare, so the status bars beside a tone switch to
+# line styles that tell the tones apart without colour.
+_CONTRAST_HEX_PATTERN = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+_CONTRAST_RULE_PATTERN = re.compile(r"([^{}]+)\{([^{}]*)\}")
+_CONTRAST_FIELD_TYPES = (
+    "QLineEdit", "QSpinBox", "QComboBox", "QTextEdit", "QAbstractItemView",
+)
+# Rules that paint a filled, chosen state: a selection, a checked box, a
+# pressed button, the primary action, the active page and progress.
+_CONTRAST_FILLED_MARKERS = (
+    ":selected", ":checked", ":pressed", "::chunk",
+    'class="primary"', '[active="true"]', 'class="brandFallback"',
+)
+# Rules that draw a line with their background colour.
+_CONTRAST_LINE_MARKERS = (
+    'class="divider"', 'class="verticalDivider"', "::separator",
+)
+# The bar beside a status. Severity widens it and changes its style, so the
+# tone still reads when every tone is drawn in the same text colour.
+_CONTRAST_TONE_BARS = (
+    (('tone="danger"', 'state="failed"', 'class="errorCallout"'), "4px double"),
+    (('tone="warning"',), "3px dashed"),
+    (('tone="success"', 'state="complete"'), "2px solid"),
+    (('state="cancelled"', 'state="skipped"'), "2px dotted"),
+)
+
+
+def system_prefers_contrast():
+    """Whether Windows is in a contrast theme, as Qt reports it."""
+    if QApplication.instance() is None:
+        return False
+    hints = QApplication.styleHints()
+    accessibility = getattr(hints, "accessibility", None)
+    if accessibility is None:
+        return False
+    return accessibility().contrastPreference() == Qt.ContrastPreference.HighContrast
+
+
+def contrast_tokens(palette):
+    """The system colours a contrast theme publishes, as #rrggbb strings."""
+    roles = QPalette.ColorRole
+    active, disabled = QPalette.ColorGroup.Active, QPalette.ColorGroup.Disabled
+    return {
+        "window": palette.color(active, roles.Window).name(),
+        "text": palette.color(active, roles.WindowText).name(),
+        "base": palette.color(active, roles.Base).name(),
+        "base_text": palette.color(active, roles.Text).name(),
+        "button": palette.color(active, roles.Button).name(),
+        "button_text": palette.color(active, roles.ButtonText).name(),
+        "highlight": palette.color(active, roles.Highlight).name(),
+        "highlight_text": palette.color(active, roles.HighlightedText).name(),
+        # Windows' GrayText, which Qt reports as disabled window text.
+        "disabled_text": palette.color(disabled, roles.WindowText).name(),
+        "tooltip": palette.color(active, roles.ToolTipBase).name(),
+        "tooltip_text": palette.color(active, roles.ToolTipText).name(),
+    }
+
+
+def _contrast_role(prop, selector):
+    """The contrast token a colour declaration takes, from what its rule draws."""
+    filled = any(marker in selector for marker in _CONTRAST_FILLED_MARKERS)
+    field = any(name in selector for name in _CONTRAST_FIELD_TYPES)
+    button = "QPushButton" in selector
+    tooltip = "QToolTip" in selector
+    if prop == "selection-color":
+        return "highlight_text"
+    if prop == "selection-background-color":
+        return "highlight"
+    if prop == "color":
+        if filled:
+            return "highlight_text"
+        if ":disabled" in selector:
+            return "disabled_text"
+        if tooltip:
+            return "tooltip_text"
+        return "base_text" if field else "button_text" if button else "text"
+    if prop in ("background", "background-color"):
+        if filled:
+            return "highlight"
+        if "::handle" in selector:
+            # The scrollbar thumb: text coloured, highlighted under the mouse.
+            return "highlight" if ":hover" in selector else "text"
+        if any(marker in selector for marker in _CONTRAST_LINE_MARKERS):
+            return "text"
+        if tooltip:
+            return "tooltip"
+        return "base" if field else "button" if button else "window"
+    # Borders. A focus ring takes the highlight, except around a filled
+    # control, where the highlight is the fill and the ring takes the text.
+    if ":focus" in selector:
+        return "text" if filled else "highlight"
+    if ":disabled" in selector:
+        return "disabled_text"
+    return "highlight" if filled else "text"
+
+
+def contrast_stylesheet(tokens):
+    """Rebuild STYLESHEET from a contrast theme's colours (see contrast_tokens).
+
+    Sizes, padding and fonts stay as authored, so nothing reflows when the
+    theme changes. Only the colours differ, plus the line style of the bars
+    that mark a status.
+    """
+    source = re.sub(r"/\*.*?\*/", "", STYLESHEET, flags=re.S)
+    rules = []
+    for match in _CONTRAST_RULE_PATTERN.finditer(source):
+        selector = " ".join(match.group(1).split())
+        bar = next(
+            (style for markers, style in _CONTRAST_TONE_BARS
+             if any(marker in selector for marker in markers)),
+            None,
+        )
+        declarations = []
+        properties = set()
+        for declaration in match.group(2).split(";"):
+            prop, colon, value = declaration.partition(":")
+            prop, value = prop.strip().lower(), value.strip()
+            if not colon or not prop:
+                continue
+            properties.add(prop)
+            if _CONTRAST_HEX_PATTERN.search(value):
+                colour = tokens[_contrast_role(prop, selector)]
+                if prop == "border-left" and bar:
+                    value = f"{bar} {colour}"
+                else:
+                    value = _CONTRAST_HEX_PATTERN.sub(colour, value)
+            declarations.append(f"{prop}: {value};")
+        filled = any(marker in selector for marker in _CONTRAST_FILLED_MARKERS)
+        if filled and "color" not in properties and (
+                properties & {"background", "background-color"}):
+            # A filled state that kept its parent's text colour would draw
+            # text on the highlight in the highlight's neighbour colour.
+            declarations.append(f"color: {tokens['highlight_text']};")
+        if 'state="error"' in selector and "border-color" in properties:
+            # A rejected field gets the heavy double line of the danger bar.
+            declarations.append("border-width: 3px; border-style: double;")
+        rules.append(f"{selector} {{ {' '.join(declarations)} }}")
+    return "\n".join(rules) + "\n"
+
+
 def resolve_theme(theme="system", color_scheme=None):
     """Resolve a stored theme preference to ``light`` or ``dark``."""
     normalized = str(theme or "system").strip().lower()
@@ -5754,8 +5900,34 @@ def set_window_title_bar_theme(window, theme):
     return False
 
 
+def _watch_contrast_theme(application, hints):
+    """Re-apply the theme when Windows enters, leaves or swaps a contrast theme."""
+    if getattr(application, "_astra_contrast_watched", False):
+        return
+    application._astra_contrast_watched = True
+
+    def reapply(*_args):
+        apply_application_theme(getattr(application, "_astra_theme_setting", "system"))
+
+    def palette_changed(*_args):
+        # Moving from one contrast theme to another (Night sky to Desert)
+        # leaves the preference alone and changes only the palette.
+        if getattr(application, "_astra_contrast_active", False) or system_prefers_contrast():
+            reapply()
+
+    accessibility = getattr(hints, "accessibility", None)
+    if accessibility is not None:
+        accessibility().contrastPreferenceChanged.connect(reapply)
+    application.paletteChanged.connect(palette_changed)
+
+
 def apply_application_theme(theme="system", *, windows=None):
-    """Apply a stored theme preference to the live Qt application."""
+    """Apply a stored theme preference to the live Qt application.
+
+    A Windows contrast theme outranks the stored preference while it is on:
+    the sheet is rebuilt from the system palette (contrast_stylesheet), and
+    the stored choice comes back when the contrast theme is turned off.
+    """
     application = QApplication.instance()
     normalized = str(theme or "system").strip().lower()
     if normalized not in {"system", "light", "dark"}:
@@ -5783,17 +5955,33 @@ def apply_application_theme(theme="system", *, windows=None):
                     # signal; startup resolution still works there.
                     # reason: the stylesheet can still resolve the initial scheme
                     pass
+        _watch_contrast_theme(application, hints)
+        contrast = system_prefers_contrast()
         set_scheme = getattr(hints, "setColorScheme", None)
         unset_scheme = getattr(hints, "unsetColorScheme", None)
         schemes = getattr(Qt, "ColorScheme", None)
-        if normalized == "system":
+        if normalized == "system" or contrast:
+            # A contrast theme brings its own palette. Asking Qt for light or
+            # dark on top of it would only fight the system colours.
             if callable(unset_scheme):
                 unset_scheme()
         elif callable(set_scheme) and schemes is not None:
             set_scheme(getattr(schemes, normalized.capitalize()))
-        resolved = resolve_theme(normalized)
-        application.setStyleSheet(stylesheet_for_theme(resolved))
-        set_gui_theme(resolved)
+        if contrast:
+            tokens = contrast_tokens(application.palette())
+            sheet = contrast_stylesheet(tokens)
+            resolved = "light" if QColor(tokens["window"]).lightness() >= 128 else "dark"
+            icon_color = tokens["button_text"]
+        else:
+            resolved = resolve_theme(normalized)
+            sheet = stylesheet_for_theme(resolved)
+            icon_color = None
+        application._astra_contrast_active = contrast
+        # An identical sheet would re-polish every widget for nothing, and a
+        # palette change answered with the same sheet must not go round again.
+        if application.styleSheet() != sheet:
+            application.setStyleSheet(sheet)
+        set_gui_theme(resolved, icon_color=icon_color)
         refresh_line_icons(application)
         targets = list(windows) if windows is not None else application.topLevelWidgets()
         for window in targets:

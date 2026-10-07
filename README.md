@@ -60,7 +60,7 @@ The link's available formats determine what you can select. Choosing 2160p doesn
 - **Keep an archive.** Search History, schedule subscriptions, or save optional thumbnails and metadata sidecars for a media library.
 - Subtitles can come from the source or its automatic captions. Optional local Whisper transcription can produce an SRT when a downloaded video has no subtitle track.
 - **Set defaults per site.** Profiles can select formats and pacing. The separate Sign-ins page manages imported cookies or supported site credentials.
-- Dark and light themes are built in. Network settings include proxies, IP preferences and browser impersonation where yt-dlp supports it.
+- Dark and light themes are built in, and a Windows contrast theme takes over Astra's colors while it's on. Network settings include proxies, IP preferences and browser impersonation where yt-dlp supports it.
 
 The [user guide](docs/USER_GUIDE.md) covers these controls, portable storage, updates and removal.
 

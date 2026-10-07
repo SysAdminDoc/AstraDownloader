@@ -61,6 +61,6 @@ Choose a directory that doesn't exist. The mode creates its own profile, forces 
 
 Run this on each distribution layout. Review the images, not just the process exit code. A source-window render doesn't establish that the executable contains every required module.
 
-The larger `smoke:gui` suite covers 88 fixture states, including small layouts and translated pages. It writes under `build/companion-ui-smoke`. Preserve earlier captures before regenerating them if they are part of a review record.
+The larger `smoke:gui` suite covers 90 fixture states, including small layouts and translated pages. It writes under `build/companion-ui-smoke`. Preserve earlier captures before regenerating them if they are part of a review record.
 
 For a network smoke test, set `ASTRA_YTDLP_SMOKE_URL` to a small public clip you have permission to download, then run `npm run smoke:yt-dlp` or `npm run smoke:yt-dlp:managed`. Don't use a private browser session as test data. Keep a record of the source, its license and the output check.

@@ -143,8 +143,8 @@ except ImportError:  # Flat source-path compatibility.
 _ICON_THEME = _gui_support._ICON_THEME
 
 
-def set_gui_theme(theme):
-    normalized = _gui_support.set_gui_theme(theme)
+def set_gui_theme(theme, icon_color=None):
+    normalized = _gui_support.set_gui_theme(theme, icon_color)
     globals()["_ICON_THEME"] = _gui_support._ICON_THEME
     return normalized
 

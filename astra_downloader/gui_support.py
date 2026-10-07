@@ -73,6 +73,7 @@ _THEME_ACCESSIBILITY_COLORS = {
 GUI_ACCESSIBILITY_COLORS = dict(_THEME_ACCESSIBILITY_COLORS["dark"])
 _ICON_THEME = "dark"
 _ICON_STROKE_COLORS = {"dark": "#aab2bd", "light": "#445466"}
+_ICON_STROKE_OVERRIDE = None
 
 SUBTITLE_LANGUAGE_CHOICES = (
     ("English", "en"), ("Spanish", "es"), ("Portuguese", "pt"),
@@ -82,14 +83,19 @@ SUBTITLE_LANGUAGE_CHOICES = (
 )
 
 
-def set_gui_theme(theme):
-    """Select the inline GUI palette and return its normalized scheme."""
+def set_gui_theme(theme, icon_color=None):
+    """Select the inline GUI palette and return its normalized scheme.
+
+    ``icon_color`` replaces the scheme's icon stroke. A Windows contrast theme
+    passes its button text colour so the line icons follow the system.
+    """
     normalized = str(theme or "dark").strip().lower()
     normalized = normalized if normalized in _THEME_ACCESSIBILITY_COLORS else "dark"
     GUI_ACCESSIBILITY_COLORS.clear()
     GUI_ACCESSIBILITY_COLORS.update(_THEME_ACCESSIBILITY_COLORS[normalized])
-    global _ICON_THEME
+    global _ICON_THEME, _ICON_STROKE_OVERRIDE
     _ICON_THEME = normalized
+    _ICON_STROKE_OVERRIDE = str(icon_color) if icon_color else None
     return normalized
 
 
@@ -634,7 +640,7 @@ def make_line_icon(name, size=18, dpr=None):
     if size != 18:
         painter.scale(size / 18, size / 18)
     painter.setPen(QPen(
-        QColor(_ICON_STROKE_COLORS[_ICON_THEME]),
+        QColor(_ICON_STROKE_OVERRIDE or _ICON_STROKE_COLORS[_ICON_THEME]),
         1.5,
         Qt.PenStyle.SolidLine,
         Qt.PenCapStyle.RoundCap,
