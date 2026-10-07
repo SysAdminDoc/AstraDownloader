@@ -100,10 +100,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Complexity: M
 
 
-- [ ] P3 | AD-66 | `read_settings_bundle` and `ConfigStore` disagree about a boolean schema version
-  Why: `read_settings_bundle` accepts `"schemaVersion": true` because `int(True) == 1`, while `ConfigStore._load_and_sanitize` rejects a bool for the same field on purpose. One of the two is wrong about what a version marker is.
-  Where: `astra_downloader/config.py`, `read_settings_bundle` and `_load_and_sanitize`.
-
 - [ ] P3 | AD-67 | Two interactive surfaces have no focus or selection styling
   Why: `QScrollArea` is keyboard-scrollable with `border: none` and no `:focus` rule, so a keyboard user scrolling a long list has no indication of where they are. `QComboBox QAbstractItemView` sets `selection-background-color` but the popup has no `::item` rule, so the keyboard highlight inside an open combo falls back to the platform default over a custom background. Neither is measured by the focus-ring test added this pass, because neither declares a ring to measure.
   Where: `astra_downloader/astra_downloader.py`, the `QScrollArea` and `QComboBox QAbstractItemView` rules.

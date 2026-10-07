@@ -3860,6 +3860,17 @@ class SettingsBundleTests(unittest.TestCase):
         self.assertIsNone(bundle)
         self.assertIn("newer version", error)
 
+    def test_a_boolean_version_is_not_a_version(self):
+        # int(True) == 1. ConfigStore refuses a bool schemaVersion, so the
+        # bundle reader must too, rather than read `true` as format 1.
+        bundle, error = ad.read_settings_bundle({
+            "schema": ad.SETTINGS_BUNDLE_SCHEMA,
+            "schemaVersion": True,
+            "settings": {},
+        })
+        self.assertIsNone(bundle)
+        self.assertIn("does not declare a version", error)
+
     def test_a_bundle_with_no_settings_is_refused(self):
         bundle, error = ad.read_settings_bundle({
             "schema": ad.SETTINGS_BUNDLE_SCHEMA,

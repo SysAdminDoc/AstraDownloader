@@ -1790,8 +1790,13 @@ def read_settings_bundle(payload):
         return None, "That bundle contains a non-finite number."
     if payload.get("schema") != SETTINGS_BUNDLE_SCHEMA:
         return None, "That file is not an Astra Downloader settings bundle."
+    raw_version = payload.get("schemaVersion")
+    # int(True) is 1, so a bool would pass as a version. ConfigStore refuses
+    # one for the same field; a version marker is a number, not a flag.
+    if isinstance(raw_version, bool):
+        return None, "That bundle does not declare a version."
     try:
-        version = int(payload.get("schemaVersion"))
+        version = int(raw_version)
     except (TypeError, ValueError, OverflowError):
         return None, "That bundle does not declare a version."
     if version > SETTINGS_BUNDLE_VERSION:

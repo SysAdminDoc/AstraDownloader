@@ -25,6 +25,7 @@ repository's git log.
 - When a site asked the queue to slow down, two downloads finishing at the same moment could each start a wake-up timer, and the extra one kept running after the app shut down. The queue now keeps exactly one and closing the app stops it.
 - Closing the app now stops the background queue saver as soon as the last queue snapshot is on disk, instead of leaving it idling for a couple of seconds.
 - The FFmpeg check on the Download page no longer says the transcription filter is missing on current FFmpeg builds. Newer FFmpeg prints its filter list in a slightly different shape, and the check misread every filter as absent, so working installs showed a repair warning they did not need. The local API's readiness summary now also says plainly that it's advice and never stops a download.
+- Importing a settings file whose format version is `true` instead of a number is now refused, the same way the app already treats its own config file.
 
 ## [2.16.0] (2026-10-06)
 
