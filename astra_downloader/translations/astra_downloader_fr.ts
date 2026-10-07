@@ -583,12 +583,12 @@
       <translation>More options</translation>
     </message>
     <message>
-      <source>Hide password, clip range, and custom file name controls.</source>
-      <translation>Hide password, clip range, and custom file name controls.</translation>
+      <source>Hide password, clip range, file name and start time controls.</source>
+      <translation>Hide password, clip range, file name and start time controls.</translation>
     </message>
     <message>
-      <source>Show password, clip range, and custom file name controls.</source>
-      <translation>Show password, clip range, and custom file name controls.</translation>
+      <source>Show password, clip range, file name and start time controls.</source>
+      <translation>Show password, clip range, file name and start time controls.</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -1327,6 +1327,10 @@
       <translation>ETA {eta}</translation>
     </message>
     <message>
+      <source>Starts {time}</source>
+      <translation>Starts {time}</translation>
+    </message>
+    <message>
       <source>Preparing download</source>
       <translation>Preparing download</translation>
     </message>
@@ -1779,6 +1783,10 @@
       <translation>A saved file name applies to a single link only.</translation>
     </message>
     <message>
+      <source>That start time has already passed. Pick a later one.</source>
+      <translation>That start time has already passed. Pick a later one.</translation>
+    </message>
+    <message>
       <source>for a yt-dlp clip</source>
       <translation>for a yt-dlp clip</translation>
     </message>
@@ -1789,6 +1797,10 @@
     <message>
       <source>Saving to {path}.</source>
       <translation>Saving to {path}.</translation>
+    </message>
+    <message>
+      <source>It starts at {time}.</source>
+      <translation>It starts at {time}.</translation>
     </message>
     <message>
       <source>No subscriptions match these filters</source>
@@ -2449,6 +2461,22 @@
     <message>
       <source>Output file name status</source>
       <translation>Output file name status</translation>
+    </message>
+    <message>
+      <source>Start at</source>
+      <translation>Start at</translation>
+    </message>
+    <message>
+      <source>Start this download later</source>
+      <translation>Start this download later</translation>
+    </message>
+    <message>
+      <source>Scheduled start time</source>
+      <translation>Scheduled start time</translation>
+    </message>
+    <message>
+      <source>The download waits in the queue until then. Astra Downloader has to be running at that time, and it can't wake a sleeping or switched-off PC.</source>
+      <translation>The download waits in the queue until then. Astra Downloader has to be running at that time, and it can't wake a sleeping or switched-off PC.</translation>
     </message>
     <message>
       <source>Site profile summary</source>

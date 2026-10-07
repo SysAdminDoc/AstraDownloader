@@ -113,6 +113,7 @@ __all__ = (
     "summarize_ytdlp_formats", "summarize_ytdlp_playlist",
     "ALLOWED_COOKIE_DOMAINS", "build_subprocess_env",
     "DownloadQueueStore", "DOWNLOAD_QUEUE_SCHEMA_VERSION",
+    "parse_not_before_utc", "format_not_before_utc",
     "PLAYLIST_PREVIEW_LIMIT",
     "SiteLoginStore", "site_login_key", "registrable_domain",
     "select_site_profile",
@@ -175,7 +176,61 @@ TRANSCRIPTION_BELOW_NORMAL_PRIORITY_CLASS = getattr(
     'BELOW_NORMAL_PRIORITY_CLASS',
     0x00004000 if os.name == 'nt' else 0,
 )
-DOWNLOAD_QUEUE_SCHEMA_VERSION = 1
+# 2 adds an optional notBeforeUtc per record. A schema-1 file loads with no
+# schedules. An older build refuses a schema-2 file rather than ignoring the
+# field and starting scheduled work at once.
+DOWNLOAD_QUEUE_SCHEMA_VERSION = 2
+# One-time scheduling. The horizon keeps a typo from parking an item for
+# decades, and the recheck cap makes the wake timer re-read the wall clock at
+# least this often, so a clock change or a sleeping PC is noticed within a
+# minute of waking rather than after a monotonic interval that slept with it.
+SCHEDULE_HORIZON_SECONDS = 366 * 24 * 60 * 60
+SCHEDULE_RECHECK_SECONDS = 60.0
+_NOT_BEFORE_FORMAT_ERROR = (
+    "notBeforeUtc must be an ISO 8601 time with a time zone, such as "
+    "2026-10-07T03:00:00Z."
+)
+
+
+def parse_not_before_utc(value, *, now=None, allow_past=False):
+    """Return ``(epoch seconds or None, error)`` for a one-time start time.
+
+    Strict on purpose: a time without a zone is refused, because "03:00" on a
+    machine and "03:00" in the caller's head are not the same instant. A time
+    already reached means "start normally" and returns None, unless
+    ``allow_past`` keeps it (a restored record that came due while Astra was
+    closed is still a scheduled item, now overdue).
+    """
+    if value is None or value == "":
+        return None, None
+    if isinstance(value, bool) or not isinstance(value, str) or len(value) > 40:
+        return None, _NOT_BEFORE_FORMAT_ERROR
+    text = value.strip()
+    if text[-1:] in ("Z", "z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None, _NOT_BEFORE_FORMAT_ERROR
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None, _NOT_BEFORE_FORMAT_ERROR
+    try:
+        stamp = parsed.timestamp()
+    except (OverflowError, OSError, ValueError):
+        return None, _NOT_BEFORE_FORMAT_ERROR
+    now = time.time() if now is None else now
+    if stamp > now + SCHEDULE_HORIZON_SECONDS:
+        return None, "A scheduled start can be at most a year ahead."
+    if stamp <= now and not allow_past:
+        return None, None
+    return stamp, None
+
+
+def format_not_before_utc(stamp):
+    """The wire and queue-file form of a scheduled start."""
+    return datetime.fromtimestamp(float(stamp), timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 DOWNLOAD_INTERMEDIATE_DIRNAME = 'download-temp'
 PLAYLIST_PREVIEW_LIMIT = 200
 DOWNLOAD_RUNNING_STATES = {
@@ -3567,8 +3622,14 @@ class Download:
                  requires_auth=False, created_at=None, queue_order=0, section=None,
                  playlist_items=None, subscription_id=None, archive_key=None,
                  subtitles_only=False, clock=None, profile_name=None,
-                 output_name=None, output_template=None):
+                 output_name=None, output_template=None, not_before_utc=None):
         self._clock = clock or time.time
+        # Wall-clock epoch seconds before which the scheduler leaves this
+        # pending item alone, or None. Cleared when a run starts, so a record
+        # that still carries one on disk has never run.
+        self.not_before_utc = (
+            float(not_before_utc) if not_before_utc is not None else None
+        )
         self.id = dl_id
         self.url = url
         self.audio_only = audio_only
@@ -3702,7 +3763,16 @@ class Download:
             payload["outputName"] = self.output_name
         if self.output_template:
             payload["outputTemplate"] = self.output_template
+        if self.not_before_utc is not None:
+            payload["notBeforeUtc"] = format_not_before_utc(self.not_before_utc)
+            payload["scheduled"] = self.is_scheduled()
         return payload
+
+    def is_scheduled(self, now=None):
+        """True while this item is waiting for its start time."""
+        if self.status != "pending" or self.not_before_utc is None:
+            return False
+        return self.not_before_utc > (self._clock() if now is None else now)
 
 
 # Fields a rejected queue mutation has to put back.
@@ -3734,7 +3804,7 @@ AUTH_RECOVERY_ROLLBACK_FIELDS = (
     'output_template',
     'subscription_id', 'archive_key', 'requires_auth', 'status',
     'filename', 'error', 'error_code', 'error_advice', 'error_action',
-    '_credentials', '_video_password', 'profile_name',
+    '_credentials', '_video_password', 'profile_name', 'not_before_utc',
 )
 
 
@@ -3768,7 +3838,8 @@ class DownloadQueueStore:
     """Schema-checked durable queue storage with injected JSON collaborators."""
 
     def __init__(self, *, path, reader, writer, logger, clean_text,
-                 clean_path_text, schema_version=1, max_records=MAX_QUEUED_TOTAL):
+                 clean_path_text, schema_version=DOWNLOAD_QUEUE_SCHEMA_VERSION,
+                 max_records=MAX_QUEUED_TOTAL):
         self.path = Path(path)
         self._reader = reader
         self._writer = writer
@@ -3834,6 +3905,8 @@ class DownloadQueueStore:
             **({'subtitleRetry': True} if getattr(download, 'subtitle_retry', False) else {}),
             **({'profileName': getattr(download, 'profile_name', None)}
                if getattr(download, 'profile_name', None) is not None else {}),
+            **({'notBeforeUtc': format_not_before_utc(download.not_before_utc)}
+               if getattr(download, 'not_before_utc', None) is not None else {}),
             'createdAt': float(download.start_time),
             'order': int(download.queue_order),
         } for download in unfinished]
@@ -4235,6 +4308,7 @@ class DownloadManagerCore:
             return
 
         restored = []
+        scheduled_count = 0
         seen_ids = set()
         allowed_roots = self._dependencies['allowed_output_roots'](self.config)
         for index, item in enumerate(records[:MAX_QUEUED_TOTAL]):
@@ -4338,6 +4412,20 @@ class DownloadManagerCore:
             dl.subtitle_retry = self._dependencies['coerce_bool'](
                 item.get('subtitleRetry'), False
             )
+            not_before, _not_before_error = parse_not_before_utc(
+                item.get('notBeforeUtc'), allow_past=True
+            )
+            if not_before is not None and not requires_auth:
+                # The schedule is cleared when a run starts, so this item
+                # never ran: no partial file, nothing to duplicate. It stays
+                # scheduled, and one that came due while Astra was closed
+                # starts as soon as intake allows.
+                dl.not_before_utc = not_before
+                dl.status = 'pending'
+                dl.error = ''
+                restored.append(dl)
+                scheduled_count += 1
+                continue
             dl.status = 'needs-auth' if requires_auth else 'paused'
             dl.error = (
                 'Fresh sign-in is required before this recovered download can run.'
@@ -4355,7 +4443,11 @@ class DownloadManagerCore:
         with self._lock:
             for dl in restored:
                 self.downloads[dl.id] = dl
-            self.intake_paused = True
+            # Interrupted work pauses intake so nothing restarts unasked.
+            # Scheduled-only restores keep the pause the user last chose.
+            self.intake_paused = (
+                True if len(restored) > scheduled_count else persisted_pause
+            )
             # Normalize any legacy/running statuses on disk immediately. The
             # persisted form contains metadata only; cookie values and jar
             # paths are deliberately absent from _serialize_queue_locked().
@@ -4364,6 +4456,10 @@ class DownloadManagerCore:
             # runs once at construction, before any window exists to stall,
             # and normalising the file on disk is the whole point of it.
             self._persist_locked()
+        if scheduled_count:
+            # Not _schedule() from the constructor: the wake timer runs it on
+            # its own thread once construction has finished.
+            self._arm_host_backoff_wakeup(1.0)
 
     def _serialize_queue_locked(self):
         if self._queue_store is None:
@@ -5041,8 +5137,17 @@ class DownloadManagerCore:
                         running_per_profile[key] = running_per_profile.get(key, 0) + 1
             # Do not slice before checking the host pause: a throttled item
             # at the head of the queue must not hide work for another site.
+            now = time.time()
             for dl in self._ordered_pending_locked():
                 if dl.status != 'pending':
+                    continue
+                not_before = getattr(dl, "not_before_utc", None)
+                if not_before is not None and not_before > now:
+                    # Skipped, not a barrier: later runnable work still goes.
+                    # The one wake timer is re-armed for the earliest start,
+                    # capped so the wall clock is re-read regularly.
+                    recheck = min(not_before - now, SCHEDULE_RECHECK_SECONDS)
+                    wake_delay = recheck if wake_delay is None else min(wake_delay, recheck)
                     continue
                 remaining = self._host_pause_remaining_locked(dl.url)
                 if remaining > 0:
@@ -5055,6 +5160,7 @@ class DownloadManagerCore:
                             continue
                         running_per_profile[key] = running_per_profile.get(key, 0) + 1
                 dl.status = 'queued'
+                dl.not_before_utc = None
                 self._running_ids.add(dl.id)
                 to_start.append(dl)
                 if len(to_start) >= available:
@@ -5090,10 +5196,13 @@ class DownloadManagerCore:
                        archive_key=None, subtitles_only=None, video_password=None,
                        profile_name=None, output_name=None,
                        output_template=None, format_summary=None,
-                       probe_size=False):
+                       probe_size=False, not_before_utc=None):
         url, err = self._dependencies['normalize_url'](url)
         if err:
             return None, err
+        not_before, not_before_error = parse_not_before_utc(not_before_utc)
+        if not_before_error:
+            return None, not_before_error
         # Every entry point lands here — HTTP routes, the GUI quick-download
         # box, the clipboard grabber, and the subscription scheduler — so the
         # private-network denylist is enforced once, at the queue boundary,
@@ -5314,6 +5423,7 @@ class DownloadManagerCore:
                 dl.profile_name = profile_name
                 dl.output_name = output_name
                 dl.output_template = str(output_template or "")
+                dl.not_before_utc = not_before
                 dl.requires_auth = True
                 dl._cookies = list(cookies)
                 dl._credentials = None
@@ -5352,6 +5462,7 @@ class DownloadManagerCore:
                     profile_name=profile_name,
                     output_name=output_name,
                     output_template=output_template,
+                    not_before_utc=not_before,
                 )
                 dl._cookies = list(cookies) if cookies else None
                 dl._video_password = video_password
@@ -7851,6 +7962,14 @@ class DownloadManagerCore:
         with self._lock:
             dl = self.downloads.get(dl_id)
             return dl.status if dl else default
+
+    def scheduled_start_of(self, dl_id):
+        """The ISO start time a scheduled download is waiting for, or ""."""
+        with self._lock:
+            dl = self.downloads.get(dl_id)
+            if dl is None or not dl.is_scheduled():
+                return ""
+            return format_not_before_utc(dl.not_before_utc)
 
     def delivered_height_of(self, dl_id):
         """Return the height yt-dlp wrote for a download, or 0."""

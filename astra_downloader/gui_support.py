@@ -780,6 +780,7 @@ def filter_site_login_entries(entries, query="", status="all"):
 def human_status(status):
     return {
         "queued": "Queued", "pending": "Pending", "paused": "Paused",
+        "scheduled": "Scheduled",
         "needs-auth": "Needs sign-in", "downloading": "Downloading",
         "fetching": "Fetching metadata",
         "merging": "Merging", "extracting": "Extracting", "trimming": "Trimming",

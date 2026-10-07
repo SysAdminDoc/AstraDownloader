@@ -9618,5 +9618,71 @@ class DownloadWebhookTests(unittest.TestCase):
         self.assertEqual(posted[0][2]["download"]["subscriptionId"], "sub_abc")
 
 
+class ScheduledStartTests(unittest.TestCase):
+    """AD-84: a durable notBeforeUtc that neither blocks the queue nor outlives pause."""
+
+    @staticmethod
+    def _iso(offset_seconds):
+        return ad.format_not_before_utc(time.time() + offset_seconds)
+
+    def test_a_future_item_waits_without_blocking_later_work(self):
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        launched = []
+        with mock.patch.object(manager, "_launch_workers", side_effect=launched.extend), \
+                mock.patch.object(manager, "_arm_host_backoff_wakeup") as arm:
+            later_id, error = manager.start_download(
+                "https://www.example.com/later", not_before_utc=self._iso(3600))
+            self.assertIsNone(error)
+            now_id, _error = manager.start_download("https://www.example.com/now")
+        later = manager.downloads[later_id]
+        self.assertEqual([dl.id for dl in launched], [now_id])
+        self.assertEqual(later.status, "pending")
+        self.assertTrue(later.to_dict()["scheduled"])
+        self.assertEqual(ad.MainWindow._download_display_status(later), "scheduled")
+        self.assertEqual(ad.human_status("scheduled"), "Scheduled")
+        # One wake, capped so the wall clock is re-read at least every minute.
+        self.assertLessEqual(arm.call_args.args[0], ad.SCHEDULE_RECHECK_SECONDS)
+
+        # Pause stays authoritative over a start time that has come due.
+        later.not_before_utc = time.time() - 1
+        manager.pause_intake()
+        with mock.patch.object(manager, "_launch_workers", side_effect=launched.extend):
+            manager._schedule()
+            self.assertEqual(len(launched), 1)
+            manager.resume_intake()
+        self.assertEqual([dl.id for dl in launched], [now_id, later_id])
+        self.assertIsNone(later.not_before_utc, "a started run carries no schedule")
+
+    def test_a_schedule_survives_a_restart_and_runs_once_overdue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = FakeConfig({"DownloadPath": tmp})
+            queue_path = Path(tmp) / "download-queue.json"
+            first = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+            with mock.patch.object(first, "_launch_workers"), \
+                    mock.patch.object(first, "_arm_host_backoff_wakeup"):
+                dl_id, error = first.start_download(
+                    "https://www.example.com/later", not_before_utc=self._iso(3600))
+            self.assertIsNone(error)
+            first.flush_persistence()
+            on_disk = json.loads(queue_path.read_text(encoding="utf-8"))
+            self.assertEqual(on_disk["schemaVersion"], ad.DOWNLOAD_QUEUE_SCHEMA_VERSION)
+            self.assertIn("notBeforeUtc", on_disk["downloads"][0])
+
+            # Came due while Astra was closed.
+            on_disk["downloads"][0]["notBeforeUtc"] = self._iso(-120)
+            queue_path.write_text(json.dumps(on_disk), encoding="utf-8")
+            launched = []
+            with mock.patch.object(ad.DownloadManager, "_launch_workers",
+                                   lambda _self, items: launched.extend(items)), \
+                    mock.patch.object(ad.DownloadManager, "_arm_host_backoff_wakeup") as arm:
+                second = ad.DownloadManager(config, FakeHistory(), queue_path=queue_path)
+                restored = second.downloads[dl_id]
+                self.assertEqual(restored.status, "pending", "scheduled, not recovered-paused")
+                self.assertFalse(second.intake_paused)
+                arm.assert_called_once()
+                second._schedule()
+            self.assertEqual([dl.id for dl in launched], [dl_id])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3025,9 +3025,9 @@ class MainWindowCore(
         self.btn_quick_options.setText(label)
         self.btn_quick_options.setAccessibleName(label)
         description = (
-            tr("Hide password, clip range, and custom file name controls.")
+            tr("Hide password, clip range, file name and start time controls.")
             if expanded
-            else tr("Show password, clip range, and custom file name controls.")
+            else tr("Show password, clip range, file name and start time controls.")
         )
         self.btn_quick_options.setToolTip(description)
         self.btn_quick_options.setAccessibleDescription(description)
@@ -3242,6 +3242,18 @@ class MainWindowCore(
                 self._set_quick_download_status(error, "error")
                 return
 
+        schedule_box = getattr(self, "quick_download_schedule", None)
+        not_before_utc = None
+        if schedule_box is not None and schedule_box.isChecked():
+            chosen = self.quick_download_schedule_time.dateTime()
+            if chosen.toSecsSinceEpoch() <= int(time.time()):
+                self._set_quick_download_status(
+                    tr("That start time has already passed. Pick a later one."),
+                    "error",
+                )
+                return
+            not_before_utc = chosen.toUTC().toString(Qt.DateFormat.ISODate)
+
         # Hand the queue boundary the asynchronous probe this page already
         # owns. The manager applies the actual storage policy for every caller.
         kind = self.quick_download_type.currentData()
@@ -3279,6 +3291,7 @@ class MainWindowCore(
                 profile_name=profile_name,
                 output_name=output_name or None,
                 format_summary=format_summary,
+                not_before_utc=not_before_utc,
             )
             if error:
                 failures.append((url, error))
@@ -3306,6 +3319,14 @@ class MainWindowCore(
                 message += " " + tr_format(
                     "Saving to {path}.", path=self._quick_download_dir
                 )
+            if not_before_utc:
+                message += " " + tr_format(
+                    "It starts at {time}.",
+                    time=self.quick_download_schedule_time.dateTime().toString(
+                        "yyyy-MM-dd HH:mm"
+                    ),
+                )
+                schedule_box.setChecked(False)
             if failures:
                 message += " " + describe_rejected_links(failures)
             self._set_quick_download_status(
@@ -5018,6 +5039,14 @@ class MainWindowCore(
             phase = "other"
         return recent, phase, action, bool(dl.error and dl.error_advice)
 
+    @staticmethod
+    def _download_display_status(dl):
+        """The status a row shows: a waiting scheduled item reads Scheduled."""
+        is_scheduled = getattr(dl, "is_scheduled", None)
+        if callable(is_scheduled) and is_scheduled():
+            return "scheduled"
+        return dl.status
+
     def _download_meta_text(self, dl):
         meta_parts = []
         if dl.status in ("downloading", "merging", "extracting"):
@@ -5042,6 +5071,11 @@ class MainWindowCore(
             meta_parts.append(dl.format.upper())
         if dl.quality:
             meta_parts.append(str(dl.quality))
+        if MainWindowCore._download_display_status(dl) == "scheduled":
+            meta_parts.append(tr_format(
+                "Starts {time}",
+                time=datetime.fromtimestamp(dl.not_before_utc).strftime("%Y-%m-%d %H:%M"),
+            ))
         if dl.status in self._value('DOWNLOAD_PENDING_STATES'):
             seconds = self._download_host_backoff_seconds(dl)
             if seconds:
@@ -5072,7 +5106,7 @@ class MainWindowCore(
         )
         state_label = refs["state"]
         active_step = getattr(dl, "step", "")
-        status_key = active_step if dl.status == "downloading" and active_step in ("fetching", "embedding", "transcribing") else dl.status
+        status_key = active_step if dl.status == "downloading" and active_step in ("fetching", "embedding", "transcribing") else self._download_display_status(dl)
         translated_status = tr(human_status(status_key))
         state_label.setText(
             tr_format("●  {status}", status=translated_status)
@@ -5129,7 +5163,10 @@ class MainWindowCore(
         top = QHBoxLayout()
         title = make_label(dl.title if dl.title and dl.title != "Unknown" else "Preparing download", "fieldLabel", word_wrap=True)
         top.addWidget(title, 1)
-        state_label = make_state_label(human_status(dl.status), download_status_tone(dl.status))
+        state_label = make_state_label(
+            human_status(self._download_display_status(dl)),
+            download_status_tone(dl.status),
+        )
         top.addWidget(state_label)
         # Repeated rows: every card carries the same words, so each control
         # is named for the download it acts on.

@@ -21,6 +21,7 @@ repository's git log.
 - History now tells you when a downloaded file is missing, or when its drive can't be reached right now, and turns off Show for that row. The entry itself stays, and Show comes back once the file does.
 - You can now point Astra Downloader at a webhook in Settings. When a download finishes or fails, or a subscription captures a video, it posts a short JSON message with the same details History shows, so an overnight archive run reports somewhere you'll actually see. It's off until you enter an address. Local and private network addresses are refused, and the address never goes into settings exports or the log. A slow or broken endpoint is tried three times in the background and never holds up a download.
 - Paste a single link and a summary card now shows its title, length, top resolution and a size estimate for the type and quality you've picked. If the lookup fails, the card says so, names the likely fix (a sign-in, for example, or Download health) and leaves Add to queue working.
+- A download can now wait for a start time. Open More options, tick Start at and pick a time, and the item sits in the queue marked Scheduled while everything after it keeps downloading. The schedule survives a restart, and one that came due while Astra was closed starts as soon as the queue is running. Pausing the queue or cancelling the item still wins. Astra has to be running at that time, since it can't wake a sleeping PC. The local API accepts the same thing as notBeforeUtc, an ISO 8601 time that must include a time zone.
 
 ### Changed
 

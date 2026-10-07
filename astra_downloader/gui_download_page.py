@@ -4,10 +4,10 @@ The page owns its construction; cross-page actions remain on the
 injected MainWindowCore.
 """
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QDateTime, Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
-    QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDateTimeEdit, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QProgressBar, QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )
 
 try:
@@ -267,10 +267,10 @@ class DownloadPageMixin:
         self.btn_quick_options = self._make_tool_button("More options", "ghost")
         self.btn_quick_options.setCheckable(True)
         self.btn_quick_options.setToolTip(
-            tr("Show password, clip range, and custom file name controls.")
+            tr("Show password, clip range, file name and start time controls.")
         )
         self.btn_quick_options.setAccessibleDescription(
-            tr("Show password, clip range, and custom file name controls.")
+            tr("Show password, clip range, file name and start time controls.")
         )
         self.btn_quick_options.toggled.connect(
             self._set_quick_options_expanded
@@ -341,6 +341,33 @@ class DownloadPageMixin:
         self.quick_download_name_hint.setAccessibleName(tr("Output file name status"))
         self.quick_download_name_hint.hide()
         advanced_layout.addWidget(self.quick_download_name_hint)
+
+        # One-time scheduling. Local time in the picker, UTC on the queue.
+        schedule_row_widget = QWidget(self.quick_download_options_container)
+        schedule_row = QHBoxLayout(schedule_row_widget)
+        schedule_row.setContentsMargins(0, 0, 0, 0)
+        schedule_row.setSpacing(8)
+        self.quick_download_schedule = QCheckBox(tr("Start at"))
+        self.quick_download_schedule.setAccessibleName(tr("Start this download later"))
+        schedule_row.addWidget(self.quick_download_schedule)
+        self.quick_download_schedule_time = QDateTimeEdit(
+            QDateTime.currentDateTime().addSecs(60 * 60)
+        )
+        self.quick_download_schedule_time.setCalendarPopup(True)
+        self.quick_download_schedule_time.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.quick_download_schedule_time.setAccessibleName(tr("Scheduled start time"))
+        self.quick_download_schedule_time.setEnabled(False)
+        self.quick_download_schedule.toggled.connect(
+            self.quick_download_schedule_time.setEnabled
+        )
+        schedule_row.addWidget(self.quick_download_schedule_time)
+        schedule_row.addStretch(1)
+        advanced_layout.addWidget(schedule_row_widget)
+        advanced_layout.addWidget(make_label(
+            "The download waits in the queue until then. Astra Downloader has to "
+            "be running at that time, and it can't wake a sleeping or switched-off PC.",
+            "fieldHint", word_wrap=True,
+        ))
 
         quick_layout.addWidget(self.quick_download_options_container)
         quick_layout.addWidget(self.quick_download_advanced)

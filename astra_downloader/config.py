@@ -142,7 +142,7 @@ HISTORY_RETENTION_MAX = 100000
 DOWNLOAD_REQUEST_ALLOWED_FIELDS = frozenset({
     "url", "audioOnly", "format", "quality", "outputDir", "title",
     "referer", "cookies", "section", "playlistItems", "videoPassword",
-    "outputName",
+    "outputName", "notBeforeUtc",
 })
 _MAX_VIDEO_PASSWORD_BYTES = 4096
 DOWNLOAD_REQUEST_FORBIDDEN_YTDLP_ARG_FIELDS = frozenset({
@@ -1907,6 +1907,17 @@ def validate_download_request_body(body):
         return None, "Download format must be a string.", "invalid-download-format"
     if "quality" in body and not isinstance(body["quality"], str):
         return None, "Download quality must be a string.", "invalid-download-quality"
+    # The time itself is parsed at the queue boundary, which every entry
+    # point shares. Here only the shape is refused, with its own code.
+    if "notBeforeUtc" in body and not (
+        body["notBeforeUtc"] is None or isinstance(body["notBeforeUtc"], str)
+    ):
+        return (
+            None,
+            "notBeforeUtc must be an ISO 8601 time with a time zone, such as "
+            "2026-10-07T03:00:00Z.",
+            "invalid-not-before",
+        )
     if "videoPassword" in body:
         video_password = body["videoPassword"]
         if not isinstance(video_password, str):

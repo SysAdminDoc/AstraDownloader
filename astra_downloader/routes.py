@@ -732,6 +732,7 @@ def _register_download_routes(api, context, dependencies):
             playlist_items=body.get('playlistItems'),
             video_password=body.get('videoPassword'),
             probe_size=True,
+            not_before_utc=body.get('notBeforeUtc'),
         )
         if err:
             error_code = getattr(err, 'error_code', '')
@@ -763,6 +764,8 @@ def _register_download_routes(api, context, dependencies):
                 }, 503)
             if 'could not save' in err.lower():
                 return cors_response({"error": err, "code": "queue-persistence-failed"}, 503)
+            if 'notbeforeutc' in err.lower() or 'scheduled start' in err.lower():
+                return cors_response({"error": err, "code": "invalid-not-before"}, 400)
             return cors_response({"error": err}, 400)
         status_value = dl_manager.status_of(dl_id, default='pending')
         payload = {
@@ -770,6 +773,10 @@ def _register_download_routes(api, context, dependencies):
             "status": status_value,
             "capacity": dl_manager.capacity(),
         }
+        scheduled_reader = getattr(dl_manager, 'scheduled_start_of', None)
+        scheduled_for = scheduled_reader(dl_id) if callable(scheduled_reader) else ""
+        if scheduled_for:
+            payload["notBeforeUtc"] = scheduled_for
         if cookies_truncated:
             # Say so rather than letting the caller discover it as an
             # authentication failure with nothing pointing at the cause.

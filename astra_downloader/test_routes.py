@@ -1320,6 +1320,31 @@ class ApiSecurityTests(unittest.TestCase):
                 self.assertIn("POST", resp.headers["Access-Control-Allow-Methods"])
         self.assertEqual(manager.downloads, {})
 
+    def test_download_endpoint_takes_a_strict_not_before_utc(self):
+        token = "q" * 32
+        config = FakeConfig({"ServerToken": token})
+        manager = ad.DownloadManager(config, FakeHistory())
+        client = ad.create_api(config, manager, FakeHistory()).test_client()
+        headers = {"X-Auth-Token": token}
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        naive = client.post("/download", json={
+            "url": url, "notBeforeUtc": "2099-01-01T03:00:00",
+        }, headers=headers)
+        self.assertEqual(naive.status_code, 400)
+        self.assertEqual(naive.get_json()["code"], "invalid-not-before")
+        self.assertEqual(manager.downloads, {})
+
+        start = ad.format_not_before_utc(time.time() + 7200)
+        with mock.patch.object(manager, "list_formats", return_value=(None, "skipped")), \
+                mock.patch.object(manager, "_launch_workers"), \
+                mock.patch.object(manager, "_arm_host_backoff_wakeup"):
+            accepted = client.post("/download", json={
+                "url": url, "notBeforeUtc": start,
+            }, headers=headers)
+        self.assertEqual(accepted.status_code, 200, accepted.get_json())
+        self.assertEqual(accepted.get_json()["notBeforeUtc"], start)
+        self.assertEqual(accepted.get_json()["status"], "pending")
+
     def test_download_endpoint_rejects_ytdlp_args_before_queueing(self):
         token = "h" * 32
         config = FakeConfig({"ServerToken": token})

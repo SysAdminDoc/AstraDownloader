@@ -583,12 +583,12 @@
       <translation>Weitere Optionen</translation>
     </message>
     <message>
-      <source>Hide password, clip range, and custom file name controls.</source>
-      <translation>Passwort, Ausschnitt und eigenen Dateinamen ausblenden.</translation>
+      <source>Hide password, clip range, file name and start time controls.</source>
+      <translation>Passwort, Ausschnitt, Dateiname und Startzeit ausblenden.</translation>
     </message>
     <message>
-      <source>Show password, clip range, and custom file name controls.</source>
-      <translation>Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.</translation>
+      <source>Show password, clip range, file name and start time controls.</source>
+      <translation>Passwort, Ausschnitt, Dateiname und Startzeit anzeigen.</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -1327,6 +1327,10 @@
       <translation>Restzeit {eta}</translation>
     </message>
     <message>
+      <source>Starts {time}</source>
+      <translation>Startet {time}</translation>
+    </message>
+    <message>
       <source>Preparing download</source>
       <translation>Download wird vorbereitet</translation>
     </message>
@@ -1779,6 +1783,10 @@
       <translation>Ein gespeicherter Dateiname gilt nur für einen einzelnen Link.</translation>
     </message>
     <message>
+      <source>That start time has already passed. Pick a later one.</source>
+      <translation>Diese Startzeit ist bereits vorbei. Wählen Sie eine spätere.</translation>
+    </message>
+    <message>
       <source>for a yt-dlp clip</source>
       <translation>für einen yt-dlp-Clip</translation>
     </message>
@@ -1789,6 +1797,10 @@
     <message>
       <source>Saving to {path}.</source>
       <translation>Speichern unter {path}.</translation>
+    </message>
+    <message>
+      <source>It starts at {time}.</source>
+      <translation>Er startet um {time}.</translation>
     </message>
     <message>
       <source>No subscriptions match these filters</source>
@@ -2449,6 +2461,22 @@
     <message>
       <source>Output file name status</source>
       <translation>Status des Ausgabedateinamens</translation>
+    </message>
+    <message>
+      <source>Start at</source>
+      <translation>Starten um</translation>
+    </message>
+    <message>
+      <source>Start this download later</source>
+      <translation>Diesen Download später starten</translation>
+    </message>
+    <message>
+      <source>Scheduled start time</source>
+      <translation>Geplante Startzeit</translation>
+    </message>
+    <message>
+      <source>The download waits in the queue until then. Astra Downloader has to be running at that time, and it can't wake a sleeping or switched-off PC.</source>
+      <translation>Der Download wartet bis dahin in der Warteschlange. Astra Downloader muss zu diesem Zeitpunkt laufen und kann einen PC im Ruhezustand oder einen ausgeschalteten PC nicht aufwecken.</translation>
     </message>
     <message>
       <source>Site profile summary</source>

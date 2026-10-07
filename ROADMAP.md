@@ -48,13 +48,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: recorded so the next pass starts where this one stopped rather than re-covering it. Not audited: the PyInstaller build pipeline beyond running it; the native messaging host registration; the Windows shell integration (jump list, `RegisterApplicationRestart`, Recycle Bin delete) beyond reading it, since driving it needs a real desktop session; the whisper transcription path; the SponsorBlock and NFO writers; and the browser extension, which is a separate repository. The GUI was exercised offscreen through `npm run smoke:gui` and the Qt test suite, never driven interactively, so nothing here rests on watching a real window.
   Where: `astra_downloader/build.py`, the native-host block in `astra_downloader/astra_downloader.py`, the taskbar and jump-list block in `astra_downloader/gui.py`, the transcription block in `astra_downloader/download.py`.
 
-- [ ] P3 | AD-84 | Add durable one-time queue scheduling
-  Why: IDM, FDM, SnapDownloader, and Downie all expose one-time scheduling, while Astra schedules subscriptions and live retries but cannot defer an ordinary queued job across a restart.
-  Evidence: IDM Scheduler documentation; FDM and SnapDownloader feature pages; Downie release notes; astra_downloader/download.py durable queue and host-backoff timer. AD-64 must land first.
-  Touches: astra_downloader/download.py, astra_downloader/routes.py, astra_downloader/gui.py, astra_downloader/gui_download_page.py, queue schema and migration tests.
-  Acceptance: A queue item can carry notBeforeUtc from the GUI or strict API. Future items display Scheduled and do not block later runnable work. One cancellable wake timer reevaluates wall-clock time, overdue work starts after restart or resume, pause and cancel remain authoritative, and the UI states that Astra does not wake a sleeping PC.
-  Complexity: M
-
 
 - [ ] P3 | AD-126 | Three PowerShell-spawning tests time out on a saturated machine
   Why: test_delayed_install_dir_removal_actually_deletes_the_directory, test_a_shortcut_carries_the_taskbar_identity and test_windows_update_helper_contains_verified_backup_and_rollback_contract each wait 30 seconds on a powershell.exe child. On 2026-10-06, with two other test runs sharing the machine, all three raised subprocess.TimeoutExpired inside `npm run check` (suite time 290 s against a 41 s quiet baseline), then passed when rerun alone. Same family as AD-125 and AD-112: the clock decides the result.

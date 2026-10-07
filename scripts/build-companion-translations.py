@@ -80,6 +80,24 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "Show password, clip range, file name and start time controls.":
+            "Passwort, Ausschnitt, Dateiname und Startzeit anzeigen.",
+        "Hide password, clip range, file name and start time controls.":
+            "Passwort, Ausschnitt, Dateiname und Startzeit ausblenden.",
+        "Start at":
+            "Starten um",
+        "Start this download later":
+            "Diesen Download später starten",
+        "Scheduled start time":
+            "Geplante Startzeit",
+        "The download waits in the queue until then. Astra Downloader has to be running at that time, and it can't wake a sleeping or switched-off PC.":
+            "Der Download wartet bis dahin in der Warteschlange. Astra Downloader muss zu diesem Zeitpunkt laufen und kann einen PC im Ruhezustand oder einen ausgeschalteten PC nicht aufwecken.",
+        "That start time has already passed. Pick a later one.":
+            "Diese Startzeit ist bereits vorbei. Wählen Sie eine spätere.",
+        "It starts at {time}.":
+            "Er startet um {time}.",
+        "Starts {time}":
+            "Startet {time}",
         "Webhook":
             "Webhook",
         "Webhook address":
@@ -216,12 +234,6 @@ CATALOGS = {
             "Weitere Optionen",
         "Fewer options":
             "Weniger Optionen",
-        "Show password, clip range, and custom file name controls.":
-            "Passwort, Ausschnitt und eigenen Dateinamen anzeigen.",
-        "Show password, clip range, and custom file name controls.":
-            "Zeigt Passwort, Ausschnitt und eigenen Dateinamen an.",
-        "Hide password, clip range, and custom file name controls.":
-            "Passwort, Ausschnitt und eigenen Dateinamen ausblenden.",
         "Download health":
             "Download-Bereitschaft",
         "Show checks":
