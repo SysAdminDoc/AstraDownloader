@@ -1794,6 +1794,17 @@ class OutputTemplateFallbackTests(unittest.TestCase):
             with self.subTest(reason):
                 self.assertEqual(n(template), "", template)
 
+    def test_an_escaped_percent_inside_a_token_is_refused(self):
+        # The validator used to read these with %% removed, while the
+        # field bounding splits on %%, so the title came through unbounded.
+        for template in ("%(title|x%%)s.%(ext)s", "%(title|x%%).300s.%(ext)s"):
+            with self.subTest(template):
+                self.assertEqual(ad.normalize_output_template(template), "")
+        self.assertEqual(
+            ad.normalize_output_template("100%% %(title)s.%(ext)s"),
+            "100%% %(title).200B.%(ext)s",
+        )
+
     def test_settings_preview_renders_a_fallback_for_present_and_absent_fields(self):
         def relative(template):
             report = ad.output_template_preview(

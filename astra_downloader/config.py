@@ -1295,6 +1295,28 @@ def bound_output_template_fields(template):
     return "%%".join(_OUTPUT_TOKEN_RE.sub(rewrite, segment) for segment in segments)
 
 
+def _percent_inside_output_token(template):
+    """True when a "%" sits between a token's "%(" and its closing ")".
+
+    Scans the way yt-dlp does: "%%" is an escaped percent, so the "%(" in
+    "%%(title)s" opens nothing.
+    """
+    index = 0
+    while index < len(template):
+        if template.startswith("%%", index):
+            index += 2
+        elif template.startswith("%(", index):
+            close = template.find(")", index + 2)
+            if close < 0:
+                return False  # unclosed; the printf check refuses it
+            if "%" in template[index + 2:close]:
+                return True
+            index = close + 1
+        else:
+            index += 1
+    return False
+
+
 def normalize_output_template(value):
     """Return a safe yt-dlp output template (relative to the download root) or
     "" when empty/invalid. Rejects absolute paths, `..` traversal, unsafe
@@ -1315,6 +1337,12 @@ def normalize_output_template(value):
         return ""
     fields = _OUTPUT_FIELD_RE.findall(norm)
     if not fields or any(f not in _SAFE_OUTPUT_FIELDS for f in fields):
+        return ""
+    # Checked on the raw text, before %% is stripped below: yt-dlp reads
+    # "%(title|x%%)s" as one token, and so would the check after stripping,
+    # but bound_output_template_fields splits on %% and would never see it,
+    # leaving the title unbounded.
+    if _percent_inside_output_token(norm):
         return ""
     # Printf-syntax check: after removing literal %% and every well-formed
     # %(field[|fallback])[pad][.prec]conv token, no stray % may remain. Without
