@@ -788,6 +788,86 @@ def _title_filter_worker(conn):
             return
 
 
+class _JobBasicLimits(ctypes.Structure):
+    _fields_ = [
+        ("PerProcessUserTimeLimit", ctypes.c_longlong),
+        ("PerJobUserTimeLimit", ctypes.c_longlong),
+        ("LimitFlags", ctypes.c_uint32),
+        ("MinimumWorkingSetSize", ctypes.c_size_t),
+        ("MaximumWorkingSetSize", ctypes.c_size_t),
+        ("ActiveProcessLimit", ctypes.c_uint32),
+        ("Affinity", ctypes.c_size_t),
+        ("PriorityClass", ctypes.c_uint32),
+        ("SchedulingClass", ctypes.c_uint32),
+    ]
+
+
+class _JobExtendedLimits(ctypes.Structure):
+    _fields_ = [
+        ("BasicLimitInformation", _JobBasicLimits),
+        ("IoInfo", ctypes.c_ulonglong * 6),
+        ("ProcessMemoryLimit", ctypes.c_size_t),
+        ("JobMemoryLimit", ctypes.c_size_t),
+        ("PeakProcessMemoryUsed", ctypes.c_size_t),
+        ("PeakJobMemoryUsed", ctypes.c_size_t),
+    ]
+
+
+_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+_PROCESS_SET_QUOTA_AND_TERMINATE = 0x0100 | 0x0001
+# Held open, never closed, for the life of this process. When the process
+# ends, however it ends, Windows closes the last handle and kills every
+# member: a worker caught in a runaway re.search can't outlive the app and
+# keep AstraDownloader.exe locked against the self-update's os.replace.
+_title_filter_job = None
+
+
+def _tie_to_this_process(pid):
+    """Put ``pid`` in a kill-on-close Job object owned by this process.
+
+    Returns whether it worked. Windows only; elsewhere the worker is a
+    daemon process and nothing more is done.
+    """
+    global _title_filter_job
+    if os.name != "nt":
+        return False
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+        kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        kernel32.SetInformationJobObject.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32,
+        ]
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        if _title_filter_job is None:
+            job = kernel32.CreateJobObjectW(None, None)
+            if not job:
+                return False
+            limits = _JobExtendedLimits()
+            limits.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if not kernel32.SetInformationJobObject(
+                job, _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                ctypes.byref(limits), ctypes.sizeof(limits),
+            ):
+                kernel32.CloseHandle(job)
+                return False
+            _title_filter_job = job
+        process = kernel32.OpenProcess(_PROCESS_SET_QUOTA_AND_TERMINATE, False, int(pid))
+        if not process:
+            return False
+        try:
+            return bool(kernel32.AssignProcessToJobObject(_title_filter_job, process))
+        finally:
+            kernel32.CloseHandle(process)
+    except (OSError, AttributeError, ValueError, TypeError):
+        # reason: an untied worker still runs; it is only not killed with us
+        return False
+
+
 class _TitleFilterWorker:
     """One reusable worker process for the patterns the NFA can't run.
 
@@ -842,6 +922,7 @@ class _TitleFilterWorker:
             return None
         child.close()
         self._process, self._conn = process, parent
+        _tie_to_this_process(process.pid)
         try:
             if parent.poll(_TITLE_FILTER_WORKER_START_SECONDS) and parent.recv()[0] == "ready":
                 return parent

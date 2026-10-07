@@ -2550,6 +2550,37 @@ class SubscriptionFilterTests(unittest.TestCase):
                 {"title": "word word"}, {"includeTitleRegex": slow}), ("matched", ""))
         self.assertLess(time.perf_counter() - started, 120)
 
+    @unittest.skipUnless(sys.platform == "win32", "Job objects are Windows only")
+    def test_the_worker_dies_with_the_app(self):
+        # Left running, a worker stuck in re.search kept burning a core and,
+        # in the frozen build, kept AstraDownloader.exe locked against the
+        # self-update. A kill-on-close job ends it with this process.
+        import ctypes
+        from ctypes import wintypes
+
+        module = subscriptions_module()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        worker = config_module._TitleFilterWorker()
+        try:
+            self.assertTrue(worker.search(r"(?=a)a", "a", 30.0))
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.IsProcessInJob.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL)]
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+            handle = kernel32.OpenProcess(0x1000, False, worker._process.pid)
+            self.assertTrue(handle)
+            inside = wintypes.BOOL(False)
+            try:
+                self.assertTrue(kernel32.IsProcessInJob(
+                    handle, config_module._title_filter_job, ctypes.byref(inside)))
+            finally:
+                kernel32.CloseHandle(handle)
+            self.assertTrue(inside.value, "the worker is not in the kill-on-close job")
+        finally:
+            worker._stop()
+
     def test_a_backtracking_pattern_cannot_stall_the_scan_thread(self):
         module = subscriptions_module()
         nested = {"includeTitleRegex": r"^(\w+\s?)*$"}
