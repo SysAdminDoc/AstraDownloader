@@ -4829,28 +4829,32 @@ class DownloadManagerCore:
         except (TypeError, ValueError, OverflowError):
             return
         deadline = time.monotonic() + delay
-        previous = None
         with self._lock:
             if self._closing:
                 return
+            # Decide on the tracked timer, never on is_alive(): a timer another
+            # caller installed but has not started yet reads as dead, and
+            # replacing it without a cancel leaves a live timer cancel_all can
+            # no longer reach. The slot is cleared only by the timer firing,
+            # by cancel_all, or by a failed start below, so a non-None slot is
+            # a wakeup that is still owed.
             current = self._host_backoff_timer
-            if current is not None and current.is_alive():
+            if current is not None:
                 if self._host_backoff_timer_due <= deadline + 0.05:
                     return
-                previous = current
-            if previous is not None:
-                previous.cancel()
+                current.cancel()
             timer = threading.Timer(delay, self._wake_host_backoff)
             timer.daemon = True
             self._host_backoff_timer = timer
             self._host_backoff_timer_due = deadline
-        try:
-            timer.start()
-        except RuntimeError:
-            with self._lock:
-                if self._host_backoff_timer is timer:
-                    self._host_backoff_timer = None
-                    self._host_backoff_timer_due = 0.0
+            # Start under the lock so no other caller can observe an installed
+            # timer that is not running yet. Thread.start() only waits for the
+            # new thread's bootstrap, which never takes this lock.
+            try:
+                timer.start()
+            except RuntimeError:
+                self._host_backoff_timer = None
+                self._host_backoff_timer_due = 0.0
 
     def _wake_host_backoff(self):
         current = threading.current_thread()

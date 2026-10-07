@@ -1671,6 +1671,44 @@ class HostBackoffTests(unittest.TestCase):
         self.assertIn("Host paused", queue_text)
         self.assertIn("retry in", queue_text)
 
+    def test_an_installed_but_unstarted_wakeup_timer_is_never_orphaned(self):
+        # A timer another caller installed but has not started yet reports
+        # is_alive() False. The fake never starts a thread, so every timer
+        # stays in exactly that state and the decision cannot lean on it.
+        created = []
+
+        class UnstartedTimer:
+            def __init__(self, interval, function):
+                self.interval = interval
+                self.function = function
+                self.cancelled = False
+                self.daemon = False
+                created.append(self)
+
+            def start(self):
+                pass
+
+            def is_alive(self):
+                return False
+
+            def cancel(self):
+                self.cancelled = True
+
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(threading, "Timer", UnstartedTimer):
+            manager._arm_host_backoff_wakeup(30)
+            manager._arm_host_backoff_wakeup(30)  # same due time: reuse
+            manager._arm_host_backoff_wakeup(10)  # earlier: replace
+
+        live = [timer for timer in created if not timer.cancelled]
+        self.assertEqual(len(live), 1)
+        self.assertIs(manager._host_backoff_timer, live[0])
+        self.assertEqual(live[0].interval, 10)
+
+        manager.cancel_all()
+        self.assertTrue(all(timer.cancelled for timer in created))
+        self.assertIsNone(manager._host_backoff_timer)
+
 
 class DownloadFailureClassifierTests(unittest.TestCase):
     def test_classifies_recoverable_youtube_failures(self):
