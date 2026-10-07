@@ -455,6 +455,18 @@
       <translation>vor dem Datum hochgeladen</translation>
     </message>
     <message>
+      <source>already captured</source>
+      <translation>bereits erfasst</translation>
+    </message>
+    <message>
+      <source>failed earlier, waiting to retry</source>
+      <translation>zuvor fehlgeschlagen, wartet auf neuen Versuch</translation>
+    </message>
+    <message>
+      <source>stopped retrying after repeated failures</source>
+      <translation>nach wiederholten Fehlern aufgegeben</translation>
+    </message>
+    <message>
       <source>Subscription archive</source>
       <translation>Abonnementarchiv</translation>
     </message>

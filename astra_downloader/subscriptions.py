@@ -100,6 +100,12 @@ RESERVE_OK = "reserved"
 RESERVE_ALREADY_PRESENT = "already-present"
 RESERVE_RETRY_BACKOFF = "retry-backoff"
 RESERVE_RETRY_EXHAUSTED = "retry-exhausted"
+# The preview's names for the archive outcomes a scan skips.
+_PREVIEW_ARCHIVE_REASONS = {
+    RESERVE_ALREADY_PRESENT: "already-captured",
+    RESERVE_RETRY_BACKOFF: "waiting-to-retry",
+    RESERVE_RETRY_EXHAUSTED: "gave-up",
+}
 RESERVE_SAVE_FAILED = "save-failed"
 _TEXT_LIMIT = 500
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
@@ -1064,30 +1070,9 @@ class SubscriptionStore:
             if not self._compatible:
                 return RESERVE_SAVE_FAILED
             existing = self._data["archive"].get(key)
-            attempts = 0
-            if existing:
-                delivered = _safe_nonnegative_int(existing.get("deliveredHeight"))
-                upgrade = (
-                    existing.get("status") == "complete"
-                    and delivered > 0
-                    and _safe_nonnegative_int(upgrade_height) > delivered
-                )
-                if existing.get("status") in {"reserved", "queued", "complete"} \
-                        and not upgrade:
-                    return RESERVE_ALREADY_PRESENT
-                if upgrade:
-                    # An upgrade is a fresh attempt at a video that already
-                    # succeeded, not a retry of a failure, so the attempt
-                    # budget starts over rather than counting toward
-                    # "stopped retrying".
-                    attempts = 0
-                else:
-                    attempts = _safe_nonnegative_int(existing.get("attempts"))
-                    if attempts >= SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS:
-                        return RESERVE_RETRY_EXHAUSTED
-                    retry_at = _finite_timestamp(existing.get("nextRetryAt"), None)
-                    if retry_at is not None and now < retry_at:
-                        return RESERVE_RETRY_BACKOFF
+            outcome, attempts = self._claim_outcome(existing, now, upgrade_height)
+            if outcome != RESERVE_OK:
+                return outcome
             attempts += 1
             before = {}
             self._snapshot_archive_entry_locked(before, key)
@@ -1404,6 +1389,50 @@ class SubscriptionStore:
                 for key, entry in self._data["archive"].items()
                 if isinstance(entry, dict)
             }
+
+    @staticmethod
+    def _claim_outcome(existing, now, upgrade_height):
+        """What reserve_archive decides for one entry: ``(outcome, attempts)``.
+
+        RESERVE_OK means a claim would be made, and ``attempts`` is the count
+        it builds on. Shared with peek_archive, so a preview and a scan can't
+        disagree about which videos the archive turns away.
+        """
+        if not existing:
+            return RESERVE_OK, 0
+        delivered = _safe_nonnegative_int(existing.get("deliveredHeight"))
+        upgrade = (
+            existing.get("status") == "complete"
+            and delivered > 0
+            and _safe_nonnegative_int(upgrade_height) > delivered
+        )
+        if existing.get("status") in {"reserved", "queued", "complete"} and not upgrade:
+            return RESERVE_ALREADY_PRESENT, 0
+        if upgrade:
+            # An upgrade is a fresh attempt at a video that already
+            # succeeded, not a retry of a failure, so the attempt
+            # budget starts over rather than counting toward
+            # "stopped retrying".
+            return RESERVE_OK, 0
+        attempts = _safe_nonnegative_int(existing.get("attempts"))
+        if attempts >= SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS:
+            return RESERVE_RETRY_EXHAUSTED, attempts
+        retry_at = _finite_timestamp(existing.get("nextRetryAt"), None)
+        if retry_at is not None and now < retry_at:
+            return RESERVE_RETRY_BACKOFF, attempts
+        return RESERVE_OK, attempts
+
+    def peek_archive(self, key, now=None, upgrade_height=0):
+        """What reserve_archive would answer for ``key``, writing nothing."""
+        key = self._clean(key, "", 430)
+        if not key:
+            return RESERVE_SAVE_FAILED
+        now = _finite_timestamp(now, self._clock()) or self._clock()
+        with self._lock:
+            outcome, _attempts = self._claim_outcome(
+                self._data["archive"].get(key), now, upgrade_height,
+            )
+            return outcome
 
     def archive_entries(self):
         with self._lock:
@@ -1984,8 +2013,12 @@ class SubscriptionManager:
 
         No begin_scan, no reservation, no archive or nextScanAt write and no
         queue entry: the source is probed and every candidate is put through
-        the same evaluator a real scan uses. ``filters`` previews unsaved
-        values from an editor; None uses the stored ones. Returns
+        the same evaluator a real scan uses. A video the filters pass is then
+        checked against the archive read-only, because the scan skips one
+        already captured (``already-captured``), waiting out a retry delay
+        (``waiting-to-retry``) or out of attempts (``gave-up``), and counting
+        those would overstate what the scan queues. ``filters`` previews
+        unsaved values from an editor; None uses the stored ones. Returns
         ``(result, error)``.
         """
         record = self.store.get_subscription(str(sub_id))
@@ -2011,6 +2044,7 @@ class SubscriptionManager:
         if probe_error:
             return None, probe_error[:500]
         matched, skipped = [], []
+        listed = set()
         for candidate in candidates:
             decision, reason = evaluate_subscription_filters(candidate, clean_filters)
             item = {
@@ -2019,6 +2053,16 @@ class SubscriptionManager:
                 "uploadDate": candidate.get("uploadDate") or "",
             }
             if decision == "matched":
+                key = subscription_archive_key(candidate)
+                # A key listed twice is claimed once by a scan.
+                outcome = RESERVE_ALREADY_PRESENT if key in listed else (
+                    self.store.peek_archive(
+                        key, upgrade_height=self._upgrade_height(record, key, candidate),
+                    )
+                )
+                listed.add(key)
+                reason = _PREVIEW_ARCHIVE_REASONS.get(outcome, "")
+            if not reason:
                 matched.append(item)
             else:
                 skipped.append(dict(item, reason=reason))

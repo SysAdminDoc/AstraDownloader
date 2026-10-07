@@ -1568,6 +1568,9 @@ class SubscriptionDeliveryDialog(QDialog):
             "title-not-included": tr("the title does not match the include pattern"),
             "title-excluded": tr("the title matches the exclude pattern"),
             "uploaded-before": tr("uploaded before the date"),
+            "already-captured": tr("already captured"),
+            "waiting-to-retry": tr("failed earlier, waiting to retry"),
+            "gave-up": tr("stopped retrying after repeated failures"),
         }
         for item in skipped:
             reason = reasons.get(

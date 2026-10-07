@@ -2367,6 +2367,35 @@ class SubscriptionFilterTests(unittest.TestCase):
             manager.scan_due(now=2000)
             self.assertEqual(set(queued), self.EXPECTED_MATCHED)
 
+    def test_a_preview_counts_only_what_the_scan_would_queue(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            queued = []
+            store, manager, sub_id = self._manager(tmpdir, queued)
+            manager.scan_subscription(sub_id, now=2000, manual=True)
+            path = Path(tmpdir) / "subscriptions.json"
+            before = path.read_text(encoding="utf-8")
+
+            def reasons():
+                preview, error = manager.preview_scan(sub_id)
+                self.assertIsNone(error)
+                self.assertEqual(preview["matched"], [])
+                return {item["title"]: item["reason"] for item in preview["skipped"]
+                        if item["title"] in self.EXPECTED_MATCHED}
+
+            self.assertEqual(set(reasons().values()), {"already-captured"})
+            keys = {entry["title"]: key for key, entry in store.archive_entries().items()}
+            with store._lock:
+                store._data["archive"][keys["Tutorial one"]].update(
+                    status="failed", attempts=1, nextRetryAt=time.time() + 3600)
+                store._data["archive"][keys["TUTORIAL undated"]].update(
+                    status="failed",
+                    attempts=subscriptions_module().SUBSCRIPTION_MAX_ARCHIVE_ATTEMPTS)
+            self.assertEqual(reasons(), {
+                "Tutorial one": "waiting-to-retry", "TUTORIAL undated": "gave-up",
+            })
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
+            self.assertEqual(len(queued), 2, "the preview queued nothing more")
+
     def test_a_preview_can_try_unsaved_filters_and_refuses_a_bad_pattern(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             _store, manager, sub_id = self._manager(tmpdir, [])

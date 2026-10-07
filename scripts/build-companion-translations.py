@@ -80,6 +80,12 @@ CATALOGS = {
         "Settings": "الإعدادات",
     },
     "de": {
+        "already captured":
+            "bereits erfasst",
+        "failed earlier, waiting to retry":
+            "zuvor fehlgeschlagen, wartet auf neuen Versuch",
+        "stopped retrying after repeated failures":
+            "nach wiederholten Fehlern aufgegeben",
         "Audio language":
             "Audiosprache",
         "Which audio track to download when a video has several. Automatic lets yt-dlp choose.":

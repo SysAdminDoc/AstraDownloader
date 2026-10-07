@@ -455,6 +455,18 @@
       <translation>uploaded before the date</translation>
     </message>
     <message>
+      <source>already captured</source>
+      <translation>already captured</translation>
+    </message>
+    <message>
+      <source>failed earlier, waiting to retry</source>
+      <translation>failed earlier, waiting to retry</translation>
+    </message>
+    <message>
+      <source>stopped retrying after repeated failures</source>
+      <translation>stopped retrying after repeated failures</translation>
+    </message>
+    <message>
       <source>Subscription archive</source>
       <translation>Subscription archive</translation>
     </message>
