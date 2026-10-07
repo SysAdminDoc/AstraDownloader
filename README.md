@@ -96,7 +96,7 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe astra_downloader/astra_downloader.py
 ```
 
-Dependencies aren't installed during import. [Building and verification](docs/BUILDING.md) covers the pinned release environment, both package layouts and the local checks.
+Dependencies aren't installed during import. To run the tests and `npm run check`, add `--group check` to that install. [Building and verification](docs/BUILDING.md) covers the pinned release environment, both package layouts and the local checks.
 
 ## License and project files
 

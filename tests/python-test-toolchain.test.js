@@ -205,6 +205,44 @@ test('every plugin pytest.ini relies on is declared in the test dependency group
         'pyproject.toml carries tooling only; build.py and requirements.txt own the app');
 });
 
+test('the check group installs the test group and pip-audit', () => {
+    const declared = dependencyGroup(pyproject, 'check');
+    assert.ok(declared, 'pyproject.toml must declare the check group the build guide names');
+    for (const name of [...dependencyGroup(pyproject, 'test'), 'pip-audit']) {
+        assert.ok(declared.has(name), `the check group must install ${name}`);
+    }
+});
+
+test('npm run check runs the python gates on an active virtual environment', () => {
+    const { buildGates, gateEnvironment, pythonCommand, AUDIT_PYTHON_ENV } =
+        require(path.join(repoRoot, 'scripts', 'run-checks.js'));
+    const venv = pythonCommand({ VIRTUAL_ENV: 'C:\\work\\.venv' }, 'win32');
+    assert.deepEqual(venv, { command: 'C:\\work\\.venv\\Scripts\\python.exe', prefix: [] });
+    assert.deepEqual(
+        pythonCommand({ VIRTUAL_ENV: '/work/.venv' }, 'linux'),
+        { command: '/work/.venv/bin/python', prefix: [] },
+    );
+    // No venv: the launcher, exactly as before.
+    const launcher = pythonCommand({}, 'win32');
+    assert.deepEqual(launcher, { command: 'py', prefix: ['-3.13'] });
+
+    const pythonGates = (gates) => gates.filter(([, , args]) => args.some((arg) => /\.py$|^pytest$/.test(arg)));
+    const inVenv = pythonGates(buildGates(venv));
+    assert.deepEqual(inVenv.map(([label]) => label), ['python suite', 'site registry', 'translations']);
+    for (const [label, command] of inVenv) {
+        assert.equal(command, venv.command, `the ${label} gate ignores the active venv`);
+    }
+    assert.deepEqual(buildGates(venv)[0][2], ['-m', 'pytest', '-q']);
+    assert.deepEqual(buildGates(launcher)[0].slice(1), ['py', ['-3.13', '-m', 'pytest', '-q']]);
+
+    // The audit gate is a Node script, so it is told which interpreter to
+    // use, unless the caller's shell already named one.
+    if (!process.env[AUDIT_PYTHON_ENV]) {
+        assert.equal(gateEnvironment('python audit', [], venv)[AUDIT_PYTHON_ENV], venv.command);
+        assert.equal(gateEnvironment('python audit', [], launcher)[AUDIT_PYTHON_ENV], undefined);
+    }
+});
+
 test('the toolchain gate names a plugin pytest.ini uses but the group omits', () => {
     const withoutQt = pyproject.replace(/^\s*"pytest-qt[^"]*",?\s*$/m, '');
     assert.notEqual(withoutQt, pyproject, 'the fixture must actually drop pytest-qt');

@@ -4,12 +4,15 @@
 # astra_downloader/build.py against astra_downloader/constraints-release.txt.
 #
 # The test group is everything pytest.ini needs beyond the app requirements.
+# The check group is the test group plus what the other `npm run check` gates
+# need from Python: pip-audit, for the dependency audit.
 # Floors are the versions the suite was last run against, ceilings stop a
 # fresh resolve from landing a major release without a deliberate pass.
 # tests/python-test-toolchain.test.js fails if pytest.ini starts relying on a
 # plugin that is not declared here.
 #
 #   py -3.13 -m pip install -r astra_downloader/requirements.txt --group test
+#   py -3.13 -m pip install -r astra_downloader/requirements.txt --group check
 #
 # `--group` needs pip 25.1 or newer (PEP 735 dependency groups).
 
@@ -19,4 +22,8 @@ test = [
     "pytest-xdist>=3.8.0,<4",
     "pytest-qt>=4.5.0,<5",
     "pytest-asyncio>=1.4.0,<2",
+]
+check = [
+    {include-group = "test"},
+    "pip-audit>=2.10.1,<3",
 ]

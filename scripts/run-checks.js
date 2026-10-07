@@ -33,36 +33,68 @@ if (!TEST_FILES.length) {
     process.exit(2);
 }
 
+// The interpreter for the Python gates. `py -3.13` is the Windows launcher,
+// and the launcher ignores an activated virtual environment: someone who
+// followed docs/BUILDING.md into a fresh venv had every test dependency in
+// that venv and the gates still ran the system interpreter, which had none
+// of them. With VIRTUAL_ENV set, the gates use that environment's own
+// interpreter. A VIRTUAL_ENV pointing at nothing fails the gate as missing
+// rather than quietly falling back to a different Python.
+function pythonCommand(env = process.env, platform = process.platform) {
+    const venv = env.VIRTUAL_ENV;
+    if (venv) {
+        const command = platform === 'win32'
+            ? path.win32.join(venv, 'Scripts', 'python.exe')
+            : path.posix.join(venv, 'bin', 'python');
+        return { command, prefix: [] };
+    }
+    return { command: 'py', prefix: ['-3.13'] };
+}
+
 // Both suites, named separately. "unit tests" used to mean only the Node
 // files, which is how a red 1,262-test Python suite sat behind an "all gates
 // passed" line: nothing in this command, `release:stage` or `build.py` ever
 // ran pytest, and `documentation-facts` only ever collected it to count.
-const GATES = [
-    ['python suite', 'py', ['-3.13', '-m', 'pytest', '-q']],
-    ['node tests', process.execPath, ['--test', ...TEST_FILES]],
-    ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
-    ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
-    ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],
-    ['site registry', 'py', ['-3.13', 'scripts/check-site-registry.py']],
-    ['translations', 'py', ['-3.13', 'scripts/check-companion-translations.py']],
-    ['versions', process.execPath, ['scripts/check-versions.js']],
-    ['python audit', process.execPath, ['scripts/audit-python-deps.js']],
-];
+function buildGates(python = pythonCommand()) {
+    const py = (...args) => [python.command, [...python.prefix, ...args]];
+    return [
+        ['python suite', ...py('-m', 'pytest', '-q')],
+        ['node tests', process.execPath, ['--test', ...TEST_FILES]],
+        ['companion ports', process.execPath, ['scripts/check-companion-port-catalogue.js']],
+        ['catch reasons', process.execPath, ['scripts/check-python-catch-reasons.js']],
+        ['license inventory', process.execPath, ['scripts/check-companion-inventory.js']],
+        ['site registry', ...py('scripts/check-site-registry.py')],
+        ['translations', ...py('scripts/check-companion-translations.py')],
+        ['versions', process.execPath, ['scripts/check-versions.js']],
+        ['python audit', process.execPath, ['scripts/audit-python-deps.js']],
+    ];
+}
+
+const PYTHON = pythonCommand();
+const GATES = buildGates(PYTHON);
 
 // conftest.py writes the collected count to this file when the variable names
 // it, and tests/documentation-facts.test.js reads it back when it is set.
 const COUNT_ENV = 'ASTRA_PYTEST_COUNT_FILE';
 const COUNT_FILE = path.join(ROOT, 'build', 'pytest-collected.json');
 
+// audit-python-deps.js tries this interpreter before `py -3.13`.
+const AUDIT_PYTHON_ENV = 'ASTRA_PIP_AUDIT_PYTHON';
+
 // The Node tests only get the count file when the Python suite actually ran.
 // A skipped suite leaves none, and the documentation test then collects for
 // itself (and skips, since the interpreter is missing). The variable is never
 // inherited from the caller's shell, which could point at a stale file.
-function gateEnvironment(label, results) {
+// The dependency audit is a Node script that finds its own Python, so a venv
+// interpreter is handed to it by name, unless the caller already chose one.
+function gateEnvironment(label, results, python = PYTHON) {
     const env = { ...process.env };
     delete env[COUNT_ENV];
     const suiteRan = results.some((result) => result.label === 'python suite' && !result.skipped);
     if (label === 'python suite' || (label === 'node tests' && suiteRan)) env[COUNT_ENV] = COUNT_FILE;
+    if (label === 'python audit' && python.command !== 'py' && !env[AUDIT_PYTHON_ENV]) {
+        env[AUDIT_PYTHON_ENV] = python.command;
+    }
     return env;
 }
 
@@ -89,7 +121,7 @@ function main() {
         const missingTool = Boolean(run.error) && run.error.code === 'ENOENT';
         const noInterpreter = !run.error && code === 103 && command === 'py';
         const reason = missingTool
-            ? `${command} is not on PATH`
+            ? (path.isAbsolute(command) ? `${command} does not exist` : `${command} is not on PATH`)
             : (noInterpreter ? `${command} found no suitable Python runtime` : '');
         if (run.error && !missingTool) {
             process.stdout.write(`could not run ${command}: ${run.error.message}\n`);
@@ -125,4 +157,6 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { GATES, COUNT_ENV, gateEnvironment };
+module.exports = {
+    GATES, COUNT_ENV, AUDIT_PYTHON_ENV, buildGates, gateEnvironment, pythonCommand,
+};
