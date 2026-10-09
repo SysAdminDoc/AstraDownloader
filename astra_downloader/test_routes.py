@@ -5488,6 +5488,24 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
         ])
         self.assertFalse(ad.is_valid_native_extension_id("../escape", "firefox"))
 
+    def test_a_braced_uuid_firefox_id_is_accepted_and_registered(self):
+        uuid_id = "{1f0e6f4c-3b5a-4d2e-9c7b-8a6d5e4f3a2b}"
+        self.assertTrue(ad.is_valid_native_extension_id(uuid_id, "firefox"))
+        for bad in ("{1f0e6f4c-3b5a-4d2e-9c7b-8a6d5e4f3a2b", "{not-a-uuid}",
+                    "{1f0e6f4c-3b5a-4d2e-9c7b-8a6d5e4f3a2b}x", "{../escape}"):
+            with self.subTest(bad=bad):
+                self.assertFalse(ad.is_valid_native_extension_id(bad, "firefox"))
+        self.assertEqual(
+            ad.parse_native_extension_ids(
+                f"ytkit@sysadmindoc.github.io, {uuid_id}", browser="firefox"
+            ),
+            ["ytkit@sysadmindoc.github.io", uuid_id],
+        )
+        manifest = ad.build_native_host_manifest(
+            "C:/x/AstraDownloader.exe", [uuid_id], browser="firefox"
+        )
+        self.assertEqual(manifest["allowed_extensions"], [uuid_id])
+
     def test_firefox_host_manifest_pins_allowed_extension_ids(self):
         m = ad.build_native_host_manifest(
             "C:/x/AstraDownloader.exe",

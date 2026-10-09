@@ -3096,7 +3096,11 @@ def describe_bundle_changes(current, bundle):
 # registration enforces. A config edited by hand used to keep IDs the
 # registrar would silently drop.
 CHROME_EXTENSION_ID_RE = re.compile(r'^[a-p]{32}$')
-FIREFOX_EXTENSION_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._%+@-]{0,127}$')
+# A Gecko ID is email-like or a braced UUID, the two forms Firefox accepts.
+FIREFOX_EXTENSION_ID_RE = re.compile(
+    r'^(?:[A-Za-z0-9][A-Za-z0-9._%+@-]{0,127}'
+    r'|\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\})$'
+)
 
 
 def is_valid_native_extension_id(value, browser='chrome'):

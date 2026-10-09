@@ -67,10 +67,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: `list2cmdline` quotes for the C runtime, not for cmd.exe, and only when there's a space: `&` splits the line, `^` is swallowed, `%` expands even inside quotes, and the UTF-8 file is read in the OEM code page, so `C:\Users\José` breaks. Source runs only; the frozen exe doesn't use it.
   Acceptance: WHEN the Python or script path holds `&`, `^`, `%`, spaces or non-ASCII letters, the launcher SHALL start the host with those exact paths.
   Where: `astra_downloader/astra_downloader.py` `write_native_host_launcher` (around 4988).
-- [ ] P3 | AD-155 | Firefox extension IDs in {uuid} form are refused
-  Why: the Gecko ID check refuses `{uuid}` IDs, so a Firefox build that uses one is never registered. The default `ytkit@...` ID isn't affected. (Plausible; confirm against the check.)
-  Acceptance: WHEN a Firefox ID is a braced UUID, it SHALL be accepted and registered.
-  Where: `astra_downloader/config.py` around 3094.
 - [ ] P3 | AD-156 | Whisper progress and interrupted setup leftovers
   Why: the progress bar sits at 0% through the audio step because ffmpeg's `progress=continue` lines never match the parser. Closing the app during setup stops the setup thread after 5 s and can leave half-downloaded model files and `.whisper.*.zip` or `.extract` leftovers in the install dir that nothing cleans up.
   Acceptance: WHEN ffmpeg reports progress, the bar SHALL move during the audio step, and WHEN the app starts, setup leftovers SHALL be removed.
