@@ -40,6 +40,7 @@ repository's git log.
 - Setup now updates an outdated Whisper runtime even when the old one still works. It keeps the previous one so Roll back works, and if a new runtime won't run, the old one is put back.
 - The progress bar moves while the audio is being prepared for subtitles instead of sitting at zero. Leftovers from a Whisper setup that was cut short are cleaned up the next time Astra starts, and uninstall removes them too.
 - Uninstalling a portable copy left ffmpeg's Roll back copy behind. It's removed with everything else now.
+- With every SponsorBlock category on, the Settings page opened with no category box ticked, the opposite of what was active. It now ticks them all, and reopening the page after an import shows the same boxes as the first time.
 
 ### Security
 

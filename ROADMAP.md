@@ -18,10 +18,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P3
 
-- [ ] P3 | AD-160 | SponsorBlock boxes open unticked when every category is on
-  Why: categories stored as "" (every category) open the Settings page with no box ticked (`gui_settings_page.py` around 651), while an import or restore ticks them all (`gui.py` around 5945). The page shows the opposite of what's active.
-  Acceptance: WHEN the stored categories mean every category, the Settings page SHALL open with every box ticked, the same as after an import.
-  Where: `astra_downloader/gui_settings_page.py`, `astra_downloader/gui.py`.
 - [ ] P3 | AD-161 | A template ending in a fixed extension gets no NFO
   Why: `normalize_output_template` only needs `%(ext)s` somewhere in the template. One that ends in a literal extension makes yt-dlp name the metadata `Title.mp4.info.json`, which doesn't pair by stem, so that file gets no NFO. (Plausible; confirm first.)
   Acceptance: WHEN a delivered file's `<stem>.info.json` is missing but `<name>.info.json` exists beside it, the NFO step SHALL use that one.

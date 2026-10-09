@@ -25,6 +25,20 @@ except ImportError:  # Flat source-path compatibility.
 
 
 class SettingsPageMixin:
+    def _sponsorblock_categories_to_tick(self):
+        """The SponsorBlock boxes the saved setting means, for build and reload alike.
+
+        An empty setting means every category, so every box is ticked; the
+        page used to open with none ticked while a reload ticked them all.
+        """
+        selected = {
+            name for name in self._dependencies['normalize_sponsorblock_categories'](
+                self.config.get("SponsorBlockCategories", "")
+            ).split(",")
+            if name
+        }
+        return selected or set(self._value('SPONSORBLOCK_CATEGORIES'))
+
     def _update_pacing_guidance(self, *_args):
         minimum = self.cfg_sleep_interval.value()
         configured_max = self.cfg_sleep_max.value()
@@ -648,11 +662,7 @@ class SettingsPageMixin:
         # Without a per-category choice the app sent the literal `all`, so
         # asking it to skip sponsors also removed intros, outros and self-promo.
         self.cfg_sb_categories = {}
-        selected = set(
-            self._dependencies['normalize_sponsorblock_categories'](
-                self.config.get("SponsorBlockCategories", "")
-            ).split(",")
-        )
+        selected = self._sponsorblock_categories_to_tick()
         # Literal tr() calls, so the string extractor sees every label. It
         # can't follow a dict read through .get(), and these stayed English.
         category_labels = {

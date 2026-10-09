@@ -5009,6 +5009,24 @@ class SettingsNavigationTests(unittest.TestCase):
                 QApplication.processEvents()
                 self.assertEqual(window.settings_status.text(), "Unsaved changes")
 
+    def test_sponsorblock_boxes_show_every_category_when_all_are_on(self):
+        # "" means every category. The page used to open with no box ticked
+        # while a reload of the same setting ticked them all.
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig({"SponsorBlockCategories": ""}))
+        boxes = window.cfg_sb_categories
+        self.assertTrue(boxes)
+        self.assertTrue(all(box.isChecked() for box in boxes.values()))
+        window._reload_settings_form()
+        self.assertTrue(all(box.isChecked() for box in boxes.values()))
+
+        window = self._window(FakeConfig({"SponsorBlockCategories": "sponsor,intro"}))
+        ticked = {name for name, box in window.cfg_sb_categories.items() if box.isChecked()}
+        self.assertEqual(ticked, {"sponsor", "intro"})
+        window._reload_settings_form()
+        ticked = {name for name, box in window.cfg_sb_categories.items() if box.isChecked()}
+        self.assertEqual(ticked, {"sponsor", "intro"})
+
     def test_restore_defaults_reports_changes_and_refreshes_the_form(self):
         class MutableConfig(FakeConfig):
             def __init__(self, data=None):

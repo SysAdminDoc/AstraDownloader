@@ -5943,14 +5943,10 @@ class MainWindowCore(
                 widget.blockSignals(False)
         # SponsorBlock categories are a dict of checkboxes rather than one
         # widget, so they do not fit the table above.
-        selected = {
-            item.strip() for item in
-            str(self.config.get("SponsorBlockCategories", "") or "").split(",")
-            if item.strip()
-        }
+        selected = self._sponsorblock_categories_to_tick()
         for name, box in getattr(self, "cfg_sb_categories", {}).items():
             box.blockSignals(True)
-            box.setChecked(not selected or name in selected)
+            box.setChecked(name in selected)
             box.blockSignals(False)
         self._sync_sublang_checkboxes(self.cfg_sublangs.text())
         self._rebuild_quick_site_profiles()
