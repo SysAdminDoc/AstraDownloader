@@ -1,6 +1,7 @@
 """Tests for the local API and the processes that talk to it."""
 
 import ast
+import contextlib
 import hashlib
 import hmac
 import inspect
@@ -5555,6 +5556,74 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
                 f"{ad.FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{ad.NATIVE_HOST_NAME}",
                 revoked,
             )
+            # Each key is revoked against the manifest it should point at.
+            manifests = {call.args[0]: call.args[1] for call in revoke.call_args_list}
+            self.assertEqual(
+                manifests[f"{ad.FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{ad.NATIVE_HOST_NAME}"],
+                firefox_manifest,
+            )
+            for root in ad.CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS:
+                self.assertEqual(manifests[f"{root}\\{ad.NATIVE_HOST_NAME}"], chrome_manifest)
+
+    class _FakeWinreg:
+        """Just enough of winreg for the unregister check: one HKCU hive."""
+
+        HKEY_CURRENT_USER = object()
+
+        def __init__(self, values):
+            self.values = dict(values)
+            self.deleted = []
+
+        def OpenKey(self, _root, key_path):
+            if key_path not in self.values:
+                raise FileNotFoundError(key_path)
+            return contextlib.nullcontext(key_path)
+
+        def QueryValueEx(self, key_path, name):
+            value = self.values[key_path]
+            if value is None or name != '':
+                raise FileNotFoundError(name)
+            return value, 1
+
+        def DeleteKey(self, _root, key_path):
+            if key_path not in self.values:
+                raise FileNotFoundError(key_path)
+            del self.values[key_path]
+            self.deleted.append(key_path)
+
+    def _unregister(self, values, key, manifest):
+        fake = self._FakeWinreg(values)
+        with mock.patch.dict(sys.modules, {"winreg": fake}), \
+             mock.patch.object(ad, "write_persistent_log") as log:
+            ad.unregister_native_host_registry_value(key, manifest)
+        return fake, log
+
+    def test_unregister_removes_a_key_that_points_at_astras_manifest(self):
+        key = f"Software\\Google\\Chrome\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}"
+        manifest = ad.NATIVE_HOST_DIR / f"{ad.NATIVE_HOST_NAME}.chrome.json"
+        fake, _log = self._unregister({key: str(manifest).upper()}, key, manifest)
+        self.assertEqual(fake.deleted, [key])
+        # A moved or older Astra copy's manifest is still Astra's to revoke.
+        moved = Path("D:/Old Astra") / ad.NATIVE_HOST_DIR.name / manifest.name
+        fake, _log = self._unregister({key: str(moved)}, key, manifest)
+        self.assertEqual(fake.deleted, [key])
+
+    def test_unregister_leaves_another_programs_registration_alone(self):
+        key = f"Software\\Google\\Chrome\\NativeMessagingHosts\\{ad.NATIVE_HOST_NAME}"
+        manifest = ad.NATIVE_HOST_DIR / f"{ad.NATIVE_HOST_NAME}.chrome.json"
+        for value in (
+            "C:\\Program Files\\Other\\host.json",
+            f"C:\\Program Files\\Other\\{manifest.name}",
+            "",
+            None,
+        ):
+            with self.subTest(value=value):
+                fake, _log = self._unregister({key: value}, key, manifest)
+                self.assertEqual(fake.deleted, [])
+                self.assertIn(key, fake.values)
+        fake, log = self._unregister({}, key, manifest)
+        self.assertEqual(fake.deleted, [])
+        log.assert_not_called()
 
     def test_source_registration_writes_a_cmd_wrapper(self):
         with tempfile.TemporaryDirectory() as tmp, \

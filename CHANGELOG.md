@@ -21,6 +21,7 @@ repository's git log.
 - Subscription title patterns are saved exactly as you type them. Spaces at either end used to be trimmed, so ` live ` quietly became `live` and started matching titles like "Delivery day". A pattern of only spaces still counts as no filter.
 - Importing a settings bundle that would push you past 32 site profiles is refused before anything touches the disk. It used to create each imported profile's download folder first, then refuse, leaving empty folders behind.
 - Ticking Highlight or Chapter in the SponsorBlock settings while the action was Remove made every YouTube download fail, because those two can only be marked. They're now left out of a remove list, and if they're all you ticked, nothing is removed. A category list with only unknown names, like a typo in an imported settings file, used to turn into "every category". It now falls back to the default ones. The new Hook or greeting category is available too.
+- Clearing the browser extension IDs removed the browser registry entries under Astra's host name even when another program had registered that name since. Astra now removes an entry only when it still points at one of its own host files, and leaves anything else in place.
 
 ### Security
 

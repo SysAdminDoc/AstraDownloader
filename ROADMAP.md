@@ -49,10 +49,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: the runtime check never returns a version, so the version probe is empty and Roll back always fails with "retained-copy-unverified"; the rollback copy lives inside the `whisper` folder the next install swaps out; a working runtime is never replaced, so raising `WHISPER_BIN_VERSION` never reaches existing installs.
   Acceptance: WHEN `WHISPER_BIN_VERSION` changes, an existing runtime SHALL be replaced on the next setup, and Roll back SHALL restore a verified previous copy kept outside the swapped folder.
   Where: `astra_downloader/astra_downloader.py` around 1576, 2229 and 2526.
-- [ ] P2 | AD-150 | Unregistering the native host can delete another program's registration
-  Why: `unregister_native_host_registry_value` deletes all six Chromium keys and the Firefox key without checking that the default value still points at Astra's manifest. (Plausible; only matters if another program reused the host name.)
-  Acceptance: WHEN a host key's default value isn't Astra's manifest path, unregister SHALL leave that key alone.
-  Where: `astra_downloader/astra_downloader.py` around 4964.
 - [ ] P2 | AD-151 | A release build can ship stale translations
   Why: the documented build runs `.release-venv\Scripts\python.exe` without activating the venv, so `pyside6-lrelease.exe` isn't on PATH. The build falls back to comparing .qm and .ts times, which can't see new UI strings, and ships stale catalogues with only a warning.
   Acceptance: WHEN build.py runs, it SHALL find `pyside6-lrelease` next to the running interpreter, and a release build SHALL fail if it can't compile the catalogues.
