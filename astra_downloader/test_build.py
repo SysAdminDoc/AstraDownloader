@@ -377,6 +377,39 @@ class ReleaseConstraintsTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'Release environment drift'):
             self._verify_fixture(app_version='1.1')
 
+    def _check_interpreter(self, *, prefix=None, base_prefix='C:/Python313',
+                           installed=('app', 'dep', 'pip'), environ=None):
+        venv = Path(tempfile.gettempdir()) / 'astra-test-release-venv'
+        constraints = {'app': {}, 'dep': {}}
+        with mock.patch.object(build, 'RELEASE_VENV', venv), \
+                mock.patch.object(build.sys, 'prefix', str(prefix or venv)), \
+                mock.patch.object(build.sys, 'base_prefix', base_prefix), \
+                mock.patch.dict(os.environ, environ or {}, clear=False):
+            for name in ('PYTHONPATH', 'PYTHONHOME'):
+                if name not in (environ or {}):
+                    os.environ.pop(name, None)
+            build.verify_release_interpreter(
+                constraints, [FakeDistribution(name, '1') for name in installed]
+            )
+
+    def test_the_release_venv_with_only_reviewed_packages_and_pip_passes(self):
+        self._check_interpreter()
+
+    def test_a_build_outside_the_release_venv_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, 'Release builds run from'):
+            self._check_interpreter(prefix='C:/Python313')
+        with self.assertRaisesRegex(SystemExit, 'Release builds run from'):
+            self._check_interpreter(prefix='C:/other-venv')
+
+    def test_a_package_outside_the_constraints_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, 'outside the reviewed constraints: rogue'):
+            self._check_interpreter(installed=('app', 'dep', 'pip', 'Rogue'))
+
+    def test_pythonpath_or_pythonhome_is_refused(self):
+        for name in ('PYTHONPATH', 'PYTHONHOME'):
+            with self.subTest(name=name), self.assertRaisesRegex(SystemExit, f'Unset {name}'):
+                self._check_interpreter(environ={name: 'C:/ambient'})
+
     def _write_catalogues(self, translations):
         for locale in (
             'ar', 'de', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'pt_BR', 'ru',

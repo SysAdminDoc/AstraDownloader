@@ -425,6 +425,47 @@ def clean():
         artifact.unlink()
 
 
+RELEASE_VENV = ROOT / ".release-venv"
+# venv puts pip in every environment it creates. PyInstaller only bundles
+# what the app imports, and the app never imports pip.
+VENV_BOOTSTRAP_PACKAGES = frozenset({"pip"})
+
+
+def verify_release_interpreter(constraints, installed=None):
+    """Refuse a build that isn't pinned to .release-venv and its reviewed packages.
+
+    The version check above only proves each pin is present. A global Python
+    with the pins plus one optional import, or a PYTHONPATH folder, could put
+    a package in the exe that the license inventory never lists.
+    """
+    for name in ("PYTHONPATH", "PYTHONHOME"):
+        if os.environ.get(name):
+            raise SystemExit(
+                f"Unset {name} before a release build. It adds modules the "
+                "reviewed constraints and the license inventory never see."
+            )
+    in_venv = sys.prefix != sys.base_prefix
+    if not in_venv or Path(sys.prefix).resolve() != RELEASE_VENV.resolve():
+        raise SystemExit(
+            f"Release builds run from {RELEASE_VENV / 'Scripts' / 'python.exe'}; "
+            f"this one is {sys.executable}. See docs/BUILDING.md."
+        )
+    if installed is None:
+        installed = importlib.metadata.distributions()
+    extra = sorted(
+        {canonicalize_name(dist.metadata.get("Name") or "") for dist in installed}
+        - set(constraints)
+        - VENV_BOOTSTRAP_PACKAGES
+        - {""}
+    )
+    if extra:
+        raise SystemExit(
+            "The release environment has packages outside the reviewed "
+            f"constraints: {', '.join(extra)}. Recreate {RELEASE_VENV.name} "
+            "from the constraints file."
+        )
+
+
 def preflight():
     if not SCRIPT.exists():
         raise SystemExit(f"Missing entry point: {SCRIPT}")
@@ -435,7 +476,8 @@ def preflight():
             "PyInstaller is not installed in the active virtual environment. Run: "
             f"{sys.executable} -m pip install --require-virtualenv pyinstaller"
         )
-    verify_release_environment()
+    environment = verify_release_environment()
+    verify_release_interpreter(environment["constraints"])
 
 
 LRELEASE_NAMES = ("pyside6-lrelease", "lrelease", "lrelease-qt6")
