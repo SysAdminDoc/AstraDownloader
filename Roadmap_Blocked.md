@@ -115,3 +115,11 @@ Astra Downloader reporting a below-floor version, which
 - Where the metadata is hosted is part of the same decision. It has to be a place a compromised release account can't rewrite without the offline keys showing it.
 
 **What to do once those are decided:** `python-tuf`'s `ngclient.Updater` covers the client side (Apache 2.0 or MIT). It needs a pin in `requirements.txt`, an entry in the license inventory, the dependency audit, and PyInstaller bundling. The release side is a small signing script run at staging. The current sidecar check stays as the fallback until the first signed root ships.
+
+## AD-139 | Drive the Windows shell integration in a real desktop session | split from AD-71
+
+**State:** the jump list (`jump_list_tasks`, `jump_list_command_from_argv`), `RegisterApplicationRestart` and the Recycle Bin delete (`send_to_recycle_bin`) in `astra_downloader/astra_downloader.py` were read in the 2026-08-22 audit and have unit tests, but nothing has watched them work in Explorer and the taskbar.
+
+**What is blocked:** checking them means a real interactive desktop: pinning the app, opening its jump list, letting Windows restart it after a crash or an update reboot, and finding a deleted file in the Recycle Bin. The build PC's display belongs to its user, and offscreen Qt can't show any of these shell surfaces.
+
+**To unblock:** a spare Windows desktop session or VM where the packaged EXE can be installed and driven. The browser extension half of the old AD-71 note lives in the Astra Deck repository (see AD-123).
