@@ -5688,6 +5688,42 @@ class QuickJsSetupFallbackTests(unittest.TestCase):
         )
 
 
+class WhisperRuntimeSetupTests(unittest.TestCase):
+    """Setup hands a working runtime to the upgrade check too."""
+
+    def _worker(self, provisioned, usable):
+        gui = gui_module_for_tests()
+        worker = gui.SetupWorkerCore.__new__(gui.SetupWorkerCore)
+        messages = []
+        calls = []
+        worker.log = types.SimpleNamespace(emit=messages.append)
+        worker.progress = types.SimpleNamespace(emit=lambda _value: None)
+        worker._dependencies = {
+            "WHISPER_BIN_PATH": Path("whisper") / "whisper-cli.exe",
+            "WHISPER_BIN_MIN_BYTES": 1,
+            "probe_whisper_runtime": lambda *_args, **_kwargs: {"usable": usable},
+            "provision_whisper_runtime": lambda **kwargs: (
+                calls.append(kwargs), provisioned)[1],
+        }
+        return worker, messages, calls
+
+    def test_a_working_runtime_still_reaches_provisioning(self):
+        # Setup skipped provisioning for any runtime that worked, so a newer
+        # pinned whisper.cpp never reached an existing install.
+        worker, messages, calls = self._worker("whisper-cli.exe", usable=True)
+        gui_module_for_tests().SetupWorkerCore._provision_whisper_runtime(worker)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(any("runtime ready" in message for message in messages))
+
+    def test_a_failed_upgrade_says_the_installed_runtime_was_kept(self):
+        worker, messages, _calls = self._worker(None, usable=True)
+        gui_module_for_tests().SetupWorkerCore._provision_whisper_runtime(worker)
+        self.assertTrue(
+            any("keeping the one already installed" in message for message in messages),
+            messages,
+        )
+
+
 class SubtitleLanguagePickerTests(unittest.TestCase):
     """The checkboxes and the free-text field describe the same languages."""
 

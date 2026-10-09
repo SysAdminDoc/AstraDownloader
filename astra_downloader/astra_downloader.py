@@ -629,6 +629,10 @@ WHISPER_BIN_URL = (
 WHISPER_BIN_SHA256 = (
     '49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a'
 )
+# whisper-cli doesn't report its release, so setup writes the version it
+# installed beside the CLI. The version probe, the upgrade check and Roll
+# back all read it; a runtime without one counts as an unknown version.
+WHISPER_BIN_VERSION_STAMP = 'astra-whisper-version.txt'
 ICON_PATH = INSTALL_DIR / 'AstraDownloader.ico'
 # Scheduled subscriptions keep their archive in the schema-checked
 # subscriptions.json document. Normal downloads still always re-run.
@@ -1600,6 +1604,47 @@ def extract_archive_directory_atomic(archive_path, destination,
             shutil.rmtree(backup, ignore_errors=True)
 
 
+def replace_directory_with_copy(source, destination):
+    """Copy one folder over another, swapping the copy in whole.
+
+    The whisper.cpp runtime is a CLI plus the DLLs it was built with, so its
+    rollback copy is the folder rather than one executable. The copy is
+    staged beside the destination and swapped in with renames, the way
+    ``extract_archive_directory_atomic`` installs it, so a failure leaves
+    the previous folder in place.
+    """
+    source = Path(source)
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staged = destination.parent / f'.{destination.name}.{uuid.uuid4().hex}.extract'
+    backup = destination.parent / f'.{destination.name}.{uuid.uuid4().hex}.old'
+    moved_old = False
+    try:
+        shutil.copytree(source, staged)
+        if destination.exists():
+            os.replace(destination, backup)
+            moved_old = True
+        os.replace(staged, destination)
+        if moved_old:
+            shutil.rmtree(backup, ignore_errors=True)
+            moved_old = False
+        return destination
+    except Exception:
+        if moved_old and not destination.exists() and backup.exists():
+            try:
+                os.replace(backup, destination)
+                moved_old = False
+            except OSError:
+                # reason: recovery is best-effort; the previous folder stays
+                # under its .old name rather than being deleted
+                pass
+        raise
+    finally:
+        shutil.rmtree(staged, ignore_errors=True)
+        if not moved_old:
+            shutil.rmtree(backup, ignore_errors=True)
+
+
 # ── v1.2.0 helpers: SHA-256 verification, path confinement, rate limiting ──
 def _compute_sha256(path, chunk_size=65536):
     """Return lowercase hex SHA-256 of a file's contents, or None on error."""
@@ -2225,13 +2270,48 @@ def provision_whisper_model(progress_cb=None, model='tiny'):
         return None
 
 
-def provision_whisper_runtime(progress_cb=None):
-    """Fetch the pinned whisper.cpp CLI and its runtime DLLs atomically."""
+def _whisper_runtime_rollback_dir():
+    """Where the previous whisper.cpp runtime folder is kept.
+
+    Beside the runtime folder, not inside it: an install swaps that whole
+    folder out, and a copy kept inside went with it.
+    """
+    return WHISPER_BIN_DIR.with_name(f'.{WHISPER_BIN_DIR.name}.last-known-good')
+
+
+def _whisper_runtime_version(cli_path):
+    """The release a whisper.cpp runtime folder was installed from, or ''."""
+    try:
+        text = (Path(cli_path).parent / WHISPER_BIN_VERSION_STAMP).read_text(
+            encoding='utf-8'
+        )
+    except (OSError, ValueError):
+        return ''
+    version = text.strip()
+    return version if re.fullmatch(r'\d+\.\d+\.\d+', version) else ''
+
+
+def provision_whisper_runtime(progress_cb=None, config=None):
+    """Fetch the pinned whisper.cpp CLI and its runtime DLLs atomically.
+
+    A working runtime stays only when its stamp names the release this build
+    pins, or the one a rollback pinned. Anything else, including a runtime
+    installed before stamps existed, is replaced, and the folder it replaces
+    is kept for Roll back.
+    """
     current = probe_whisper_runtime(
         WHISPER_BIN_PATH, WHISPER_BIN_MIN_BYTES,
     )
     if current.get('usable'):
-        return str(WHISPER_BIN_PATH)
+        installed_version = _whisper_runtime_version(WHISPER_BIN_PATH)
+        if installed_version and installed_version in (
+            WHISPER_BIN_VERSION, managed_binary_pin_for(config, 'whisper'),
+        ):
+            return str(WHISPER_BIN_PATH)
+        write_persistent_log(
+            f"whisper.cpp runtime {installed_version or 'of unknown version'} "
+            f'is not the pinned {WHISPER_BIN_VERSION}; refreshing'
+        )
 
     space_failure = check_download_disk_space(INSTALL_DIR, HELPER_DOWNLOAD_MAX_BYTES)
     if space_failure:
@@ -2246,7 +2326,7 @@ def provision_whisper_runtime(progress_cb=None):
     # Every managed binary the pin UI offers a Roll back for has to keep the
     # copy it is about to replace, or the button is permanently disabled for
     # a tool the panel says is rollbackable.
-    retain_managed_binary_rollback('whisper')
+    retained = retain_managed_binary_rollback('whisper')
     try:
         download_file_atomic(
             WHISPER_BIN_URL,
@@ -2269,10 +2349,31 @@ def provision_whisper_runtime(progress_cb=None):
             raise RuntimeError(
                 'Downloaded whisper.cpp runtime did not expose its SRT capability.'
             )
+        try:
+            (Path(extracted).parent / WHISPER_BIN_VERSION_STAMP).write_text(
+                WHISPER_BIN_VERSION, encoding='utf-8'
+            )
+        except OSError as error:
+            # The runtime works. Unstamped, the next setup fetches it again.
+            write_persistent_log(
+                f'Could not record the whisper.cpp runtime version: {error}'
+            )
         return str(extracted)
     except Exception as error:
         if installed:
             shutil.rmtree(WHISPER_BIN_DIR, ignore_errors=True)
+            if retained:
+                # An upgrade that installed but won't run puts the runtime it
+                # replaced back rather than leaving none.
+                try:
+                    replace_directory_with_copy(
+                        _whisper_runtime_rollback_dir(), WHISPER_BIN_DIR
+                    )
+                except Exception as restore_error:  # noqa: BLE001
+                    write_persistent_log(
+                        'Could not restore the previous whisper.cpp runtime: '
+                        f'{restore_error}'
+                    )
         write_persistent_log(f'Whisper runtime provisioning failed: {error}')
         return None
     finally:
@@ -2527,7 +2628,17 @@ def _probe_ffmpeg_binary_version(path):
 
 
 def _probe_whisper_binary_version(path):
-    return str((probe_whisper_runtime(path) or {}).get('version') or '')
+    # A copy that can't show its SRT switch is not one worth naming, so the
+    # stamp counts only beside a CLI that runs.
+    if not (probe_whisper_runtime(path, WHISPER_BIN_MIN_BYTES) or {}).get('usable'):
+        return ''
+    return _whisper_runtime_version(path)
+
+
+def _managed_binary_min_bytes(name):
+    """The size below which one managed binary is treated as damaged."""
+    # whisper-cli.exe is small; the weight of that runtime is in its DLLs.
+    return WHISPER_BIN_MIN_BYTES if name == 'whisper' else MANAGED_BINARY_MIN_BYTES
 
 
 def managed_binary_paths():
@@ -2557,7 +2668,9 @@ def probe_managed_binary_version(name, path=None):
     if probe is None:
         return ''
     target = Path(path) if path is not None else managed_binary_paths().get(name)
-    if target is None or not managed_binary_usable(target):
+    if target is None or not managed_binary_usable(
+        target, _managed_binary_min_bytes(name)
+    ):
         return ''
     try:
         return str(probe(target) or '')
@@ -2572,6 +2685,9 @@ def managed_binary_rollback_path(name):
     if name == 'yt-dlp':
         # The updater has retained this name since before pinning existed.
         return INSTALL_DIR / YTDLP_ROLLBACK_FILENAME
+    if name == 'whisper':
+        # The CLI inside a copy of its whole folder, DLLs and stamp included.
+        return _whisper_runtime_rollback_dir() / WHISPER_BIN_PATH.name
     path = managed_binary_paths().get(name)
     return None if path is None else path.with_name(f'.{path.name}.last-known-good')
 
@@ -2583,11 +2699,19 @@ def retain_managed_binary_rollback(name):
     design: failing to retain a copy must not stop a security refresh, it
     only means this particular version cannot be returned to.
     """
-    path = managed_binary_paths().get(str(name or '').strip().lower())
+    name = str(name or '').strip().lower()
+    path = managed_binary_paths().get(name)
     backup = managed_binary_rollback_path(name)
-    if path is None or backup is None or not managed_binary_usable(path):
+    if path is None or backup is None or not managed_binary_usable(
+        path, _managed_binary_min_bytes(name)
+    ):
         return ''
     try:
+        if name == 'whisper':
+            # whisper-cli only runs with the DLLs it shipped with, so the
+            # whole folder is kept.
+            replace_directory_with_copy(path.parent, backup.parent)
+            return _compute_sha256(backup) or ''
         return atomic_copy_verified(path, backup) or ''
     except Exception as exc:  # noqa: BLE001
         write_persistent_log(f'Could not retain a rollback copy of {name}: {exc}')
@@ -2660,7 +2784,7 @@ def rollback_managed_binary(config, name):
             'reason': 'unknown-managed-binary',
             'message': f"{name or 'That tool'} is not a managed binary.",
         }
-    if not managed_binary_usable(backup):
+    if not managed_binary_usable(backup, _managed_binary_min_bytes(name)):
         return {
             'ok': False, 'name': name, 'version': '',
             'reason': 'no-retained-copy',
@@ -2701,7 +2825,10 @@ def rollback_managed_binary(config, name):
             ),
         }
     try:
-        atomic_copy_verified(backup, path)
+        if name == 'whisper':
+            replace_directory_with_copy(backup.parent, path.parent)
+        else:
+            atomic_copy_verified(backup, path)
     except Exception as exc:  # noqa: BLE001
         write_persistent_log(f'{name} rollback failed: {exc}')
         return {
@@ -2783,7 +2910,7 @@ def managed_binary_inventory(config):
             'sha256': (
                 _compute_sha256(path) or ''
                 if pinned and installed == pinned and path is not None
-                and managed_binary_usable(path)
+                and managed_binary_usable(path, _managed_binary_min_bytes(name))
                 else ''
             ),
             'floor': MANAGED_BINARY_FLOORS.get(name, ''),
@@ -2793,7 +2920,9 @@ def managed_binary_inventory(config):
             'belowFloor': _managed_binary_below_floor(name, installed),
             'rollback': (
                 probe_managed_binary_version(name, backup)
-                if backup is not None and managed_binary_usable(backup) else ''
+                if backup is not None and managed_binary_usable(
+                    backup, _managed_binary_min_bytes(name)
+                ) else ''
             ),
         })
     return inventory
@@ -6478,7 +6607,8 @@ class SetupWorker(SetupWorkerCore):
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
                 'provision_quickjs': lambda *args, **kwargs: provision_quickjs(*args, **kwargs),
-                'provision_whisper_runtime': lambda *args, **kwargs: provision_whisper_runtime(*args, **kwargs),
+                'provision_whisper_runtime': lambda *args, **kwargs: provision_whisper_runtime(
+                    *args, config=config, **kwargs),
                 'provision_whisper_model': lambda *args, **kwargs: provision_whisper_model(
                     *args, model=chosen_whisper_model(config), **kwargs),
                 'probe_whisper_runtime': lambda *args, **kwargs: probe_whisper_runtime(*args, **kwargs),
@@ -6532,6 +6662,8 @@ def _portable_state_paths(root=None):
     }
     root_dir_names.update({
         'site-logins', 'download-temp',
+        # The previous whisper.cpp runtime folder, kept for Roll back.
+        _whisper_runtime_rollback_dir().name,
     })
     exact = {root / name for name in root_file_names | root_dir_names}
     exact.update({

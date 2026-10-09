@@ -1648,6 +1648,114 @@ class WhisperRuntimeProvisioningTests(unittest.TestCase):
                 self.assertIsNone(ad.provision_whisper_runtime())
             self.assertEqual(runtime_path.read_bytes(), b"verified old runtime")
 
+    @staticmethod
+    def _runtime(directory, payload, version=None):
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "whisper-cli.exe").write_bytes(payload)
+        (directory / "whisper.dll").write_bytes(payload)
+        if version:
+            (directory / ad.WHISPER_BIN_VERSION_STAMP).write_text(
+                version, encoding="utf-8"
+            )
+
+    @staticmethod
+    def _fake_probe(path, *_args, **_kwargs):
+        return {"usable": Path(path).is_file(), "path": str(path)}
+
+    def test_a_stale_working_runtime_is_replaced_and_kept_for_rollback(self):
+        # A working runtime was never replaced, so raising WHISPER_BIN_VERSION
+        # reached no existing install, and the rollback copy lived inside the
+        # folder the install swaps out, so it was deleted with it.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_dir = root / "whisper"
+            runtime_path = runtime_dir / "whisper-cli.exe"
+            self._runtime(runtime_dir, b"old", "1.0.0")
+            fetched = []
+
+            def fake_download(_url, path, **_kwargs):
+                fetched.append(path)
+                self._archive(path)
+
+            with mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_BIN_DIR", runtime_dir), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", runtime_path), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "download_file_atomic", fake_download), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "verify_file_sha256", return_value=True), \
+                    mock.patch.object(ad, "probe_whisper_runtime", side_effect=self._fake_probe), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                result = ad.provision_whisper_runtime()
+                retained = ad.managed_binary_rollback_path("whisper")
+                retained_version = ad.probe_managed_binary_version("whisper", retained)
+                installed_version = ad.probe_managed_binary_version("whisper")
+
+            self.assertEqual(result, str(runtime_path))
+            self.assertTrue(fetched, "a stale runtime has to be replaced")
+            self.assertEqual(runtime_path.read_bytes(), b"cli")
+            self.assertEqual(installed_version, ad.WHISPER_BIN_VERSION)
+            self.assertFalse(retained.is_relative_to(runtime_dir))
+            self.assertEqual((retained.parent / "whisper.dll").read_bytes(), b"old")
+            self.assertEqual(retained_version, "1.0.0")
+
+    def test_a_current_or_rollback_pinned_runtime_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_dir = root / "whisper"
+            runtime_path = runtime_dir / "whisper-cli.exe"
+            fetched = []
+            with mock.patch.object(ad, "INSTALL_DIR", root), \
+                    mock.patch.object(ad, "WHISPER_BIN_DIR", runtime_dir), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", runtime_path), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "download_file_atomic",
+                                      lambda _url, path, **_k: fetched.append(path)), \
+                    mock.patch.object(ad, "check_download_disk_space", return_value=None), \
+                    mock.patch.object(ad, "probe_whisper_runtime", side_effect=self._fake_probe), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                self._runtime(runtime_dir, b"current", ad.WHISPER_BIN_VERSION)
+                self.assertEqual(ad.provision_whisper_runtime(), str(runtime_path))
+                # Roll back pins the release it restored; setup must not
+                # undo that on its next run.
+                self._runtime(runtime_dir, b"old", "1.0.0")
+                pinned = FakeConfig({"ManagedBinaryPins": {"whisper": "1.0.0"}})
+                self.assertEqual(
+                    ad.provision_whisper_runtime(config=pinned), str(runtime_path)
+                )
+            self.assertEqual(fetched, [])
+
+    def test_roll_back_restores_the_retained_runtime_folder_and_pins_it(self):
+        # The version probe read a key the runtime check never set, so every
+        # Roll back failed with "retained-copy-unverified".
+        stored = {}
+
+        class PinConfig(FakeConfig):
+            def update(self, mapping):
+                stored.update(mapping)
+                self.data.update(mapping)
+                return True
+
+        config = PinConfig({"ManagedBinaryPins": {}})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_dir = root / "whisper"
+            runtime_path = runtime_dir / "whisper-cli.exe"
+            self._runtime(runtime_dir, b"new", ad.WHISPER_BIN_VERSION)
+            self._runtime(root / ".whisper.last-known-good", b"old", "1.9.1")
+            with mock.patch.object(ad, "WHISPER_BIN_DIR", runtime_dir), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", runtime_path), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", side_effect=self._fake_probe), \
+                    mock.patch.object(ad, "write_persistent_log"):
+                result = ad.rollback_managed_binary(config, "whisper")
+
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["version"], "1.9.1")
+            self.assertEqual(runtime_path.read_bytes(), b"old")
+            self.assertEqual((runtime_dir / "whisper.dll").read_bytes(), b"old")
+            self.assertEqual(stored["ManagedBinaryPins"], {"whisper": "1.9.1"})
+
 
 class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
     """The flags this app compiles do what it claims, on the installed yt-dlp.

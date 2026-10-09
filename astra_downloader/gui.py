@@ -572,6 +572,33 @@ class SetupWorkerCore(QThread):
                 # reason: failed staging cleanup may race with antivirus
                 pass
 
+    def _provision_whisper_runtime(self):
+        """Install the pinned whisper.cpp runtime, or replace a stale one.
+
+        Provisioning returns at once when the runtime on disk is the release
+        this build pins (or the one a rollback pinned), so it runs even when
+        a runtime already works: skipping it there kept every install on its
+        first whisper.cpp forever.
+        """
+        self.log.emit('Preparing local subtitle transcription runtime...')
+        runtime_path = self._dependencies['provision_whisper_runtime'](
+            progress_cb=self._ranged_progress_cb(60, 64),
+        )
+        if runtime_path:
+            self.log.emit(f'  Whisper runtime ready: {runtime_path}')
+        elif self._dependencies['probe_whisper_runtime'](
+            self._value('WHISPER_BIN_PATH'),
+            self._value('WHISPER_BIN_MIN_BYTES'),
+        ).get('usable'):
+            self.log.emit(
+                '  Whisper runtime update failed; keeping the one already installed.'
+            )
+        else:
+            self.log.emit(
+                '  Whisper runtime is unavailable; local subtitle '
+                'generation will remain unavailable until setup succeeds.'
+            )
+
     def _provision_javascript_runtime(self):
         """Make sure some JavaScript runtime exists, preferring Deno.
 
@@ -732,26 +759,7 @@ class SetupWorkerCore(QThread):
             # pinned fetch is still part of setup once the user enables the
             # setting, so a media job never reaches a half-provisioned model.
             if bool(self.config.get('GenerateSubtitles', False)):
-                self.log.emit('Preparing local subtitle transcription runtime...')
-                runtime = self._dependencies['probe_whisper_runtime'](
-                    self._value('WHISPER_BIN_PATH'),
-                    self._value('WHISPER_BIN_MIN_BYTES'),
-                )
-                if not runtime.get('usable'):
-                    runtime_path = self._dependencies['provision_whisper_runtime'](
-                        progress_cb=self._ranged_progress_cb(60, 64),
-                    )
-                    if runtime_path:
-                        self.log.emit(f'  Whisper runtime ready: {runtime_path}')
-                    else:
-                        self.log.emit(
-                            '  Whisper runtime is unavailable; local subtitle '
-                            'generation will remain unavailable until setup succeeds.'
-                        )
-                else:
-                    self.log.emit(
-                        f"  Whisper runtime already ready: {runtime.get('path')}"
-                    )
+                self._provision_whisper_runtime()
                 self.log.emit('Preparing local subtitle transcription model...')
                 model = self._dependencies['provision_whisper_model'](
                     progress_cb=self._ranged_progress_cb(64, 68),
