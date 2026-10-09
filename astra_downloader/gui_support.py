@@ -8,18 +8,19 @@ builders for the common visual language.
 import os
 import unicodedata
 
-from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QRect, QSize, Qt
 from PySide6.QtGui import (
     QAccessible, QAccessibleAnnouncementEvent, QColor, QIcon, QPainter, QPen,
     QPixmap,
 )
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QLabel, QPushButton, QSizePolicy, QVBoxLayout,
-    QWidget,
+    QApplication, QComboBox, QFrame, QLabel, QPushButton, QSizePolicy,
+    QStyle, QStyleOptionComboBox, QVBoxLayout, QWidget,
 )
 
 
 __all__ = (
+    "ChoiceBox",
     "GUI_ACCESSIBILITY_COLORS", "describe_rejected_links", "download_status_tone", "filter_site_login_entries",
     "filter_subscription_records", "format_duration", "human_status", "make_card",
     "make_divider", "make_empty_state", "make_label", "make_line_icon", "make_section_label",
@@ -393,7 +394,7 @@ _ICON_MATCHERS = (
     ("register", lambda key: "register" in key or "pair" in key),
     ("link", lambda key: "link" in key or "url" in key),
     ("clip", lambda key: "clip" in key or "30 s" in key or "seconds" in key),
-    ("options", lambda key: "option" in key or "advanced" in key or key == "more"),
+    ("options", lambda key: "option" in key or "advanced" in key or "filter" in key or key == "more"),
     ("add", lambda key: key.startswith("add") or key.startswith("new ")),
     ("subscriptions", lambda key: "subscription" in key or "feed" in key),
     ("archive", lambda key: "archive" in key or "allow" in key),
@@ -672,6 +673,30 @@ def set_line_icon(widget, name, size=18):
     elif hasattr(widget, "setPixmap"):
         widget.setPixmap(icon.pixmap(size, size))
     return icon
+
+
+class ChoiceBox(QComboBox):
+    """Keep a visible dropdown affordance with the shared control stylesheet."""
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        arrow = self.style().subControlRect(
+            QStyle.ComplexControl.CC_ComboBox, option,
+            QStyle.SubControl.SC_ComboBoxArrow, self,
+        )
+        size = 14
+        target = QRect(
+            arrow.center().x() - size // 2,
+            arrow.center().y() - size // 2,
+            size, size,
+        )
+        painter = QPainter(self)
+        icon = make_line_icon("down", size=size, dpr=self.devicePixelRatioF())
+        mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
+        icon.paint(painter, target, Qt.AlignmentFlag.AlignCenter, mode)
+        painter.end()
 
 
 def refresh_line_icons(root=None):

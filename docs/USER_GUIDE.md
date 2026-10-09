@@ -1,4 +1,4 @@
-# Using Astra Downloader v2.17.0
+# Using Astra Downloader v2.18.0
 
 [Back to the download page](../README.md)
 
@@ -7,6 +7,8 @@
 Paste one link in Download, or paste a whitespace-separated batch. The app probes a single link so the quality picker can reflect its available formats. A probe can fail even when a different site works; read the error before retrying.
 
 Video output supports MP4, MKV and WebM. MP4 prefers H.264 with AAC for compatibility. Audio choices include MP3, M4A, Opus, FLAC and WAV. Codec and frame-rate preferences order formats the source actually provides; they aren't an upscaler.
+
+Open **More options** for site profiles, audio language, a protected video password, clipping, a filename or a scheduled start. Collapsing the section keeps your choices. **Show checks** opens tool status and repair actions. A failed health check opens them automatically.
 
 Use the filename field for a single download, or leave it empty to use the source title. Settings has a naming-template preview with checks for Windows reserved names and path length. Windows filename sanitization is on by default.
 
@@ -18,9 +20,13 @@ The queue is saved locally so pending work can survive a restart. Pause intake t
 
 A playlist can be limited by item count, upload date or duration. If an entry is private or unavailable, that doesn't necessarily explain a different entry's failure.
 
-History searches titles, filenames and URLs. Settings controls its retention cap. Subscription archive entries appear alongside ordinary downloads without duplicating the same URL.
+History searches titles, filenames and URLs. **More filters** reveals the format and date filters. Their values remain active when collapsed. Settings controls its retention cap. Subscription archive entries appear alongside ordinary downloads without duplicating the same URL.
 
 By default, each download uses its own staging folder. Finished output is moved to the destination; partial and merge files stay out of the media folder. The diagnostic option to keep intermediates beside output is available in Settings. Known file sizes are checked against free space before a job is queued, but unknown sizes can still run out of room later.
+
+## Find a setting
+
+Settings opens to **General**. Choose **Folders**, **Downloads**, **Connection** or **Maintenance** for the other groups. Search checks every category, and clearing it returns to the category you selected. **Save changes** and **Restore defaults** remain at the bottom of the window. Switching categories keeps unsaved edits.
 
 ## Subtitles and archives
 
@@ -36,9 +42,9 @@ Subscriptions remember format, quality, audio mode, naming template and upgrade 
 
 Sites combines a curated guidance catalogue with extractors reported by your installed yt-dlp. Search it or filter by category. Site-specific referers and extractor arguments are applied where configured. There is also a native resolver for supported Kick VOD links; this is not a promise that every Kick URL remains available.
 
-Site profiles hold domain-specific defaults for formats, quality, proxy, browser impersonation and pacing. The paste area shows the matched profile. You can choose a different profile for that job or disable matching. Secrets remain in the separate sign-in store.
+Site profiles hold domain-specific defaults for formats, quality, proxy, browser impersonation and pacing. More options shows the matched profile. You can choose a different profile for that job or disable matching. Secrets remain in the separate sign-in store.
 
-Sign-ins can import a Netscape-format `cookies.txt`, read a supported browser profile, or receive a session from the paired extension. Cookies are scoped to the site's registrable domain. A site may reject an imported session, require additional checks or change its login flow. Don't import your everyday account without considering the risk, particularly on YouTube.
+Sign-ins can import a Netscape-format `cookies.txt`, read a supported browser profile, or receive a session from the paired extension. Choose an **Import method** to show the browser, file, or username and password form. Cookies are scoped to the site's registrable domain. A site may reject an imported session, require additional checks or change its login flow. Don't import your everyday account without considering the risk, particularly on YouTube.
 
 The app warns about YouTube account risks and links to [yt-dlp's guidance](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies). Settings shows approximate rates based on your configured pause and worker count. These estimates aren't a service quota or a guarantee against rate limits.
 
@@ -51,6 +57,8 @@ Settings can use a configured proxy or the Windows system proxy. The displayed a
 Advanced options include IPv4 or IPv6 preference, a source address, geo-related headers and a verification proxy. Browser impersonation is limited to targets included in your yt-dlp build. None of these options grants access to content you aren't authorized to use.
 
 [Astra Deck](https://github.com/SysAdminDoc/Astra-Deck) is optional and maintained separately. Its handoff uses the local API's fixed loopback port catalogue and session token. Browser-specific extension IDs are checked before native-messaging registration. A native bootstrap can prove the endpoint knows the session secret before receiving cookies. Pairing a live browser wasn't part of the screenshot capture.
+
+On Browser extension, **More options** reveals manual extension IDs, the local address and activity log. Connection and pairing actions stay visible above it.
 
 The Astra Deck userscript can't use native messaging, so it pairs once by hand. Open Browser extension, choose **Pair userscript**, then press a download button on YouTube within two minutes. The status line counts down and says when the userscript is paired. The window closes after the first request it answers. To unpair the userscript, regenerate the token in Settings. You can also open the window from a command line with `AstraDownloader.exe --pair-userscript`, which hands the request to the copy that's already running.
 

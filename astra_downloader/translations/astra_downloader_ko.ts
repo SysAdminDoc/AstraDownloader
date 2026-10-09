@@ -615,12 +615,12 @@
       <translation>More options</translation>
     </message>
     <message>
-      <source>Hide password, clip range, file name and start time controls.</source>
-      <translation>Hide password, clip range, file name and start time controls.</translation>
+      <source>Hide site profile, audio language, password, clip range, file name and start time controls.</source>
+      <translation>Hide site profile, audio language, password, clip range, file name and start time controls.</translation>
     </message>
     <message>
-      <source>Show password, clip range, file name and start time controls.</source>
-      <translation>Show password, clip range, file name and start time controls.</translation>
+      <source>Show site profile, audio language, password, clip range, file name and start time controls.</source>
+      <translation>Show site profile, audio language, password, clip range, file name and start time controls.</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -765,6 +765,18 @@
     <message>
       <source>Loading history…</source>
       <translation>Loading history…</translation>
+    </message>
+    <message>
+      <source>No downloads yet</source>
+      <translation>No downloads yet</translation>
+    </message>
+    <message>
+      <source>Completed downloads will appear here.</source>
+      <translation>Completed downloads will appear here.</translation>
+    </message>
+    <message>
+      <source>View download queue</source>
+      <translation>View download queue</translation>
     </message>
     <message>
       <source>Not set</source>
@@ -1251,8 +1263,12 @@
       <translation>Use automatic, original or a language code such as en or es-419 for the audio language.</translation>
     </message>
     <message>
-      <source>Add a site sign-in</source>
-      <translation>Add a site sign-in</translation>
+      <source>No stored sign-ins</source>
+      <translation>No stored sign-ins</translation>
+    </message>
+    <message>
+      <source>Add a sign-in above when a video needs an account.</source>
+      <translation>Add a sign-in above when a video needs an account.</translation>
     </message>
     <message>
       <source>Username and password. Stored securely.</source>
@@ -1505,18 +1521,6 @@
     <message>
       <source>0 of {filtered} filtered · {total} retained · limit {limit}</source>
       <translation>0 of {filtered} filtered · {total} retained · limit {limit}</translation>
-    </message>
-    <message>
-      <source>No downloads yet</source>
-      <translation>No downloads yet</translation>
-    </message>
-    <message>
-      <source>Completed downloads will appear here.</source>
-      <translation>Completed downloads will appear here.</translation>
-    </message>
-    <message>
-      <source>View download queue</source>
-      <translation>View download queue</translation>
     </message>
     <message>
       <source>No matching downloads</source>
@@ -1869,14 +1873,6 @@
     <message>
       <source>Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.</source>
       <translation>Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.</translation>
-    </message>
-    <message>
-      <source>No stored sign-ins</source>
-      <translation>No stored sign-ins</translation>
-    </message>
-    <message>
-      <source>Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.</source>
-      <translation>Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.</translation>
     </message>
     <message>
       <source>No sign-ins match these filters</source>
@@ -2403,8 +2399,8 @@
       <translation>Download a video</translation>
     </message>
     <message>
-      <source>Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
-      <translation>Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</translation>
+      <source>Paste a link. Choose a format. Save it.</source>
+      <translation>Paste a link. Choose a format. Save it.</translation>
     </message>
     <message>
       <source>Welcome to Astra Downloader</source>
@@ -2579,8 +2575,8 @@
       <translation>Download tool setup progress</translation>
     </message>
     <message>
-      <source>Download health</source>
-      <translation>Download health</translation>
+      <source>Tools and download health</source>
+      <translation>Tools and download health</translation>
     </message>
     <message>
       <source>Show each download readiness check and its repair action.</source>
@@ -2597,6 +2593,10 @@
     <message>
       <source>Quarantined state file</source>
       <translation>Quarantined state file</translation>
+    </message>
+    <message>
+      <source>Your downloads</source>
+      <translation>Your downloads</translation>
     </message>
     <message>
       <source>Running and pending downloads stored in the durable queue.</source>
@@ -2711,6 +2711,10 @@
       <translation>Export filtered</translation>
     </message>
     <message>
+      <source>More filters</source>
+      <translation>More filters</translation>
+    </message>
+    <message>
       <source>0 of 0 retained</source>
       <translation>0 of 0 retained</translation>
     </message>
@@ -2725,6 +2729,10 @@
     <message>
       <source>History</source>
       <translation>기록</translation>
+    </message>
+    <message>
+      <source>Find files you downloaded.</source>
+      <translation>Find files you downloaded.</translation>
     </message>
     <message>
       <source>Remove saved history entries. Downloaded files are not deleted.</source>
@@ -2759,14 +2767,6 @@
       <translation>Complete</translation>
     </message>
     <message>
-      <source>History format</source>
-      <translation>History format</translation>
-    </message>
-    <message>
-      <source>All formats</source>
-      <translation>All formats</translation>
-    </message>
-    <message>
       <source>History sort order</source>
       <translation>History sort order</translation>
     </message>
@@ -2777,6 +2777,18 @@
     <message>
       <source>Oldest first</source>
       <translation>Oldest first</translation>
+    </message>
+    <message>
+      <source>Show or hide format and saved-date filters.</source>
+      <translation>Show or hide format and saved-date filters.</translation>
+    </message>
+    <message>
+      <source>History format</source>
+      <translation>History format</translation>
+    </message>
+    <message>
+      <source>All formats</source>
+      <translation>All formats</translation>
     </message>
     <message>
       <source>Saved from</source>
@@ -2815,8 +2827,20 @@
       <translation>Cancelled</translation>
     </message>
     <message>
+      <source>More filters ({count})</source>
+      <translation>More filters ({count})</translation>
+    </message>
+    <message>
       <source>Undo remove</source>
       <translation>Undo remove</translation>
+    </message>
+    <message>
+      <source>Site address</source>
+      <translation>Site address</translation>
+    </message>
+    <message>
+      <source>Import method</source>
+      <translation>Import method</translation>
     </message>
     <message>
       <source>Store username/password</source>
@@ -2835,16 +2859,32 @@
       <translation>로그인</translation>
     </message>
     <message>
+      <source>Save a site sign-in for private or members-only videos.</source>
+      <translation>Save a site sign-in for private or members-only videos.</translation>
+    </message>
+    <message>
       <source>Restore the sign-in removed by the last action.</source>
       <translation>Restore the sign-in removed by the last action.</translation>
+    </message>
+    <message>
+      <source>Add a site sign-in</source>
+      <translation>Add a site sign-in</translation>
     </message>
     <message>
       <source>Site address for the sign-in</source>
       <translation>Site address for the sign-in</translation>
     </message>
     <message>
-      <source>Site address you signed in to, such as x.com, instagram.com, or vimeo.com</source>
-      <translation>Site address you signed in to, such as x.com, instagram.com, or vimeo.com</translation>
+      <source>example.com</source>
+      <translation>example.com</translation>
+    </message>
+    <message>
+      <source>Sign-in import method</source>
+      <translation>Sign-in import method</translation>
+    </message>
+    <message>
+      <source>Username and password</source>
+      <translation>Username and password</translation>
     </message>
     <message>
       <source>Site sign-in username</source>
@@ -2891,6 +2931,18 @@
       <translation>Default, or a profile name</translation>
     </message>
     <message>
+      <source>Firefox can usually be read directly. For Chrome or Edge, import a cookies.txt file.</source>
+      <translation>Firefox can usually be read directly. For Chrome or Edge, import a cookies.txt file.</translation>
+    </message>
+    <message>
+      <source>Choose a cookies.txt file exported from the browser where you signed in to this site.</source>
+      <translation>Choose a cookies.txt file exported from the browser where you signed in to this site.</translation>
+    </message>
+    <message>
+      <source>Sign-ins stay on this PC and are sent only to their site.</source>
+      <translation>Sign-ins stay on this PC and are sent only to their site.</translation>
+    </message>
+    <message>
       <source>Site sign-in status</source>
       <translation>Site sign-in status</translation>
     </message>
@@ -2901,6 +2953,10 @@
     <message>
       <source>YouTube sign-in risk warning</source>
       <translation>YouTube sign-in risk warning</translation>
+    </message>
+    <message>
+      <source>Stored sign-ins</source>
+      <translation>Stored sign-ins</translation>
     </message>
     <message>
       <source>Search stored sign-ins</source>
@@ -2915,10 +2971,6 @@
       <translation>Stored sign-in status</translation>
     </message>
     <message>
-      <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
-      <translation>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</translation>
-    </message>
-    <message>
       <source>Username</source>
       <translation>Username</translation>
     </message>
@@ -2927,16 +2979,16 @@
       <translation>Password</translation>
     </message>
     <message>
-      <source>Read from</source>
-      <translation>Read from</translation>
-    </message>
-    <message>
       <source>{browser}. {warning}</source>
       <translation>{browser}. {warning}</translation>
     </message>
     <message>
-      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
-      <translation>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</translation>
+      <source>Browser</source>
+      <translation>Browser</translation>
+    </message>
+    <message>
+      <source>Profile (optional)</source>
+      <translation>Profile (optional)</translation>
     </message>
     <message>
       <source>likely unreadable on Chromium 127+</source>
@@ -2959,6 +3011,10 @@
       <translation>일치하는 사이트 1개.</translation>
     </message>
     <message>
+      <source>Open downloads</source>
+      <translation>Open downloads</translation>
+    </message>
+    <message>
       <source>Sign-in needed</source>
       <translation>로그인 필요</translation>
     </message>
@@ -2971,8 +3027,8 @@
       <translation>사이트</translation>
     </message>
     <message>
-      <source>Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.</source>
-      <translation>설치된 yt-dlp가 지원하는 모든 사이트입니다. 이 중 아무 사이트의 링크나 다운로드 페이지에 붙여 넣으세요.</translation>
+      <source>Find a site, then paste its link on the Download page.</source>
+      <translation>Find a site, then paste its link on the Download page.</translation>
     </message>
     <message>
       <source>Search supported sites</source>
@@ -2989,6 +3045,18 @@
     <message>
       <source>All categories</source>
       <translation>모든 분류</translation>
+    </message>
+    <message>
+      <source>Site</source>
+      <translation>Site</translation>
+    </message>
+    <message>
+      <source>Category</source>
+      <translation>Category</translation>
+    </message>
+    <message>
+      <source>Sign-in</source>
+      <translation>Sign-in</translation>
     </message>
     <message>
       <source>Live streaming</source>
@@ -3023,12 +3091,8 @@
       <translation>성인</translation>
     </message>
     <message>
-      <source>New subscription</source>
-      <translation>New subscription</translation>
-    </message>
-    <message>
-      <source>Every</source>
-      <translation>Every</translation>
+      <source>Check every</source>
+      <translation>Check every</translation>
     </message>
     <message>
       <source>Subscriptions are ready when the local companion is running.</source>
@@ -3039,12 +3103,16 @@
       <translation>Subscriptions</translation>
     </message>
     <message>
-      <source>Watch YouTube channels or playlists on a schedule and queue only new uploads.</source>
-      <translation>Watch YouTube channels or playlists on a schedule and queue only new uploads.</translation>
+      <source>Watch channels and playlists. Download new uploads automatically.</source>
+      <translation>Watch channels and playlists. Download new uploads automatically.</translation>
     </message>
     <message>
       <source>Restore the subscription removed by the last action.</source>
       <translation>Restore the subscription removed by the last action.</translation>
+    </message>
+    <message>
+      <source>Channel or playlist link</source>
+      <translation>Channel or playlist link</translation>
     </message>
     <message>
       <source>Subscription channel or playlist URL</source>
@@ -3053,6 +3121,14 @@
     <message>
       <source>Subscription scan interval in minutes</source>
       <translation>Subscription scan interval in minutes</translation>
+    </message>
+    <message>
+      <source>New uploads are queued while Astra is running.</source>
+      <translation>New uploads are queued while Astra is running.</translation>
+    </message>
+    <message>
+      <source>Your subscriptions</source>
+      <translation>Your subscriptions</translation>
     </message>
     <message>
       <source>Search subscriptions</source>
@@ -3087,6 +3163,14 @@
       <translation>Local only · token required</translation>
     </message>
     <message>
+      <source>Allow extension pairing</source>
+      <translation>Allow extension pairing</translation>
+    </message>
+    <message>
+      <source>Pair userscript</source>
+      <translation>Pair userscript</translation>
+    </message>
+    <message>
       <source>Copy endpoint</source>
       <translation>Copy endpoint</translation>
     </message>
@@ -3097,14 +3181,6 @@
     <message>
       <source>Register</source>
       <translation>Register</translation>
-    </message>
-    <message>
-      <source>Allow extension pairing</source>
-      <translation>Allow extension pairing</translation>
-    </message>
-    <message>
-      <source>Pair userscript</source>
-      <translation>Pair userscript</translation>
     </message>
     <message>
       <source>In progress</source>
@@ -3135,36 +3211,20 @@
       <translation>Local API</translation>
     </message>
     <message>
-      <source>Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.</source>
-      <translation>Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.</translation>
+      <source>Send downloads from your browser with Astra Deck.</source>
+      <translation>Send downloads from your browser with Astra Deck.</translation>
     </message>
     <message>
-      <source>Pairing</source>
-      <translation>Pairing</translation>
+      <source>Connect your browser</source>
+      <translation>Connect your browser</translation>
     </message>
     <message>
-      <source>The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.</source>
-      <translation>The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.</translation>
+      <source>Chrome and Edge</source>
+      <translation>Chrome and Edge</translation>
     </message>
     <message>
-      <source>Chrome and Edge pairing</source>
-      <translation>Chrome and Edge pairing</translation>
-    </message>
-    <message>
-      <source>Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.</source>
-      <translation>Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.</translation>
-    </message>
-    <message>
-      <source>32-letter extension ID. Separate multiple IDs with commas.</source>
-      <translation>32-letter extension ID. Separate multiple IDs with commas.</translation>
-    </message>
-    <message>
-      <source>Chrome and Edge extension IDs</source>
-      <translation>Chrome and Edge extension IDs</translation>
-    </message>
-    <message>
-      <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
-      <translation>Write the Chrome and Edge native-messaging registration for these IDs.</translation>
+      <source>Allow pairing, then use a download button in Astra Deck within two minutes.</source>
+      <translation>Allow pairing, then use a download button in Astra Deck within two minutes.</translation>
     </message>
     <message>
       <source>Let one Chrome or Edge extension pair in the next two minutes.</source>
@@ -3175,12 +3235,12 @@
       <translation>Chrome pairing status</translation>
     </message>
     <message>
-      <source>Userscript pairing</source>
-      <translation>Userscript pairing</translation>
+      <source>Userscript</source>
+      <translation>Userscript</translation>
     </message>
     <message>
-      <source>Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.</source>
-      <translation>Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.</translation>
+      <source>Pair the Astra Deck userscript, then use a download button on YouTube.</source>
+      <translation>Pair the Astra Deck userscript, then use a download button on YouTube.</translation>
     </message>
     <message>
       <source>Let the Astra Deck userscript collect the token once in the next two minutes.</source>
@@ -3189,6 +3249,42 @@
     <message>
       <source>Userscript pairing status</source>
       <translation>Userscript pairing status</translation>
+    </message>
+    <message>
+      <source>Firefox is registered automatically.</source>
+      <translation>Firefox is registered automatically.</translation>
+    </message>
+    <message>
+      <source>Downloading by pasting a link never needs this server.</source>
+      <translation>Downloading by pasting a link never needs this server.</translation>
+    </message>
+    <message>
+      <source>Connection details and activity</source>
+      <translation>Connection details and activity</translation>
+    </message>
+    <message>
+      <source>Manual extension IDs, local address and server log.</source>
+      <translation>Manual extension IDs, local address and server log.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge extension IDs</source>
+      <translation>Chrome and Edge extension IDs</translation>
+    </message>
+    <message>
+      <source>For manual pairing, paste the ID from chrome://extensions. Separate multiple IDs with commas. Only the signed .crx build pairs on its own.</source>
+      <translation>For manual pairing, paste the ID from chrome://extensions. Separate multiple IDs with commas. Only the signed .crx build pairs on its own.</translation>
+    </message>
+    <message>
+      <source>32-letter extension ID. Separate multiple IDs with commas.</source>
+      <translation>32-letter extension ID. Separate multiple IDs with commas.</translation>
+    </message>
+    <message>
+      <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
+      <translation>Write the Chrome and Edge native-messaging registration for these IDs.</translation>
+    </message>
+    <message>
+      <source>Regenerating the token in Settings unpairs the userscript.</source>
+      <translation>Regenerating the token in Settings unpairs the userscript.</translation>
     </message>
     <message>
       <source>Server log</source>
@@ -3209,6 +3305,14 @@
     <message>
       <source>. yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Source&lt;/a&gt;.</source>
       <translation>. yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Source&lt;/a&gt;.</translation>
+    </message>
+    <message>
+      <source>General</source>
+      <translation>General</translation>
+    </message>
+    <message>
+      <source>Your everyday preferences.</source>
+      <translation>Your everyday preferences.</translation>
     </message>
     <message>
       <source>No settings match this search.</source>
@@ -3335,12 +3439,40 @@
       <translation>Undo import</translation>
     </message>
     <message>
+      <source>Changes apply when you save.</source>
+      <translation>Changes apply when you save.</translation>
+    </message>
+    <message>
       <source>Restore defaults</source>
       <translation>Restore defaults</translation>
     </message>
     <message>
       <source>Undo defaults</source>
       <translation>Undo defaults</translation>
+    </message>
+    <message>
+      <source>Folders</source>
+      <translation>Folders</translation>
+    </message>
+    <message>
+      <source>Downloads</source>
+      <translation>Downloads</translation>
+    </message>
+    <message>
+      <source>Choose where your files are saved.</source>
+      <translation>Choose where your files are saved.</translation>
+    </message>
+    <message>
+      <source>Set your preferred formats and download behavior.</source>
+      <translation>Set your preferred formats and download behavior.</translation>
+    </message>
+    <message>
+      <source>Adjust network access and site-specific options.</source>
+      <translation>Adjust network access and site-specific options.</translation>
+    </message>
+    <message>
+      <source>Keep your tools current and manage your settings.</source>
+      <translation>Keep your tools current and manage your settings.</translation>
     </message>
     <message>
       <source>Current pacing has no pause between downloads with concurrency set to {concurrent}, so this setting does not impose an hourly ceiling</source>
@@ -3355,8 +3487,8 @@
       <translation>설정</translation>
     </message>
     <message>
-      <source>Find a setting</source>
-      <translation>Find a setting</translation>
+      <source>Make Astra work your way.</source>
+      <translation>Make Astra work your way.</translation>
     </message>
     <message>
       <source>Filter settings</source>
@@ -3365,6 +3497,14 @@
     <message>
       <source>Search settings by name or group</source>
       <translation>Search settings by name or group</translation>
+    </message>
+    <message>
+      <source>Settings category</source>
+      <translation>Settings category</translation>
+    </message>
+    <message>
+      <source>Settings categories</source>
+      <translation>Settings categories</translation>
     </message>
     <message>
       <source>Local API port</source>
@@ -3907,6 +4047,10 @@
       <translation>Stable</translation>
     </message>
     <message>
+      <source>Choose how Astra looks and the language you prefer.</source>
+      <translation>Choose how Astra looks and the language you prefer.</translation>
+    </message>
+    <message>
       <source>Theme</source>
       <translation>Theme</translation>
     </message>
@@ -3943,6 +4087,10 @@
       <translation>Language changes apply after restarting Astra Downloader.</translation>
     </message>
     <message>
+      <source>Control how Astra behaves in the background.</source>
+      <translation>Control how Astra behaves in the background.</translation>
+    </message>
+    <message>
       <source>Close to the system tray</source>
       <translation>Close to the system tray</translation>
     </message>
@@ -3969,6 +4117,22 @@
     <message>
       <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
       <translation>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</translation>
+    </message>
+    <message>
+      <source>Minimize to the tray instead of closing the application.</source>
+      <translation>Minimize to the tray instead of closing the application.</translation>
+    </message>
+    <message>
+      <source>Launch Astra in the system tray.</source>
+      <translation>Launch Astra in the system tray.</translation>
+    </message>
+    <message>
+      <source>Show a system notification when a download completes.</source>
+      <translation>Show a system notification when a download completes.</translation>
+    </message>
+    <message>
+      <source>Show a system notification when a download fails.</source>
+      <translation>Show a system notification when a download fails.</translation>
     </message>
     <message>
       <source>Webhook address</source>
@@ -4045,6 +4209,14 @@
     <message>
       <source>Restore the settings from before Restore defaults was used.</source>
       <translation>Restore the settings from before Restore defaults was used.</translation>
+    </message>
+    <message>
+      <source>Search results</source>
+      <translation>Search results</translation>
+    </message>
+    <message>
+      <source>Matching settings from every category.</source>
+      <translation>Matching settings from every category.</translation>
     </message>
     <message>
       <source>Current pacing: {minimum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}</source>

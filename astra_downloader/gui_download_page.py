@@ -6,7 +6,7 @@ injected MainWindowCore.
 
 from PySide6.QtCore import QDateTime, Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDateTimeEdit, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QCheckBox, QDateTimeEdit, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QProgressBar, QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -50,11 +50,10 @@ class DownloadPageMixin:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 38, 24)
-        layout.setSpacing(12)
+        layout.setSpacing(18)
         layout.addLayout(self._make_page_header(
             "Download a video",
-            "Paste a link from almost any site. YouTube, Reddit, X, TikTok, "
-            "Vimeo, Instagram, Twitch and hundreds more.",
+            "Paste a link. Choose a format. Save it.",
         ))
 
         # A fresh install needs one decision before the first download. Keep
@@ -129,10 +128,10 @@ class DownloadPageMixin:
         layout.addWidget(self.first_run_panel)
         self._apply_first_run_panel_state()
 
-        quick_card = make_card()
+        quick_card = make_card("composer")
         quick_layout = QVBoxLayout(quick_card)
-        quick_layout.setContentsMargins(16, 14, 16, 14)
-        quick_layout.setSpacing(10)
+        quick_layout.setContentsMargins(0, 10, 0, 12)
+        quick_layout.setSpacing(14)
         url_row = QHBoxLayout()
         self.quick_download_url = QLineEdit()
         self.quick_download_url.setProperty("class", "heroUrl")
@@ -152,6 +151,7 @@ class DownloadPageMixin:
         self.btn_quick_stage.hide()
         url_row.addWidget(self.btn_quick_stage)
         self.btn_quick_download = self._make_tool_button("Download", "primary")
+        self.btn_quick_download.setMinimumHeight(50)
         self.btn_quick_download.clicked.connect(self._start_quick_download)
         url_row.addWidget(self.btn_quick_download)
         quick_layout.addLayout(url_row)
@@ -209,7 +209,7 @@ class DownloadPageMixin:
         profile_row.setContentsMargins(0, 0, 0, 0)
         profile_row.setSpacing(8)
         profile_row.addWidget(make_label("Profile", "fieldHint"))
-        self.quick_download_profile = QComboBox()
+        self.quick_download_profile = ChoiceBox()
         self.quick_download_profile.setAccessibleName(tr("Site profile"))
         self.quick_download_profile.setMinimumWidth(210)
         self.quick_download_profile.setToolTip(tr("Automatic site profile"))
@@ -217,7 +217,7 @@ class DownloadPageMixin:
             self._quick_download_profile_changed
         )
         profile_row.addWidget(self.quick_download_profile)
-        self.quick_download_type = QComboBox()
+        self.quick_download_type = ChoiceBox()
         self.quick_download_type.setAccessibleName(tr("Download type"))
         self.quick_download_type.addItem(tr("Video"), "video")
         self.quick_download_type.addItem(tr("Audio"), "audio")
@@ -228,10 +228,9 @@ class DownloadPageMixin:
         self.quick_download_type.currentIndexChanged.connect(
             self._render_probe_summary
         )
-        profile_row.addWidget(self.quick_download_type)
         # Automatic and Original always; the languages a probe finds join
         # them once the link has been looked up.
-        self.quick_download_audio_language = QComboBox()
+        self.quick_download_audio_language = ChoiceBox()
         self.quick_download_audio_language.setAccessibleName(tr("Audio language"))
         self.quick_download_audio_language.setToolTip(tr(
             "Which audio track to download when a video has several. "
@@ -241,17 +240,18 @@ class DownloadPageMixin:
         self._set_audio_language_choices()
         profile_row.addWidget(self.quick_download_audio_language)
         profile_row.addStretch(1)
-        options_layout.addWidget(profile_row_widget)
+        advanced_layout.insertWidget(0, profile_row_widget)
 
         media_row_widget = QWidget(self.quick_download_options_container)
         media_row = QHBoxLayout(media_row_widget)
         media_row.setContentsMargins(0, 0, 0, 0)
         media_row.setSpacing(8)
-        self.quick_download_format = QComboBox()
+        media_row.addWidget(self.quick_download_type)
+        self.quick_download_format = ChoiceBox()
         self.quick_download_format.setAccessibleName(tr("Download format"))
         self.quick_download_format.setMinimumWidth(100)
         media_row.addWidget(self.quick_download_format)
-        self.quick_download_quality = QComboBox()
+        self.quick_download_quality = ChoiceBox()
         self.quick_download_quality.setAccessibleName(tr("Download quality"))
         self.quick_download_quality.setMinimumWidth(100)
         self._set_quality_choices(self._value('QUALITY_LADDER'))
@@ -278,10 +278,10 @@ class DownloadPageMixin:
         self.btn_quick_options = self._make_tool_button("More options", "ghost")
         self.btn_quick_options.setCheckable(True)
         self.btn_quick_options.setToolTip(
-            tr("Show password, clip range, file name and start time controls.")
+            tr("Show site profile, audio language, password, clip range, file name and start time controls.")
         )
         self.btn_quick_options.setAccessibleDescription(
-            tr("Show password, clip range, file name and start time controls.")
+            tr("Show site profile, audio language, password, clip range, file name and start time controls.")
         )
         self.btn_quick_options.toggled.connect(
             self._set_quick_options_expanded
@@ -392,7 +392,7 @@ class DownloadPageMixin:
             "", "fieldHint", word_wrap=True
         )
         self.quick_download_profile_hint.setAccessibleName(tr("Site profile summary"))
-        quick_layout.addWidget(self.quick_download_profile_hint)
+        advanced_layout.insertWidget(1, self.quick_download_profile_hint)
         self.quick_download_subs_hint = make_label("", "fieldHint", word_wrap=True)
         self.quick_download_subs_hint.setAccessibleName(tr("Subtitle request summary"))
         self.quick_download_subs_hint.hide()
@@ -457,15 +457,14 @@ class DownloadPageMixin:
             for _ in range(3 - len(chunk)):
                 line.addStretch(1)
             tools_grid.addLayout(line)
-        layout.addLayout(tools_grid)
 
         preflight_panel = QFrame()
-        preflight_panel.setProperty("class", "readiness")
+        preflight_panel.setProperty("class", "healthSummary")
         preflight_layout = QVBoxLayout(preflight_panel)
-        preflight_layout.setContentsMargins(18, 10, 18, 8)
+        preflight_layout.setContentsMargins(0, 12, 0, 12)
         preflight_layout.setSpacing(1)
         preflight_header = QHBoxLayout()
-        preflight_header.addWidget(make_label("Download health", "panelTitle"))
+        preflight_header.addWidget(make_label("Tools and download health", "panelTitle"))
         preflight_header.addStretch()
         self.btn_preflight_toggle = self._make_tool_button(
             "Show checks", "ghost"
@@ -490,6 +489,7 @@ class DownloadPageMixin:
         preflight_details_layout = QVBoxLayout(self.preflight_details)
         preflight_details_layout.setContentsMargins(0, 3, 0, 0)
         preflight_details_layout.setSpacing(1)
+        preflight_details_layout.addLayout(tools_grid)
         self._preflight_statuses = {}
         for key, label_text, action_text in PREFLIGHT_ROW_SPECS:
             preflight_details_layout.addWidget(
@@ -535,9 +535,9 @@ class DownloadPageMixin:
         self._refresh_quarantine_notice()
 
         self._set_readiness("sabr", "Limited", "warning")
-        layout.addWidget(make_divider())
-
         toolbar = QHBoxLayout()
+        toolbar.addWidget(make_label("Your downloads", "heroTitle"))
+        toolbar.addSpacing(12)
         self.queue_capacity_badge = make_label("0 / 200 jobs", "toolbarMeta")
         self.queue_capacity_badge.setToolTip(
             tr("Running and pending downloads stored in the durable queue.")
@@ -553,7 +553,6 @@ class DownloadPageMixin:
         self.btn_queue_pause.clicked.connect(self._toggle_queue_intake)
         toolbar.addWidget(self.btn_queue_pause)
         layout.addLayout(toolbar)
-        layout.addWidget(make_divider())
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)

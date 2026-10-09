@@ -12,6 +12,16 @@ repository's git log.
 
 ## Unreleased
 
+## [2.18.0] - 2026-10-09
+
+### Changed
+
+- All seven pages have a simpler layout with clearer headings and more readable controls. The original icon and coral accent stay.
+- Download keeps the link, output choice and queue in view. More options holds site profiles, audio language and the less common controls. Tool details expand when needed, and failed checks still open their repair actions.
+- Settings opens to everyday preferences. Categories make folders, downloads, connection and maintenance easier to find, while search reaches every setting and keeps unsaved edits.
+- History moves date and format filters behind More filters. Sites uses an aligned directory, and Sign-ins shows one import method at a time.
+- Subscriptions puts the channel link first. Browser extension keeps connection actions in view and places technical details under an expandable section.
+
 ### Fixed
 
 - A title filter built from nested repeats of something repeated zero times, like `(?:(?:(?:a{0}){256}){256}){256}`, could take 10 seconds to check, and one more level of nesting ran for minutes. Every save, settings import and app start paid that again. It's now checked instantly and matches the same titles it always did.

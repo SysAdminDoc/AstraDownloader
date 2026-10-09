@@ -4707,9 +4707,8 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertIn(
             "Add subscription", empty_actions(window.subscription_container)
         )
-        self.assertIn(
-            "Add a site sign-in", empty_actions(window.site_login_container)
-        )
+        self.assertEqual([], empty_actions(window.site_login_container))
+        self.assertFalse(window.site_login_url.isHidden())
         self.assertIn(
             "View download queue", empty_actions(window.history_container)
         )
@@ -5250,6 +5249,74 @@ class SettingsNavigationTests(unittest.TestCase):
         self.assertIn("likely unreadable", window.site_login_browser.itemText(chrome_index))
         self.assertNotIn("likely unreadable", window.site_login_browser.itemText(firefox_index))
 
+    def test_sign_in_method_reveals_one_form_and_keeps_entered_values(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        self.assertEqual(window.site_login_method.currentData(), "browser")
+        self.assertFalse(window.site_login_browser_panel.isHidden())
+        self.assertTrue(window.site_login_file_panel.isHidden())
+        self.assertTrue(window.site_login_credentials_panel.isHidden())
+
+        window.site_login_url.setText("vimeo.com")
+        window.site_login_method.setCurrentIndex(window.site_login_method.findData("credentials"))
+        window.site_login_username.setText("member@example.com")
+        self.assertFalse(window.site_login_credentials_panel.isHidden())
+        self.assertTrue(window.site_login_browser_panel.isHidden())
+        window.site_login_method.setCurrentIndex(window.site_login_method.findData("file"))
+        self.assertFalse(window.site_login_file_panel.isHidden())
+        self.assertTrue(window.site_login_credentials_panel.isHidden())
+        self.assertEqual(window.site_login_url.text(), "vimeo.com")
+        self.assertEqual(window.site_login_username.text(), "member@example.com")
+
+    def test_collapsed_history_filters_remain_visible_in_summary_and_apply(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        self.assertTrue(window.history_extra_filters.isHidden())
+        window.btn_history_more_filters.click()
+        self.assertFalse(window.history_extra_filters.isHidden())
+        window.history_format.setCurrentIndex(window.history_format.findData("mp4"))
+        window.history_date_from.setText("2026-10-01")
+        window.btn_history_more_filters.click()
+        self.assertTrue(window.history_extra_filters.isHidden())
+        self.assertEqual(window.btn_history_more_filters.text(), "More filters (2)")
+        result = window._history_query(entries=[
+            {"title": "October video", "format": "mp4", "date": "2026-10-09"},
+            {"title": "October audio", "format": "mp3", "date": "2026-10-09"},
+            {"title": "Older video", "format": "mp4", "date": "2026-09-29"},
+        ])
+        self.assertEqual([row["title"] for row in result["history"]], ["October video"])
+        window._clear_history_filters()
+        self.assertEqual(window.btn_history_more_filters.text(), "More filters")
+
+    def test_sites_directory_opens_the_download_page(self):
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        window._nav_click("Sites")
+        window.btn_catalog_download.click()
+        self.assertEqual(window.tabs.currentIndex(), 0)
+
+    def test_sign_in_form_scrolls_at_minimum_size_without_overlapping_fields(self):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QApplication, QScrollArea
+
+        _get_qapp_or_skip(self)
+        window = self._window(FakeConfig())
+        window.resize(900, 620)
+        window._nav_click("Sign-ins")
+        window.show()
+        QApplication.processEvents()
+        page = window.tabs.currentWidget()
+        self.assertIsInstance(page, QScrollArea)
+        self.assertGreater(page.verticalScrollBar().maximum(), 0)
+        self.assertGreaterEqual(window.site_login_browser.height(), window.site_login_browser.minimumSizeHint().height())
+        field_bottom = window.site_login_browser.mapTo(page.widget(), QPoint(0, window.site_login_browser.height()))
+        action_top = window.btn_site_login_browser.mapTo(page.widget(), QPoint(0, 0))
+        self.assertLessEqual(field_bottom.y(), action_top.y())
+        page.ensureWidgetVisible(window.btn_site_login_browser)
+        QApplication.processEvents()
+        point = window.btn_site_login_browser.mapTo(page.viewport(), window.btn_site_login_browser.rect().center())
+        self.assertTrue(page.viewport().rect().contains(point))
+
     def test_sign_in_page_can_store_credentials_without_rendering_them(self):
         from PySide6.QtWidgets import QApplication
 
@@ -5258,6 +5325,7 @@ class SettingsNavigationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             window.dl_manager.site_logins = ad.SiteLoginStore(tmp)
             window.site_login_url.setText("vimeo.com")
+            window.site_login_method.setCurrentIndex(window.site_login_method.findData("credentials"))
             window.site_login_username.setText("member@example.com")
             window.site_login_password.setText("GUI-PASSWORD-SECRET")
             window.btn_site_login_credentials.click()
@@ -5825,7 +5893,7 @@ class SubtitleLanguagePickerTests(unittest.TestCase):
 class StylesheetContrastTests(unittest.TestCase):
     """Control boundaries meet the WCAG non-text contrast floor."""
 
-    PAGE_BACKGROUND = "#0a0d12"
+    PAGE_BACKGROUND = "#101318"
 
     INPUT_BOUNDARIES = (
         ("line edit", "QLineEdit", None),
@@ -6903,6 +6971,33 @@ class DownloaderFirstLayoutTests(unittest.TestCase):
         )
         self.addCleanup(_retire_test_window, window)
         return window
+
+    def test_secondary_download_choices_are_reachable_without_crowding_the_composer(self):
+        from PySide6.QtWidgets import QApplication
+
+        window = self._window()
+        window.show()
+        QApplication.processEvents()
+        self.assertTrue(window.quick_download_type.isVisible())
+        self.assertTrue(window.quick_download_format.isVisible())
+        self.assertFalse(window.quick_download_profile.isVisible())
+        self.assertFalse(window.quick_download_audio_language.isVisible())
+        self.assertFalse(window.readiness_values["ytDlp"][1].isVisible())
+
+        window.btn_quick_options.click()
+        QApplication.processEvents()
+        self.assertTrue(window.quick_download_profile.isVisible())
+        self.assertTrue(window.quick_download_audio_language.isVisible())
+        window.quick_download_video_password.setText("one-link-only")
+        window.btn_quick_options.click()
+        window.btn_quick_options.click()
+        self.assertEqual(window.quick_download_video_password.text(), "one-link-only")
+
+        window.btn_preflight_toggle.click()
+        QApplication.processEvents()
+        self.assertTrue(window.readiness_values["ytDlp"][1].isVisible())
+        window.btn_preflight_toggle.click()
+        self.assertFalse(window.readiness_values["ytDlp"][1].isVisible())
 
     def test_an_active_download_is_visible_without_scrolling(self):
         """The design invariant is downloader first, so the download you just

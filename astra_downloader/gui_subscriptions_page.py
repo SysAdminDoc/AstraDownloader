@@ -6,7 +6,7 @@ injected MainWindowCore so the existing dependency contract is unchanged.
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
     QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -21,11 +21,11 @@ class SubscriptionsPageMixin:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(38, 26, 38, 24)
-        layout.setSpacing(14)
+        layout.setSpacing(18)
         header = QHBoxLayout()
         header.addLayout(self._make_page_header(
             "Subscriptions",
-            "Watch YouTube channels or playlists on a schedule and queue only new uploads.",
+            "Watch channels and playlists. Download new uploads automatically.",
         ), 1)
         self.btn_undo_subscription = self._make_tool_button("Undo remove", "ghost")
         self.btn_undo_subscription.setToolTip(
@@ -36,8 +36,11 @@ class SubscriptionsPageMixin:
         header.addWidget(self.btn_undo_subscription, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header)
 
-        add_card, add_layout = self._make_settings_group("New subscription")
-        url_row = QHBoxLayout()
+        add_panel = QWidget()
+        add_layout = QVBoxLayout(add_panel)
+        add_layout.setContentsMargins(0, 8, 0, 10)
+        add_layout.setSpacing(10)
+        add_layout.addWidget(make_label("Channel or playlist link", "fieldLabel"))
         self.subscription_url = QLineEdit()
         self.subscription_url.setAccessibleName(
             tr("Subscription channel or playlist URL")
@@ -45,9 +48,12 @@ class SubscriptionsPageMixin:
         self.subscription_url.setPlaceholderText(
             tr("https://www.youtube.com/@channel or playlist URL")
         )
-        url_row.addWidget(self.subscription_url, 1)
-        interval_label = make_label("Every", "fieldHint")
-        url_row.addWidget(interval_label)
+        self.subscription_url.returnPressed.connect(self._add_subscription)
+        add_layout.addWidget(self.subscription_url)
+        action_row = QHBoxLayout()
+        action_row.setSpacing(10)
+        interval_label = make_label("Check every", "fieldHint")
+        action_row.addWidget(interval_label)
         self.subscription_interval = QSpinBox()
         self.subscription_interval.setRange(5, 10080)
         self.subscription_interval.setValue(60)
@@ -55,25 +61,37 @@ class SubscriptionsPageMixin:
         self.subscription_interval.setAccessibleName(
             tr("Subscription scan interval in minutes")
         )
-        url_row.addWidget(self.subscription_interval)
+        self.subscription_interval.setMaximumWidth(130)
+        action_row.addWidget(self.subscription_interval)
+        action_row.addStretch()
         self.btn_add_subscription = self._make_tool_button("Add subscription", "primary")
         self.btn_add_subscription.clicked.connect(self._add_subscription)
-        url_row.addWidget(self.btn_add_subscription)
-        add_layout.addLayout(url_row)
+        action_row.addWidget(self.btn_add_subscription)
+        add_layout.addLayout(action_row)
+        add_layout.addWidget(make_label(
+            "New uploads are queued while Astra is running.", "fieldHint", word_wrap=True,
+        ))
         self.subscription_status = make_label("Subscriptions are ready when the local companion is running.", "toolbarMeta", word_wrap=True, status=True)
         add_layout.addWidget(self.subscription_status)
-        layout.addWidget(add_card)
+        layout.addWidget(add_panel)
+        layout.addWidget(make_divider())
+        list_heading = QHBoxLayout()
+        list_heading.addWidget(make_label("Your subscriptions", "sectionHeading"))
+        list_heading.addStretch()
+        self.subscription_filter_meta = make_label("", "toolbarMeta")
+        list_heading.addWidget(self.subscription_filter_meta)
+        layout.addLayout(list_heading)
 
-        subscription_filter_panel = make_card("filterBar")
+        subscription_filter_panel = QWidget()
         subscription_filters = QHBoxLayout(subscription_filter_panel)
-        subscription_filters.setContentsMargins(14, 12, 14, 12)
+        subscription_filters.setContentsMargins(0, 0, 0, 0)
         subscription_filters.setSpacing(8)
         self.subscription_search = QLineEdit()
         self.subscription_search.setAccessibleName(tr("Search subscriptions"))
         self.subscription_search.setPlaceholderText(tr("Search title, URL, or error"))
         self.subscription_search.setClearButtonEnabled(True)
         subscription_filters.addWidget(self.subscription_search, 2)
-        self.subscription_status_filter = QComboBox()
+        self.subscription_status_filter = ChoiceBox()
         self.subscription_status_filter.setAccessibleName(tr("Subscription status"))
         for label, value in (
             ("All subscriptions", "all"),
@@ -83,8 +101,6 @@ class SubscriptionsPageMixin:
         ):
             self.subscription_status_filter.addItem(tr(label), value)
         subscription_filters.addWidget(self.subscription_status_filter)
-        self.subscription_filter_meta = make_label("", "toolbarMeta")
-        subscription_filters.addWidget(self.subscription_filter_meta)
         layout.addWidget(subscription_filter_panel)
         self._subscription_filter_timer = QTimer(self)
         self._subscription_filter_timer.setSingleShot(True)

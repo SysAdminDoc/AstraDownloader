@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
+    QCheckBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
     QLineEdit, QProgressBar, QScrollArea, QSpinBox, QTextEdit, QVBoxLayout,
     QWidget,
 )
@@ -24,7 +24,80 @@ except ImportError:  # Flat source-path compatibility.
     from i18n import ADVERTISED_LOCALES
 
 
+class _SettingsRoot(QWidget):
+    """Use a category picker when the rail would squeeze the settings form."""
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "category_rail"):
+            compact = self.width() < 860
+            self.category_rail.setVisible(not compact)
+            self.category_picker.setVisible(compact)
+
+
 class SettingsPageMixin:
+    _SETTINGS_CATEGORIES = (
+        ("General", "Your everyday preferences.", (
+            "Appearance and language", "Window and tray",
+        )),
+        ("Folders", "Choose where your files are saved.", ("Storage",)),
+        ("Downloads", "Set your preferred formats and download behavior.", (
+            "Format preferences", "Clipboard", "Post-processing", "Playlist limits",
+        )),
+        ("Connection", "Adjust network access and site-specific options.", (
+            "Performance", "Connection", "Site profiles", "Webhook",
+        )),
+        ("Maintenance", "Keep your tools current and manage your settings.", (
+            "Maintenance", "Import and export",
+        )),
+    )
+
+    def _select_settings_category(self, category):
+        self._settings_active_category = category
+        if self.settings_filter.text():
+            self.settings_filter.clear()
+        else:
+            self._filter_settings("")
+        self.settings_scroll.verticalScrollBar().setValue(0)
+
+    def _reveal_settings_control(self, control):
+        """Bring an invalid field back into view, including after a search."""
+        for group, _content, _title in self._settings_group_specs:
+            if group.isAncestorOf(control):
+                self._select_settings_category(group.property("settingsCategory"))
+                self.settings_scroll.widget().layout().activate()
+                self.settings_scroll.ensureWidgetVisible(control, 0, 80)
+                break
+
+    def _update_settings_category_heading(self, query):
+        searching = bool(str(query or "").strip())
+        selected = self._settings_active_category
+        labels = {
+            "General": tr("General"), "Folders": tr("Folders"),
+            "Downloads": tr("Downloads"), "Connection": tr("Connection"),
+            "Maintenance": tr("Maintenance"),
+        }
+        descriptions = {
+            "General": tr("Your everyday preferences."),
+            "Folders": tr("Choose where your files are saved."),
+            "Downloads": tr("Set your preferred formats and download behavior."),
+            "Connection": tr("Adjust network access and site-specific options."),
+            "Maintenance": tr("Keep your tools current and manage your settings."),
+        }
+        for name, _description, _titles in self._SETTINGS_CATEGORIES:
+            self.settings_category_buttons[name].setChecked(
+                not searching and name == selected
+            )
+            if name == selected:
+                self.settings_category_heading.setText(labels[name])
+                self.settings_category_hint.setText(descriptions[name])
+        self.settings_category_picker.setCurrentIndex(
+            self.settings_category_picker.findData(selected)
+        )
+        if searching:
+            self.settings_category_heading.setText(tr("Search results"))
+            self.settings_category_hint.setText(tr("Matching settings from every category."))
+
     def _sponsorblock_categories_to_tick(self):
         """The SponsorBlock boxes the saved setting means, for build and reload alike.
 
@@ -93,27 +166,17 @@ class SettingsPageMixin:
         self.pacing_guidance.setText(current + guidance)
 
     def _build_settings(self):
+        self._building_settings_page = True
         self._settings_group_specs = []
-        root = QWidget()
+        self._settings_active_category = "General"
+        root = _SettingsRoot()
         root_layout = QVBoxLayout(root)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-        page = QWidget()
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(page)
-        root_layout.addWidget(scroll, 1)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(38, 26, 30, 24)
-        layout.setSpacing(10)
-
-        layout.addLayout(self._make_page_header("Settings", ""))
-        layout.addSpacing(14)
-        layout.addWidget(make_divider())
-
-        filter_row = QHBoxLayout()
-        filter_row.setContentsMargins(0, 14, 0, 0)
-        filter_row.addWidget(make_label("Find a setting", "fieldLabel"))
+        header = QVBoxLayout()
+        header.setContentsMargins(38, 26, 30, 0)
+        header.setSpacing(20)
+        header.addLayout(self._make_page_header("Settings", "Make Astra work your way."))
         self.settings_filter = QLineEdit()
         self.settings_filter.setAccessibleName(tr("Filter settings"))
         self.settings_filter.setPlaceholderText(
@@ -121,8 +184,68 @@ class SettingsPageMixin:
         )
         self.settings_filter.setClearButtonEnabled(True)
         self.settings_filter.textChanged.connect(self._filter_settings)
-        filter_row.addWidget(self.settings_filter, 1)
-        layout.addLayout(filter_row)
+        header.addWidget(self.settings_filter)
+        self.settings_category_picker = ChoiceBox()
+        self.settings_category_picker.setAccessibleName(tr("Settings category"))
+        for name, _description, _titles in self._SETTINGS_CATEGORIES:
+            self.settings_category_picker.addItem(tr(name), name)
+        self.settings_category_picker.activated.connect(
+            lambda index: self._select_settings_category(
+                self.settings_category_picker.itemData(index)
+            )
+        )
+        self.settings_category_picker.hide()
+        header.addWidget(self.settings_category_picker)
+        root_layout.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(38, 24, 30, 24)
+        body.setSpacing(28)
+        category_rail = QFrame()
+        category_rail.setProperty("class", "settingsCategoryRail")
+        category_rail.setFixedWidth(184)
+        category_rail.setAccessibleName(tr("Settings categories"))
+        category_layout = QVBoxLayout(category_rail)
+        category_layout.setContentsMargins(0, 0, 12, 0)
+        category_layout.setSpacing(6)
+        self.settings_category_buttons = {}
+        for name, _description, _titles in self._SETTINGS_CATEGORIES:
+            button = self._make_tool_button(name, "settingsCategory")
+            set_line_icon(button, {
+                "General": "Settings", "Connection": "link", "Maintenance": "diagnostic",
+            }.get(name, name), size=16)
+            button.setCheckable(True)
+            button.setMinimumHeight(46)
+            button.clicked.connect(
+                lambda _checked=False, selected=name: self._select_settings_category(selected)
+            )
+            self.settings_category_buttons[name] = button
+            category_layout.addWidget(button)
+        category_layout.addStretch()
+        body.addWidget(category_rail)
+        root.category_rail = category_rail
+        root.category_picker = self.settings_category_picker
+
+        page = QWidget()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(page)
+        self.settings_scroll = scroll
+        body.addWidget(scroll, 1)
+        root_layout.addLayout(body, 1)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+        category_copy = QVBoxLayout()
+        category_copy.setSpacing(4)
+        self.settings_category_heading = make_label("General", "settingsCategoryTitle")
+        self.settings_category_hint = make_label(
+            "Your everyday preferences.", "settingsCategoryHint", word_wrap=True
+        )
+        category_copy.addWidget(self.settings_category_heading)
+        category_copy.addWidget(self.settings_category_hint)
+        layout.addLayout(category_copy)
         self.settings_filter_empty = make_label(
             "No settings match this search.", "fieldHint"
         )
@@ -188,7 +311,7 @@ class SettingsPageMixin:
             "fieldHint", word_wrap=True,
         ))
         force_ip_row.addLayout(force_ip_copy, 1)
-        self.cfg_force_ip_version = QComboBox()
+        self.cfg_force_ip_version = ChoiceBox()
         self.cfg_force_ip_version.setAccessibleName(tr("Force IP version"))
         self.cfg_force_ip_version.addItem(tr("Off"), "")
         self.cfg_force_ip_version.addItem(tr("IPv4"), "ipv4")
@@ -417,7 +540,7 @@ class SettingsPageMixin:
         )
         # Each choice names its file size, so trading disk for accuracy is a
         # decision made in the open. Choosing only saves the setting.
-        self.cfg_transcription_model = QComboBox()
+        self.cfg_transcription_model = ChoiceBox()
         self.cfg_transcription_model.setAccessibleName(tr("Transcription model"))
         for model_key in self._value('WHISPER_MODELS'):
             self.cfg_transcription_model.addItem(
@@ -492,7 +615,7 @@ class SettingsPageMixin:
         track_row.setSpacing(8)
         track_row.addSpacing(28)
         track_row.addWidget(make_label("Tracks", "fieldHint"))
-        self.cfg_subtitle_mode = QComboBox()
+        self.cfg_subtitle_mode = ChoiceBox()
         self.cfg_subtitle_mode.setAccessibleName(tr("Subtitle tracks"))
         for label, value in (
             ("Creator, else auto-generated", "prefer-manual"),
@@ -508,7 +631,7 @@ class SettingsPageMixin:
         track_row.addWidget(self.cfg_subtitle_mode)
         track_row.addSpacing(12)
         track_row.addWidget(make_label("Save as", "fieldHint"))
-        self.cfg_subtitle_format = QComboBox()
+        self.cfg_subtitle_format = ChoiceBox()
         self.cfg_subtitle_format.setAccessibleName(tr("Subtitle format"))
         for label, value in (
             ("Same as source", ""), ("SRT", "srt"), ("WebVTT", "vtt"),
@@ -647,7 +770,7 @@ class SettingsPageMixin:
         sb_row.setSpacing(8)
         sb_row.addSpacing(28)
         sb_row.addWidget(make_label("Action", "fieldHint"))
-        self.cfg_sb_action = QComboBox()
+        self.cfg_sb_action = ChoiceBox()
         self.cfg_sb_action.setAccessibleName(tr("SponsorBlock action"))
         self.cfg_sb_action.addItem(tr("Remove segments"), "remove")
         self.cfg_sb_action.addItem(tr("Mark segments"), "mark")
@@ -1076,7 +1199,7 @@ class SettingsPageMixin:
             "fieldHint", word_wrap=True,
         ))
         impersonate_row.addLayout(impersonate_copy, 1)
-        self.cfg_impersonate = QComboBox()
+        self.cfg_impersonate = ChoiceBox()
         self.cfg_impersonate.setAccessibleName(tr("Imitate a browser"))
         self.cfg_impersonate.addItem(tr("Off"), "")
         configured = self._dependencies['normalize_impersonate_target'](
@@ -1103,7 +1226,7 @@ class SettingsPageMixin:
             "fieldHint", word_wrap=True,
         ))
         runtime_row.addLayout(runtime_copy, 1)
-        self.cfg_js_runtime = QComboBox()
+        self.cfg_js_runtime = ChoiceBox()
         self.cfg_js_runtime.setAccessibleName(tr("JavaScript runtime"))
         self.cfg_js_runtime.addItem(tr("Auto"), "auto")
         self.cfg_js_runtime.addItem(tr("Deno"), "deno")
@@ -1123,7 +1246,7 @@ class SettingsPageMixin:
             "fieldHint", word_wrap=True,
         ))
         channel_row.addLayout(channel_copy, 1)
-        self.cfg_ytdlp_channel = QComboBox()
+        self.cfg_ytdlp_channel = ChoiceBox()
         self.cfg_ytdlp_channel.setAccessibleName(tr("yt-dlp update channel"))
         self.cfg_ytdlp_channel.addItem(tr("Nightly (recommended)"), "nightly")
         self.cfg_ytdlp_channel.addItem(tr("Stable"), "stable")
@@ -1135,11 +1258,16 @@ class SettingsPageMixin:
 
         # Appearance and language
         language_card, language_l = self._make_settings_group("Appearance and language")
+        language_l.addWidget(make_label(
+            "Choose how Astra looks and the language you prefer.",
+            "fieldHint", word_wrap=True,
+        ))
         theme_row = QHBoxLayout()
         theme_row.addWidget(make_label("Theme", "fieldLabel"))
         theme_row.addStretch()
-        self.cfg_theme = QComboBox()
+        self.cfg_theme = ChoiceBox()
         self.cfg_theme.setAccessibleName(tr("Theme"))
+        self.cfg_theme.setMinimumWidth(240)
         self.cfg_theme.addItem(tr("System default"), "system")
         self.cfg_theme.addItem(tr("Dark"), "dark")
         self.cfg_theme.addItem(tr("Light"), "light")
@@ -1152,11 +1280,13 @@ class SettingsPageMixin:
         )
         theme_row.addWidget(self.cfg_theme)
         language_l.addLayout(theme_row)
+        language_l.addWidget(make_divider())
         language_row = QHBoxLayout()
         language_row.addWidget(make_label("Language", "fieldLabel"))
         language_row.addStretch()
-        self.cfg_language = QComboBox()
+        self.cfg_language = ChoiceBox()
         self.cfg_language.setAccessibleName(tr("Companion language"))
+        self.cfg_language.setMinimumWidth(240)
         self.cfg_language.addItem(tr("System default"), "system")
         language_labels = {"de": "Deutsch", "en": "English"}
         for value in ADVERTISED_LOCALES:
@@ -1180,6 +1310,10 @@ class SettingsPageMixin:
 
         # Window and tray
         beh_card, beh_l = self._make_settings_group("Window and tray")
+        beh_l.addWidget(make_label(
+            "Control how Astra behaves in the background.",
+            "fieldHint", word_wrap=True,
+        ))
         self.cfg_closetotray = QCheckBox(tr("Close to the system tray"))
         self.cfg_closetotray.setChecked(self.config.get("CloseToTray", True))
         self.cfg_startmin = QCheckBox(tr("Start minimized to the tray"))
@@ -1208,11 +1342,19 @@ class SettingsPageMixin:
                 "download."
             )
         )
-        for w in [
-            self.cfg_closetotray, self.cfg_startmin, self.cfg_notify,
-            self.cfg_notify_failure,
-        ]:
-            beh_l.addWidget(w)
+        for control, hint in (
+            (self.cfg_closetotray, "Minimize to the tray instead of closing the application."),
+            (self.cfg_startmin, "Launch Astra in the system tray."),
+            (self.cfg_notify, "Show a system notification when a download completes."),
+            (self.cfg_notify_failure, "Show a system notification when a download fails."),
+        ):
+            row = QVBoxLayout()
+            row.setSpacing(4)
+            row.addWidget(control)
+            explanation = make_label(hint, "fieldHint", word_wrap=True)
+            explanation.setContentsMargins(26, 0, 0, 8)
+            row.addWidget(explanation)
+            beh_l.addLayout(row)
         layout.addWidget(beh_card)
 
         # Unattended runs report somewhere durable. Off until an address is
@@ -1363,18 +1505,29 @@ class SettingsPageMixin:
         layout.addWidget(tools_card)
         layout.addWidget(transfer_card)
 
+        # Keep construction close to its control logic while arranging the
+        # finished groups in the order users encounter them in each category.
+        group_order = {
+            title: (category, order)
+            for category, (_name, _description, titles) in enumerate(self._SETTINGS_CATEGORIES)
+            for order, title in enumerate(titles)
+        }
+        self._settings_group_specs.sort(key=lambda item: group_order[item[2]])
+        for group, _content, _title in self._settings_group_specs:
+            layout.removeWidget(group)
+            layout.addWidget(group)
+
         save_bar = QFrame()
         save_bar.setProperty("class", "settingsSaveBar")
         save_row = QHBoxLayout(save_bar)
         save_row.setContentsMargins(38, 12, 30, 12)
         save_row.setSpacing(8)
-        self.settings_status = make_label("", "settingsStatus", status=True)
+        self.settings_status = make_label("Changes apply when you save.", "settingsStatus", status=True)
         self.settings_status.setAccessibleName(tr("Settings status"))
         save_row.addWidget(self.settings_status, 1)
         btn_save = self._make_tool_button("Save changes", "primary")
         btn_save.clicked.connect(self._save_settings)
         self.btn_save = btn_save
-        save_row.addWidget(btn_save)
         self.btn_restore_defaults = self._make_tool_button(
             "Restore defaults", "ghost"
         )
@@ -1394,6 +1547,7 @@ class SettingsPageMixin:
         )
         self._set_settings_filter_hidden(self.btn_undo_restore_defaults, True)
         save_row.addWidget(self.btn_undo_restore_defaults)
+        save_row.addWidget(btn_save)
         layout.addStretch()
         root_layout.addWidget(save_bar)
 
@@ -1402,3 +1556,4 @@ class SettingsPageMixin:
         self._filter_settings("")
 
         self.tabs.addTab(root, tr("Settings"))
+        self._building_settings_page = False

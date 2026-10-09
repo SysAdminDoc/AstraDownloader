@@ -92,6 +92,7 @@ def run_review(ad, root):
         ad.apply_application_theme('dark')
         history = ad.History(config)
         manager = ad.DownloadManager(config, history, queue_path=ad.DOWNLOAD_QUEUE_PATH)
+        subscriptions = ad.build_subscription_manager(config, manager)
 
         class ReviewWindow(ad.MainWindow):
             # These background boundaries are intentionally disabled only in
@@ -114,7 +115,7 @@ def run_review(ad, root):
             def _animate_page(self):
                 pass
 
-        window = ReviewWindow(config, manager, history, first_run=True)
+        window = ReviewWindow(config, manager, history, subscriptions=subscriptions, first_run=True)
         for timer in (window.update_timer, window.cleanup_timer, window.tools_status_timer):
             timer.stop()
         window.tray.hide()
@@ -167,17 +168,50 @@ def run_review(ad, root):
         check(sum(key[0] == 'download' for key in window._download_widgets) == 2,
               'example queue rendered')
         capture('downloads')
+        window.btn_quick_options.click()
+        app.processEvents()
+        check(window.quick_download_advanced.isVisible(), 'download options expand')
+        window.btn_quick_options.click()
+        app.processEvents()
+        check(window.quick_download_advanced.isHidden(), 'download options collapse')
         for page, name in (('Sites', 'sites'), ('History', 'history'),
-                           ('Sign-ins', 'sign-ins'), ('Settings', 'settings')):
-            window._nav_click(page)
+                           ('Sign-ins', 'sign-ins'),
+                           ('Subscriptions', 'subscriptions'),
+                           ('Browser extension', 'browser-extension'),
+                           ('Settings', 'settings')):
+            window.nav_buttons[window._page_names.index(page)].click()
             check(window.tabs.currentIndex() == window._page_names.index(page), page + ' navigation')
             capture(name)
+            if page == 'Sites':
+                window.site_catalog_search.setText('youtube')
+                app.processEvents()
+                check(window.site_catalog_container.count() > 0, 'supported sites search renders results')
+                window.site_catalog_search.clear()
+            elif page == 'Subscriptions':
+                check(window.subscription_url.isVisible() and window.btn_add_subscription.isEnabled(),
+                      'subscription entry controls available')
+            elif page == 'Browser extension':
+                check(window.btn_startstop.isVisible() and window.btn_allow_extension_pairing.isEnabled(),
+                      'extension server and pairing controls available')
+                check(window.extension_details.isHidden(), 'connection details start collapsed')
+                window.btn_extension_details.click()
+                app.processEvents()
+                check(window.cfg_native_chrome_ids.isVisible(), 'manual extension pairing expands')
+                capture('browser-extension-details')
+                window.btn_extension_details.click()
+                check(window.extension_details.isHidden(), 'connection details collapse')
+            elif page == 'Settings':
+                window.settings_filter.setText('download folder')
+                app.processEvents()
+                check(window.cfg_dl_path.isVisible(), 'settings search finds download folder')
+                window.settings_filter.clear()
         window._nav_click('Download')
         ad.apply_application_theme('light', windows=(window,))
         capture('downloads-light')
         check(config.get('ClipboardLinkGrabber') is False, 'clipboard monitoring remains off')
         check(not window.server_running and window._instance_command_thread is None,
               'no server or instance listener started')
+        check(subscriptions._thread is None, 'subscription scheduler remains stopped')
         check(not ad.YTDLP_PATH.exists() and not ad.FFMPEG_PATH.exists(), 'no helpers downloaded')
         report['passed'] = True
     except Exception:

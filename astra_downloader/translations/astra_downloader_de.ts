@@ -615,12 +615,12 @@
       <translation>Weitere Optionen</translation>
     </message>
     <message>
-      <source>Hide password, clip range, file name and start time controls.</source>
-      <translation>Passwort, Ausschnitt, Dateiname und Startzeit ausblenden.</translation>
+      <source>Hide site profile, audio language, password, clip range, file name and start time controls.</source>
+      <translation>Website-Profil, Audiosprache, Passwort, Clipbereich, Dateiname und Startzeit ausblenden.</translation>
     </message>
     <message>
-      <source>Show password, clip range, file name and start time controls.</source>
-      <translation>Passwort, Ausschnitt, Dateiname und Startzeit anzeigen.</translation>
+      <source>Show site profile, audio language, password, clip range, file name and start time controls.</source>
+      <translation>Website-Profil, Audiosprache, Passwort, Clipbereich, Dateiname und Startzeit anzeigen.</translation>
     </message>
     <message>
       <source>No site profile for this download.</source>
@@ -765,6 +765,18 @@
     <message>
       <source>Loading history…</source>
       <translation>Verlauf wird geladen…</translation>
+    </message>
+    <message>
+      <source>No downloads yet</source>
+      <translation>Noch keine Downloads</translation>
+    </message>
+    <message>
+      <source>Completed downloads will appear here.</source>
+      <translation>Abgeschlossene Downloads erscheinen hier.</translation>
+    </message>
+    <message>
+      <source>View download queue</source>
+      <translation>Download-Warteschlange anzeigen</translation>
     </message>
     <message>
       <source>Not set</source>
@@ -1251,8 +1263,12 @@
       <translation>Verwenden Sie für die Audiosprache automatisch, original oder einen Sprachcode wie en oder es-419.</translation>
     </message>
     <message>
-      <source>Add a site sign-in</source>
-      <translation>Website-Anmeldung hinzufügen</translation>
+      <source>No stored sign-ins</source>
+      <translation>Keine gespeicherten Anmeldungen</translation>
+    </message>
+    <message>
+      <source>Add a sign-in above when a video needs an account.</source>
+      <translation>Füge oben eine Anmeldung hinzu, wenn ein Video ein Konto erfordert.</translation>
     </message>
     <message>
       <source>Username and password. Stored securely.</source>
@@ -1505,18 +1521,6 @@
     <message>
       <source>0 of {filtered} filtered · {total} retained · limit {limit}</source>
       <translation>0 von {filtered} gefiltert · {total} behalten · Limit {limit}</translation>
-    </message>
-    <message>
-      <source>No downloads yet</source>
-      <translation>Noch keine Downloads</translation>
-    </message>
-    <message>
-      <source>Completed downloads will appear here.</source>
-      <translation>Abgeschlossene Downloads erscheinen hier.</translation>
-    </message>
-    <message>
-      <source>View download queue</source>
-      <translation>Download-Warteschlange anzeigen</translation>
     </message>
     <message>
       <source>No matching downloads</source>
@@ -1869,14 +1873,6 @@
     <message>
       <source>Could not read stored sign-ins: {error} Check that the install folder is readable, then reopen this page.</source>
       <translation>Gespeicherte Anmeldungen konnten nicht gelesen werden: {error} Prüfen Sie, ob der Installationsordner lesbar ist, und öffnen Sie diese Seite erneut.</translation>
-    </message>
-    <message>
-      <source>No stored sign-ins</source>
-      <translation>Keine gespeicherten Anmeldungen</translation>
-    </message>
-    <message>
-      <source>Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.</source>
-      <translation>Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. Verwenden Sie YouTube-Anmeldungen nur für Videos, die ein Konto erfordern.</translation>
     </message>
     <message>
       <source>No sign-ins match these filters</source>
@@ -2403,8 +2399,8 @@
       <translation>Video herunterladen</translation>
     </message>
     <message>
-      <source>Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.</source>
-      <translation>Fügen Sie einen Link von fast jeder Website ein. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.</translation>
+      <source>Paste a link. Choose a format. Save it.</source>
+      <translation>Link einfügen. Format wählen. Speichern.</translation>
     </message>
     <message>
       <source>Welcome to Astra Downloader</source>
@@ -2579,8 +2575,8 @@
       <translation>Fortschritt der Download-Tool-Einrichtung</translation>
     </message>
     <message>
-      <source>Download health</source>
-      <translation>Download-Bereitschaft</translation>
+      <source>Tools and download health</source>
+      <translation>Werkzeuge und Downloadbereitschaft</translation>
     </message>
     <message>
       <source>Show each download readiness check and its repair action.</source>
@@ -2597,6 +2593,10 @@
     <message>
       <source>Quarantined state file</source>
       <translation>In Quarantäne verschobene Zustandsdatei</translation>
+    </message>
+    <message>
+      <source>Your downloads</source>
+      <translation>Ihre Downloads</translation>
     </message>
     <message>
       <source>Running and pending downloads stored in the durable queue.</source>
@@ -2711,6 +2711,10 @@
       <translation>Gefilterte exportieren</translation>
     </message>
     <message>
+      <source>More filters</source>
+      <translation>Weitere Filter</translation>
+    </message>
+    <message>
       <source>0 of 0 retained</source>
       <translation>0 von 0 behalten</translation>
     </message>
@@ -2725,6 +2729,10 @@
     <message>
       <source>History</source>
       <translation>Verlauf</translation>
+    </message>
+    <message>
+      <source>Find files you downloaded.</source>
+      <translation>Finde deine heruntergeladenen Dateien.</translation>
     </message>
     <message>
       <source>Remove saved history entries. Downloaded files are not deleted.</source>
@@ -2759,14 +2767,6 @@
       <translation>Abgeschlossen</translation>
     </message>
     <message>
-      <source>History format</source>
-      <translation>Verlaufsformat</translation>
-    </message>
-    <message>
-      <source>All formats</source>
-      <translation>Alle Formate</translation>
-    </message>
-    <message>
       <source>History sort order</source>
       <translation>Sortierreihenfolge des Verlaufs</translation>
     </message>
@@ -2777,6 +2777,18 @@
     <message>
       <source>Oldest first</source>
       <translation>Älteste zuerst</translation>
+    </message>
+    <message>
+      <source>Show or hide format and saved-date filters.</source>
+      <translation>Filter für Format und Speicherdatum ein- oder ausblenden.</translation>
+    </message>
+    <message>
+      <source>History format</source>
+      <translation>Verlaufsformat</translation>
+    </message>
+    <message>
+      <source>All formats</source>
+      <translation>Alle Formate</translation>
     </message>
     <message>
       <source>Saved from</source>
@@ -2815,8 +2827,20 @@
       <translation>Abgebrochen</translation>
     </message>
     <message>
+      <source>More filters ({count})</source>
+      <translation>Weitere Filter ({count})</translation>
+    </message>
+    <message>
       <source>Undo remove</source>
       <translation>Entfernen rückgängig</translation>
+    </message>
+    <message>
+      <source>Site address</source>
+      <translation>Website-Adresse</translation>
+    </message>
+    <message>
+      <source>Import method</source>
+      <translation>Importmethode</translation>
     </message>
     <message>
       <source>Store username/password</source>
@@ -2835,16 +2859,32 @@
       <translation>Anmeldungen</translation>
     </message>
     <message>
+      <source>Save a site sign-in for private or members-only videos.</source>
+      <translation>Speichere eine Website-Anmeldung für private Videos oder Videos nur für Mitglieder.</translation>
+    </message>
+    <message>
       <source>Restore the sign-in removed by the last action.</source>
       <translation>Die durch die letzte Aktion entfernte Anmeldung wiederherstellen.</translation>
+    </message>
+    <message>
+      <source>Add a site sign-in</source>
+      <translation>Website-Anmeldung hinzufügen</translation>
     </message>
     <message>
       <source>Site address for the sign-in</source>
       <translation>Adresse der Website für die Anmeldung</translation>
     </message>
     <message>
-      <source>Site address you signed in to, such as x.com, instagram.com, or vimeo.com</source>
-      <translation>Adresse der Website, bei der Sie angemeldet sind, zum Beispiel x.com, instagram.com oder vimeo.com</translation>
+      <source>example.com</source>
+      <translation>example.com</translation>
+    </message>
+    <message>
+      <source>Sign-in import method</source>
+      <translation>Importmethode für die Anmeldung</translation>
+    </message>
+    <message>
+      <source>Username and password</source>
+      <translation>Benutzername und Passwort</translation>
     </message>
     <message>
       <source>Site sign-in username</source>
@@ -2891,6 +2931,18 @@
       <translation>Standard oder ein Profilname</translation>
     </message>
     <message>
+      <source>Firefox can usually be read directly. For Chrome or Edge, import a cookies.txt file.</source>
+      <translation>Firefox kann meist direkt gelesen werden. Importiere bei Chrome oder Edge eine cookies.txt-Datei.</translation>
+    </message>
+    <message>
+      <source>Choose a cookies.txt file exported from the browser where you signed in to this site.</source>
+      <translation>Wähle eine cookies.txt-Datei aus dem Browser, in dem du bei dieser Website angemeldet bist.</translation>
+    </message>
+    <message>
+      <source>Sign-ins stay on this PC and are sent only to their site.</source>
+      <translation>Anmeldungen bleiben auf diesem PC und werden nur an ihre jeweilige Website gesendet.</translation>
+    </message>
+    <message>
       <source>Site sign-in status</source>
       <translation>Status der Website-Anmeldung</translation>
     </message>
@@ -2901,6 +2953,10 @@
     <message>
       <source>YouTube sign-in risk warning</source>
       <translation>Risikowarnung für YouTube-Anmeldung</translation>
+    </message>
+    <message>
+      <source>Stored sign-ins</source>
+      <translation>Gespeicherte Anmeldungen</translation>
     </message>
     <message>
       <source>Search stored sign-ins</source>
@@ -2915,10 +2971,6 @@
       <translation>Status der gespeicherten Anmeldung</translation>
     </message>
     <message>
-      <source>Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.</source>
-      <translation>Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.</translation>
-    </message>
-    <message>
       <source>Username</source>
       <translation>Benutzername</translation>
     </message>
@@ -2927,16 +2979,16 @@
       <translation>Passwort</translation>
     </message>
     <message>
-      <source>Read from</source>
-      <translation>Lesen aus</translation>
-    </message>
-    <message>
       <source>{browser}. {warning}</source>
       <translation>{browser}. {warning}</translation>
     </message>
     <message>
-      <source>Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.</source>
-      <translation>Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt. Exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername und Passwort. Firefox lässt sich normalerweise direkt lesen.</translation>
+      <source>Browser</source>
+      <translation>Browser</translation>
+    </message>
+    <message>
+      <source>Profile (optional)</source>
+      <translation>Profil (optional)</translation>
     </message>
     <message>
       <source>likely unreadable on Chromium 127+</source>
@@ -2959,6 +3011,10 @@
       <translation>1 passende Website.</translation>
     </message>
     <message>
+      <source>Open downloads</source>
+      <translation>Downloads öffnen</translation>
+    </message>
+    <message>
       <source>Sign-in needed</source>
       <translation>Anmeldung erforderlich</translation>
     </message>
@@ -2971,8 +3027,8 @@
       <translation>Websites</translation>
     </message>
     <message>
-      <source>Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.</source>
-      <translation>Alles, was das installierte yt-dlp erreichen kann. Fügen Sie auf der Seite „Download“ einen Link von einer dieser Websites ein.</translation>
+      <source>Find a site, then paste its link on the Download page.</source>
+      <translation>Finde eine Website und füge ihren Link auf der Download-Seite ein.</translation>
     </message>
     <message>
       <source>Search supported sites</source>
@@ -2989,6 +3045,18 @@
     <message>
       <source>All categories</source>
       <translation>Alle Kategorien</translation>
+    </message>
+    <message>
+      <source>Site</source>
+      <translation>Website</translation>
+    </message>
+    <message>
+      <source>Category</source>
+      <translation>Kategorie</translation>
+    </message>
+    <message>
+      <source>Sign-in</source>
+      <translation>Anmeldung</translation>
     </message>
     <message>
       <source>Live streaming</source>
@@ -3023,12 +3091,8 @@
       <translation>Erwachsene</translation>
     </message>
     <message>
-      <source>New subscription</source>
-      <translation>Neues Abonnement</translation>
-    </message>
-    <message>
-      <source>Every</source>
-      <translation>Alle</translation>
+      <source>Check every</source>
+      <translation>Prüfen alle</translation>
     </message>
     <message>
       <source>Subscriptions are ready when the local companion is running.</source>
@@ -3039,12 +3103,16 @@
       <translation>Abonnements</translation>
     </message>
     <message>
-      <source>Watch YouTube channels or playlists on a schedule and queue only new uploads.</source>
-      <translation>YouTube-Kanäle oder Playlists nach Zeitplan beobachten und nur neue Uploads einreihen.</translation>
+      <source>Watch channels and playlists. Download new uploads automatically.</source>
+      <translation>Kanälen und Playlists folgen. Neue Uploads automatisch herunterladen.</translation>
     </message>
     <message>
       <source>Restore the subscription removed by the last action.</source>
       <translation>Das durch die letzte Aktion entfernte Abonnement wiederherstellen.</translation>
+    </message>
+    <message>
+      <source>Channel or playlist link</source>
+      <translation>Link zum Kanal oder zur Playlist</translation>
     </message>
     <message>
       <source>Subscription channel or playlist URL</source>
@@ -3053,6 +3121,14 @@
     <message>
       <source>Subscription scan interval in minutes</source>
       <translation>Scanintervall des Abonnements in Minuten</translation>
+    </message>
+    <message>
+      <source>New uploads are queued while Astra is running.</source>
+      <translation>Neue Uploads werden eingereiht, solange Astra läuft.</translation>
+    </message>
+    <message>
+      <source>Your subscriptions</source>
+      <translation>Ihre Abonnements</translation>
     </message>
     <message>
       <source>Search subscriptions</source>
@@ -3087,6 +3163,14 @@
       <translation>Nur lokal · Token erforderlich</translation>
     </message>
     <message>
+      <source>Allow extension pairing</source>
+      <translation>Erweiterungskopplung erlauben</translation>
+    </message>
+    <message>
+      <source>Pair userscript</source>
+      <translation>Userscript koppeln</translation>
+    </message>
+    <message>
       <source>Copy endpoint</source>
       <translation>Endpunkt kopieren</translation>
     </message>
@@ -3097,14 +3181,6 @@
     <message>
       <source>Register</source>
       <translation>Registrieren</translation>
-    </message>
-    <message>
-      <source>Allow extension pairing</source>
-      <translation>Erweiterungskopplung erlauben</translation>
-    </message>
-    <message>
-      <source>Pair userscript</source>
-      <translation>Userscript koppeln</translation>
     </message>
     <message>
       <source>In progress</source>
@@ -3135,36 +3211,20 @@
       <translation>Lokale API</translation>
     </message>
     <message>
-      <source>Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.</source>
-      <translation>Astra Downloader betreibt eine lokale API, damit die Astra-Deck-Browsererweiterung Downloads direkt von einer Seite senden kann. Zum Herunterladen per eingefügtem Link wird dieser Server nie benötigt.</translation>
+      <source>Send downloads from your browser with Astra Deck.</source>
+      <translation>Downloads mit Astra Deck direkt aus dem Browser senden.</translation>
     </message>
     <message>
-      <source>Pairing</source>
-      <translation>Kopplung</translation>
+      <source>Connect your browser</source>
+      <translation>Browser verbinden</translation>
     </message>
     <message>
-      <source>The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.</source>
-      <translation>Die Erweiterung findet diesen Server selbst, sobald er läuft. Anfragen werden nur von diesem Computer angenommen und müssen das Sitzungstoken enthalten.</translation>
+      <source>Chrome and Edge</source>
+      <translation>Chrome und Edge</translation>
     </message>
     <message>
-      <source>Chrome and Edge pairing</source>
-      <translation>Kopplung mit Chrome und Edge</translation>
-    </message>
-    <message>
-      <source>Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.</source>
-      <translation>Firefox wird automatisch registriert. Für Chrome oder Edge wählen Sie „Erweiterungskopplung erlauben“ und drücken dann innerhalb von zwei Minuten einen Download-Button in Astra Deck, oder Sie fügen die ID von chrome://extensions hier ein. Nur der signierte .crx-Build koppelt sich selbst.</translation>
-    </message>
-    <message>
-      <source>32-letter extension ID. Separate multiple IDs with commas.</source>
-      <translation>Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.</translation>
-    </message>
-    <message>
-      <source>Chrome and Edge extension IDs</source>
-      <translation>Erweiterungs-IDs für Chrome und Edge</translation>
-    </message>
-    <message>
-      <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
-      <translation>Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.</translation>
+      <source>Allow pairing, then use a download button in Astra Deck within two minutes.</source>
+      <translation>Kopplung erlauben und innerhalb von zwei Minuten eine Download-Schaltfläche in Astra Deck verwenden.</translation>
     </message>
     <message>
       <source>Let one Chrome or Edge extension pair in the next two minutes.</source>
@@ -3175,12 +3235,12 @@
       <translation>Status der Chrome-Kopplung</translation>
     </message>
     <message>
-      <source>Userscript pairing</source>
-      <translation>Kopplung mit dem Userscript</translation>
+      <source>Userscript</source>
+      <translation>Userscript</translation>
     </message>
     <message>
-      <source>Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.</source>
-      <translation>Sie verwenden das Astra-Deck-Userscript statt der Erweiterung? Wählen Sie „Userscript koppeln“ und drücken Sie dann innerhalb von zwei Minuten auf YouTube einen Download-Button. Wenn Sie das Servertoken in den Einstellungen neu erzeugen, wird die Kopplung aufgehoben.</translation>
+      <source>Pair the Astra Deck userscript, then use a download button on YouTube.</source>
+      <translation>Das Astra-Deck-Userscript koppeln und eine Download-Schaltfläche auf YouTube verwenden.</translation>
     </message>
     <message>
       <source>Let the Astra Deck userscript collect the token once in the next two minutes.</source>
@@ -3189,6 +3249,42 @@
     <message>
       <source>Userscript pairing status</source>
       <translation>Status der Userscript-Kopplung</translation>
+    </message>
+    <message>
+      <source>Firefox is registered automatically.</source>
+      <translation>Firefox wird automatisch registriert.</translation>
+    </message>
+    <message>
+      <source>Downloading by pasting a link never needs this server.</source>
+      <translation>Downloads über eingefügte Links benötigen diesen Server nicht.</translation>
+    </message>
+    <message>
+      <source>Connection details and activity</source>
+      <translation>Verbindungsdetails und Aktivität</translation>
+    </message>
+    <message>
+      <source>Manual extension IDs, local address and server log.</source>
+      <translation>Manuelle Erweiterungs-IDs, lokale Adresse und Serverprotokoll.</translation>
+    </message>
+    <message>
+      <source>Chrome and Edge extension IDs</source>
+      <translation>Erweiterungs-IDs für Chrome und Edge</translation>
+    </message>
+    <message>
+      <source>For manual pairing, paste the ID from chrome://extensions. Separate multiple IDs with commas. Only the signed .crx build pairs on its own.</source>
+      <translation>Für die manuelle Kopplung die ID aus chrome://extensions einfügen. Mehrere IDs durch Kommas trennen. Nur die signierte .crx-Version koppelt sich automatisch.</translation>
+    </message>
+    <message>
+      <source>32-letter extension ID. Separate multiple IDs with commas.</source>
+      <translation>Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.</translation>
+    </message>
+    <message>
+      <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
+      <translation>Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.</translation>
+    </message>
+    <message>
+      <source>Regenerating the token in Settings unpairs the userscript.</source>
+      <translation>Ein neues Token in den Einstellungen hebt die Kopplung des Userscripts auf.</translation>
     </message>
     <message>
       <source>Server log</source>
@@ -3209,6 +3305,14 @@
     <message>
       <source>. yt-dlp reports about 300 videos/hour signed out and 2,000/hour signed in, and recommends 5 to 10 seconds between downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Source&lt;/a&gt;.</source>
       <translation>. yt-dlp nennt etwa 300 Videos pro Stunde ohne Anmeldung und 2.000 pro Stunde mit Anmeldung. Empfohlen werden 5 bis 10 Sekunden zwischen Downloads. &lt;a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#common-youtube-errors"&gt;Quelle&lt;/a&gt;.</translation>
+    </message>
+    <message>
+      <source>General</source>
+      <translation>Allgemein</translation>
+    </message>
+    <message>
+      <source>Your everyday preferences.</source>
+      <translation>Ihre alltäglichen Einstellungen.</translation>
     </message>
     <message>
       <source>No settings match this search.</source>
@@ -3335,12 +3439,40 @@
       <translation>Import rückgängig</translation>
     </message>
     <message>
+      <source>Changes apply when you save.</source>
+      <translation>Änderungen werden beim Speichern übernommen.</translation>
+    </message>
+    <message>
       <source>Restore defaults</source>
       <translation>Standards wiederherstellen</translation>
     </message>
     <message>
       <source>Undo defaults</source>
       <translation>Standards rückgängig</translation>
+    </message>
+    <message>
+      <source>Folders</source>
+      <translation>Ordner</translation>
+    </message>
+    <message>
+      <source>Downloads</source>
+      <translation>Downloads</translation>
+    </message>
+    <message>
+      <source>Choose where your files are saved.</source>
+      <translation>Wählen Sie, wo Ihre Dateien gespeichert werden.</translation>
+    </message>
+    <message>
+      <source>Set your preferred formats and download behavior.</source>
+      <translation>Legen Sie Ihre bevorzugten Formate und das Downloadverhalten fest.</translation>
+    </message>
+    <message>
+      <source>Adjust network access and site-specific options.</source>
+      <translation>Passen Sie den Netzwerkzugriff und die Optionen für einzelne Websites an.</translation>
+    </message>
+    <message>
+      <source>Keep your tools current and manage your settings.</source>
+      <translation>Halten Sie Ihre Werkzeuge aktuell und verwalten Sie Ihre Einstellungen.</translation>
     </message>
     <message>
       <source>Current pacing has no pause between downloads with concurrency set to {concurrent}, so this setting does not impose an hourly ceiling</source>
@@ -3355,8 +3487,8 @@
       <translation>Einstellungen</translation>
     </message>
     <message>
-      <source>Find a setting</source>
-      <translation>Einstellung suchen</translation>
+      <source>Make Astra work your way.</source>
+      <translation>Passen Sie Astra an Ihre Bedürfnisse an.</translation>
     </message>
     <message>
       <source>Filter settings</source>
@@ -3365,6 +3497,14 @@
     <message>
       <source>Search settings by name or group</source>
       <translation>Einstellungen nach Name oder Gruppe durchsuchen</translation>
+    </message>
+    <message>
+      <source>Settings category</source>
+      <translation>Einstellungskategorie</translation>
+    </message>
+    <message>
+      <source>Settings categories</source>
+      <translation>Einstellungskategorien</translation>
     </message>
     <message>
       <source>Local API port</source>
@@ -3907,6 +4047,10 @@
       <translation>Stabil</translation>
     </message>
     <message>
+      <source>Choose how Astra looks and the language you prefer.</source>
+      <translation>Wählen Sie das Aussehen von Astra und Ihre bevorzugte Sprache.</translation>
+    </message>
+    <message>
       <source>Theme</source>
       <translation>Erscheinungsbild</translation>
     </message>
@@ -3943,6 +4087,10 @@
       <translation>Sprachänderungen werden nach einem Neustart von Astra Downloader angewendet.</translation>
     </message>
     <message>
+      <source>Control how Astra behaves in the background.</source>
+      <translation>Legen Sie fest, wie Astra im Hintergrund arbeitet.</translation>
+    </message>
+    <message>
       <source>Close to the system tray</source>
       <translation>In den Infobereich schließen</translation>
     </message>
@@ -3969,6 +4117,22 @@
     <message>
       <source>Off by default. Clipboard content that does not look like a video link is ignored, and a matching link is staged without starting a download.</source>
       <translation>Standardmäßig deaktiviert. Zwischenablageinhalte, die nicht wie ein Videolink aussehen, werden ignoriert; passende Links werden bereitgestellt, ohne einen Download zu starten.</translation>
+    </message>
+    <message>
+      <source>Minimize to the tray instead of closing the application.</source>
+      <translation>In den Infobereich minimieren, statt die Anwendung zu schließen.</translation>
+    </message>
+    <message>
+      <source>Launch Astra in the system tray.</source>
+      <translation>Astra im Infobereich starten.</translation>
+    </message>
+    <message>
+      <source>Show a system notification when a download completes.</source>
+      <translation>Eine Systembenachrichtigung anzeigen, wenn ein Download abgeschlossen ist.</translation>
+    </message>
+    <message>
+      <source>Show a system notification when a download fails.</source>
+      <translation>Eine Systembenachrichtigung anzeigen, wenn ein Download fehlschlägt.</translation>
     </message>
     <message>
       <source>Webhook address</source>
@@ -4045,6 +4209,14 @@
     <message>
       <source>Restore the settings from before Restore defaults was used.</source>
       <translation>Die Einstellungen vor dem Zurücksetzen auf Standards wiederherstellen.</translation>
+    </message>
+    <message>
+      <source>Search results</source>
+      <translation>Suchergebnisse</translation>
+    </message>
+    <message>
+      <source>Matching settings from every category.</source>
+      <translation>Passende Einstellungen aus allen Kategorien.</translation>
     </message>
     <message>
       <source>Current pacing: {minimum} seconds between downloads per worker, about {per_worker} per hour each and {aggregate} total with concurrency set to {concurrent}</source>

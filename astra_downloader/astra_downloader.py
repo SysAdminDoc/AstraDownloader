@@ -392,7 +392,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.17.0"
+APP_VERSION = "2.18.0"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -5607,9 +5607,9 @@ def ensure_system_integrations(prefer_installed=True, force=False):
 # harder to find.
 STYLESHEET = """
 QMainWindow, QWidget {
-    background-color: #0a0d12;
+    background-color: #101318;
     color: #f2f0ed;
-    font-size: 13px;
+    font-size: 14px;
 }
 QLabel { color: #f2f0ed; background: transparent; }
 QLabel[class="brandFallback"] {
@@ -5626,13 +5626,13 @@ QLabel[class="brandTitle"] {
     letter-spacing: .35px;
 }
 QLabel[class="brandVersion"] { color: #8d97a4; font-size: 11px; }
-QLabel[class="settingsStatus"] { font-size: 12px; }
+QLabel[class="settingsStatus"] { font-size: 13px; }
 QLabel[class="settingsStatus"][tone="neutral"] { color: #9ca5b0; }
 QLabel[class="settingsStatus"][tone="success"] { color: #75dcb1; }
 QLabel[class="settingsStatus"][tone="warning"] { color: #edbd76; }
 QLabel[class="settingsStatus"][tone="danger"] { color: #ff8d82; }
-QLabel[class="title"] { font-size: 28px; font-weight: 700; color: #fbf8f5; }
-QLabel[class="subtitle"] { color: #9da6b2; font-size: 13px; }
+QLabel[class="title"] { font-size: 34px; font-weight: 700; color: #fbf8f5; }
+QLabel[class="subtitle"] { color: #9da6b2; font-size: 14px; }
 QLabel[class="muted"] { color: #8d97a4; }
 QLabel[class="secondary"] { color: #c5cbd3; font-size: 13px; }
 QLabel[class="section"], QLabel[class="panelTitle"] {
@@ -5643,11 +5643,11 @@ QLabel[class="section"], QLabel[class="panelTitle"] {
 }
 QLabel[class="settingsSection"] {
     color: #b8c0ca;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 650;
 }
-QLabel[class="fieldLabel"] { color: #f1eeea; font-size: 13px; font-weight: 600; }
-QLabel[class="fieldHint"] { color: #8d97a4; font-size: 12px; }
+QLabel[class="fieldLabel"] { color: #f1eeea; font-size: 14px; font-weight: 600; }
+QLabel[class="fieldHint"] { color: #8d97a4; font-size: 13px; }
 /* Status labels carry a tone so a refusal is visibly different from a hint.
    These mirror the settingsStatus palette — one convention for every status
    surface; the old `state` property had no rule behind it at all. */
@@ -5681,7 +5681,8 @@ QLabel[class="toolbarMeta"], QLabel[class="columnLabel"], QLabel[class="tableVal
 QLabel[class="metricLabel"] { color: #aab2bd; font-size: 13px; }
 QLabel[class="metricValue"] { color: #f8f5f1; font-size: 26px; font-weight: 700; }
 QLabel[class="metricValue"][tone="accent"] { color: #ff6a57; }
-QLabel[class="heroTitle"] { color: #faf7f3; font-size: 18px; font-weight: 650; }
+QLabel[class="heroTitle"] { color: #faf7f3; font-size: 22px; font-weight: 650; }
+QLabel[class="downloadTitle"] { color: #f1eeea; font-size: 16px; font-weight: 600; }
 QLabel[class="emptyGlyph"] { color: #788391; font-size: 42px; font-weight: 300; }
 QLabel[class="emptyTitle"] { color: #f4f1ee; font-size: 19px; font-weight: 650; }
 QLabel[class="emptyBody"] { color: #98a1ad; font-size: 13px; }
@@ -5722,8 +5723,8 @@ QPushButton {
     border: 1px solid #607080;
     border-radius: 6px;
     padding: 7px 13px;
-    min-height: 36px;
-    font-size: 13px;
+    min-height: 24px;
+    font-size: 14px;
     font-weight: 600;
 }
 QPushButton:hover { background-color: #171d25; border-color: #718092; color: #fffaf6; }
@@ -5762,10 +5763,10 @@ QPushButton[class="nav"] {
     border-left: 3px solid transparent;
     border-radius: 4px;
     text-align: left;
-    padding: 11px 14px;
+    padding: 10px 12px;
     margin: 0 12px 5px 12px;
-    min-height: 42px;
-    font-size: 14px;
+    min-height: 36px;
+    font-size: 15px;
     font-weight: 550;
 }
 QPushButton[class="nav"]:hover { background-color: #151a21; color: #f2f0ed; }
@@ -5777,6 +5778,8 @@ QPushButton[class="nav"][active="true"] {
 }
 QPushButton[class="nav"]:focus { background-color: #171d25; border-left-color: #697482; }
 QPushButton[class="nav"][active="true"]:focus { background-color: #242b35; border-left-color: #ff6552; }
+QFrame[class="sidebar"][spacious="true"] QPushButton[class="nav"] { min-height: 48px; font-size: 16px; }
+QFrame[class="sidebar"][spacious="true"] QLabel[class="brandTitle"] { font-size: 13px; }
 
 /* Keep a combo's popup a list view on every base style; a menu-style popup
    ignores the ::item rules below. Its own block, ahead of the shared one. */
@@ -5787,8 +5790,8 @@ QLineEdit, QSpinBox, QComboBox {
     border: 1px solid #607080;
     border-radius: 6px;
     padding: 7px 10px;
-    min-height: 36px;
-    font-size: 13px;
+    min-height: 24px;
+    font-size: 14px;
 }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #ff7664; background: #151b23; }
 QLineEdit[state="error"], QSpinBox[state="error"], QTextEdit[state="error"] { border-color: #c9675f; background: #1a1214; }
@@ -5825,7 +5828,7 @@ QComboBox QAbstractItemView::item { min-height: 26px; padding: 2px 8px; border-l
 QComboBox QAbstractItemView::item:hover { background: #171d25; }
 QComboBox QAbstractItemView::item:selected { background: #242b35; color: #fff8f4; border-left-color: #ff7664; }
 QSpinBox::up-button, QSpinBox::down-button { width: 18px; border: none; background: transparent; }
-QCheckBox { color: #d7dce2; font-size: 13px; spacing: 10px; min-height: 26px; }
+QCheckBox { color: #d7dce2; font-size: 14px; spacing: 10px; min-height: 26px; }
 QCheckBox::indicator { width: 17px; height: 17px; border-radius: 4px; border: 1px solid #607080; background: transparent; }
 QCheckBox::indicator:hover { border-color: #718092; }
 QCheckBox::indicator:checked { background: #ff6552; border-color: #ff6552; }
@@ -5839,7 +5842,33 @@ QCheckBox::indicator:checked:focus { border-color: #170806; background: #ff7867;
 QCheckBox:focus { color: #fff8f4; }
 QCheckBox:disabled { color: #687381; }
 
-QFrame[class="sidebar"] { background-color: #080b0f; border-right: 1px solid #252c35; }
+QFrame[class="sidebar"] { background-color: #15191f; border-right: 1px solid #252c35; }
+QFrame[class="composer"] { background: transparent; border: none; }
+QWidget[class="formFields"] { background: transparent; border: none; }
+QFrame[class="listPanel"] { background: #0d1218; border: 1px solid #252d37; border-radius: 8px; }
+QFrame[class="siteRow"] { background: transparent; border: none; border-bottom: 1px solid #252d37; border-radius: 0; }
+QFrame[class="siteRow"]:hover { background: #19212c; }
+QLabel[class="sectionHeading"] { color: #f1eeea; font-size: 18px; font-weight: 650; }
+QFrame[class="healthSummary"] {
+    background: transparent;
+    border-top: 1px solid #29313b;
+    border-bottom: 1px solid #29313b;
+    border-radius: 0;
+}
+QPushButton[class="settingsCategory"] {
+    text-align: left;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #aeb6c1;
+    padding: 8px 10px;
+}
+QPushButton[class="settingsCategory"]:hover { background: #171d25; color: #fff8f4; }
+QPushButton[class="settingsCategory"]:checked { background: #202630; color: #fff8f4; border-left: 3px solid #ff6552; }
+QPushButton[class="settingsCategory"]:focus { border-color: #ffb2a5; }
+QPushButton[class="settingsCategory"]:checked:focus { border-color: #ffb2a5; }
+QLabel[class="settingsCategoryHint"] { color: #8d97a4; font-size: 12px; }
+QLabel[class="settingsCategoryTitle"] { color: #fbf8f5; font-size: 20px; font-weight: 650; }
+QFrame[class="settingsCategoryRail"] { background: transparent; border: none; border-right: 1px solid #29313b; }
 QFrame[class="card"] {
     background: #0d1218;
     border: 1px solid #252d37;
@@ -5946,6 +5975,8 @@ QToolTip { background: #11161d; color: #f0eeeb; border: 1px solid #607080; paddi
 # token map prevents one-off controls from quietly retaining the old dark
 # surface when the user changes schemes.
 _LIGHT_THEME_COLOR_REPLACEMENTS = {
+    "#101318": "#f6f8fb",
+    "#15191f": "#e8edf3",
     "#080b0f": "#e8edf3",
     "#0a0d12": "#f6f8fb",
     "#0d1218": "#ffffff",

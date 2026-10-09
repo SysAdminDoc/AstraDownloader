@@ -1,4 +1,4 @@
-# Building and checking Astra Downloader v2.17.0
+# Building and checking Astra Downloader v2.18.0
 
 [Back to the project](../README.md)
 
@@ -41,10 +41,12 @@ While a virtual environment is active, `npm run check` runs the Python gates and
 
 ```powershell
 npm test
-py -3.13 -m pytest -rs       # 1417 tests collected; the gate verifies this count
+py -3.13 -m pytest -rs       # 1501 tests collected; the gate verifies this count
 npm run check
 npm run smoke:gui
 ```
+
+Add `-n 2` to the pytest command to limit parallel testing to two workers.
 
 The command runs all nine gates: both test suites, port-catalogue agreement, catch-reason checks, license inventory, site registry, translations, version agreement and dependency auditing. Missing interpreters count as a failure, not a pass.
 

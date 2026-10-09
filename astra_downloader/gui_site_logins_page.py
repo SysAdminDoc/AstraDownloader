@@ -6,8 +6,8 @@ injected MainWindowCore so the existing dependency contract is unchanged.
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
-    QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QLayout, QLineEdit, QScrollArea,
+    QVBoxLayout, QWidget,
 )
 
 try:
@@ -18,16 +18,17 @@ except ImportError:  # Flat source-path compatibility.
 
 class SiteLoginsPageMixin:
     def _build_site_logins(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(38, 26, 38, 24)
-        layout.setSpacing(14)
+        page = QScrollArea()
+        page.setWidgetResizable(True)
+        page_content = QWidget()
+        layout = QVBoxLayout(page_content)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        layout.setContentsMargins(38, 32, 38, 24)
+        layout.setSpacing(20)
         header = QHBoxLayout()
         header.addLayout(self._make_page_header(
             "Sign-ins",
-            tr("Store a signed-in session so private or members-only videos "
-               "download. Cookies or stored credentials stay on this PC and "
-               "are only ever sent to the site they belong to."),
+            "Save a site sign-in for private or members-only videos.",
         ), 1)
         self.btn_undo_site_login = self._make_tool_button("Undo remove", "ghost")
         self.btn_undo_site_login.setToolTip(
@@ -38,46 +39,83 @@ class SiteLoginsPageMixin:
         header.addWidget(self.btn_undo_site_login, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header)
 
-        add_card, add_layout = self._make_settings_group(tr("Add a site sign-in"))
-        site_row = QHBoxLayout()
+        add_card = make_card()
+        add_layout = QVBoxLayout(add_card)
+        add_layout.setContentsMargins(24, 20, 24, 20)
+        add_layout.setSpacing(14)
+        add_layout.addWidget(make_label("Add a site sign-in", "sectionHeading"))
+        site_row = QVBoxLayout()
+        site_row.setSpacing(6)
+        site_label = make_label("Site address", "fieldLabel")
+        site_row.addWidget(site_label)
         self.site_login_url = QLineEdit()
         self.site_login_url.setAccessibleName(tr("Site address for the sign-in"))
-        self.site_login_url.setPlaceholderText(
-            tr("Site address you signed in to, such as x.com, instagram.com, or vimeo.com")
-        )
-        site_row.addWidget(self.site_login_url, 1)
+        self.site_login_url.setPlaceholderText(tr("example.com"))
+        site_label.setBuddy(self.site_login_url)
+        site_row.addWidget(self.site_login_url)
         add_layout.addLayout(site_row)
 
-        credentials_row = QHBoxLayout()
-        credentials_row.setSpacing(8)
-        # Two fields side by side whose only identification was their own
-        # placeholder text, which is gone the moment either one is typed in.
-        # The row below this one already labels its controls this way.
-        credentials_row.addWidget(make_label(tr("Username"), "fieldHint"))
+        method_row = QVBoxLayout()
+        method_row.setSpacing(6)
+        method_label = make_label("Import method", "fieldLabel")
+        method_row.addWidget(method_label)
+        self.site_login_method = ChoiceBox()
+        self.site_login_method.setAccessibleName(tr("Sign-in import method"))
+        self.site_login_method.addItem(tr("Read from browser"), "browser")
+        self.site_login_method.addItem(tr("Import cookies.txt"), "file")
+        self.site_login_method.addItem(tr("Username and password"), "credentials")
+        self.site_login_method.setMaximumWidth(520)
+        method_label.setBuddy(self.site_login_method)
+        method_row.addWidget(self.site_login_method)
+        add_layout.addLayout(method_row)
+
+        self.site_login_credentials_panel = QWidget()
+        self.site_login_credentials_panel.setProperty("class", "formFields")
+        credentials_layout = QVBoxLayout(self.site_login_credentials_panel)
+        credentials_layout.setContentsMargins(0, 0, 0, 0)
+        credentials_layout.setSpacing(12)
+        credentials_fields = QHBoxLayout()
+        credentials_fields.setSpacing(16)
         self.site_login_username = QLineEdit()
         self.site_login_username.setAccessibleName(tr("Site sign-in username"))
         self.site_login_username.setPlaceholderText(tr("name@example.com"))
-        credentials_row.addWidget(self.site_login_username, 1)
-        credentials_row.addWidget(make_label(tr("Password"), "fieldHint"))
         self.site_login_password = QLineEdit()
         self.site_login_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.site_login_password.setAccessibleName(tr("Site sign-in password"))
         self.site_login_password.setPlaceholderText(tr("Site password"))
         self.site_login_password.setClearButtonEnabled(True)
-        credentials_row.addWidget(self.site_login_password, 1)
+        for title, field in (
+            (tr("Username"), self.site_login_username),
+            (tr("Password"), self.site_login_password),
+        ):
+            field_layout = QVBoxLayout()
+            field_layout.setSpacing(6)
+            label = make_label(title, "fieldLabel")
+            label.setBuddy(field)
+            field_layout.addWidget(label)
+            field_layout.addWidget(field)
+            credentials_fields.addLayout(field_layout, 1)
+        credentials_layout.addLayout(credentials_fields)
         self.btn_site_login_credentials = self._make_tool_button(
             "Store username/password", "primary"
         )
         self.btn_site_login_credentials.clicked.connect(
             self._store_site_login_credentials
         )
-        credentials_row.addWidget(self.btn_site_login_credentials)
-        add_layout.addLayout(credentials_row)
+        credentials_actions = QHBoxLayout()
+        credentials_actions.addStretch()
+        credentials_actions.addWidget(self.btn_site_login_credentials)
+        credentials_layout.addLayout(credentials_actions)
+        add_layout.addWidget(self.site_login_credentials_panel)
 
+        self.site_login_browser_panel = QWidget()
+        self.site_login_browser_panel.setProperty("class", "formFields")
+        browser_layout = QVBoxLayout(self.site_login_browser_panel)
+        browser_layout.setContentsMargins(0, 0, 0, 0)
+        browser_layout.setSpacing(14)
         source_fields = QHBoxLayout()
-        source_fields.setSpacing(8)
-        source_fields.addWidget(make_label(tr("Read from"), "fieldHint"))
-        self.site_login_browser = QComboBox()
+        source_fields.setSpacing(16)
+        self.site_login_browser = ChoiceBox()
         self.site_login_browser.setAccessibleName(tr("Browser to read cookies from"))
         for browser in self._value('SITE_LOGIN_BROWSERS'):
             label = browser.title()
@@ -96,36 +134,61 @@ class SiteLoginsPageMixin:
         if firefox_index >= 0:
             self.site_login_browser.setCurrentIndex(firefox_index)
         self.site_login_browser.setMinimumWidth(170)
-        source_fields.addWidget(self.site_login_browser)
         self.site_login_profile = QLineEdit()
         self.site_login_profile.setAccessibleName(tr("Browser profile name or path"))
         # Was "Profile (optional)", which restated the label and showed no
         # example of what a profile actually looks like.
         self.site_login_profile.setPlaceholderText(tr("Default, or a profile name"))
         self.site_login_profile.setMinimumWidth(180)
-        self.site_login_profile.setMaximumWidth(300)
-        source_fields.addWidget(self.site_login_profile, 1)
-        add_layout.addLayout(source_fields)
+        for title, field in (
+            (tr("Browser"), self.site_login_browser),
+            (tr("Profile (optional)"), self.site_login_profile),
+        ):
+            field_layout = QVBoxLayout()
+            field_layout.setSpacing(6)
+            label = make_label(title, "fieldLabel")
+            label.setBuddy(field)
+            field_layout.addWidget(label)
+            field_layout.addWidget(field)
+            source_fields.addLayout(field_layout, 1)
+        browser_layout.addLayout(source_fields)
 
         source_actions = QHBoxLayout()
-        source_actions.setSpacing(8)
-        source_actions.addStretch()
+        source_actions.setSpacing(16)
+        source_actions.addWidget(make_label(
+            "Firefox can usually be read directly. For Chrome or Edge, "
+            "import a cookies.txt file.", "toolbarMeta", word_wrap=True,
+        ), 1)
         self.btn_site_login_browser = self._make_tool_button("Read from browser", "primary")
         self.btn_site_login_browser.clicked.connect(self._import_site_login_from_browser)
         source_actions.addWidget(self.btn_site_login_browser)
-        self.btn_site_login_file = self._make_tool_button("Import cookies.txt", "ghost")
-        self.btn_site_login_file.clicked.connect(self._import_site_login_from_file)
-        source_actions.addWidget(self.btn_site_login_file)
-        add_layout.addLayout(source_actions)
+        browser_layout.addLayout(source_actions)
+        add_layout.addWidget(self.site_login_browser_panel)
 
+        self.site_login_file_panel = QWidget()
+        self.site_login_file_panel.setProperty("class", "formFields")
+        file_layout = QVBoxLayout(self.site_login_file_panel)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        file_layout.setSpacing(14)
+        file_layout.addWidget(make_label(
+            "Choose a cookies.txt file exported from the browser where "
+            "you signed in to this site.", "toolbarMeta", word_wrap=True,
+        ))
+        file_actions = QHBoxLayout()
+        file_actions.addStretch()
+        self.btn_site_login_file = self._make_tool_button("Import cookies.txt", "primary")
+        self.btn_site_login_file.clicked.connect(self._import_site_login_from_file)
+        file_actions.addWidget(self.btn_site_login_file)
+        file_layout.addLayout(file_actions)
+        add_layout.addWidget(self.site_login_file_panel)
+
+        self.site_login_method.currentIndexChanged.connect(self._show_site_login_method)
+        self._show_site_login_method()
+
+        add_layout.addWidget(make_divider())
         add_layout.addWidget(make_label(
-            tr("Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, "
-               "and Chromium 127+ encrypt their cookie store, so reading them "
-               "from outside the browser usually fails. Export a cookies.txt "
-               "file or use username/password instead. Firefox can normally be "
-               "read directly."),
-            "toolbarMeta",
-            word_wrap=True,
+            "Sign-ins stay on this PC and are sent only to their site.",
+            "fieldHint", word_wrap=True,
         ))
         self.site_login_status = make_label("", "fieldHint", word_wrap=True, status=True)
         self.site_login_status.setAccessibleName(tr("Site sign-in status"))
@@ -152,16 +215,17 @@ class SiteLoginsPageMixin:
         add_layout.addWidget(self.youtube_sign_in_warning)
         layout.addWidget(add_card)
 
-        site_login_filter_panel = make_card("filterBar")
+        layout.addWidget(make_label("Stored sign-ins", "sectionHeading"))
+        site_login_filter_panel = QWidget()
         site_login_filters = QHBoxLayout(site_login_filter_panel)
-        site_login_filters.setContentsMargins(14, 12, 14, 12)
-        site_login_filters.setSpacing(8)
+        site_login_filters.setContentsMargins(0, 0, 0, 0)
+        site_login_filters.setSpacing(12)
         self.site_login_search = QLineEdit()
         self.site_login_search.setAccessibleName(tr("Search stored sign-ins"))
         self.site_login_search.setPlaceholderText(tr("Search site or source"))
         self.site_login_search.setClearButtonEnabled(True)
         site_login_filters.addWidget(self.site_login_search, 2)
-        self.site_login_status_filter = QComboBox()
+        self.site_login_status_filter = ChoiceBox()
         self.site_login_status_filter.setAccessibleName(tr("Stored sign-in status"))
         for label, value in (
             ("All sign-ins", "all"),
@@ -187,11 +251,19 @@ class SiteLoginsPageMixin:
 
         self.site_login_scroll = QScrollArea()
         self.site_login_scroll.setWidgetResizable(True)
+        self.site_login_scroll.setMinimumHeight(220)
         content = QWidget()
         self.site_login_container = QVBoxLayout(content)
         self.site_login_container.setContentsMargins(0, 0, 0, 0)
         self.site_login_container.setSpacing(10)
         self.site_login_scroll.setWidget(content)
         layout.addWidget(self.site_login_scroll, 1)
+        page.setWidget(page_content)
         self.tabs.addTab(page, tr("Sign-ins"))
         self._refresh_site_logins(force=True)
+
+    def _show_site_login_method(self, *_args):
+        method = self.site_login_method.currentData()
+        self.site_login_browser_panel.setVisible(method == "browser")
+        self.site_login_file_panel.setVisible(method == "file")
+        self.site_login_credentials_panel.setVisible(method == "credentials")

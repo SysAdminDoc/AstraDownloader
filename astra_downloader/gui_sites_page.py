@@ -13,8 +13,10 @@ maintained by hand.
 
 import threading
 
+from PySide6.QtCore import Qt
+from shiboken6 import isValid
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLineEdit, QScrollArea, QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLineEdit, QScrollArea, QVBoxLayout, QWidget,
 )
 
 try:
@@ -102,22 +104,26 @@ class SitesPageMixin:
     def _build_sites(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(38, 26, 38, 24)
-        layout.setSpacing(14)
-        layout.addLayout(self._make_page_header(
+        layout.setContentsMargins(38, 32, 38, 24)
+        layout.setSpacing(20)
+        header = QHBoxLayout()
+        header.addLayout(self._make_page_header(
             "Sites",
-            "Everything the installed yt-dlp can reach. Paste a link from any "
-            "of these on the Download page.",
-        ))
+            "Find a site, then paste its link on the Download page.",
+        ), 1)
+        self.btn_catalog_download = self._make_tool_button("Open downloads", "ghost")
+        self.btn_catalog_download.clicked.connect(lambda: self._nav_click("Download"))
+        header.addWidget(self.btn_catalog_download, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header)
 
         # The curated rows are available with no subprocess, so the page is
         # never empty while the extractor list is being read.
         self._site_catalog_rows = list(site_catalog())
 
-        filter_panel = make_card("filterBar")
+        filter_panel = QWidget()
         filters = QHBoxLayout(filter_panel)
-        filters.setContentsMargins(14, 12, 14, 12)
-        filters.setSpacing(8)
+        filters.setContentsMargins(0, 0, 0, 0)
+        filters.setSpacing(12)
         self.site_catalog_search = QLineEdit()
         self.site_catalog_search.setAccessibleName(tr("Search supported sites"))
         self.site_catalog_search.setPlaceholderText(
@@ -127,7 +133,7 @@ class SitesPageMixin:
         self.site_catalog_search.textChanged.connect(self._refresh_site_catalog)
         filters.addWidget(self.site_catalog_search, 2)
 
-        self.site_catalog_category = QComboBox()
+        self.site_catalog_category = ChoiceBox()
         self.site_catalog_category.setAccessibleName(tr("Site category"))
         self.site_catalog_category.addItem(tr("All categories"), "")
         for key in SITE_CATEGORIES:
@@ -141,14 +147,28 @@ class SitesPageMixin:
         self.site_catalog_meta = make_label("", "toolbarMeta", word_wrap=True)
         layout.addWidget(self.site_catalog_meta)
 
+        list_panel = make_card("listPanel")
+        list_layout = QVBoxLayout(list_panel)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(0)
+        columns = QFrame()
+        columns.setProperty("class", "listHeader")
+        columns_layout = QHBoxLayout(columns)
+        columns_layout.setContentsMargins(20, 12, 20, 12)
+        columns_layout.setSpacing(20)
+        columns_layout.addWidget(make_label("Site", "columnLabel"), 3)
+        columns_layout.addWidget(make_label("Category", "columnLabel"), 2)
+        columns_layout.addWidget(make_label("Sign-in", "columnLabel"), 1)
+        list_layout.addWidget(columns)
         self.site_catalog_scroll = QScrollArea()
         self.site_catalog_scroll.setWidgetResizable(True)
         content = QWidget()
         self.site_catalog_container = QVBoxLayout(content)
         self.site_catalog_container.setContentsMargins(0, 0, 0, 0)
-        self.site_catalog_container.setSpacing(8)
+        self.site_catalog_container.setSpacing(0)
         self.site_catalog_scroll.setWidget(content)
-        layout.addWidget(self.site_catalog_scroll, 1)
+        list_layout.addWidget(self.site_catalog_scroll, 1)
+        layout.addWidget(list_panel, 1)
 
         self.tabs.addTab(page, tr("Sites"))
         self._refresh_site_catalog()
@@ -157,30 +177,36 @@ class SitesPageMixin:
     # --- rendering --------------------------------------------------------
 
     def _make_site_catalog_row(self, row):
-        card = make_card()
+        card = make_card("siteRow")
         outer = QVBoxLayout(card)
-        outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(4)
+        outer.setContentsMargins(20, 14, 20, 14)
+        outer.setSpacing(6)
 
         heading = QHBoxLayout()
-        heading.setSpacing(8)
-        name = make_label(row.get("name") or "", "cardTitle")
-        heading.addWidget(name)
-        heading.addStretch(1)
-
+        heading.setSpacing(20)
+        identity = QVBoxLayout()
+        identity.setSpacing(4)
+        name = make_label(row.get("name") or "", "fieldLabel", word_wrap=True)
+        identity.addWidget(name)
+        key = row.get("key") or ""
+        if key:
+            identity.addWidget(make_label(key, "fieldHint", word_wrap=True))
+        heading.addLayout(identity, 3)
         if row.get("source") == CATALOG_SOURCE_CURATED:
-            heading.addWidget(
-                make_status_badge(category_label(row.get("category")), "neutral")
-            )
+            category = category_label(row.get("category"))
+        else:
+            category = ""
+        heading.addWidget(make_label(category, "toolbarMeta", word_wrap=True), 2)
         auth = auth_badge(row.get("auth"))
         if auth:
             label, tone = auth
-            heading.addWidget(make_status_badge(label, tone))
+            sign_in = make_label(label, "toolbarMeta", word_wrap=True)
+            if tone == "warning":
+                set_status_tone(sign_in, tone)
+        else:
+            sign_in = make_label("", "toolbarMeta")
+        heading.addWidget(sign_in, 1)
         outer.addLayout(heading)
-
-        key = row.get("key") or ""
-        if key:
-            outer.addWidget(make_label(key, "fieldHint"))
 
         # The sign-in note is the reason a row is worth reading, so it comes
         # before the general note when a site carries both.
@@ -233,7 +259,13 @@ class SitesPageMixin:
                 # emptying the page
                 return
             if names:
-                self.site_catalog_ready.emit(names)
+                try:
+                    self.site_catalog_ready.emit(names)
+                except RuntimeError:
+                    # The probe can finish after the window's QObject was
+                    # destroyed. Its result then has no live receiver.
+                    if isValid(self):
+                        raise
 
         threading.Thread(
             target=run, name="site-catalog-extractors", daemon=True

@@ -37,8 +37,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "المواقع",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "كل ما يمكن لبرنامج yt-dlp المثبَّت الوصول إليه. الصق رابطًا من أي من هذه المواقع في صفحة التنزيل.",
         "Search supported sites":
             "البحث في المواقع المدعومة",
         "Search by site name or domain":
@@ -108,10 +106,6 @@ CATALOGS = {
             "Für Videos mit mehreren Tonspuren. Fehlt die gewünschte, wird die Standardspur geladen, und der Download weist darauf hin.",
         "Use automatic, original or a language code such as en or es-419 for the audio language.":
             "Verwenden Sie für die Audiosprache automatisch, original oder einen Sprachcode wie en oder es-419.",
-        "Show password, clip range, file name and start time controls.":
-            "Passwort, Ausschnitt, Dateiname und Startzeit anzeigen.",
-        "Hide password, clip range, file name and start time controls.":
-            "Passwort, Ausschnitt, Dateiname und Startzeit ausblenden.",
         "Start at":
             "Starten um",
         "Start this download later":
@@ -184,8 +178,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "Websites",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "Alles, was das installierte yt-dlp erreichen kann. Fügen Sie auf der Seite „Download“ einen Link von einer dieser Websites ein.",
         "Search supported sites":
             "Unterstützte Websites durchsuchen",
         "Search by site name or domain":
@@ -262,8 +254,6 @@ CATALOGS = {
             "Weitere Optionen",
         "Fewer options":
             "Weniger Optionen",
-        "Download health":
-            "Download-Bereitschaft",
         "Show checks":
             "Prüfungen anzeigen",
         "Hide checks":
@@ -332,8 +322,6 @@ CATALOGS = {
             "Das Abonnement konnte nicht wiederhergestellt werden.",
         "Closing now will cancel {count} active downloads.":
             "Beim Schließen werden {count} aktive Downloads abgebrochen.",
-        "Find a setting":
-            "Einstellung suchen",
         "Filter settings":
             "Einstellungen filtern",
         "Search settings by name or group":
@@ -384,10 +372,6 @@ CATALOGS = {
             "Zurück",
         "Next":
             "Weiter",
-        "New subscription":
-            "Neues Abonnement",
-        "Every":
-            "Alle",
         "Add subscription":
             "Abonnement hinzufügen",
         "Subscriptions are ready when the local companion is running.":
@@ -538,12 +522,6 @@ CATALOGS = {
             "Pfade, URLs, Token, cookieähnliche Werte und undurchsichtige Kennungen werden entfernt. Kopieren Sie diese Daten nur, wenn Sie mit der Weitergabe des Rests einverstanden sind.",
         "Browser extension":
             "Browser-Erweiterung",
-        "Astra Downloader runs a local API so the Astra Deck browser extension can send downloads straight from a page. Downloading by pasting a link never needs this server.":
-            "Astra Downloader betreibt eine lokale API, damit die Astra-Deck-Browsererweiterung Downloads direkt von einer Seite senden kann. Zum Herunterladen per eingefügtem Link wird dieser Server nie benötigt.",
-        "Pairing":
-            "Kopplung",
-        "The extension finds this server on its own once it is running. Requests are accepted from this machine only and must carry the session token.":
-            "Die Erweiterung findet diesen Server selbst, sobald er läuft. Anfragen werden nur von diesem Computer angenommen und müssen das Sitzungstoken enthalten.",
         "Server log":
             "Serverprotokoll",
         "No server events yet":
@@ -556,8 +534,6 @@ CATALOGS = {
             "Starten Sie die lokale API oder koppeln Sie die Browsererweiterung, um hier aktuelle Aktivitäten zu sehen.",
         "Download a video":
             "Video herunterladen",
-        "Paste a link from almost any site. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch and hundreds more.":
-            "Fügen Sie einen Link von fast jeder Website ein. YouTube, Reddit, X, TikTok, Vimeo, Instagram, Twitch und Hunderte mehr.",
         "Welcome to Astra Downloader":
             "Willkommen bei Astra Downloader",
         "Confirm where finished videos should go. You can change this later in Settings.":
@@ -614,8 +590,6 @@ CATALOGS = {
             "Datei",
         "Subscriptions":
             "Abonnements",
-        "Watch YouTube channels or playlists on a schedule and queue only new uploads.":
-            "YouTube-Kanäle oder Playlists nach Zeitplan beobachten und nur neue Uploads einreihen.",
         "Scan now":
             "Jetzt prüfen",
         "Remove":
@@ -624,8 +598,6 @@ CATALOGS = {
             "Anmeldungen",
         "Add a site sign-in":
             "Website-Anmeldung hinzufügen",
-        "Site address you signed in to, such as x.com, instagram.com, or vimeo.com":
-            "Adresse der Website, bei der Sie angemeldet sind, zum Beispiel x.com, instagram.com oder vimeo.com",
         "Reading cookies from the browser…":
             "Cookies werden aus dem Browser gelesen…",
         "Settings":
@@ -864,12 +836,6 @@ CATALOGS = {
             "Keine geplanten Abonnements",
         "Add a YouTube channel or playlist above. New uploads will be queued on its interval.":
             "Fügen Sie oben einen YouTube-Kanal oder eine Playlist hinzu. Neue Uploads werden im eingestellten Intervall eingereiht.",
-        "Store a signed-in session so private or members-only videos download. Cookies or stored credentials stay on this PC and are only ever sent to the site they belong to.":
-            "Eine angemeldete Sitzung speichern, damit private oder mitgliederexklusive Videos heruntergeladen werden können. Cookies oder gespeicherte Zugangsdaten bleiben auf diesem PC und werden nur an die zugehörige Website gesendet.",
-        "Read from":
-            "Lesen aus",
-        "Chromium browsers such as Chrome, Edge, Brave, Opera, Vivaldi, and Chromium 127+ encrypt their cookie store, so reading them from outside the browser usually fails. Export a cookies.txt file or use username/password instead. Firefox can normally be read directly.":
-            "Chromium-Browser wie Chrome, Edge, Brave, Opera, Vivaldi und Chromium 127+ verschlüsseln ihren Cookie-Speicher, sodass das Lesen von außerhalb des Browsers meist fehlschlägt. Exportieren Sie eine cookies.txt oder verwenden Sie stattdessen Benutzername und Passwort. Firefox lässt sich normalerweise direkt lesen.",
         "likely unreadable on Chromium 127+":
             "unter Windows 127+ wahrscheinlich nicht lesbar",
         "Site sign-in username":
@@ -922,8 +888,6 @@ CATALOGS = {
             "Anzeigen",
         "No stored sign-ins":
             "Keine gespeicherten Anmeldungen",
-        "Add one above for any site that only serves video to signed-in viewers. Reserve YouTube sign-ins for videos that require an account.":
-            "Fügen Sie oben eine für jede Website hinzu, die Videos nur angemeldeten Nutzern zeigt. Verwenden Sie YouTube-Anmeldungen nur für Videos, die ein Konto erfordern.",
         "YouTube sign-ins are risky. yt-dlp warns that account use can cause temporary or permanent bans, and some signed-in sessions can make public videos unplayable. Use cookies only for account-required videos, keep a 5 to 10 second pause, and retry public videos signed out. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies\">Read yt-dlp's YouTube guidance.</a>":
             "YouTube-Anmeldungen sind riskant. yt-dlp warnt, dass die Kontonutzung zu vorübergehenden oder dauerhaften Sperren führen kann. Bei einigen angemeldeten Sitzungen lassen sich öffentliche Videos nicht abspielen. Verwenden Sie Cookies nur für Videos, die ein Konto erfordern, halten Sie 5 bis 10 Sekunden Pause ein und versuchen Sie öffentliche Videos ohne Anmeldung erneut. <a href=\"https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies\">YouTube-Hinweise von yt-dlp lesen.</a>",
         "YouTube sign-in risk warning":
@@ -1668,8 +1632,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "Sitios",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "Todo lo que puede alcanzar el yt-dlp instalado. Pegue un enlace de cualquiera de estos sitios en la página de descargas.",
         "Search supported sites":
             "Buscar sitios compatibles",
         "Search by site name or domain":
@@ -1721,8 +1683,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "Sites",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "Tout ce que le yt-dlp installé peut atteindre. Collez un lien de l'un de ces sites sur la page de téléchargement.",
         "Search supported sites":
             "Rechercher les sites pris en charge",
         "Search by site name or domain":
@@ -1774,8 +1734,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "Siti",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "Tutto ciò che il yt-dlp installato riesce a raggiungere. Incolla un link da uno di questi siti nella pagina Download.",
         "Search supported sites":
             "Cerca tra i siti supportati",
         "Search by site name or domain":
@@ -1827,8 +1785,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "サイト",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "インストール済みの yt-dlp が対応するすべてのサイトです。これらのサイトのリンクをダウンロードページに貼り付けてください。",
         "Search supported sites":
             "対応サイトを検索",
         "Search by site name or domain":
@@ -1880,8 +1836,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "사이트",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "설치된 yt-dlp가 지원하는 모든 사이트입니다. 이 중 아무 사이트의 링크나 다운로드 페이지에 붙여 넣으세요.",
         "Search supported sites":
             "지원 사이트 검색",
         "Search by site name or domain":
@@ -1933,8 +1887,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "Sites",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "Tudo o que o yt-dlp instalado consegue acessar. Cole um link de qualquer um desses sites na página de download.",
         "Search supported sites":
             "Pesquisar sites compatíveis",
         "Search by site name or domain":
@@ -1986,8 +1938,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "Сайты",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "Всё, к чему может обратиться установленный yt-dlp. Вставьте ссылку с любого из этих сайтов на странице загрузки.",
         "Search supported sites":
             "Поиск поддерживаемых сайтов",
         "Search by site name or domain":
@@ -2039,8 +1989,6 @@ CATALOGS = {
             "check-link-and-retry",
         "Sites":
             "站点",
-        "Everything the installed yt-dlp can reach. Paste a link from any of these on the Download page.":
-            "已安装的 yt-dlp 能够访问的全部站点。请在下载页面粘贴其中任意站点的链接。",
         "Search supported sites":
             "搜索支持的站点",
         "Search by site name or domain":
@@ -2543,18 +2491,12 @@ CATALOGS["de"].update({
     "Cleared. This copy registers no browser hosts.":
         "Entfernt. Diese Kopie registriert keine Browser-Hosts.",
     "Register": "Registrieren",
-    "Chrome and Edge pairing": "Kopplung mit Chrome und Edge",
-    "Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.":
-        "Firefox wird automatisch registriert. Für Chrome oder Edge wählen Sie „Erweiterungskopplung erlauben“ und drücken dann innerhalb von zwei Minuten einen Download-Button in Astra Deck, oder Sie fügen die ID von chrome://extensions hier ein. Nur der signierte .crx-Build koppelt sich selbst.",
     "32-letter extension ID. Separate multiple IDs with commas.":
         "Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.",
     "Chrome and Edge extension IDs": "Erweiterungs-IDs für Chrome und Edge",
     "Write the Chrome and Edge native-messaging registration for these IDs.":
         "Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.",
     "Chrome pairing status": "Status der Chrome-Kopplung",
-    "Userscript pairing": "Kopplung mit dem Userscript",
-    "Using the Astra Deck userscript instead of the extension? Choose Pair userscript, then press a download button on YouTube within two minutes. Regenerating the token in Settings unpairs it.":
-        "Sie verwenden das Astra-Deck-Userscript statt der Erweiterung? Wählen Sie „Userscript koppeln“ und drücken Sie dann innerhalb von zwei Minuten auf YouTube einen Download-Button. Wenn Sie das Servertoken in den Einstellungen neu erzeugen, wird die Kopplung aufgehoben.",
     "Pair userscript": "Userscript koppeln",
     "Let the Astra Deck userscript collect the token once in the next two minutes.":
         "Das Astra-Deck-Userscript darf das Token in den nächsten zwei Minuten einmal abholen.",
@@ -2592,6 +2534,75 @@ CATALOGS["de"].update({
     "Hook or greeting": "Aufhänger oder Begrüßung",
     "Highlight": "Highlight",
     "Chapter": "Kapitel",
+})
+
+
+# Page navigation and progressive disclosure.
+CATALOGS["de"].update({
+    "Add a sign-in above when a video needs an account.": "Füge oben eine Anmeldung hinzu, wenn ein Video ein Konto erfordert.",
+    "Adjust network access and site-specific options.": "Passen Sie den Netzwerkzugriff und die Optionen für einzelne Websites an.",
+    "Allow pairing, then use a download button in Astra Deck within two minutes.": "Kopplung erlauben und innerhalb von zwei Minuten eine Download-Schaltfläche in Astra Deck verwenden.",
+    "Browser": "Browser",
+    "Category": "Kategorie",
+    "Changes apply when you save.": "Änderungen werden beim Speichern übernommen.",
+    "Channel or playlist link": "Link zum Kanal oder zur Playlist",
+    "Check every": "Prüfen alle",
+    "Choose a cookies.txt file exported from the browser where you signed in to this site.": "Wähle eine cookies.txt-Datei aus dem Browser, in dem du bei dieser Website angemeldet bist.",
+    "Choose how Astra looks and the language you prefer.": "Wählen Sie das Aussehen von Astra und Ihre bevorzugte Sprache.",
+    "Choose where your files are saved.": "Wählen Sie, wo Ihre Dateien gespeichert werden.",
+    "Chrome and Edge": "Chrome und Edge",
+    "Connect your browser": "Browser verbinden",
+    "Connection details and activity": "Verbindungsdetails und Aktivität",
+    "Control how Astra behaves in the background.": "Legen Sie fest, wie Astra im Hintergrund arbeitet.",
+    "Downloading by pasting a link never needs this server.": "Downloads über eingefügte Links benötigen diesen Server nicht.",
+    "Downloads": "Downloads",
+    "Find a site, then paste its link on the Download page.": "Finde eine Website und füge ihren Link auf der Download-Seite ein.",
+    "Find files you downloaded.": "Finde deine heruntergeladenen Dateien.",
+    "Firefox can usually be read directly. For Chrome or Edge, import a cookies.txt file.": "Firefox kann meist direkt gelesen werden. Importiere bei Chrome oder Edge eine cookies.txt-Datei.",
+    "Firefox is registered automatically.": "Firefox wird automatisch registriert.",
+    "Folders": "Ordner",
+    "For manual pairing, paste the ID from chrome://extensions. Separate multiple IDs with commas. Only the signed .crx build pairs on its own.": "Für die manuelle Kopplung die ID aus chrome://extensions einfügen. Mehrere IDs durch Kommas trennen. Nur die signierte .crx-Version koppelt sich automatisch.",
+    "General": "Allgemein",
+    "Hide site profile, audio language, password, clip range, file name and start time controls.": "Website-Profil, Audiosprache, Passwort, Clipbereich, Dateiname und Startzeit ausblenden.",
+    "Import method": "Importmethode",
+    "Keep your tools current and manage your settings.": "Halten Sie Ihre Werkzeuge aktuell und verwalten Sie Ihre Einstellungen.",
+    "Launch Astra in the system tray.": "Astra im Infobereich starten.",
+    "Make Astra work your way.": "Passen Sie Astra an Ihre Bedürfnisse an.",
+    "Manual extension IDs, local address and server log.": "Manuelle Erweiterungs-IDs, lokale Adresse und Serverprotokoll.",
+    "Matching settings from every category.": "Passende Einstellungen aus allen Kategorien.",
+    "Minimize to the tray instead of closing the application.": "In den Infobereich minimieren, statt die Anwendung zu schließen.",
+    "More filters": "Weitere Filter",
+    "More filters ({count})": "Weitere Filter ({count})",
+    "New uploads are queued while Astra is running.": "Neue Uploads werden eingereiht, solange Astra läuft.",
+    "Open downloads": "Downloads öffnen",
+    "Pair the Astra Deck userscript, then use a download button on YouTube.": "Das Astra-Deck-Userscript koppeln und eine Download-Schaltfläche auf YouTube verwenden.",
+    "Paste a link. Choose a format. Save it.": "Link einfügen. Format wählen. Speichern.",
+    "Profile (optional)": "Profil (optional)",
+    "Regenerating the token in Settings unpairs the userscript.": "Ein neues Token in den Einstellungen hebt die Kopplung des Userscripts auf.",
+    "Save a site sign-in for private or members-only videos.": "Speichere eine Website-Anmeldung für private Videos oder Videos nur für Mitglieder.",
+    "Search results": "Suchergebnisse",
+    "Send downloads from your browser with Astra Deck.": "Downloads mit Astra Deck direkt aus dem Browser senden.",
+    "Set your preferred formats and download behavior.": "Legen Sie Ihre bevorzugten Formate und das Downloadverhalten fest.",
+    "Settings categories": "Einstellungskategorien",
+    "Settings category": "Einstellungskategorie",
+    "Show a system notification when a download completes.": "Eine Systembenachrichtigung anzeigen, wenn ein Download abgeschlossen ist.",
+    "Show a system notification when a download fails.": "Eine Systembenachrichtigung anzeigen, wenn ein Download fehlschlägt.",
+    "Show or hide format and saved-date filters.": "Filter für Format und Speicherdatum ein- oder ausblenden.",
+    "Show site profile, audio language, password, clip range, file name and start time controls.": "Website-Profil, Audiosprache, Passwort, Clipbereich, Dateiname und Startzeit anzeigen.",
+    "Sign-in": "Anmeldung",
+    "Sign-in import method": "Importmethode für die Anmeldung",
+    "Sign-ins stay on this PC and are sent only to their site.": "Anmeldungen bleiben auf diesem PC und werden nur an ihre jeweilige Website gesendet.",
+    "Site": "Website",
+    "Site address": "Website-Adresse",
+    "Stored sign-ins": "Gespeicherte Anmeldungen",
+    "Tools and download health": "Werkzeuge und Downloadbereitschaft",
+    "Username and password": "Benutzername und Passwort",
+    "Userscript": "Userscript",
+    "Watch channels and playlists. Download new uploads automatically.": "Kanälen und Playlists folgen. Neue Uploads automatisch herunterladen.",
+    "Your downloads": "Ihre Downloads",
+    "Your everyday preferences.": "Ihre alltäglichen Einstellungen.",
+    "Your subscriptions": "Ihre Abonnements",
+    "example.com": "example.com",
 })
 
 

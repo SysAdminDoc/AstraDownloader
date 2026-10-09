@@ -112,7 +112,7 @@ def system_reduced_motion_enabled():
 try:
     from . import gui_support as _gui_support
     from .gui_support import (
-        GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
+        ChoiceBox, GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
         describe_rejected_links, download_status_tone,
         filter_site_login_entries, filter_subscription_records,
         format_duration, human_status, make_card, make_divider,
@@ -126,7 +126,7 @@ try:
 except ImportError:  # Flat source-path compatibility.
     import gui_support as _gui_support
     from gui_support import (
-        GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
+        ChoiceBox, GUI_ACCESSIBILITY_COLORS, SUBTITLE_LANGUAGE_CHOICES,
         describe_rejected_links, download_status_tone,
         filter_site_login_entries, filter_subscription_records,
         format_duration, human_status, make_card, make_divider,
@@ -1020,7 +1020,7 @@ class PlaylistStagingDialog(QDialog):
         self._build_ui()
 
     def _make_choice_combo(self, choices, current, accessible_name):
-        combo = QComboBox()
+        combo = ChoiceBox()
         combo.setAccessibleName(accessible_name)
         for label, value in choices:
             combo.addItem(label, value)
@@ -1391,11 +1391,11 @@ class SubscriptionDeliveryDialog(QDialog):
 
         picker_row = QHBoxLayout()
         picker_row.addWidget(make_label("Format", "fieldLabel"))
-        self.format_combo = QComboBox()
+        self.format_combo = ChoiceBox()
         self.format_combo.setAccessibleName(tr("Subscription format"))
         picker_row.addWidget(self.format_combo)
         picker_row.addWidget(make_label("Quality", "fieldLabel"))
-        self.quality_combo = QComboBox()
+        self.quality_combo = ChoiceBox()
         self.quality_combo.setAccessibleName(tr("Subscription quality"))
         self.quality_combo.addItem(tr("No preference"), "")
         for label, value in self.QUALITIES:
@@ -1831,7 +1831,7 @@ class MainWindowCore(
         # Sidebar
         sidebar = QFrame()
         sidebar.setProperty("class", "sidebar")
-        sidebar.setFixedWidth(232)
+        sidebar.setFixedWidth(220)
         self.sidebar = sidebar
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
@@ -1841,7 +1841,7 @@ class MainWindowCore(
         brand = QWidget()
         self.brand_widget = brand
         brand_layout = QHBoxLayout(brand)
-        brand_layout.setContentsMargins(20, 22, 16, 28)
+        brand_layout.setContentsMargins(16, 24, 12, 28)
         brand_layout.setSpacing(10)
         brand_icon = QLabel()
         brand_icon.setFixedSize(36, 36)
@@ -2096,6 +2096,29 @@ class MainWindowCore(
             header.addWidget(make_label(subtitle, "subtitle", word_wrap=True))
         return header
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        sidebar = getattr(self, "sidebar", None)
+        spacious = self.width() >= 1280
+        if sidebar is None or sidebar.property("spacious") == spacious:
+            return
+        sidebar.setProperty("spacious", spacious)
+        sidebar.setFixedWidth(260 if spacious else 220)
+        repolish(sidebar)
+        for button in self.nav_buttons:
+            repolish(button)
+        for control_name, compact, wide in (
+            ("quick_download_type", 96, 130),
+            ("quick_download_format", 100, 130),
+            ("quick_download_quality", 100, 140),
+            ("btn_quick_download_dest", 0, 150),
+            ("btn_quick_options", 0, 164),
+            ("btn_quick_download", 0, 160),
+        ):
+            widget = getattr(self, control_name, None)
+            if widget is not None:
+                widget.setMinimumWidth(wide if spacious else compact)
+
     def _add_settings_number(self, target, label, hint, accessible,
                              minimum, maximum, current):
         """Add one labelled spin box with its explanation to a settings group."""
@@ -2119,7 +2142,7 @@ class MainWindowCore(
         """Add one labelled preference combo to a settings group."""
         row = QHBoxLayout()
         row.addWidget(make_label(label, "fieldLabel"), 1)
-        combo = QComboBox()
+        combo = ChoiceBox()
         combo.setAccessibleName(tr(accessible))
         for text_label, value in choices:
             combo.addItem(text_label, value)
@@ -2133,16 +2156,26 @@ class MainWindowCore(
         group = QFrame()
         group.setProperty("class", "settingsGroup")
         group.setProperty("settingsSearchTitle", str(title))
-        outer = QHBoxLayout(group)
-        outer.setContentsMargins(18, 16, 18, 16)
-        outer.setSpacing(26)
+        is_settings = getattr(self, "_building_settings_page", False)
+        outer = QVBoxLayout(group) if is_settings else QHBoxLayout(group)
+        if is_settings:
+            outer.setContentsMargins(24, 22, 24, 22)
+        else:
+            outer.setContentsMargins(18, 16, 18, 16)
+        outer.setSpacing(12 if is_settings else 26)
         heading = make_label(title, "settingsSection")
-        heading.setMinimumWidth(150)
+        if not is_settings:
+            heading.setMinimumWidth(150)
         heading.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         outer.addWidget(heading)
         content = QVBoxLayout()
-        content.setSpacing(9)
+        content.setSpacing(14 if is_settings else 9)
         outer.addLayout(content, 1)
+        if is_settings:
+            for category, _description, titles in self._SETTINGS_CATEGORIES:
+                if title in titles:
+                    group.setProperty("settingsCategory", category)
+                    break
         if hasattr(self, "_settings_group_specs"):
             self._settings_group_specs.append((group, content, str(title)))
         return group, content
@@ -2331,20 +2364,26 @@ class MainWindowCore(
         query = str(query or "").strip().casefold()
         matched_groups = 0
         for group, content, title in getattr(self, "_settings_group_specs", []):
-            group_matches = not query or query in str(title).casefold()
+            group_matches = not query or query in f"{title} {tr(title)}".casefold()
             row_matches = False
             for index in range(content.count()):
                 item = content.itemAt(index)
                 matches = group_matches or query in self._settings_item_search_text(item)
                 self._set_settings_item_visible(item, matches)
                 row_matches = row_matches or matches
-            visible = not query or group_matches or row_matches
+            visible = group_matches or row_matches
+            if not query:
+                category = group.property("settingsCategory")
+                selected = getattr(self, "_settings_active_category", None)
+                visible = not selected or not category or category == selected
             group.setVisible(visible)
             if visible and query:
                 matched_groups += 1
         empty = getattr(self, "settings_filter_empty", None)
         if empty is not None:
             empty.setVisible(bool(query) and matched_groups == 0)
+        if hasattr(self, "settings_category_heading"):
+            self._update_settings_category_heading(query)
 
     def _make_tool_button(self, text, class_name="secondary", target=""):
         """A tool button, optionally named for the row it acts on.
@@ -2611,6 +2650,8 @@ class MainWindowCore(
             return
         if action == "choose-output-folder":
             self._nav_click("Settings")
+            self._reveal_settings_control(self.cfg_dl_path)
+            self.cfg_dl_path.setFocus(Qt.FocusReason.OtherFocusReason)
             self._show_settings_status(
                 tr("Choose a download folder this machine can write to."),
                 "warning",
@@ -3090,9 +3131,9 @@ class MainWindowCore(
         self.btn_quick_options.setText(label)
         self.btn_quick_options.setAccessibleName(label)
         description = (
-            tr("Hide password, clip range, file name and start time controls.")
+            tr("Hide site profile, audio language, password, clip range, file name and start time controls.")
             if expanded
-            else tr("Show password, clip range, file name and start time controls.")
+            else tr("Show site profile, audio language, password, clip range, file name and start time controls.")
         )
         self.btn_quick_options.setToolTip(description)
         self.btn_quick_options.setAccessibleDescription(description)
@@ -3910,15 +3951,14 @@ class MainWindowCore(
                 )
             )
         if not entries:
-            self.site_login_container.addWidget(make_empty_state(
+            empty = make_empty_state(
                 tr("No stored sign-ins"),
-                tr("Add one above for any site that only serves video to "
-                   "signed-in viewers. Reserve YouTube sign-ins for videos "
-                   "that require an account."),
-                "Add a site sign-in",
-                self._focus_site_login_url,
-            ))
-            self.site_login_container.addStretch()
+                tr("Add a sign-in above when a video needs an account."),
+            )
+            for label in empty.findChildren(QLabel):
+                if label.property("class") == "emptyGlyph":
+                    set_line_icon(label, "Sign-ins", size=36)
+            self.site_login_container.addWidget(empty, 1)
             return
         if not visible_entries:
             self.site_login_container.addWidget(make_empty_state(
@@ -5249,7 +5289,10 @@ class MainWindowCore(
         card_l.setSpacing(9)
 
         top = QHBoxLayout()
-        title = make_label(dl.title if dl.title and dl.title != "Unknown" else "Preparing download", "fieldLabel", word_wrap=True)
+        row_icon = QLabel()
+        set_line_icon(row_icon, "Download", size=22)
+        top.addWidget(row_icon)
+        title = make_label(dl.title if dl.title and dl.title != "Unknown" else "Preparing download", "downloadTitle", word_wrap=True)
         top.addWidget(title, 1)
         state_label = make_state_label(
             human_status(self._download_display_status(dl)),
@@ -5340,6 +5383,7 @@ class MainWindowCore(
         bar = None
         if dl.status in self._value('DOWNLOAD_RUNNING_STATES'):
             bar = QProgressBar()
+            bar.setFixedHeight(6)
             bar.setRange(0, 100)
             bar.setValue(int(min(max(dl.progress, 0), 100)))
             bar.setTextVisible(False)
@@ -6612,13 +6656,14 @@ class MainWindowCore(
         self.btn_history_next.setEnabled(result["hasMore"])
         self.btn_export_history.setEnabled(filtered_total > 0)
         if not data and result["total"] == 0:
-            self.history_container.addWidget(make_empty_state(
+            empty = make_empty_state(
                 "No downloads yet",
                 "Completed downloads will appear here.",
                 "View download queue",
                 lambda: self._nav_click("Download"),
-            ))
-            self.history_container.addStretch()
+            )
+            empty.empty_action.setProperty("class", "primary")
+            self.history_container.addWidget(empty, 1)
             return
         if not rows:
             self.history_container.addWidget(make_empty_state(
@@ -7687,6 +7732,9 @@ class MainWindowCore(
                 self._show_settings_status(
                     "Check the highlighted fields before saving.", "danger")
             if first_error is not None:
+                reveal = getattr(self, "_reveal_settings_control", None)
+                if callable(reveal):
+                    reveal(first_error)
                 first_error.setFocus(Qt.FocusReason.OtherFocusReason)
             return
 

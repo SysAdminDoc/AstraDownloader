@@ -387,22 +387,37 @@ def main():
             window._render_focus_target = focus_target
 
         def assert_download_options_reflow(window):
-            """Pin the minimum-size fixture's option rows, not its screenshot."""
+            """Keep primary and expanded controls readable at the minimum size."""
             container = window.quick_download_options_container
-            if window.quick_download_options_layout.count() < 2:
-                raise RuntimeError("Download options did not wrap into multiple rows")
-            controls = [
-                window.quick_download_profile,
+            advanced = window.quick_download_advanced
+            primary_controls = [
                 window.quick_download_type,
                 window.quick_download_format,
                 window.quick_download_quality,
                 window.btn_quick_download_dest,
+                window.btn_quick_options,
+            ]
+            advanced_controls = [
+                window.quick_download_profile,
+                window.quick_download_audio_language,
+                window.quick_download_video_password,
                 window.quick_download_start,
                 window.quick_download_end,
+                window.btn_quick_clip_from_url,
+                window.btn_quick_clip_last_30,
+                window.quick_download_name,
+                window.quick_download_schedule,
+                window.quick_download_schedule_time,
             ]
+            for owner, controls in ((container, primary_controls), (advanced, advanced_controls)):
+                if not all(owner.isAncestorOf(control) for control in controls):
+                    raise RuntimeError("Download options escaped their primary or advanced section")
+            current = window.tabs.currentWidget()
+            if isinstance(current, QScrollArea) and current.horizontalScrollBar().maximum() > 0:
+                raise RuntimeError("Download options require sideways scrolling at the minimum size")
             rects = []
             common_parent = container.parentWidget()
-            for control in controls:
+            for control in primary_controls + advanced_controls:
                 if not control.isVisible():
                     raise RuntimeError(
                         f"Download option is hidden: {control.objectName() or type(control).__name__}"
@@ -713,12 +728,11 @@ def main():
                     ("Sites", {"Websites", "Anmeldung erforderlich",
                                "Livestreaming", "Musik und Audio"}),
                     ("Sign-ins", {"Anmeldungen", "Website-Anmeldung hinzufügen",
-                                  "Lesen aus"}),
-                    ("Subscriptions", {"Abonnements", "Neues Abonnement"}),
-                    ("Browser extension", {"Browser-Erweiterung", "Kopplung",
+                                  "Importmethode"}),
+                    ("Subscriptions", {"Abonnements", "Ihre Abonnements"}),
+                    ("Browser extension", {"Browser-Erweiterung", "Browser verbinden",
                                            "Laufzeit"}),
-                    ("Settings", {"Einstellungen", "Formatwünsche",
-                                  "Dateinamenvorlage", "Aktion"}),
+                    ("Settings", {"Einstellungen", "Formatwünsche", "Aktion"}),
                 ):
                     select_page(window, page)
                     scroll_current_page_to_top(window)
@@ -730,7 +744,20 @@ def main():
                         window._set_preflight_row(
                             "output-folder", "error", "", "choose-output-folder")
                         app.processEvents()
+                    elif page == "History":
+                        window.btn_history_more_filters.setChecked(True)
+                        app.processEvents()
+                    elif page == "Settings":
+                        window._select_settings_category("Downloads")
+                        app.processEvents()
+                    elif page == "Browser extension":
+                        window.btn_extension_details.setChecked(True)
+                        app.processEvents()
                     assert_visible_text(window, expected_german)
+                    if page == "Settings":
+                        window._select_settings_category("Folders")
+                        app.processEvents()
+                        assert_visible_text(window, {"Dateinamenvorlage"})
                     if page == "Download":
                         # visible_text reads QLabels; a button's text is not
                         # one, which is how ten English repair buttons hid
@@ -813,9 +840,14 @@ def main():
                 # they reached the widgets there rather than asserting them
                 # on a page that no longer carries those rows.
                 select_page(window, "Download")
+                window.btn_preflight_toggle.setChecked(True)
+                app.processEvents()
                 assert_visible_text(window, {"2026.07.04", "7.1", "Deno 2.7.11"})
+                window.btn_preflight_toggle.setChecked(False)
                 select_page(window, "Browser extension")
                 if scenario == "dashboard-log-populated":
+                    window.btn_extension_details.setChecked(True)
+                    app.processEvents()
                     window._append_log("Browser extension paired with the local server.")
                     window._append_log("Download request accepted from Astra Deck.")
                     window._restore_log_view()
@@ -841,7 +873,7 @@ def main():
                     app.processEvents()
                     QTest.qWait(40)
                 assert_visible_text(window, {
-                    "Userscript pairing",
+                    "Userscript",
                     "Waiting for the userscript, 2:00 left. Press a download button on YouTube now.",
                 })
                 if not window.btn_pair_userscript.isVisible():
@@ -872,7 +904,10 @@ def main():
                 )
                 # The degraded tool rows render on the Download page.
                 select_page(window, "Download")
+                window.btn_preflight_toggle.setChecked(True)
+                app.processEvents()
                 assert_visible_text(window, {"Missing", "Update Deno"})
+                window.btn_preflight_toggle.setChecked(False)
                 select_page(window, "Browser extension")
             capture_window(window, scenario)
 
@@ -1567,6 +1602,20 @@ def main():
 
         def capture_settings_state(window, config):
             select_page(window, "Settings")
+            category = {
+                "settings-dirty": "Folders",
+                "settings-invalid": "Folders",
+                "settings-subtitles": "Downloads",
+                "settings-pacing-guidance": "Connection",
+                "settings-fallback-port": "Connection",
+                "settings-invalid-site-profiles": "Connection",
+                "settings-version-pins": "Maintenance",
+                "settings-bundle-imported": "Maintenance",
+                "settings-update-busy": "Maintenance",
+                "settings-focus-125x": "Maintenance",
+            }.get(scenario, "General")
+            window.settings_category_buttons[category].click()
+            app.processEvents()
             expected = ""
             if scenario == "settings-dirty":
                 window.cfg_dl_path.setText(str(Path(temp_dir) / "Videos" / "Edited"))
@@ -1738,7 +1787,7 @@ def main():
                     raise RuntimeError("Settings search did not reveal the proxy field")
                 if window.cfg_dl_path.isVisible():
                     raise RuntimeError("Settings search left an unrelated field visible")
-                expected = "Connection"
+                expected = "Proxy"
             elif scenario == "settings-invalid-site-profiles":
                 window.cfg_site_profiles.setPlainText("{not valid JSON")
                 window._save_settings()
@@ -1783,9 +1832,12 @@ def main():
                     "until the update passes."
                 )
                 window._show_settings_status(expected, "warning")
-            if scenario in {"settings-fallback-port", "settings-light-theme"}:
-                # The Connection card is the top of the page.
+            if scenario == "settings-light-theme":
                 scroll_current_page_to_top(window)
+            elif scenario == "settings-fallback-port":
+                window.settings_scroll.ensureWidgetVisible(window.cfg_port_session_hint, 0, 160)
+                app.processEvents()
+                QTest.qWait(40)
             elif scenario == "settings-search-active":
                 current = window.tabs.currentWidget()
                 scroll = (current if isinstance(current, QScrollArea)
@@ -2134,10 +2186,22 @@ def main():
                     app.quit()
 
         QTimer.singleShot(0, capture_all)
-        exit_code = app.exec()
-        if capture_failures:
-            raise capture_failures[0]
-        return exit_code
+        try:
+            exit_code = app.exec()
+            if capture_failures:
+                raise capture_failures[0]
+            return exit_code
+        finally:
+            # A captured action can queue disk work just before Qt exits.
+            # Drain persistence first because it may log, then wait until the
+            # log writer has closed its file before TemporaryDirectory removes it.
+            persistence_drained = app_module.flush_all_persistence(timeout=30)
+            log_drained = app_module.flush_persistent_log(timeout=30)
+            if not persistence_drained or not log_drained:
+                raise RuntimeError(
+                    "Companion render cleanup could not drain pending disk writes "
+                    f"(persistence={persistence_drained}, log={log_drained})"
+                )
 
 
 if __name__ == "__main__":
