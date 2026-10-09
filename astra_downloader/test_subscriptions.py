@@ -2550,6 +2550,98 @@ class SubscriptionFilterTests(unittest.TestCase):
                 {"title": "word word"}, {"includeTitleRegex": slow}), ("matched", ""))
         self.assertLess(time.perf_counter() - started, 120)
 
+    def test_repeated_timeouts_fail_fast_until_the_cooldown_ends(self):
+        # Each timeout killed and respawned the worker, so a pattern that ran
+        # out of time on most titles cost a second plus a spawn per title,
+        # under the lock previews also wait on.
+        module = subscriptions_module()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        timeout = config_module.TitleFilterTimeout
+
+        class SilentConn:
+            def send(self, _item):
+                pass
+
+            def poll(self, _budget):
+                return False
+
+        class AnsweringConn(SilentConn):
+            def poll(self, _budget):
+                return True
+
+            def recv(self):
+                return ("ok", True)
+
+        now = [1000.0]
+        worker = config_module._TitleFilterWorker(clock=lambda: now[0])
+        conn = [SilentConn()]
+        starts = []
+
+        def connection():
+            starts.append(1)
+            return conn[0]
+
+        with mock.patch.object(worker, "_connection", side_effect=connection):
+            for _ in range(2):
+                with self.assertRaises(timeout):
+                    worker.search("slow", "title", 1.0)
+            # An answer in between starts the count again.
+            conn[0] = AnsweringConn()
+            self.assertTrue(worker.search("slow", "title", 1.0))
+            conn[0] = SilentConn()
+            for _ in range(3):
+                with self.assertRaises(timeout):
+                    worker.search("slow", "title", 1.0)
+            self.assertEqual(len(starts), 6)
+            # Three in a row: later titles fail fast and never reach the worker.
+            for _ in range(5):
+                with self.assertRaises(timeout):
+                    worker.search("slow", "title", 1.0)
+            self.assertEqual(len(starts), 6)
+            # Even while another title holds the worker.
+            outcome = []
+
+            def blocked_search():
+                try:
+                    worker.search("slow", "title", 1.0)
+                except timeout:
+                    outcome.append("filter-timeout")
+
+            with worker._lock:
+                thread = threading.Thread(target=blocked_search, daemon=True)
+                thread.start()
+                thread.join(5)
+                answered = list(outcome)
+            thread.join(5)
+            self.assertEqual(answered, ["filter-timeout"])
+            self.assertEqual(len(starts), 6)
+            # Another pattern still runs.
+            conn[0] = AnsweringConn()
+            self.assertTrue(worker.search("other", "title", 1.0))
+            self.assertEqual(len(starts), 7)
+            # Once the cooldown ends, the pattern is tried for real again.
+            now[0] += config_module._TITLE_FILTER_COOLDOWN_SECONDS
+            self.assertTrue(worker.search("slow", "title", 1.0))
+            self.assertEqual(len(starts), 8)
+
+    def test_a_worker_that_cannot_start_is_not_retried_on_every_title(self):
+        # A start that hangs costs up to a minute; paying it per title made a
+        # scan of a long channel take an hour.
+        module = subscriptions_module()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        now = [1000.0]
+        worker = config_module._TitleFilterWorker(clock=lambda: now[0])
+        starts = []
+        with mock.patch.object(worker, "_connection", side_effect=lambda: starts.append(1)):
+            for pattern in ("one", "two", "three"):
+                with self.assertRaises(config_module.TitleFilterTimeout):
+                    worker.search(pattern, "title", 1.0)
+            self.assertEqual(len(starts), 1)
+            now[0] += config_module._TITLE_FILTER_COOLDOWN_SECONDS
+            with self.assertRaises(config_module.TitleFilterTimeout):
+                worker.search("one", "title", 1.0)
+            self.assertEqual(len(starts), 2)
+
     @unittest.skipUnless(sys.platform == "win32", "Job objects are Windows only")
     def test_the_worker_dies_with_the_app(self):
         # Left running, a worker stuck in re.search kept burning a core and,

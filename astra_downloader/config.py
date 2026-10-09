@@ -730,6 +730,14 @@ TITLE_FILTER_TIME_BUDGET_SECONDS = 1.0
 # Starting the worker is not part of any title's budget; a spawned interpreter
 # can take seconds on a busy machine.
 _TITLE_FILTER_WORKER_START_SECONDS = 60.0
+# Each timeout kills and respawns the worker, so a pattern that runs out of
+# time on most titles would cost a second plus a spawn per title, and a worker
+# that can't start up to a minute per title. After this many timeouts in a
+# row on one pattern, or one failed start, titles fail fast as filter-timeout
+# until the cooldown ends. It's shorter than the shortest scan interval, so
+# the next scan always tries the pattern again.
+_TITLE_FILTER_STRIKES = 3
+_TITLE_FILTER_COOLDOWN_SECONDS = 120.0
 _RE = re._constants
 _TITLE_FILTER_ANCHORS = frozenset({
     _RE.AT_BEGINNING, _RE.AT_BEGINNING_STRING, _RE.AT_END, _RE.AT_END_STRING,
@@ -876,15 +884,25 @@ class _TitleFilterWorker:
     the budget is spent. The next title starts a fresh one.
     """
 
-    def __init__(self):
+    def __init__(self, clock=time.monotonic):
         self._lock = threading.Lock()
         self._process = None
         self._conn = None
+        self._clock = clock
+        # Timeouts in a row per pattern, and when titles may reach the worker
+        # again per pattern (None for a worker that failed to start).
+        self._strikes = {}
+        self._cooling = {}
 
     def search(self, pattern, title, budget):
+        # Checked before the lock too, so a pattern that is cooling down
+        # answers at once even while another title holds the worker.
+        self._refuse_while_cooling(pattern)
         with self._lock:
+            self._refuse_while_cooling(pattern)
             conn = self._connection()
             if conn is None:
+                self._cool_down(None)
                 raise TitleFilterTimeout("the filter worker could not start")
             reply = None
             try:
@@ -895,11 +913,34 @@ class _TitleFilterWorker:
                 reply = None
             if reply is None:
                 self._stop()
+                strikes = self._strikes.pop(pattern, 0) + 1
+                if strikes >= _TITLE_FILTER_STRIKES:
+                    self._cool_down(pattern)
+                else:
+                    self._strikes[pattern] = strikes
                 raise TitleFilterTimeout("the filter ran out of time on this title")
+            self._strikes.pop(pattern, None)
         kind, value = reply
         if kind != "ok":
             raise TitleFilterError(f"is not a valid regular expression: {value}")
         return bool(value)
+
+    def _refuse_while_cooling(self, pattern):
+        now = self._clock()
+        cooling = self._cooling
+        for key in (None, pattern):
+            until = cooling.get(key)
+            if until is not None and now < until:
+                raise TitleFilterTimeout("the filter is resting after repeated timeouts")
+
+    def _cool_down(self, key):
+        # Called under the lock. Rebuilt rather than edited, so a reader
+        # outside the lock always sees a whole dict, and ended cooldowns
+        # don't pile up.
+        now = self._clock()
+        cooling = {k: until for k, until in self._cooling.items() if until > now}
+        cooling[key] = now + _TITLE_FILTER_COOLDOWN_SECONDS
+        self._cooling = cooling
 
     def _connection(self):
         if self._process is not None and self._process.is_alive():
