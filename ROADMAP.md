@@ -14,42 +14,19 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-142 | Local subtitles fail when downloads are on another drive
-  Why: the finished SRT moves from the temp folder under the install dir to the video's folder with `os.replace`, which Windows refuses across drives. Install on C:, downloads on D: ends every transcription with "Unexpected local subtitle error."
-  Acceptance: WHEN the temp folder and the video's folder are on different drives, the SRT SHALL land beside the video (copied there under a temp name, then renamed), and the temp copy SHALL be removed.
-  Where: `astra_downloader/download.py` around 6349.
-- [ ] P1 | AD-143 | A skipped transcription leaves a finished download marked failed
-  Why: the job is set to `transcribing` before it waits for the transcription slot. If the second check then skips (subtitles turned off meanwhile, the video moved, an .srt appeared), it returns with that status still set, and the worker cleanup turns it into `failed` ("Download worker stopped before reporting a result"). The subtitle-only retry path does the same with `downloading`.
-  Acceptance: WHEN the transcription step returns early for any reason, the download SHALL end `complete` (or keep its retry outcome), never `failed` by the worker cleanup.
-  Where: `astra_downloader/download.py` around 6052, 6058 and 6076.
-- [ ] P1 | AD-144 | Subtitle language "all" makes local subtitles fail
-  Why: the language check accepts any 2 or 3 letters, so Subtitle languages `all` (saved as `all,-live_chat`) becomes `-l all`, and `eng`, `iw` and `und` get through the same way. whisper.cpp stops on a language it doesn't know, and the user sees "completed without producing an SRT sidecar".
-  Acceptance: WHEN the configured subtitle language isn't one whisper.cpp knows, transcription SHALL run with `-l auto`.
-  Where: `astra_downloader/download.py` `subtitle_language_for_transcription` (around 2595).
-
 ### P2
 
-- [ ] P2 | AD-147 | Subtitles can't be retried after a disk-space skip
-  Why: a failed disk check marks the item `complete` with `insufficient-disk-space`, which isn't in the subtitle-retry list, so after freeing space the retry says "Only failed or skipped downloads can be retried".
-  Acceptance: WHEN a transcription was skipped for disk space, a subtitle retry SHALL be offered and accepted.
-  Where: `astra_downloader/download.py` around 260 and 6123.
-- [ ] P2 | AD-148 | Switching the Whisper model mid-transcription can delete the model in use
-  Why: the model path is picked before the audio step. Saving base in Settings during that step provisions base and retires tiny, then whisper-cli starts on a deleted file. (Plausible; confirm first.)
-  Acceptance: WHEN the model changes while a transcription is running, that transcription SHALL finish with the model it started with, or pick the new one after it exists.
-  Where: `astra_downloader/download.py` around 6079, `astra_downloader/astra_downloader.py` `_retire_other_whisper_models` (around 2153) and `provision_whisper_model` (around 2217).
-- [ ] P2 | AD-149 | The whisper.cpp runtime has no version stamp, so rollback always fails and it never upgrades
-  Why: the runtime check never returns a version, so the version probe is empty and Roll back always fails with "retained-copy-unverified"; the rollback copy lives inside the `whisper` folder the next install swaps out; a working runtime is never replaced, so raising `WHISPER_BIN_VERSION` never reaches existing installs.
-  Acceptance: WHEN `WHISPER_BIN_VERSION` changes, an existing runtime SHALL be replaced on the next setup, and Roll back SHALL restore a verified previous copy kept outside the swapped folder.
-  Where: `astra_downloader/astra_downloader.py` around 1576, 2229 and 2526.
-- [ ] P2 | AD-152 | The transcription disk check assumes an hour of audio
-  Why: no download carries a duration, so every one is sized as one hour (about 115 MB). A 4 hour video writes about 460 MB to the install drive after passing a 147 MB check. The check also wants that space in the output folder, which only gets the small SRT. (Plausible; confirm first.)
-  Acceptance: WHEN the duration is known (yt-dlp's info or an ffprobe), the WAV estimate SHALL use it, and the free-space check SHALL be against the temp folder's drive.
-  Where: `astra_downloader/download.py` `estimate_transcription_wav_bytes` (around 3080) and around 6108.
 ### P3
 
-- [ ] P3 | AD-156 | Whisper progress and interrupted setup leftovers
-  Why: the progress bar sits at 0% through the audio step because ffmpeg's `progress=continue` lines never match the parser. Closing the app during setup stops the setup thread after 5 s and can leave half-downloaded model files and `.whisper.*.zip` or `.extract` leftovers in the install dir that nothing cleans up.
-  Acceptance: WHEN ffmpeg reports progress, the bar SHALL move during the audio step, and WHEN the app starts, setup leftovers SHALL be removed.
-  Where: `astra_downloader/download.py` `parse_whisper_progress` and the audio step, `astra_downloader/astra_downloader.py` provisioning.
-
-
+- [ ] P3 | AD-160 | SponsorBlock boxes open unticked when every category is on
+  Why: categories stored as "" (every category) open the Settings page with no box ticked (`gui_settings_page.py` around 651), while an import or restore ticks them all (`gui.py` around 5945). The page shows the opposite of what's active.
+  Acceptance: WHEN the stored categories mean every category, the Settings page SHALL open with every box ticked, the same as after an import.
+  Where: `astra_downloader/gui_settings_page.py`, `astra_downloader/gui.py`.
+- [ ] P3 | AD-161 | A template ending in a fixed extension gets no NFO
+  Why: `normalize_output_template` only needs `%(ext)s` somewhere in the template. One that ends in a literal extension makes yt-dlp name the metadata `Title.mp4.info.json`, which doesn't pair by stem, so that file gets no NFO. (Plausible; confirm first.)
+  Acceptance: WHEN a delivered file's `<stem>.info.json` is missing but `<name>.info.json` exists beside it, the NFO step SHALL use that one.
+  Where: `astra_downloader/download.py` `write_media_server_sidecars`.
+- [ ] P3 | AD-162 | Two extension pairings at once can lose an ID
+  Why: `pair_browser_extension` reads the saved Chrome IDs, then writes the joined list back. Two requests between those steps each save a list without the other's ID.
+  Acceptance: WHEN two IDs pair at the same moment, both SHALL be saved.
+  Where: `astra_downloader/astra_downloader.py` `pair_browser_extension`.
