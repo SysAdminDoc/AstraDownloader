@@ -6382,7 +6382,22 @@ class DownloadManagerCore:
             if dl.status == 'cancelled':
                 return False
             if temporary_srt.is_file() and temporary_srt.stat().st_size > 0:
-                os.replace(temporary_srt, output_path)
+                # Staging sits under the install folder, which can be on
+                # another drive than the downloads, and os.replace can't move
+                # a file across drives. Copy it beside the video under a
+                # hidden name first so the rename that publishes it is atomic.
+                partial_srt = output_path.with_name(
+                    f'.{output_path.name}.{token}.part'
+                )
+                try:
+                    shutil.copyfile(temporary_srt, partial_srt)
+                    os.replace(partial_srt, output_path)
+                finally:
+                    try:
+                        partial_srt.unlink(missing_ok=True)
+                    except OSError:
+                        # reason: a locked partial copy is hidden and harmless
+                        pass
                 dl.status = 'complete'
                 dl.progress = 100.0
                 dl.speed = ''
