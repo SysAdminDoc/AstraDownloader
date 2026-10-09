@@ -14,9 +14,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-130 | Nested empty repeats stall the title filter compiler
-  Why: `a{0}` emits no instructions, but `_title_filter_zero_width` judges the body and ignores `high == 0`, so nested exact repeats multiply and the 256 instruction limit never trips. `(?:(?:(?:a{0}){256}){256}){256}` (32 characters) takes about 10 s in `compile_title_filter` and one more level runs for minutes. It's accepted and stored, so every store load, save and bundle import pays it on the Flask or GUI thread.
-  Where: `astra_downloader/config.py` (`_title_filter_zero_width` and the repeat emitter). Treat `high == 0` and any body that emits nothing as zero width, and budget the product of copies across nesting levels. Test that the 32 and 41 character patterns compile in well under a second and still decide like `re`.
 
 ### P2
 

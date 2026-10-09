@@ -1001,14 +1001,19 @@ def _title_filter_zero_width(items):
             if not all(_title_filter_zero_width(branch) for branch in av[1]):
                 return False
         elif op is _RE.MAX_REPEAT or op is _RE.MIN_REPEAT:
-            if not _title_filter_zero_width(av[2]):
+            # x{0} never runs its body, so it matches only the empty string
+            # whatever the body is, and emits nothing.
+            if av[1] != 0 and not _title_filter_zero_width(av[2]):
                 return False
         else:
             return False
     return True
 
 
-def _emit_title_filter(items, program):
+def _emit_title_filter(items, program, scale=1):
+    """Append the program for ``items``. ``scale`` is how many copies of these
+    items the enclosing repeats ask for in all, so the copy budget holds for
+    the product across nesting levels and not only one level at a time."""
     for op, av in items:
         if len(program) > TITLE_FILTER_PROGRAM_LIMIT:
             raise _LinearUnsupported
@@ -1040,17 +1045,17 @@ def _emit_title_filter(items, program):
             _group, add_flags, del_flags, body = av
             if add_flags or del_flags:
                 raise _LinearUnsupported
-            _emit_title_filter(body, program)
+            _emit_title_filter(body, program, scale)
         elif op is _RE.BRANCH:
             alternatives = av[1]
             exits = []
             for index, alternative in enumerate(alternatives):
                 if index == len(alternatives) - 1:
-                    _emit_title_filter(alternative, program)
+                    _emit_title_filter(alternative, program, scale)
                     break
                 split = len(program)
                 program.append(None)
-                _emit_title_filter(alternative, program)
+                _emit_title_filter(alternative, program, scale)
                 exits.append(len(program))
                 program.append(None)
                 program[split] = ("split", split + 1, len(program))
@@ -1060,32 +1065,41 @@ def _emit_title_filter(items, program):
             # Greedy and lazy match the same titles; only the span differs,
             # and a filter asks only whether there is a match.
             low, high, body = av
+            if high == 0:
+                # x{0} matches the empty string and never runs its body.
+                # Counted as a full body, (?:(?:(?:a{0}){256}){256}){256}
+                # walked 16 million empty copies (10 s) and one more level
+                # never finished.
+                continue
             if _title_filter_zero_width(body):
                 # A body that can only match empty text passes or fails the
                 # same way on every pass at one position, so zero passes
                 # (always true) or one pass says everything. Expanding
                 # (?:){4294967294} copy by copy never finished.
                 if low:
-                    _emit_title_filter(body, program)
+                    _emit_title_filter(body, program, scale)
                 continue
-            copies = low + (1 if high == _RE.MAXREPEAT else high - low)
-            if copies > TITLE_FILTER_PROGRAM_LIMIT:
-                # Counted before expanding: each copy of a body that isn't
-                # zero-width adds at least one instruction.
+            # Counted before expanding, and multiplied through every
+            # enclosing repeat: each copy of a body that isn't zero-width
+            # adds at least one instruction, so a product over the limit
+            # would overflow the program anyway, only much later. Siblings
+            # don't multiply each other, so a{200}b{2} still fits.
+            inner = scale * (low + (1 if high == _RE.MAXREPEAT else high - low))
+            if inner > TITLE_FILTER_PROGRAM_LIMIT:
                 raise _LinearUnsupported
             for _copy in range(low):
-                _emit_title_filter(body, program)
+                _emit_title_filter(body, program, inner)
             if high == _RE.MAXREPEAT:
                 loop = len(program)
                 program.append(None)
-                _emit_title_filter(body, program)
+                _emit_title_filter(body, program, inner)
                 program.append(("jmp", loop))
                 program[loop] = ("split", loop + 1, len(program))
             else:
                 for _copy in range(high - low):
                     split = len(program)
                     program.append(None)
-                    _emit_title_filter(body, program)
+                    _emit_title_filter(body, program, inner)
                     program[split] = ("split", split + 1, len(program))
         else:
             # Backreferences, lookarounds, possessive and atomic groups.

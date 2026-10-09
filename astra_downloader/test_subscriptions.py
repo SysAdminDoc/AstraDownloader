@@ -2492,6 +2492,44 @@ class SubscriptionFilterTests(unittest.TestCase):
                 compiled, config_module._BacktrackingTitleFilter, pattern)
             self.assertIs(compiled.search(title), expected, pattern)
 
+    def test_nested_empty_repeats_compile_at_once_and_decide_like_re(self):
+        # a{0} emits nothing, but it was not counted as zero-width, so each
+        # level of nesting multiplied the copies walked: three levels took
+        # 10 s and four never finished saving a subscription. Python's re
+        # walks the same copies at match time (5 s for three levels), so each
+        # pattern is checked against an equivalent re can answer at once.
+        module = subscriptions_module()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        titles = ("", "a", "ab", "b", "xay", "Live xy", "xxy", "aaaa bbbb", "y")
+        for pattern, equivalent in (
+            ("(?:(?:(?:a{0}){256}){256}){256}", ""),
+            ("(?:(?:(?:(?:a{0}){256}){256}){256}){256}", ""),
+            ("(?:(?:(?:(?:(?:a{0}){999}){999}){999}){999}){999}b", "b"),
+            ("(?:(?:a{0}|b{0}){200}x){2}y", "xxy"),
+            ("x(?:(?:(?:a{0})*){99}){99}y", "xy"),
+            ("(?:(?:a{0}?){256}b){1,3}", "b"),
+        ):
+            # No subTest: the first slow one must end the test, not hang it.
+            started = time.perf_counter()
+            compiled = module.compile_title_filter(pattern)
+            self.assertLess(time.perf_counter() - started, 0.5, pattern)
+            self.assertIsInstance(compiled, config_module._TitleFilterProgram, pattern)
+            for title in titles:
+                self.assertIs(
+                    compiled.search(title),
+                    re.search(equivalent, title, re.IGNORECASE) is not None,
+                    (pattern, title),
+                )
+        # The budget is the product across levels: 16 x 32 copies of a body
+        # that emits something no longer fit, even though each level does.
+        self.assertIsInstance(
+            module.compile_title_filter("(?:(?:ab){16}){32}"),
+            config_module._BacktrackingTitleFilter,
+        )
+        # Sibling repeats add up rather than multiply: 202 instructions fit.
+        self.assertIsInstance(
+            module.compile_title_filter("a{200}b{2}"), config_module._TitleFilterProgram)
+
     def test_a_backtracking_pattern_runs_out_of_time_closed(self):
         module = subscriptions_module()
         # Python's re needs minutes here, and the lookahead keeps it off the

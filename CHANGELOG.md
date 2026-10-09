@@ -10,6 +10,12 @@ Releases before 2.0.0 were made from the
 program lived as a companion service. That history is preserved in this
 repository's git log.
 
+## Unreleased
+
+### Fixed
+
+- A title filter built from nested repeats of something repeated zero times, like `(?:(?:(?:a{0}){256}){256}){256}`, could take 10 seconds to check, and one more level of nesting ran for minutes. Every save, settings import and app start paid that again. It's now checked instantly and matches the same titles it always did.
+
 ## [2.17.0] (2026-10-07)
 
 ### Added
