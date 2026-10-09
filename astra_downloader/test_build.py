@@ -527,6 +527,7 @@ class UninstallCleanupTests(unittest.TestCase):
                 ".AstraDownloader.update.deadbeef.exe",
                 ".yt-dlp.update.deadbeef.exe",
                 ".whisper.deadbeef.zip",
+                ".ffmpeg.exe.last-known-good",
                 "archive.txt",
             ):
                 (install / name).write_text("orphan", encoding="utf-8")
@@ -555,6 +556,7 @@ class UninstallCleanupTests(unittest.TestCase):
                 ".AstraDownloader.update.deadbeef.exe",
                 ".yt-dlp.update.deadbeef.exe",
                 ".whisper.deadbeef.zip",
+                ".ffmpeg.exe.last-known-good",
                 "archive.txt",
             ):
                 self.assertFalse((install / name).exists(), name)

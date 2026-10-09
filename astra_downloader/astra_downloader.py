@@ -6731,6 +6731,9 @@ def _portable_state_paths(root=None):
             'archive.txt',
             YTDLP_ROLLBACK_FILENAME,
             COMPANION_ROLLBACK_FILENAME,
+            # ffmpeg's Roll back copy sits beside it in the root; deno's and
+            # quickjs's live inside their own folders, which go anyway.
+            managed_binary_rollback_path('ffmpeg').name,
             Path(_ytdlp_update_state_path()).name,
             Path(_companion_update_state_path()).name,
         )
