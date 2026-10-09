@@ -2772,6 +2772,29 @@ def parse_whisper_progress(line):
         return None
 
 
+_FFMPEG_DURATION_RE = re.compile(r'\bDuration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)')
+# ffmpeg prints both keys in microseconds; out_time_ms is a historical misnomer.
+_FFMPEG_OUT_TIME_RE = re.compile(r'out_time_(?:us|ms)=(\d+)')
+
+
+def parse_ffmpeg_duration_seconds(line):
+    """Return the input length ffmpeg prints as ``Duration: HH:MM:SS.ss``."""
+    match = _FFMPEG_DURATION_RE.search(str(line or ''))
+    if not match:
+        return None
+    hours, minutes, seconds = match.groups()
+    total = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    return total if total > 0 else None
+
+
+def parse_ffmpeg_progress_seconds(line):
+    """Return how far ffmpeg's ``-progress`` output has got, in seconds."""
+    match = _FFMPEG_OUT_TIME_RE.fullmatch(str(line or '').strip())
+    if not match:
+        return None
+    return int(match.group(1)) / 1_000_000
+
+
 def should_generate_local_subtitles(config, download):
     """Gate local transcription to opt-in video jobs with no subtitle track."""
     read = getattr(config, 'get', None)
@@ -6284,6 +6307,21 @@ class DownloadManagerCore:
                 f'{LOCAL_TRANSCRIPTION_TIMEOUT_SECONDS // 60}-minute time limit while {phase}.',
             )
 
+        audio_length = {'seconds': float(getattr(dl, 'duration', 0) or 0)}
+
+        def audio_progress(line):
+            # ffmpeg's -progress block reports elapsed time and
+            # `progress=continue`, never a percentage. Its own "Duration:"
+            # line (or the length yt-dlp reported) turns that into one.
+            length = parse_ffmpeg_duration_seconds(line)
+            if length:
+                audio_length['seconds'] = length
+                return None
+            elapsed = parse_ffmpeg_progress_seconds(line)
+            if elapsed is None or audio_length['seconds'] <= 0:
+                return None
+            return max(0.0, min(100.0, elapsed * 100.0 / audio_length['seconds']))
+
         def run_process(args, stage):
             proc = None
             stop_watchdog = None
@@ -6364,7 +6402,10 @@ class DownloadManagerCore:
                     output_lines.append(line)
                     if len(output_lines) > 40:
                         del output_lines[:-40]
-                    progress = parse_whisper_progress(line)
+                    if stage == 'audio':
+                        progress = audio_progress(line)
+                    else:
+                        progress = parse_whisper_progress(line)
                     if progress is not None:
                         if stage == 'whisper':
                             # Audio extraction is the first 20% of this

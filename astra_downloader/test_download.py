@@ -7842,6 +7842,27 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
         self.assertEqual(ad.parse_whisper_progress("progress: 120%"), 100.0)
         self.assertIsNone(ad.parse_whisper_progress("progress=end"))
 
+    def test_ffmpeg_progress_lines_are_read_as_seconds(self):
+        import download as download_module
+
+        self.assertEqual(
+            download_module.parse_ffmpeg_duration_seconds(
+                "  Duration: 01:02:03.50, start: 0.000000, bitrate: 128 kb/s"
+            ),
+            3723.5,
+        )
+        self.assertIsNone(
+            download_module.parse_ffmpeg_duration_seconds("  Duration: N/A, bitrate: N/A")
+        )
+        # out_time_ms is in microseconds too; ffmpeg kept the old name.
+        self.assertEqual(
+            download_module.parse_ffmpeg_progress_seconds("out_time_us=2500000"), 2.5
+        )
+        self.assertEqual(
+            download_module.parse_ffmpeg_progress_seconds("out_time_ms=2500000"), 2.5
+        )
+        self.assertIsNone(download_module.parse_ffmpeg_progress_seconds("progress=continue"))
+
     def test_whisper_invocation_requests_real_progress_output(self):
         import download as download_module
 
@@ -7940,6 +7961,43 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             self.assertEqual(download.status, "complete")
             self.assertEqual(download.progress, 100.0)
             self.assertEqual(list(root.glob(".clip*")), [])
+
+    def test_the_bar_moves_while_ffmpeg_prepares_the_audio(self):
+        # ffmpeg reports elapsed time, never a percentage, so the bar used to
+        # sit still for the whole audio step of a long recording.
+        class AudioProgressProcess(self._TranscriptProcess):
+            def __init__(self, args, **kwargs):
+                super().__init__(args, **kwargs)
+                if "-c:a" in self.args:
+                    self.stdout = io.StringIO(
+                        "  Duration: 00:01:40.00, start: 0.000000, bitrate: 1 kb/s\n"
+                        "out_time_us=50000000\nprogress=continue\nprogress=end\n"
+                    )
+
+        seen = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
+            config, download = self._download(media)
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            manager.progress_updated.connect(lambda: seen.append(download.progress))
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
+                    mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
+                    mock.patch.object(ad, "spawn_media_process", AudioProgressProcess):
+                self.assertTrue(manager._run_local_subtitles(download, config))
+        # Fifty of a hundred seconds is half the audio step, which is the
+        # first fifth of the bar.
+        self.assertTrue(any(math.isclose(value, 10.0) for value in seen), seen)
+        self.assertEqual(download.status, "complete")
 
     def test_the_srt_reaches_a_video_on_another_drive(self):
         # Staging lives under the install folder. With downloads on another

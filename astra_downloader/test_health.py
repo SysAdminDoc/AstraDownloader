@@ -1756,6 +1756,69 @@ class WhisperRuntimeProvisioningTests(unittest.TestCase):
             self.assertEqual((runtime_dir / "whisper.dll").read_bytes(), b"old")
             self.assertEqual(stored["ManagedBinaryPins"], {"whisper": "1.9.1"})
 
+    def _sweep(self, root, names, folders):
+        for name in names:
+            (root / name).write_bytes(b"x")
+        for name in folders:
+            (root / name).mkdir()
+            (root / name / "whisper-cli.exe").write_bytes(b"x")
+        with mock.patch.object(ad, "INSTALL_DIR", root), \
+                mock.patch.object(ad, "WHISPER_BIN_DIR", root / "whisper"), \
+                mock.patch.object(ad, "write_persistent_log"):
+            ad.sweep_whisper_setup_leftovers()
+        return sorted(child.name for child in root.iterdir())
+
+    def test_startup_removes_what_an_interrupted_setup_left(self):
+        model = ad.WHISPER_MODELS["base"]["name"]
+        token = "0123456789abcdef0123456789abcdef"
+        leftovers = [
+            f".whisper.{token}.zip",
+            f"..whisper.{token}.zip.{token}.download",
+            f".{model}.{token}.verified",
+            f"..{model}.{token}.verified.{token}.download",
+        ]
+        leftover_folders = [
+            f".whisper.{token}.extract",
+            f"..whisper.last-known-good.{token}.extract",
+            f".whisper.{token}.old",
+        ]
+        kept = [model, "config.json", f".notes.{token}.zip"]
+        kept_folders = ["whisper", ".whisper.last-known-good"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left = self._sweep(
+                Path(tmpdir), leftovers + kept, leftover_folders + kept_folders
+            )
+        self.assertEqual(left, sorted(kept + kept_folders))
+
+    def test_a_swapped_out_runtime_that_is_the_only_copy_survives(self):
+        # A crash between a swap's two renames leaves the old folder under its
+        # temporary name and nothing at the real one.
+        token = "0123456789abcdef0123456789abcdef"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left = self._sweep(Path(tmpdir), [], [f".whisper.{token}.old"])
+        self.assertEqual(left, [f".whisper.{token}.old"])
+
+    def test_the_sweep_runs_at_startup_before_setup_can_start(self):
+        source = inspect.getsource(ad.main)
+        self.assertIn("sweep_whisper_setup_leftovers()", source)
+        self.assertLess(
+            source.index("sweep_whisper_setup_leftovers()"),
+            source.index("MainWindow("),
+        )
+
+    def test_uninstall_removes_setup_leftovers_too(self):
+        token = "0123456789abcdef0123456789abcdef"
+        with mock.patch.object(ad, "WHISPER_BIN_DIR", Path("C:/state/whisper")):
+            for name in (
+                f"..whisper.{token}.zip.{token}.download",
+                f".whisper.{token}.extract",
+                f"..whisper.last-known-good.{token}.old",
+            ):
+                self.assertTrue(ad._portable_state_child_matches(name, set()), name)
+            self.assertFalse(
+                ad._portable_state_child_matches(f".notes.{token}.zip", set())
+            )
+
 
 class SubtitleAgainstTheRealBinaryTests(unittest.TestCase):
     """The flags this app compiles do what it claims, on the installed yt-dlp.

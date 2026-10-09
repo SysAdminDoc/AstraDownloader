@@ -2291,6 +2291,66 @@ def _whisper_runtime_version(cli_path):
     return version if re.fullmatch(r'\d+\.\d+\.\d+', version) else ''
 
 
+def _is_whisper_setup_temp_name(name):
+    """Whether a name is a download, archive or extraction a Whisper setup
+    writes and removes again.
+
+    Each carries the uuid4 hex its writer added, so nothing a user saved
+    can match.
+    """
+    hex32 = '[0-9a-f]{32}'
+    models = '|'.join(re.escape(spec['name']) for spec in WHISPER_MODELS.values())
+    runtime = re.escape(WHISPER_BIN_DIR.name)
+    folders = f'{runtime}|{re.escape(_whisper_runtime_rollback_dir().name)}'
+    name = str(name)
+    return bool(
+        re.fullmatch(rf'\.\.?{runtime}\.{hex32}\.zip(?:\.{hex32}\.download)?', name)
+        or re.fullmatch(
+            rf'\.\.?(?:{models})\.{hex32}\.verified(?:\.{hex32}\.download)?', name
+        )
+        or re.fullmatch(rf'\.(?:{folders})\.{hex32}\.extract', name)
+    )
+
+
+def _whisper_swapped_out_folder(name):
+    """The runtime folder a ``.old`` leftover was swapped out of, or None."""
+    for folder in (WHISPER_BIN_DIR, _whisper_runtime_rollback_dir()):
+        if re.fullmatch(rf'\.{re.escape(folder.name)}\.[0-9a-f]{{32}}\.old', str(name)):
+            return folder
+    return None
+
+
+def sweep_whisper_setup_leftovers():
+    """Remove what an interrupted Whisper setup left in the install folder.
+
+    Closing the app stops setup after five seconds, which can leave a
+    partial model or runtime download, the runtime archive, or a half
+    extracted runtime folder, and nothing else ever removes them. Runs at
+    startup, before setup can start again. A swapped-out ``.old`` folder
+    goes only while the folder it came from exists: a crash between a
+    swap's two renames leaves it the only copy.
+    """
+    root = Path(INSTALL_DIR)
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return
+    for child in children:
+        if not _is_whisper_setup_temp_name(child.name):
+            swapped_from = _whisper_swapped_out_folder(child.name)
+            if swapped_from is None or not swapped_from.is_dir():
+                continue
+        try:
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink(missing_ok=True)
+        except OSError as error:
+            write_persistent_log(
+                f'Could not remove the Whisper setup leftover {child.name}: {error}'
+            )
+
+
 def provision_whisper_runtime(progress_cb=None, config=None):
     """Fetch the pinned whisper.cpp CLI and its runtime DLLs atomically.
 
@@ -6687,6 +6747,9 @@ def _portable_state_child_matches(name, state_names):
         return True
     if name.startswith('.whisper.') and name.endswith('.zip'):
         return True
+    # Uninstall removes both runtime folders, so a swapped-out copy goes too.
+    if _is_whisper_setup_temp_name(name) or _whisper_swapped_out_folder(name) is not None:
+        return True
     return any(
         name.startswith(f'{base}.corrupt-')
         or name.startswith(f'.{base}.') and name.endswith('.tmp')
@@ -8213,6 +8276,9 @@ def main():
     except OSError:
         # reason: the obsolete archive is optional and may already be removed
         pass
+    # Before any setup can start: a setup the last exit cut short leaves its
+    # downloads and half-extracted folders in the install folder.
+    sweep_whisper_setup_leftovers()
 
     start_min = start_minimized or config.get("StartMinimized", False)
     window = MainWindow(
