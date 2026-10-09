@@ -17,8 +17,3 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 ### P2
 
 ### P3
-
-- [ ] P3 | AD-162 | Two extension pairings at once can lose an ID
-  Why: `pair_browser_extension` reads the saved Chrome IDs, then writes the joined list back. Two requests between those steps each save a list without the other's ID.
-  Acceptance: WHEN two IDs pair at the same moment, both SHALL be saved.
-  Where: `astra_downloader/astra_downloader.py` `pair_browser_extension`.

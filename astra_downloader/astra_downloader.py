@@ -647,6 +647,8 @@ DEFAULT_FIREFOX_EXTENSION_IDS = ("ytkit@sysadmindoc.github.io",)
 # pairs over loopback on its own; any other ID, including an unpacked install
 # whose ID comes from its folder, needs the user to open extension pairing.
 PUBLISHED_CHROME_EXTENSION_IDS = ("lgbiefafhjdbplelniclnflbbilennlg",)
+# Pairing requests run on the API's threads and each rewrites the saved list.
+_EXTENSION_ID_SAVE_LOCK = threading.Lock()
 # Chromium-family browsers all read a Chrome-style ``allowed_origins`` host
 # manifest, but each browser has its own per-user HKCU registry root.
 CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS = (
@@ -5401,35 +5403,38 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
         key = "NativeFirefoxExtensionIds"
         browser = "firefox"
 
-    existing = parse_native_extension_ids(config.get(key, ""), browser=browser)
-    already = extension_id in existing
-    consumed = None
-    if (browser == "chrome" and not already
-            and extension_id not in PUBLISHED_CHROME_EXTENSION_IDS):
-        window = EXTENSION_PAIRING if window is None else window
-        if not window.consume(extension_id):
-            return {
-                "ok": False,
-                "paired": False,
-                "code": "extension-pairing-closed",
-                "id": extension_id,
-            }
-        consumed = window
-    if not already:
-        joined = ", ".join(existing + [extension_id])
-        update = getattr(config, "update", None)
-        if callable(update):
-            saved = bool(update({key: joined}))
-        else:
-            setter = getattr(config, "set", None)
-            if callable(setter):
-                setter(key, joined)
-            saved = callable(setter)
-        if not saved:
-            # The page would otherwise report a pairing that didn't stick.
-            if consumed is not None:
-                consumed.fail()
-            return {"ok": False, "paired": False, "code": "save-failed"}
+    # Read and write the saved list as one step: two pairings between the
+    # read and the write each saved a list without the other's ID.
+    with _EXTENSION_ID_SAVE_LOCK:
+        existing = parse_native_extension_ids(config.get(key, ""), browser=browser)
+        already = extension_id in existing
+        consumed = None
+        if (browser == "chrome" and not already
+                and extension_id not in PUBLISHED_CHROME_EXTENSION_IDS):
+            window = EXTENSION_PAIRING if window is None else window
+            if not window.consume(extension_id):
+                return {
+                    "ok": False,
+                    "paired": False,
+                    "code": "extension-pairing-closed",
+                    "id": extension_id,
+                }
+            consumed = window
+        if not already:
+            joined = ", ".join(existing + [extension_id])
+            update = getattr(config, "update", None)
+            if callable(update):
+                saved = bool(update({key: joined}))
+            else:
+                setter = getattr(config, "set", None)
+                if callable(setter):
+                    setter(key, joined)
+                saved = callable(setter)
+            if not saved:
+                # The page would otherwise report a pairing that didn't stick.
+                if consumed is not None:
+                    consumed.fail()
+                return {"ok": False, "paired": False, "code": "save-failed"}
 
     refresh_fn = refresh_native_messaging_registration if refresh is None else refresh
     registered = bool(refresh_fn(config) if refresh is None else refresh_fn())

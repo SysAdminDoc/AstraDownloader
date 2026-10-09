@@ -5800,6 +5800,57 @@ class ExtensionPairingTests(unittest.TestCase):
         self.assertEqual(window.client(), chrome_id)
         refresh.assert_called_once_with()
 
+    def test_two_pairings_at_once_both_keep_their_id(self):
+        # Each request read the saved IDs, then wrote the list back, so the
+        # second save dropped the first ID when both read before either wrote.
+        first_id = "abcdefghijklmnopabcdefghijklmnop"
+        second_id = "ponmlkjihgfedcbaponmlkjihgfedcba"
+        second_started = threading.Event()
+
+        class SlowConfig:
+            def __init__(self):
+                self.values = {"NativeChromeExtensionIds": ""}
+                self.calls = 0
+
+            def get(self, key, default=None):
+                return self.values.get(key, default)
+
+            def update(self, mapping):
+                self.calls += 1
+                if self.calls == 1:
+                    # Hold the first save until the second request is under way.
+                    second_started.wait(2)
+                    time.sleep(0.2)
+                self.values.update(mapping)
+                return True
+
+        config = SlowConfig()
+        windows = [ad.UserscriptPairingWindow(), ad.UserscriptPairingWindow()]
+        for window in windows:
+            window.open()
+
+        def pair(extension_id, window):
+            ad.pair_browser_extension(
+                config, f"chrome-extension://{extension_id}", extension_id,
+                refresh=lambda: True, window=window,
+            )
+
+        # Patched once here: patching from both threads could restore it wrong.
+        with mock.patch.object(ad, "write_persistent_log"):
+            first = threading.Thread(target=pair, args=(first_id, windows[0]))
+            first.start()
+            while config.calls == 0 and first.is_alive():
+                time.sleep(0.01)
+            second = threading.Thread(target=pair, args=(second_id, windows[1]))
+            second.start()
+            second_started.set()
+            first.join(5)
+            second.join(5)
+        saved = ad.parse_native_extension_ids(
+            config.get("NativeChromeExtensionIds"), browser="chrome"
+        )
+        self.assertEqual(sorted(saved), sorted([first_id, second_id]))
+
     def test_a_pairing_that_could_not_be_saved_is_not_reported_as_paired(self):
         # The window was spent before the save, and the page read `paired`
         # as success while the route answered save-failed.
