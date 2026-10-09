@@ -26,6 +26,7 @@ repository's git log.
 - NFO files now match the right video. A video could end up with another video's title, and a playlist got only one NFO, for its last episode, holding the first episode's details. The NFO step also rewrote every NFO in your download folder, including ones you'd edited by hand or that Jellyfin or tinyMediaManager saved. Now each download writes NFOs only for its own files, and Astra leaves alone any NFO it didn't write. Astra's NFOs start with a short comment line, and deleting it keeps Astra from overwriting your edits. NFOs from earlier versions don't have that line, so they're left as they are. Delete one and the next download of that video writes a fresh one.
 - Downloads that land straight in your download folder, like a renamed playlist item or a custom template with no folder, don't drop a tvshow.nfo or season.nfo there anymore. Those files made Jellyfin and Kodi treat the whole folder as one show.
 - A title with U+FFFE or U+FFFF in it (two rare invisible characters) no longer produces an NFO that Kodi and Jellyfin refuse to read. A broken or extremely deeply nested info.json is now just skipped, and the rest of the download's NFOs are still written.
+- Running Astra from source, the browser helper didn't start when the Python or Astra folder path had `&`, `^` or `%` in it, or letters outside your system's old code page, like `C:\Users\José`. Those paths now work. The installed app wasn't affected.
 
 ### Security
 
