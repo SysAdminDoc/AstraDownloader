@@ -8204,6 +8204,33 @@ class SubtitleRetryTests(unittest.TestCase):
         download.error_code = "transcription-runtime-missing"
         self.assertTrue(download.to_dict()["retryable"])
 
+    def test_subtitles_skipped_for_disk_space_can_be_retried(self):
+        # The transcription's disk preflight leaves the media complete with
+        # this code. It wasn't in the subtitle-retry list, so after freeing
+        # space the retry said "Only failed or skipped downloads".
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            download = ad.Download(
+                "dl_subtitle_disk_retry", "https://example.com/video",
+                output_dir=str(root),
+            )
+            download.status = "complete"
+            download.filename = str(media)
+            download.error_code = "insufficient-disk-space"
+            manager = ad.DownloadManager(config=FakeConfig(), history=FakeHistory())
+            manager.downloads[download.id] = download
+            manager._schedule = lambda: None
+            self.assertTrue(download.to_dict()["retryable"])
+            self.assertTrue(manager.is_retryable(download))
+
+            ok, error = manager.retry(download.id)
+
+            self.assertTrue(ok, error)
+            self.assertTrue(download.subtitle_retry)
+            self.assertEqual(download.filename, str(media))
+
     def test_a_retry_with_nothing_left_to_transcribe_ends_complete(self):
         # An .srt saved by hand after the failure means the retry has nothing
         # to do. It used to return with `downloading` still set, which the

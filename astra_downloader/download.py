@@ -262,6 +262,10 @@ DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES = frozenset({
     'transcription-runtime-missing',
     'transcription-timeout',
     'transcription-failed',
+    # Only a `complete` download consults this list, and the only check that
+    # leaves a complete download with this code is the transcription's own
+    # disk preflight, so freeing space and retrying is the whole recovery.
+    'insufficient-disk-space',
 })
 
 DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
