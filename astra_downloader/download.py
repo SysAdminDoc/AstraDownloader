@@ -276,6 +276,12 @@ NFO_MAX_INFO_JSON_BYTES = 8 * 1024 * 1024
 NFO_MAX_TEXT_CHARS = 8192
 NFO_MAX_LIST_ITEMS = 64
 NFO_MAX_INFO_FILES = 2000
+# Every NFO Astra writes starts with this line. An existing NFO without it was
+# saved by the user, Jellyfin or tinyMediaManager, and is never replaced.
+NFO_ASTRA_MARKER = (
+    b'<!-- Astra Downloader wrote this file and may update it. '
+    b'Remove this line to keep your own edits. -->'
+)
 NFO_MEDIA_EXTENSIONS = frozenset({
     '.aac', '.avi', '.flac', '.flv', '.m4a', '.m4v', '.mkv', '.mov',
     '.mp3', '.mp4', '.ogg', '.opus', '.ts', '.wav', '.webm',
@@ -487,7 +493,14 @@ def _nfo_bytes(root):
     except AttributeError:
         # reason: Python 3.10 lacks ET.indent; the XML remains valid without pretty-printing
         pass
-    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+    # The marker goes before the root element, where tinyMediaManager puts its
+    # own comment, so media servers read the same document as before.
+    return b''.join((
+        b"<?xml version='1.0' encoding='utf-8'?>\n",
+        NFO_ASTRA_MARKER,
+        b'\n',
+        ET.tostring(root, encoding='utf-8', xml_declaration=False),
+    ))
 
 
 def build_media_server_nfo(metadata, *, provider=None):
@@ -558,7 +571,15 @@ def build_season_nfo(metadata, season_number=None, *, provider=None):
 
 
 def _write_nfo_bytes(payload, target):
+    """Write one NFO, or return None when the existing one isn't Astra's."""
     target = Path(target)
+    try:
+        with target.open('rb') as handle:
+            if NFO_ASTRA_MARKER not in handle.read(4096):
+                return None
+    except FileNotFoundError:
+        # reason: no NFO there yet, so nobody's edits can be lost
+        pass
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(f'.{target.name}.{uuid.uuid4().hex}.tmp')
     try:
@@ -578,7 +599,10 @@ def _write_nfo_bytes(payload, target):
 
 
 def write_media_server_nfo(metadata, media_path, *, provider=None):
-    """Atomically write the item NFO beside one existing media file."""
+    """Atomically write the item NFO beside one existing media file.
+
+    Returns None, writing nothing, when an NFO someone else saved is there.
+    """
     media = Path(media_path)
     if media.suffix.casefold() == '.nfo' or media.name.endswith(NFO_INFO_JSON_SUFFIX):
         raise ValueError('NFO sidecars require a media path, not metadata input')
@@ -594,33 +618,6 @@ def _nfo_resolved_inside(candidate, root):
     except (OSError, RuntimeError, ValueError):
         return False
     return True
-
-
-def _nfo_media_for_info(info_path, root, requested_media=None):
-    base = Path(str(info_path)[:-len(NFO_INFO_JSON_SUFFIX)])
-    candidates = [base]
-    requested = Path(requested_media) if requested_media else None
-    if requested is not None:
-        candidates.extend((requested, requested.with_suffix('')))
-    for candidate in candidates:
-        if (
-            candidate.is_file()
-            and candidate.suffix.casefold() in NFO_MEDIA_EXTENSIONS
-            and _nfo_resolved_inside(candidate, root)
-        ):
-            return candidate
-    stem = info_path.name[:-len(NFO_INFO_JSON_SUFFIX)]
-    try:
-        siblings = sorted(info_path.parent.iterdir(), key=lambda item: item.name.casefold())
-    except OSError:
-        siblings = []
-    for candidate in siblings:
-        if not candidate.is_file() or candidate.suffix.casefold() not in NFO_MEDIA_EXTENSIONS:
-            continue
-        if candidate.stem == stem or candidate.name.startswith(f'{stem}.'):
-            if _nfo_resolved_inside(candidate, root):
-                return candidate
-    return None
 
 
 def _nfo_load_metadata(info_path):
@@ -641,37 +638,47 @@ def _nfo_show_directory(media_directory):
     return parent
 
 
-def write_media_server_sidecars(output_root, media_path=None):
-    """Convert yt-dlp info JSON files into item, show, and season NFO files."""
+def write_media_server_sidecars(output_root, media_paths=()):
+    """Write item, show and season NFO files for the media one download delivered.
+
+    Only the `<stem>.info.json` beside each delivered file is read: yt-dlp
+    names both from one template, so the stem is the pairing. Walking the
+    whole folder instead gave other videos this download's metadata and
+    rewrote NFO files this download never made.
+    """
     root = Path(output_root).resolve(strict=False)
     if not root.is_dir():
         return []
-    try:
-        info_paths = sorted(root.rglob(f'*{NFO_INFO_JSON_SUFFIX}'), key=lambda item: str(item).casefold())
-    except (OSError, RuntimeError):
-        return []
+    if isinstance(media_paths, (str, os.PathLike)):
+        media_paths = [media_paths]
     records = []
-    for info_path in info_paths[:NFO_MAX_INFO_FILES]:
-        if not _nfo_resolved_inside(info_path, root):
+    seen_media = set()
+    for raw in list(media_paths or ())[:NFO_MAX_INFO_FILES]:
+        if not raw:
             continue
-        metadata = _nfo_load_metadata(info_path)
+        try:
+            media = Path(raw).resolve(strict=False)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        key = str(media).casefold()
+        if (
+            key in seen_media
+            or media.suffix.casefold() not in NFO_MEDIA_EXTENSIONS
+            or not _nfo_resolved_inside(media, root)
+            or not media.is_file()
+        ):
+            continue
+        seen_media.add(key)
+        metadata = _nfo_load_metadata(
+            media.with_name(f'{media.stem}{NFO_INFO_JSON_SUFFIX}')
+        )
         if metadata is None:
-            continue
-        media = _nfo_media_for_info(info_path, root, media_path)
-        if media is None:
             continue
         records.append((media, metadata))
 
     written = []
-    seen_media = set()
     for media, metadata in records:
-        resolved_media = str(media.resolve(strict=False)).casefold()
-        if resolved_media in seen_media:
-            continue
-        seen_media.add(resolved_media)
-        target = write_media_server_nfo(metadata, media)
-        if _nfo_resolved_inside(target, root):
-            written.append(target)
+        written.append(write_media_server_nfo(metadata, media))
 
     grouped = {}
     for media, metadata in records:
@@ -704,6 +711,8 @@ def write_media_server_sidecars(output_root, media_path=None):
     unique = []
     seen_targets = set()
     for target in written:
+        if target is None:
+            continue
         key = str(Path(target).resolve(strict=False)).casefold()
         if key not in seen_targets:
             seen_targets.add(key)
@@ -3812,6 +3821,10 @@ class Download:
         self.speed = ""
         self.eta = ""
         self.filename = ""
+        # Every final path this run's yt-dlp reported after the move. A
+        # playlist delivers many, and `filename` only keeps the last, so the
+        # NFO step reads this to know which files are this download's.
+        self.delivered_files = []
         # Set when yt-dlp reports a creator or auto-generated track. This is
         # separate from the sidecar check because --embed-subs can consume the
         # temporary subtitle file before the local-transcription stage runs.
@@ -3924,6 +3937,7 @@ RETRY_ROLLBACK_FIELDS = (
     'requires_auth', '_cookies', 'resume_partial', 'subtitle_retry',
     'sabr_capped_warning', 'subtitle_written', 'delivered_height',
     'delivered_language', 'delivered_language_preference', 'audio_language_note',
+    'delivered_files',
 )
 # start_download() reuses an existing needs-auth record rather than queueing a
 # duplicate, so it overwrites the whole request and must be able to put the
@@ -5864,6 +5878,7 @@ class DownloadManagerCore:
                     filepath = json.loads(line[len('MDLP_FILEPATH '):])
                     if isinstance(filepath, str) and filepath:
                         dl.filename = filepath
+                        dl.delivered_files.append(filepath)
                         continue
                 except Exception:
                     # reason: malformed path payload; keep parsing the stream
@@ -7230,7 +7245,8 @@ class DownloadManagerCore:
                 if effective_config.get('WriteNfo'):
                     try:
                         written_nfo = self._dependencies['write_media_server_sidecars'](
-                            dl.output_dir, media_path=dl.filename
+                            dl.output_dir,
+                            media_paths=list(dl.delivered_files) or [dl.filename],
                         )
                         if not written_nfo:
                             self._dependencies['write_persistent_log'](
@@ -7493,6 +7509,7 @@ class DownloadManagerCore:
         dl.delivered_language = ''
         dl.delivered_language_preference = None
         dl.audio_language_note = ''
+        dl.delivered_files = []
 
     def _retry_locked(self, dl, cookies, subtitle_retry):
         """Apply a validated retry while ``self._lock`` is held."""

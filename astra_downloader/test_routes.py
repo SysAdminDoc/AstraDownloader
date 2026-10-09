@@ -83,11 +83,14 @@ class MediaServerSidecarTests(unittest.TestCase):
                     "extractor_key": "Youtube",
                     "channel": "Channel & Co",
                 }
-                info = Path(f"{media}.info.json")
+                # yt-dlp writes "Episode 1.info.json" beside "Episode 1.mp4".
+                info = season / f"Episode {index}.info.json"
                 info.write_text(json.dumps(metadata), encoding="utf-8")
                 records.append((media, info))
 
-            written = ad.write_media_server_sidecars(root)
+            written = ad.write_media_server_sidecars(
+                root, media_paths=[media for media, _info in records]
+            )
 
             self.assertEqual(
                 {path.name for path in written},

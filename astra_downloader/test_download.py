@@ -5211,7 +5211,8 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
                 if '--ignore-config' not in args:
                     return self._FakeProc([], 0)
                 final.write_bytes(b"finished")
-                Path(f"{final}.info.json").write_text(
+                # yt-dlp names it from the same template: Clip.info.json.
+                final.with_name("Clip.info.json").write_text(
                     json.dumps(metadata), encoding="utf-8"
                 )
                 return self._FakeProc(
@@ -5238,6 +5239,119 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             nfo = final.with_suffix(".nfo")
             self.assertTrue(nfo.exists())
             self.assertEqual(ET.parse(nfo).getroot().findtext("youtubeid"), "clip-123")
+
+    @staticmethod
+    def _write_yt_dlp_item(media, metadata):
+        """Media and its info.json, laid out the way yt-dlp writes them."""
+        media.parent.mkdir(parents=True, exist_ok=True)
+        media.write_bytes(b"media")
+        media.with_name(f"{media.stem}.info.json").write_text(
+            json.dumps(metadata), encoding="utf-8"
+        )
+
+    def test_nfo_step_pairs_each_info_json_only_with_its_own_video(self):
+        # Aardvark.info.json used to fall through to the video that had just
+        # finished, so Zebra.nfo got Aardvark's title.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._write_yt_dlp_item(root / "Aardvark.mp4", {"id": "a", "title": "Aardvark"})
+            self._write_yt_dlp_item(root / "Zebra.mp4", {"id": "z", "title": "Zebra"})
+
+            written = ad.write_media_server_sidecars(
+                root, media_paths=[str(root / "Zebra.mp4")]
+            )
+
+            self.assertEqual([path.name for path in written], ["Zebra.nfo"])
+            self.assertEqual(
+                ET.parse(root / "Zebra.nfo").getroot().findtext("title"), "Zebra"
+            )
+            self.assertFalse(
+                (root / "Aardvark.nfo").exists(),
+                "Aardvark wasn't part of this download",
+            )
+
+    def test_nfo_step_writes_one_nfo_per_playlist_item_this_run_delivered(self):
+        with tempfile.TemporaryDirectory() as output_dir, \
+                tempfile.TemporaryDirectory() as install_dir, \
+                mock.patch.object(ad, "INSTALL_DIR", Path(install_dir)):
+            show = Path(output_dir) / "My Show"
+            episodes = [show / f"Ep {index}.mp4" for index in (1, 2, 3)]
+
+            def popen(args, **_kwargs):
+                if '--ignore-config' not in args:
+                    return self._FakeProc([], 0)
+                lines = []
+                for index, media in enumerate(episodes, start=1):
+                    self._write_yt_dlp_item(media, {
+                        "id": f"ep-{index}",
+                        "title": f"Ep {index}",
+                        "playlist_title": "My Show",
+                        "playlist_id": "PL123",
+                        "playlist_index": index,
+                    })
+                    lines.append(f'MDLP_FILEPATH {json.dumps(str(media))}')
+                return self._FakeProc(lines, 0)
+
+            config = FakeConfig({
+                "DownloadPath": output_dir,
+                "AudioDownloadPath": output_dir,
+                "WriteNfo": True,
+            })
+            manager = ad.DownloadManager(config, FakeHistory())
+            download = ad.Download(
+                "dl_nfo_playlist", "https://example.com/playlist",
+                output_dir=output_dir,
+            )
+            download.status = "queued"
+            with mock.patch.object(ad.subprocess, 'Popen', popen), \
+                    mock.patch.object(ad, 'probe_po_token_provider', return_value=None), \
+                    mock.patch.object(ad, 'write_persistent_log', return_value=None):
+                manager._run_download(download)
+
+            self.assertEqual(download.status, "complete")
+            for index, media in enumerate(episodes, start=1):
+                nfo = media.with_suffix(".nfo")
+                self.assertTrue(nfo.exists(), f"no NFO for {media.name}")
+                item = ET.parse(nfo).getroot()
+                self.assertEqual(item.findtext("title"), f"Ep {index}")
+                self.assertEqual(item.findtext("episode"), str(index))
+
+    def test_nfo_step_never_replaces_an_nfo_astra_did_not_write(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            show = Path(tmpdir) / "My Show"
+            delivered = []
+            for index in (1, 2):
+                media = show / f"Ep {index}.mp4"
+                self._write_yt_dlp_item(media, {
+                    "id": f"ep-{index}",
+                    "title": f"Ep {index}",
+                    "playlist_title": "My Show",
+                    "playlist_id": "PL123",
+                    "playlist_index": index,
+                })
+                delivered.append(str(media))
+            # Hand edits and what Jellyfin or tinyMediaManager saved.
+            hand_edited = b"<episodedetails><title>My own title</title></episodedetails>"
+            (show / "Ep 1.nfo").write_bytes(hand_edited)
+            jellyfin_show = b"<tvshow><title>Renamed in Jellyfin</title></tvshow>"
+            (show / "tvshow.nfo").write_bytes(jellyfin_show)
+            # An NFO an earlier Astra run wrote is still Astra's to refresh.
+            (show / "Ep 2.nfo").write_bytes(
+                ad.build_media_server_nfo({"id": "ep-2", "title": "Stale"})
+            )
+
+            written = ad.write_media_server_sidecars(
+                Path(tmpdir), media_paths=delivered
+            )
+
+            self.assertEqual((show / "Ep 1.nfo").read_bytes(), hand_edited)
+            self.assertEqual((show / "tvshow.nfo").read_bytes(), jellyfin_show)
+            self.assertEqual(
+                ET.parse(show / "Ep 2.nfo").getroot().findtext("title"), "Ep 2"
+            )
+            self.assertEqual(
+                {path.name for path in written}, {"Ep 2.nfo", "season.nfo"}
+            )
 
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",
