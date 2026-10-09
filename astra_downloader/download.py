@@ -295,11 +295,16 @@ def _nfo_text(value, limit=NFO_MAX_TEXT_CHARS):
     if isinstance(value, bool):
         return ''
     text = str(value).strip()
-    # XML 1.0 does not permit control characters or lone UTF-16 surrogates.
+    # XML 1.0 does not permit control characters, lone UTF-16 surrogates, or
+    # the two noncharacters U+FFFE and U+FFFF.
     text = ''.join(
         char for char in text
         if char in '\t\n\r'
-        or (ord(char) >= 0x20 and not 0xD800 <= ord(char) <= 0xDFFF)
+        or (
+            ord(char) >= 0x20
+            and not 0xD800 <= ord(char) <= 0xDFFF
+            and char not in '￾￿'
+        )
     )
     return text[:max(1, int(limit))]
 
@@ -626,7 +631,9 @@ def _nfo_load_metadata(info_path):
             return None
         with info_path.open('r', encoding='utf-8') as handle:
             data = json.load(handle)
-    except (OSError, UnicodeError, ValueError):
+    except (OSError, UnicodeError, ValueError, RecursionError):
+        # RecursionError is a file nested thousands of levels deep. It skips
+        # just that file, like any other unreadable one.
         return None
     return data if isinstance(data, dict) else None
 

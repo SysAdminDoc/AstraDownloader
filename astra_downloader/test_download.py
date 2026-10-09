@@ -5379,6 +5379,35 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             self.assertFalse((root / "tvshow.nfo").exists())
             self.assertFalse((root / "season.nfo").exists())
 
+    def test_nfo_text_drops_the_two_noncharacters_xml_forbids(self):
+        # U+FFFE and U+FFFF aren't XML characters, so expat, Kodi and
+        # Jellyfin rejected the whole NFO.
+        payload = ad.build_media_server_nfo({
+            "id": "clip-￾1", "title": "A￾B￿C",
+        })
+        item = ET.fromstring(payload)
+        self.assertEqual(item.findtext("title"), "ABC")
+        self.assertEqual(item.findtext("uniqueid"), "clip-1")
+
+    def test_nfo_step_skips_only_the_info_json_it_cannot_read(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            nested = root / "Nested.mp4"
+            self._write_yt_dlp_item(nested, {})
+            # Deep enough that the decoder raises RecursionError.
+            nested.with_name("Nested.info.json").write_text(
+                "[" * 200000, encoding="utf-8"
+            )
+            good = root / "Good.mp4"
+            self._write_yt_dlp_item(good, {"id": "good", "title": "Good"})
+
+            written = ad.write_media_server_sidecars(
+                root, media_paths=[str(nested), str(good)]
+            )
+
+            self.assertEqual([path.name for path in written], ["Good.nfo"])
+            self.assertFalse((root / "Nested.nfo").exists())
+
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",
                               with_cookies=False)
