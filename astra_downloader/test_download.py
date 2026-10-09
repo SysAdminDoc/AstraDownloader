@@ -5418,6 +5418,51 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             self.assertEqual([path.name for path in written], ["Good.nfo"])
             self.assertFalse((root / "Nested.nfo").exists())
 
+    def test_nfo_runtime_is_left_out_for_an_infinite_duration(self):
+        # json.load reads `Infinity`, and rounding it to minutes raised
+        # OverflowError, which stopped every NFO after that item.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            endless = root / "Endless.mp4"
+            self._write_yt_dlp_item(
+                endless, {"id": "e", "title": "Endless", "duration": float("inf")}
+            )
+            after = root / "After.mp4"
+            self._write_yt_dlp_item(after, {"id": "b", "title": "After", "duration": 125})
+
+            written = ad.write_media_server_sidecars(
+                root, media_paths=[str(endless), str(after)]
+            )
+
+            self.assertEqual(
+                [path.name for path in written], ["Endless.nfo", "After.nfo"]
+            )
+            self.assertIsNone(ET.parse(root / "Endless.nfo").getroot().find("runtime"))
+            self.assertEqual(
+                ET.parse(root / "After.nfo").getroot().findtext("runtime"), "2"
+            )
+
+    def test_nfo_step_skips_only_the_nfo_it_cannot_write(self):
+        # A folder named like the NFO (or one a media server holds locked)
+        # raised out of the whole step, so later items got no NFO.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            blocked = root / "Blocked.mp4"
+            self._write_yt_dlp_item(blocked, {"id": "x", "title": "Blocked"})
+            (root / "Blocked.nfo").mkdir()
+            after = root / "After.mp4"
+            self._write_yt_dlp_item(after, {"id": "b", "title": "After"})
+            messages = []
+
+            written = ad.write_media_server_sidecars(
+                root, media_paths=[str(blocked), str(after)], log=messages.append
+            )
+
+            self.assertEqual([path.name for path in written], ["After.nfo"])
+            self.assertTrue((root / "Blocked.nfo").is_dir())
+            self.assertEqual(len(messages), 1)
+            self.assertIn("Blocked.nfo", messages[0])
+
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",
                               with_cookies=False)

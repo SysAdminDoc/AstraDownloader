@@ -484,7 +484,8 @@ def _nfo_common_media_fields(root, metadata, provider, *, episode=False):
             seconds = max(0, float(duration))
         except (TypeError, ValueError, OverflowError):
             seconds = 0
-        if seconds:
+        # json.load reads `Infinity`, and rounding it to minutes raises.
+        if seconds and math.isfinite(seconds):
             _nfo_add(root, 'runtime', max(1, int(round(seconds / 60))))
     premiered = _nfo_date(metadata)
     _nfo_add(root, 'premiered', premiered)
@@ -649,13 +650,26 @@ def _nfo_show_directory(media_directory):
     return parent
 
 
-def write_media_server_sidecars(output_root, media_paths=()):
+def _nfo_write_guarded(write, target, log):
+    """Run one NFO write. A failure skips that NFO, never the ones after it."""
+    try:
+        return write()
+    except (OSError, ValueError, TypeError, OverflowError, RecursionError) as error:
+        # reason: a locked or odd NFO (a media server scanning it, a folder
+        # with its name, metadata no NFO can hold) costs only that file
+        if log is not None:
+            log(f'Skipped {Path(target).name}: {error}')
+        return None
+
+
+def write_media_server_sidecars(output_root, media_paths=(), *, log=None):
     """Write item, show and season NFO files for the media one download delivered.
 
     Only the `<stem>.info.json` beside each delivered file is read: yt-dlp
     names both from one template, so the stem is the pairing. Walking the
     whole folder instead gave other videos this download's metadata and
-    rewrote NFO files this download never made.
+    rewrote NFO files this download never made. ``log`` hears about each NFO
+    that couldn't be written.
     """
     root = Path(output_root).resolve(strict=False)
     if not root.is_dir():
@@ -689,7 +703,10 @@ def write_media_server_sidecars(output_root, media_paths=()):
 
     written = []
     for media, metadata in records:
-        target = write_media_server_nfo(metadata, media)
+        target = _nfo_write_guarded(
+            lambda media=media, metadata=metadata: write_media_server_nfo(metadata, media),
+            media.with_suffix('.nfo'), log,
+        )
         if target is not None:
             written.append(target)
 
@@ -707,7 +724,12 @@ def write_media_server_sidecars(output_root, media_paths=()):
     for show_directory, group in sorted(grouped.items(), key=lambda item: str(item[0]).casefold()):
         representative = group[0][1]
         tvshow_path = show_directory / 'tvshow.nfo'
-        written.append(_write_nfo_bytes(build_tvshow_nfo(representative), tvshow_path))
+        written.append(_nfo_write_guarded(
+            lambda representative=representative, tvshow_path=tvshow_path: _write_nfo_bytes(
+                build_tvshow_nfo(representative), tvshow_path
+            ),
+            tvshow_path, log,
+        ))
         seasons = {}
         for media, metadata in group:
             season_number = _nfo_season_number(metadata)
@@ -720,9 +742,13 @@ def write_media_server_sidecars(output_root, media_paths=()):
         ):
             if not _nfo_resolved_inside(season_directory, root):
                 continue
-            written.append(_write_nfo_bytes(
-                build_season_nfo(metadata, season_number),
-                season_directory / 'season.nfo',
+            season_path = season_directory / 'season.nfo'
+            written.append(_nfo_write_guarded(
+                lambda metadata=metadata, season_number=season_number,
+                season_path=season_path: _write_nfo_bytes(
+                    build_season_nfo(metadata, season_number), season_path
+                ),
+                season_path, log,
             ))
     unique = []
     seen_targets = set()
@@ -7399,6 +7425,9 @@ class DownloadManagerCore:
                         written_nfo = self._dependencies['write_media_server_sidecars'](
                             dl.output_dir,
                             media_paths=list(dl.delivered_files) or [dl.filename],
+                            log=lambda message: self._dependencies['write_persistent_log'](
+                                f'Download {dl.id}: NFO {message}'
+                            ),
                         )
                         if not written_nfo:
                             self._dependencies['write_persistent_log'](
