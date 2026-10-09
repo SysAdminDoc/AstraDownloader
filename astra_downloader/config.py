@@ -1750,6 +1750,14 @@ _SHORT_OUTPUT_FIELDS = frozenset({
     # The extractor's own short name ("youtube", "soundcloud"), never page text.
     "extractor",
 })
+# Fields whose value can be a lone digit: a short playlist's index, a first
+# season, a video with under ten views, a five second duration, a site with
+# small numeric ids. "LPT%(playlist_index)s" names a folder LPT1 on them.
+_DIGIT_OUTPUT_FIELDS = frozenset({
+    "playlist_index", "autonumber", "season_number", "episode_number",
+    "track_number", "disc_number", "view_count", "like_count", "fps",
+    "height", "width", "duration_string", "id", "format_id",
+})
 _SAFE_OUTPUT_FIELDS = _LONG_TEXT_OUTPUT_FIELDS | _SHORT_OUTPUT_FIELDS
 _OUTPUT_FIELD_RE = re.compile(r"%\((\w+)")
 # yt-dlp writes the text after "|" verbatim when the field is missing, in
@@ -1857,6 +1865,83 @@ def _percent_inside_output_token(template):
     return False
 
 
+def _output_token_renders(match):
+    """The two things one token can write, as far as reserved names go: a
+    stand-in for a present value and the fallback (or "NA") for a missing
+    one, which yt-dlp writes without the token's width or precision."""
+    field, fallback, pad, precision, conversion = match.groups()
+    # No reserved name contains "_". A field that can hold a lone digit is a
+    # digit, shaped by the token the way yt-dlp shapes it.
+    value = "1" if field in _DIGIT_OUTPUT_FIELDS else "_"
+    if conversion == "s" and not pad and not precision:
+        value = value.rjust(_OUTPUT_TEMPLATE_STRING_WIDTHS.get(field, 1), "0")
+    if precision:
+        value = (
+            value.rjust(int(precision), "0") if conversion == "d"
+            else value[:int(precision)]
+        )
+    if pad:
+        value = value.rjust(int(pad), "0" if pad.startswith("0") else " ")
+    return (value, "NA" if fallback is None else fallback)
+
+
+def _reserved_name_state(text):
+    """The start of a path component cut down to what decides whether more
+    text can still make it a reserved name, or None when nothing can."""
+    head, dot, rest = text.upper().partition(".")
+    stem = head.rstrip(" ")
+    spaced = stem + (" " if stem != head else "")
+    if dot:
+        if stem not in _WINDOWS_RESERVED_NAMES:
+            return None
+        # The stem is settled. What follows only matters while it's all dots
+        # and spaces, which the trailing strip removes.
+        return spaced + "." + ("X" if rest.strip(" .") else "")
+    if not any(name.startswith(stem) for name in _WINDOWS_RESERVED_NAMES):
+        return None
+    return spaced
+
+
+def _output_template_forms_reserved_name(segments):
+    """True when any mix of present and missing fields renders a component
+    of the template (already split on %%) as a name Windows reserves.
+
+    Every mix is tried, but only the renderings that can still become a
+    reserved name are carried forward, so the work stays small however many
+    tokens a component has.
+    """
+    pieces = []
+    for index, segment in enumerate(segments):
+        if index:
+            pieces.append(("%",))
+        position = 0
+        for match in _OUTPUT_TOKEN_RE.finditer(segment):
+            pieces.append((segment[position:match.start()],))
+            pieces.append(_output_token_renders(match))
+            position = match.end()
+        pieces.append((segment[position:],))
+    # None stands for a component that can no longer be reserved; a "/" in
+    # a later literal still starts a fresh one. Tokens never contain "/".
+    states = {""}
+    for piece in pieces:
+        following = set()
+        for state in states:
+            for text in piece:
+                parts = text.split("/")
+                current = None if state is None else _reserved_name_state(state + parts[0])
+                if len(parts) > 1:
+                    if current is not None and _windows_reserved_output_component(current):
+                        return True
+                    if any(_windows_reserved_output_component(part) for part in parts[1:-1]):
+                        return True
+                    current = _reserved_name_state(parts[-1])
+                following.add(current)
+        states = following
+    return any(
+        state is not None and _windows_reserved_output_component(state) for state in states
+    )
+
+
 def normalize_output_template(value):
     """Return a safe yt-dlp output template (relative to the download root) or
     "" when empty/invalid. Rejects absolute paths, `..` traversal, unsafe
@@ -1908,21 +1993,12 @@ def normalize_output_template(value):
             if ".." in (match.group(2) or ""):
                 return ""
     # No component may render as a name Windows reserves (CON, NUL, COM1):
-    # Explorer can't open or delete a folder called that. Literal parts and
-    # fallbacks glued to them ("%(playlist_title|CO)sN") both count, so each
-    # component is rendered with every field present and with every field
-    # missing. A present field renders as "_" and a missing one without a
-    # fallback as "NA", and neither can be part of a reserved name, so a
-    # mix of the two cases adds nothing these two don't cover.
-    for missing in (False, True):
-        def render(match, missing=missing):
-            if not missing:
-                return "_"
-            return match.group(2) if match.group(2) is not None else "NA"
-
-        rendered = "%".join(_OUTPUT_TOKEN_RE.sub(render, segment) for segment in segments)
-        if any(_windows_reserved_output_component(part) for part in rendered.split("/")):
-            return ""
+    # Explorer can't open or delete a folder called that. Literal parts,
+    # fallbacks glued to them ("%(playlist_title|CO)sN") and fields that can
+    # be a lone digit ("LPT%(playlist_index)s" on a short playlist) all
+    # count, in any mix of present and missing fields.
+    if _output_template_forms_reserved_name(segments):
+        return ""
     return bound_output_template_fields(norm)
 
 

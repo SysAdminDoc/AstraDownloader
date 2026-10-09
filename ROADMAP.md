@@ -17,10 +17,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P2
 
-- [ ] P2 | AD-131 | Digit fields can still form LPT1 or COM1 folders
-  Why: the template check renders every field as `_` for its "all present" pass, which can't stand in for a number, so `LPT%(playlist_index)s/%(title)s.%(ext)s` and `COM%(track_number)s/...` pass and create reserved folder names on short playlists.
-  Where: `astra_downloader/config.py` reserved name check in `normalize_output_template`. Add a pass that renders numeric fields as a digit. `Season %(season_number)s/...` must still pass.
-
 ### P3
 
 - [ ] P3 | AD-134 | Small filter and profile import leftovers

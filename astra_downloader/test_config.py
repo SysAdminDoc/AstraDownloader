@@ -1857,6 +1857,35 @@ class OutputTemplateFallbackTests(unittest.TestCase):
                 self.assertEqual(ad.normalize_output_template(template), "")
         self.assertTrue(ad.normalize_output_template("%(album|CO)sNcerts/%(title)s.%(ext)s"))
 
+    def test_a_field_that_can_be_one_digit_cannot_form_a_reserved_name(self):
+        # Every field used to stand in as "_", which no number can be, so
+        # LPT%(playlist_index)s made an LPT1 folder on a short playlist. A
+        # present digit next to a missing field's fallback counts too.
+        for template in (
+            "LPT%(playlist_index)s/%(title)s.%(ext)s",
+            "COM%(track_number)s/%(title)s.%(ext)s",
+            "x/com%(view_count)s.%(title)s.%(ext)s",
+            "LPT%(autonumber)d/%(title)s.%(ext)s",
+            "%(album|COM)s%(track_number)s/%(title)s.%(ext)s",
+            "%(album|LPT)s%(track_number|X)s/%(title)s.%(ext)s",
+            "%(track_number|COM)s%(disc_number)s/%(title)s.%(ext)s",
+            "COM%(title).0s1/%(title)s.%(ext)s",
+        ):
+            with self.subTest(template):
+                self.assertEqual(ad.normalize_output_template(template), "")
+        # A digit with words or padding beside it, or a field that is never
+        # one digit long, is fine.
+        for template in (
+            "Season %(season_number)s/%(title)s.%(ext)s",
+            "%(playlist_index)s - %(title)s.%(ext)s",
+            "LPT%(playlist_index)02d/%(title)s.%(ext)s",
+            "LPT%(autonumber)s/%(title)s.%(ext)s",
+            "COM%(upload_date)s/%(title)s.%(ext)s",
+            "COM%(track_number)s %(title)s.%(ext)s",
+        ):
+            with self.subTest(template):
+                self.assertTrue(ad.normalize_output_template(template))
+
     def test_a_token_glued_across_an_escaped_percent_is_refused(self):
         # Reading "%(title)%%s" with %% deleted gave "%(title)s", and yt-dlp
         # raised on every download.
