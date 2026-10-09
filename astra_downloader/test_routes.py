@@ -5705,13 +5705,27 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
         self.assertNotIn(b"\r\r\n", raw)
         lines = raw.decode("utf-8").split("\r\n")
         self.assertEqual(lines[:3], [
-            "@echo off", "setlocal DisableDelayedExpansion", "chcp 65001 >nul 2>&1",
+            "@echo off", "setlocal DisableDelayedExpansion",
+            '"%SystemRoot%\\System32\\chcp.com" 65001 >nul 2>&1',
         ])
         self.assertEqual(
             lines[3],
             '"C:\\py & ^ %%TEMP%%\\python.exe" -u '
             '"C:\\a&b^c %%PATH%% José 日本\\astra.py" --native-host %*',
         )
+
+    def test_an_unchanged_launcher_is_left_alone(self):
+        # cmd re-reads a running batch file by byte offset, so rewriting it
+        # under a host that's still running could make that host run a
+        # fragment of the new file. Registration runs on every save.
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "host.cmd"
+            ad.write_native_host_launcher("C:\\py\\python.exe", "C:\\a.py", dest)
+            os.utime(dest, (1_000_000_000, 1_000_000_000))
+            ad.write_native_host_launcher("C:\\py\\python.exe", "C:\\a.py", dest)
+            self.assertEqual(dest.stat().st_mtime, 1_000_000_000)
+            ad.write_native_host_launcher("C:\\py2\\python.exe", "C:\\a.py", dest)
+            self.assertIn(b"C:\\py2\\python.exe", dest.read_bytes())
 
     @unittest.skipUnless(sys.platform == "win32", "cmd.exe runs the launcher")
     def test_the_launcher_starts_python_with_the_exact_paths(self):

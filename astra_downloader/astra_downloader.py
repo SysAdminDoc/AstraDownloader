@@ -5256,13 +5256,23 @@ def write_native_host_launcher(python_exe, script_path, dest):
     body = "\r\n".join((
         "@echo off",
         "setlocal DisableDelayedExpansion",
-        "chcp 65001 >nul 2>&1",
+        # By full path: a PATH without System32 would skip it silently.
+        '"%SystemRoot%\\System32\\chcp.com" 65001 >nul 2>&1',
         command,
         "",
-    ))
+    )).encode("utf-8")
+    # cmd re-reads a running batch file at a byte offset after each command,
+    # so a host still running from this file would resume inside the new
+    # one. Registration runs often and the content rarely changes.
+    try:
+        if dest.read_bytes() == body:
+            return dest
+    except OSError:
+        # reason: no launcher yet, or one that can't be read; write it fresh
+        pass
     tmp = dest.with_name(dest.name + ".tmp")
     # Bytes, not text mode, so the CRLFs aren't doubled into CR CR LF.
-    tmp.write_bytes(body.encode("utf-8"))
+    tmp.write_bytes(body)
     tmp.replace(dest)
     return dest
 
