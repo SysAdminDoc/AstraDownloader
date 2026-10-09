@@ -21,7 +21,7 @@ The jar is now scoped to the site of the download it belongs to, which is a
 tighter rule rather than a looser one. `sites.build_site_cookie_filter()` derives
 the accepted cookie domains from the download's own registrable domain: a Twitch
 download accepts Twitch cookies and nothing else, and a YouTube download
-additionally accepts the Google account domains a YouTube session genuinely lives
+additionally accepts the Google account domains a YouTube session actually lives
 on. A cookie outside that scope is dropped before the jar is written, so it never
 reaches disk. The old YouTube-only URL allowlist was replaced with literal URL checks. Those checks are not an equivalent network boundary: DNS answers and redirects are not confined. See the threats table.
 
