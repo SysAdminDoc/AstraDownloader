@@ -1269,7 +1269,11 @@ def sanitize_subscription_filters(raw):
     filters = {}
     for key, label in _SUBSCRIPTION_FILTER_LABELS.items():
         value = raw.get(key)
-        pattern = "" if value is None else str(value).strip()
+        # Stripped only to tell a blank one apart: " live " and "live"
+        # match different titles.
+        pattern = "" if value is None else str(value)
+        if not pattern.strip():
+            pattern = ""
         if len(pattern) > SUBSCRIPTION_FILTER_REGEX_MAX:
             return None, (
                 f"The {label} title pattern is too long. Keep it under "
@@ -1455,14 +1459,15 @@ def check_site_profile_folder(download_root, folder, output_template=""):
     return ""
 
 
-def validate_site_profiles(value, download_root=None, output_template=""):
+def validate_site_profiles(value, download_root=None, output_template="", preflight=True):
     """Validate and normalize the editable named-profile document.
 
     The GUI uses the error text to keep malformed JSON or a bad profile from
     being silently discarded. The config loader calls ``normalize_site_profiles``
     below, which fails closed for hand-edited or legacy state files. Given a
     ``download_root`` (the Settings save does), each DownloadFolder also runs
-    the same filesystem preflight the root itself gets.
+    the same filesystem preflight the root itself gets, which creates the
+    folder; ``preflight=False`` skips that and touches nothing on disk.
     """
     if value in (None, ""):
         raw_profiles = []
@@ -1571,7 +1576,7 @@ def validate_site_profiles(value, download_root=None, output_template=""):
         if cap:
             entry["MaxConcurrent"] = cap
         profiles.append(entry)
-    if download_root:
+    if download_root and preflight:
         for index, entry in enumerate(profiles, 1):
             if not entry.get("DownloadFolder"):
                 continue
@@ -2985,17 +2990,14 @@ def read_settings_bundle(payload, current_site_profiles=None):
                 } if isinstance(item, dict) else item
                 for item in raw_profiles
             ]
-        # The Settings save's preflight, against the download folder this
-        # import puts in effect: each profile folder has to sit inside it,
-        # take a write, have free space and leave room under the path limit.
+        download_root = settings.get("DownloadPath") or None
+        # Checked without touching the disk first. The folder preflight
+        # creates each DownloadFolder, and a bundle refused for having too
+        # many profiles used to leave those folders behind.
         imported_profiles, profile_error = validate_site_profiles(
-            portable,
-            download_root=settings.get("DownloadPath") or None,
-            output_template=settings.get("OutputTemplate") or "",
+            portable, download_root=download_root, preflight=False,
         )
-        if profile_error:
-            warnings.append(f"Site profiles were not imported: {profile_error}")
-        else:
+        if not profile_error:
             merged_profiles = merge_imported_site_profiles(
                 imported_profiles, current_site_profiles,
             )
@@ -3008,6 +3010,17 @@ def read_settings_bundle(payload, current_site_profiles=None):
                     "Remove some on this computer or from the bundle, then "
                     "import again."
                 )
+            # The Settings save's preflight, against the download folder this
+            # import puts in effect: each profile folder has to sit inside it,
+            # take a write, have free space and leave room under the path limit.
+            _checked, profile_error = validate_site_profiles(
+                portable,
+                download_root=download_root,
+                output_template=settings.get("OutputTemplate") or "",
+            )
+        if profile_error:
+            warnings.append(f"Site profiles were not imported: {profile_error}")
+        else:
             settings["SiteProfiles"] = merged_profiles
     sites = []
     for site in (payload.get("siteLoginSites") or []):

@@ -471,6 +471,35 @@ class NormalizationTests(unittest.TestCase):
         self.assertIsNone(imported)
         self.assertIn("33 site profiles, more than the 32 allowed", error)
 
+    def test_a_refused_profile_import_creates_no_folders(self):
+        # The folder preflight ran before the overflow refusal and left each
+        # profile's DownloadFolder behind, empty, for an import that never
+        # happened.
+        with tempfile.TemporaryDirectory() as root:
+            bundle = ad.build_settings_bundle(FakeConfig({
+                "DownloadPath": root,
+                "SiteProfiles": [
+                    {"Name": f"Shared {index}", "Domain": f"s{index}.example.com",
+                     "DownloadFolder": f"Shared {index}/Videos"}
+                    for index in range(3)
+                ],
+            }))
+            local = [
+                {"Name": f"Local {index}", "Domain": f"l{index}.example.com"}
+                for index in range(30)
+            ]
+            imported, error = ad.read_settings_bundle(
+                json.loads(json.dumps(bundle)), current_site_profiles=local)
+            self.assertIsNone(imported)
+            self.assertIn("33 site profiles, more than the 32 allowed", error)
+            self.assertEqual(list(Path(root).iterdir()), [])
+            # Within the limit, the preflight still runs and makes the folders.
+            imported, error = ad.read_settings_bundle(
+                json.loads(json.dumps(bundle)), current_site_profiles=local[:29])
+            self.assertIsNone(error)
+            self.assertEqual(len(imported["settings"]["SiteProfiles"]), 32)
+            self.assertTrue((Path(root) / "Shared 0" / "Videos").is_dir())
+
     def test_output_template_bounds_split_long_text_and_preserve_literals(self):
         import config as config_module
 

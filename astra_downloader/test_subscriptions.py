@@ -2472,6 +2472,19 @@ class SubscriptionFilterTests(unittest.TestCase):
         self.assertEqual(
             imported["subscriptions"][0]["filters"]["excludeTitleRegex"], r"(?<!no )shorts")
 
+    def test_title_patterns_are_stored_as_typed(self):
+        # The spaces are part of the pattern: " live " skips "Delivery".
+        module = subscriptions_module()
+        kept, error = module.sanitize_subscription_filters(
+            {"includeTitleRegex": " live ", "excludeTitleRegex": "   "})
+        self.assertIsNone(error)
+        self.assertEqual(kept["includeTitleRegex"], " live ")
+        self.assertEqual(kept["excludeTitleRegex"], "")
+        self.assertEqual(module.evaluate_subscription_filters(
+            {"title": "Delivery day"}, kept), ("skipped", "title-not-included"))
+        self.assertEqual(module.evaluate_subscription_filters(
+            {"title": "Going live now"}, kept), ("matched", ""))
+
     def test_a_huge_repeat_of_nothing_compiles_at_once(self):
         # Expanded copy by copy, the first took 2 s, the second about 48
         # minutes and the third never finished, on Flask and GUI threads.

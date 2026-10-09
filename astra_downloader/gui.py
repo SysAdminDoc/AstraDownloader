@@ -1517,8 +1517,9 @@ class SubscriptionDeliveryDialog(QDialog):
 
     def filters(self):
         return {
-            "includeTitleRegex": self.include_title.text().strip(),
-            "excludeTitleRegex": self.exclude_title.text().strip(),
+            # Kept as typed: " live " and "live" match different titles.
+            "includeTitleRegex": self.include_title.text(),
+            "excludeTitleRegex": self.exclude_title.text(),
             "uploadedAfter": self.uploaded_after.text().strip(),
         }
 

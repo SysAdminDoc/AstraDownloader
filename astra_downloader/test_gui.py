@@ -1147,6 +1147,20 @@ class RepeatedRowAccessibilityTests(unittest.TestCase):
         finally:
             dialog.deleteLater()
 
+    def test_the_delivery_dialog_keeps_title_patterns_as_typed(self):
+        # " live " and "live" match different titles; trimming one on save
+        # quietly changed the filter.
+        _get_qapp_or_skip(self)
+        dialog = ad.SubscriptionDeliveryDialog(None, {"id": "s"})
+        try:
+            dialog.include_title.setText(" live ")
+            dialog.exclude_title.setText("shorts ")
+            filters = dialog.filters()
+            self.assertEqual(filters["includeTitleRegex"], " live ")
+            self.assertEqual(filters["excludeTitleRegex"], "shorts ")
+        finally:
+            dialog.deleteLater()
+
     def test_a_terminal_card_offers_its_menu_without_a_right_click(self):
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QApplication, QPushButton
