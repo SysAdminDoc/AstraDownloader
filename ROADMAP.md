@@ -14,10 +14,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P1
 
-- [ ] P1 | AD-141 | The NFO writer gives a video another video's metadata and rewrites NFOs it didn't write
-  Why: `_nfo_media_for_info` tries `Title` for `Title.info.json`, which yt-dlp never writes (it writes `Title.info.json` beside `Title.mp4`), so every info.json in the tree falls through to the download that just finished. Two videos in the root: `Zebra.nfo` gets Aardvark's title and Aardvark gets none; a 3-item playlist writes only `Ep 3.nfo`, holding Ep 1's metadata. The step also walks the whole download folder and `os.replace`s every item, `tvshow.nfo` and `season.nfo` it finds, so hand edits and NFOs saved by Jellyfin or tinyMediaManager are lost. The existing test uses `Episode 1.mp4.info.json`, a layout yt-dlp doesn't produce.
-  Acceptance: WHEN a download finishes, the NFO step SHALL process only the info.json files this download wrote, SHALL pair `X.info.json` only with media whose stem is `X`, and SHALL NOT replace an existing .nfo that lacks Astra's marker.
-  Where: `astra_downloader/download.py` `_nfo_media_for_info` (around 600) and its caller (around 650 to 705).
 - [ ] P1 | AD-142 | Local subtitles fail when downloads are on another drive
   Why: the finished SRT moves from the temp folder under the install dir to the video's folder with `os.replace`, which Windows refuses across drives. Install on C:, downloads on D: ends every transcription with "Unexpected local subtitle error."
   Acceptance: WHEN the temp folder and the video's folder are on different drives, the SRT SHALL land beside the video (copied there under a temp name, then renamed), and the temp copy SHALL be removed.
@@ -33,10 +29,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P2
 
-- [ ] P2 | AD-146 | tvshow.nfo and season.nfo land in the download folder itself
-  Why: media written straight into the root (a renamed playlist row, a custom template with no folder) gives `show_directory == root`, `_nfo_resolved_inside(root, root)` is True, and `Downloads\tvshow.nfo` makes the media server treat the whole folder as one show.
-  Acceptance: WHEN the show directory is the download root, no `tvshow.nfo` or `season.nfo` SHALL be written there.
-  Where: `astra_downloader/download.py` around 680.
 - [ ] P2 | AD-147 | Subtitles can't be retried after a disk-space skip
   Why: a failed disk check marks the item `complete` with `insufficient-disk-space`, which isn't in the subtitle-retry list, so after freeing space the retry says "Only failed or skipped downloads can be retried".
   Acceptance: WHEN a transcription was skipped for disk space, a subtitle retry SHALL be offered and accepted.
@@ -59,10 +51,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Where: `astra_downloader/download.py` `estimate_transcription_wav_bytes` (around 3080) and around 6108.
 ### P3
 
-- [ ] P3 | AD-153 | NFO edge cases: U+FFFE and U+FFFF, and a deeply nested info.json
-  Why: `_nfo_text` keeps U+FFFE and U+FFFF, so a title with one gives an NFO that expat, Kodi and Jellyfin reject. An info.json nested `[` 200,000 deep raises RecursionError, which isn't caught, so the NFO step fails for every download while that file exists.
-  Acceptance: WHEN a title holds U+FFFE or U+FFFF the NFO SHALL still parse, and WHEN an info.json can't be read for any reason, only that file SHALL be skipped.
-  Where: `astra_downloader/download.py` around 293 and 632.
 - [ ] P3 | AD-154 | The source-run native host launcher breaks on some paths
   Why: `list2cmdline` quotes for the C runtime, not for cmd.exe, and only when there's a space: `&` splits the line, `^` is swallowed, `%` expands even inside quotes, and the UTF-8 file is read in the OEM code page, so `C:\Users\José` breaks. Source runs only; the frozen exe doesn't use it.
   Acceptance: WHEN the Python or script path holds `&`, `^`, `%`, spaces or non-ASCII letters, the launcher SHALL start the host with those exact paths.

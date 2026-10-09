@@ -303,7 +303,7 @@ def _nfo_text(value, limit=NFO_MAX_TEXT_CHARS):
         or (
             ord(char) >= 0x20
             and not 0xD800 <= ord(char) <= 0xDFFF
-            and char not in '￾￿'
+            and char not in '\ufffe\uffff'
         )
     )
     return text[:max(1, int(limit))]
@@ -685,7 +685,9 @@ def write_media_server_sidecars(output_root, media_paths=()):
 
     written = []
     for media, metadata in records:
-        written.append(write_media_server_nfo(metadata, media))
+        target = write_media_server_nfo(metadata, media)
+        if target is not None:
+            written.append(target)
 
     grouped = {}
     for media, metadata in records:

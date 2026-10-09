@@ -5383,7 +5383,7 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         # U+FFFE and U+FFFF aren't XML characters, so expat, Kodi and
         # Jellyfin rejected the whole NFO.
         payload = ad.build_media_server_nfo({
-            "id": "clip-￾1", "title": "A￾B￿C",
+            "id": "clip-\ufffe1", "title": "A\ufffeB\uffffC",
         })
         item = ET.fromstring(payload)
         self.assertEqual(item.findtext("title"), "ABC")
