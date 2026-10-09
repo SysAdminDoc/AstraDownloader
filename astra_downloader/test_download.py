@@ -8081,6 +8081,26 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             self.assertFalse((root / "clip.srt").exists())
             self.assertEqual(list(root.glob(".clip*")), [])
 
+    def test_a_skip_after_the_slot_wait_leaves_the_download_complete(self):
+        # The second check runs once the slot is free. An .srt that appeared
+        # meanwhile skips the work, and the `transcribing` status it used to
+        # leave behind was turned into a failure by the worker cleanup.
+        import importlib
+
+        download_module = importlib.import_module("download")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "clip.mp4"
+            media.write_bytes(b"media")
+            config, download = self._download(media)
+            download.status = "complete"
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            with mock.patch.object(
+                download_module, "should_generate_local_subtitles",
+                side_effect=[True, False],
+            ):
+                self.assertTrue(manager._run_local_subtitles(download, config))
+            self.assertEqual(download.status, "complete")
+
 
 class SubtitleRetryTests(unittest.TestCase):
     """A sidecar failure is retried in place, never as a second media fetch."""
@@ -8115,6 +8135,40 @@ class SubtitleRetryTests(unittest.TestCase):
         download.status = "complete"
         download.error_code = "transcription-runtime-missing"
         self.assertTrue(download.to_dict()["retryable"])
+
+    def test_a_retry_with_nothing_left_to_transcribe_ends_complete(self):
+        # An .srt saved by hand after the failure means the retry has nothing
+        # to do. It used to return with `downloading` still set, which the
+        # worker cleanup reported as "stopped before reporting a result".
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            (root / "clip.srt").write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\nhello\n", encoding="utf-8"
+            )
+            download = ad.Download(
+                "dl_subtitle_retry_skip", "https://example.com/video",
+                output_dir=str(root),
+            )
+            download.filename = str(media)
+            download.status = "queued"
+            download.subtitle_retry = True
+            manager = ad.DownloadManager(
+                config=FakeConfig({"GenerateSubtitles": True}),
+                history=FakeHistory(),
+            )
+            manager.downloads[download.id] = download
+            manager._schedule = lambda: None
+            manager.maybe_refresh_ytdlp = lambda *_args: None
+            with manager._lock:
+                manager._running_ids.add(download.id)
+
+            manager._worker_entry(download)
+
+            self.assertEqual(download.status, "complete")
+            self.assertNotIn("stopped before reporting", download.error)
+            self.assertFalse(download.subtitle_retry)
 
 
 class ImpersonateTests(unittest.TestCase):

@@ -6076,21 +6076,30 @@ class DownloadManagerCore:
 
     def _run_local_subtitles(self, dl, effective_config):
         """Run optional local subtitles under the independent CPU gate."""
-        if not should_generate_local_subtitles(effective_config, dl):
-            return True
-        if dl.status == 'cancelled':
-            return False
-        # Mark the job active while it waits for the one transcription slot so
-        # cancel_all() can see and stop it even before whisper-cli is spawned.
-        dl.status = 'transcribing'
-        self.progress_updated.emit()
-        while not self._transcription_gate.acquire(timeout=0.25):
+        try:
+            if not should_generate_local_subtitles(effective_config, dl):
+                return True
             if dl.status == 'cancelled':
                 return False
-        try:
-            return self._run_local_subtitles_impl(dl, effective_config)
+            # Mark the job active while it waits for the one transcription slot
+            # so cancel_all() can see and stop it before whisper-cli is spawned.
+            dl.status = 'transcribing'
+            self.progress_updated.emit()
+            while not self._transcription_gate.acquire(timeout=0.25):
+                if dl.status == 'cancelled':
+                    return False
+            try:
+                return self._run_local_subtitles_impl(dl, effective_config)
+            finally:
+                self._transcription_gate.release()
         finally:
-            self._transcription_gate.release()
+            # The media was finished before this step began. A skip (subtitles
+            # turned off, the video moved, an .srt appeared while waiting)
+            # returns with `transcribing`, or `downloading` on a subtitle
+            # retry, and the worker cleanup would turn that into a failure.
+            with self._lock:
+                if dl.status in DOWNLOAD_RUNNING_STATES:
+                    dl.status = 'complete'
 
     def _run_local_subtitles_impl(self, dl, effective_config):
         """Transcribe a successful video into an atomic SRT sidecar.
