@@ -2534,11 +2534,17 @@ class SubscriptionFilterTests(unittest.TestCase):
                     (pattern, title),
                 )
         # The budget is the product across levels: 16 x 32 copies of a body
-        # that emits something no longer fit, even though each level does.
+        # that emits something can't fit, even though each level does, and
+        # the emitter says so before expanding a single copy.
         self.assertIsInstance(
             module.compile_title_filter("(?:(?:ab){16}){32}"),
             config_module._BacktrackingTitleFilter,
         )
+        program = []
+        with self.assertRaises(config_module._LinearUnsupported):
+            config_module._emit_title_filter(
+                re._parser.parse("(?:(?:ab){16}){32}", re.IGNORECASE), program)
+        self.assertEqual(program, [])
         # Sibling repeats add up rather than multiply: 202 instructions fit.
         self.assertIsInstance(
             module.compile_title_filter("a{200}b{2}"), config_module._TitleFilterProgram)
@@ -2727,12 +2733,22 @@ class SubscriptionFilterTests(unittest.TestCase):
             kernel32.IsProcessInJob.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL)]
             kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel32.QueryInformationJobObject.argtypes = [
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+            # A None job would match any job the worker happens to be in.
+            job = config_module._title_filter_job
+            self.assertIsNotNone(job)
+            limits = config_module._JobExtendedLimits()
+            self.assertTrue(kernel32.QueryInformationJobObject(
+                job, 9, ctypes.byref(limits), ctypes.sizeof(limits), None))
+            self.assertTrue(limits.BasicLimitInformation.LimitFlags & 0x2000,
+                            "the job does not kill its members when it closes")
             handle = kernel32.OpenProcess(0x1000, False, worker._process.pid)
             self.assertTrue(handle)
             inside = wintypes.BOOL(False)
             try:
                 self.assertTrue(kernel32.IsProcessInJob(
-                    handle, config_module._title_filter_job, ctypes.byref(inside)))
+                    handle, job, ctypes.byref(inside)))
             finally:
                 kernel32.CloseHandle(handle)
             self.assertTrue(inside.value, "the worker is not in the kill-on-close job")
