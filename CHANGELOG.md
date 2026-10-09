@@ -20,6 +20,7 @@ repository's git log.
 - A filename template could still create a folder Windows reserves when a number filled in the rest of the name. `LPT%(playlist_index)s` made a folder called LPT1 on a playlist with fewer than ten videos, and Explorer can't open or delete that. The same went for a missing field's fallback sitting next to a number, like `%(album|COM)s%(track_number)s`. Settings now refuses those templates when you save. `Season %(season_number)s` and other names with words or padding around the number still work.
 - Subscription title patterns are saved exactly as you type them. Spaces at either end used to be trimmed, so ` live ` quietly became `live` and started matching titles like "Delivery day". A pattern of only spaces still counts as no filter.
 - Importing a settings bundle that would push you past 32 site profiles is refused before anything touches the disk. It used to create each imported profile's download folder first, then refuse, leaving empty folders behind.
+- Ticking Highlight or Chapter in the SponsorBlock settings while the action was Remove made every YouTube download fail, because those two can only be marked. They're now left out of a remove list, and if they're all you ticked, nothing is removed. A category list with only unknown names, like a typo in an imported settings file, used to turn into "every category". It now falls back to the default ones. The new Hook or greeting category is available too.
 
 ## [2.17.0] (2026-10-07)
 

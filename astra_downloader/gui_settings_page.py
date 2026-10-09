@@ -657,7 +657,7 @@ class SettingsPageMixin:
             "sponsor": "Sponsor", "intro": "Intro", "outro": "Outro",
             "selfpromo": "Self-promotion", "preview": "Recap or preview",
             "filler": "Filler", "interaction": "Interaction reminder",
-            "music_offtopic": "Non-music section",
+            "music_offtopic": "Non-music section", "hook": "Hook or greeting",
             "poi_highlight": "Highlight", "chapter": "Chapter",
         }
         category_grid = QVBoxLayout()

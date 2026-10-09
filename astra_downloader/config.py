@@ -1727,7 +1727,7 @@ def normalize_subtitle_sleep(value):
 # passed through: these reach a subprocess argument.
 SPONSORBLOCK_CATEGORIES = (
     "sponsor", "intro", "outro", "selfpromo", "preview", "filler",
-    "interaction", "music_offtopic", "poi_highlight", "chapter",
+    "interaction", "music_offtopic", "hook", "poi_highlight", "chapter",
 )
 
 
@@ -1736,7 +1736,10 @@ def normalize_sponsorblock_categories(value):
 
     An empty result means "all", which is what the app used to send
     unconditionally — enabling SponsorBlock to skip sponsors also removed
-    intros, outros and self-promo with no way to say otherwise.
+    intros, outros and self-promo with no way to say otherwise. Only nothing
+    at all, or the word "all", means that: a list that names categories but
+    none this app knows (a typo, a name from a newer yt-dlp) falls back to the
+    default ones, never to every category.
     """
     if isinstance(value, (list, tuple, set)):
         raw = ",".join(str(item) for item in value)
@@ -1749,6 +1752,8 @@ def normalize_sponsorblock_categories(value):
         name = re.sub(r"[^a-z_]", "", name.strip().lower())
         if name in SPONSORBLOCK_CATEGORIES and name not in known:
             known.append(name)
+    if not known and raw.strip(" ,"):
+        return DEFAULT_CONFIG["SponsorBlockCategories"]
     return ",".join(known)
 
 

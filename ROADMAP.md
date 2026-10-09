@@ -19,6 +19,9 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
 
 ### P3
 
+- [ ] P3 | AD-140 | SponsorBlock category labels are never translated
+  Why: the Settings page builds the category checkboxes from a dict and calls `tr()` on its values, so the string extractor never sees "Self-promotion", "Recap or preview" and the rest, and the German interface shows them in English. Same shape as the readiness row labels fixed in 9bd60f8.
+  Where: `astra_downloader/gui_settings_page.py` `category_labels`, `scripts/build-companion-translations.py`. Make the labels extractable (literal `tr()` calls or the 9bd60f8 approach), add German, re-run the build script.
 - [ ] P3 | AD-135 | Audit the NFO and SponsorBlock writers (split from AD-71)
   Acceptance: WHEN `build_media_server_nfo`, `build_tvshow_nfo`, `build_season_nfo`, `write_media_server_nfo` and the SponsorBlock argv are read against what yt-dlp, Kodi and Jellyfin expect, every confirmed defect SHALL be fixed with a test or filed as its own item.
   Where: `astra_downloader/download.py` (`_nfo_*`, NFO writers), `astra_downloader/config.py` `normalize_sponsorblock_categories` and the SponsorBlock flags in the yt-dlp argv.

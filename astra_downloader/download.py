@@ -6694,7 +6694,16 @@ class DownloadManagerCore:
             categories = self._dependencies['normalize_sponsorblock_categories'](
                 effective_config.get("SponsorBlockCategories", "")
             )
-            args += [f'--sponsorblock-{action}', categories or 'all']
+            if categories and action == 'remove':
+                # A highlight or a chapter can only be marked, and naming one
+                # in a remove list makes yt-dlp refuse the whole download.
+                # With nothing else ticked there is nothing to remove.
+                categories = ','.join(
+                    name for name in categories.split(',')
+                    if name not in ('poi_highlight', 'chapter')
+                ) or None
+            if categories is not None:
+                args += [f'--sponsorblock-{action}', categories or 'all']
         # v1.3.0: --force-overwrites lets the user re-download the same URL
         # repeatedly. Without it, yt-dlp refuses to overwrite an existing
         # output file and prints "[download] Title.mp4 has already been

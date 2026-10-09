@@ -488,16 +488,27 @@ class SponsorBlockCategoryTests(unittest.TestCase):
             "intro,sponsor",
         )
         # A token carrying anything but a category name is dropped whole
-        # rather than salvaged down to the part that happens to match.
+        # rather than salvaged down to the part that happens to match. With
+        # nothing left, the defaults apply: "" would be sent as "all".
         self.assertEqual(
-            ad.normalize_sponsorblock_categories("sponsor; rm -rf /"), "")
+            ad.normalize_sponsorblock_categories("sponsor; rm -rf /"),
+            ad.DEFAULT_CONFIG["SponsorBlockCategories"])
 
-    def _argv_for(self, categories):
+    def test_a_list_of_unknown_names_never_means_every_category(self):
+        # "sponser" or a name from a newer yt-dlp normalized to "", which the
+        # download sends as "all": one typo cut every kind of segment.
+        default = ad.DEFAULT_CONFIG["SponsorBlockCategories"]
+        self.assertEqual(ad.normalize_sponsorblock_categories("sponser"), default)
+        self.assertEqual(ad.normalize_sponsorblock_categories(["nonsense"]), default)
+        self.assertEqual(ad.normalize_sponsorblock_categories(" , "), "")
+        self.assertEqual(ad.normalize_sponsorblock_categories("hook"), "hook")
+
+    def _argv_for(self, categories, action="remove"):
         captured = []
         manager = ad.DownloadManager(
             FakeConfig({
                 "SponsorBlock": True,
-                "SponsorBlockAction": "remove",
+                "SponsorBlockAction": action,
                 "SponsorBlockCategories": categories,
             }),
             FakeHistory(),
@@ -544,6 +555,17 @@ class SponsorBlockCategoryTests(unittest.TestCase):
     def test_no_selection_still_means_every_category(self):
         args = self._argv_for("")
         self.assertEqual(args[args.index("--sponsorblock-remove") + 1], "all")
+
+    def test_a_highlight_or_chapter_is_never_in_a_remove_list(self):
+        # yt-dlp refuses "--sponsorblock-remove sponsor,chapter" outright, so
+        # ticking either box under Remove failed every YouTube download.
+        args = self._argv_for("sponsor,poi_highlight,chapter")
+        self.assertEqual(args[args.index("--sponsorblock-remove") + 1], "sponsor")
+        # Only those two ticked: nothing can be removed, and "all" would
+        # remove every other category instead.
+        self.assertNotIn("--sponsorblock-remove", self._argv_for("chapter,poi_highlight"))
+        args = self._argv_for("chapter,poi_highlight", action="mark")
+        self.assertEqual(args[args.index("--sponsorblock-mark") + 1], "chapter,poi_highlight")
 
 
 class PerDownloadDestinationTests(unittest.TestCase):
