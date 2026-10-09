@@ -270,9 +270,9 @@ DOWNLOAD_SUBTITLE_RETRYABLE_ERROR_CODES = frozenset({
 
 DOWNLOAD_DISK_SPACE_RESERVE_BYTES = 32 * 1024 * 1024
 # whisper.cpp converts media to 16 kHz, mono, signed 16-bit PCM: two bytes per
-# sample, or 32,000 bytes per second. yt-dlp's progress stream does not carry
-# duration, so a one-hour fallback keeps the preflight conservative when a
-# caller has no duration metadata of its own.
+# sample, or 32,000 bytes per second. yt-dlp reports the written file's
+# duration after the move; a one-hour fallback keeps the preflight
+# conservative when it can't (a live stream, a restarted queue).
 TRANSCRIPTION_WAV_BYTES_PER_SECOND = 32000
 TRANSCRIPTION_FALLBACK_DURATION_SECONDS = 60 * 60
 NFO_INFO_JSON_SUFFIX = '.info.json'
@@ -3093,7 +3093,7 @@ def _check_one_download_volume(path, required, reserve, label):
 
 def check_download_disk_space(
     path, required_bytes, *, reserve_bytes=DOWNLOAD_DISK_SPACE_RESERVE_BYTES,
-    staging_path=None,
+    staging_path=None, label='output',
 ):
     """Check the output volume and, when supplied, the staging volume.
 
@@ -3101,7 +3101,9 @@ def check_download_disk_space(
     checked on the same volume. ``yt-dlp`` writes the estimate once to its
     private staging path and then moves it to the output path, so both volumes
     must have room. Disk-usage failures are fail-closed: an unknown free-space
-    value must not turn a preflight into a false pass.
+    value must not turn a preflight into a false pass. ``label`` names the
+    volume of ``path`` in the message, for a caller that writes only to
+    staging.
     """
     try:
         required = max(0, int(required_bytes or 0))
@@ -3113,7 +3115,7 @@ def check_download_disk_space(
         )
     if required <= 0:
         return None
-    checks = [('output', path)]
+    checks = [(label, path)]
     if staging_path is not None:
         checks.append(('staging', staging_path))
     failures = [
@@ -3133,8 +3135,8 @@ def check_download_disk_space(
 def estimate_transcription_wav_bytes(download):
     """Estimate the PCM scratch space required by local transcription.
 
-    Accurate clip requests already carry their duration. A future caller may
-    also attach duration metadata to a queued download; malformed or absent
+    Accurate clip requests already carry their duration, and a finished run
+    records the one yt-dlp printed for the written file. Malformed or absent
     values deliberately use the conservative one-hour fallback instead of
     allowing an unbounded WAV write to bypass the disk check.
     """
@@ -3824,6 +3826,10 @@ class Download:
         self.output_template = str(output_template or "")
         # What yt-dlp actually wrote, in pixels. 0 until a run reports it.
         self.delivered_height = 0
+        # The written media's length in seconds as yt-dlp reported it, or 0.
+        # It sizes the local transcription's scratch WAV. Kept across a
+        # subtitle retry, which transcribes the same file again.
+        self.duration = 0.0
         self.referer = referer
         self.section = dict(section) if isinstance(section, dict) else None
         self.playlist_items = list(playlist_items) if playlist_items else None
@@ -5895,6 +5901,19 @@ class DownloadManagerCore:
                     # reason: an audio-only or malformed height is simply not recorded
                     pass
                 continue
+            if line.startswith('MDLP_DURATION '):
+                try:
+                    duration = float(
+                        json.loads(line[len('MDLP_DURATION '):]) or 0
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    duration = 0.0
+                # A live stream or an extractor with no length prints null;
+                # 0 keeps the one-hour fallback for that file.
+                dl.duration = (
+                    duration if math.isfinite(duration) and duration > 0 else 0.0
+                )
+                continue
             if line.startswith('MDLP_LANGUAGE '):
                 try:
                     language = json.loads(line[len('MDLP_LANGUAGE '):])
@@ -6193,10 +6212,13 @@ class DownloadManagerCore:
         staging_dir = self._download_intermediate_dir(dl)
         estimated_wav_bytes = estimate_transcription_wav_bytes(dl)
         try:
+            # The WAV is written only to staging under the install folder. The
+            # video's folder gets just the small SRT, so asking it for the
+            # WAV's size refused jobs a nearly full download drive could take.
             disk_failure = self._dependencies['check_download_disk_space'](
-                output_path.parent,
+                staging_dir,
                 estimated_wav_bytes,
-                staging_path=staging_dir,
+                label='staging',
             )
         except Exception as error:
             disk_failure = download_error_payload(
@@ -6740,6 +6762,9 @@ class DownloadManagerCore:
                 # upgrade has to compare against what is on disk, and
                 # "requested 1080p" says nothing about what YouTube served.
                 '--print', 'after_move:MDLP_HEIGHT %(height)j',
+                # The length local transcription sizes its scratch WAV from;
+                # without it every video was assumed to run an hour.
+                '--print', 'after_move:MDLP_DURATION %(duration)j',
                 # The audio half of a merged pair is the last requested
                 # format; a single-file download carries the fields itself.
                 '--print',

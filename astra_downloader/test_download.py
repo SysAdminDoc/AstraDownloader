@@ -6,6 +6,7 @@ import inspect
 import io
 import re
 import json
+import math
 import os
 import queue
 import shutil
@@ -5066,6 +5067,15 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
         return attempts[0]
 
 
+    def test_yt_dlp_reports_the_written_files_duration(self):
+        # Local transcription sizes its scratch WAV from this line.
+        argv = self._argv_for("https://example.com/video", with_cookies=False)
+        self.assertIn("after_move:MDLP_DURATION %(duration)j", argv)
+        self.assertEqual(
+            argv[argv.index("after_move:MDLP_DURATION %(duration)j") - 1],
+            "--print",
+        )
+
     def test_a_subscription_template_outranks_the_global_one(self):
         # One feed can land in its own folder shape while every other
         # download keeps the user's default.
@@ -7793,6 +7803,40 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             * ad.TRANSCRIPTION_WAV_BYTES_PER_SECOND,
         )
 
+    def test_the_wav_estimate_uses_the_length_yt_dlp_reported(self):
+        # Nothing used to set a duration, so a four-hour video was sized as
+        # one hour and wrote about 460 MB after passing a 147 MB check.
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        download = ad.Download("dl_duration", "https://example.com/video")
+        download.status = "downloading"
+
+        class Proc:
+            stdout = iter(["MDLP_DURATION 14400.5\n"])
+
+        manager._consume_ytdlp_output(download, Proc(), {"at": 0.0})
+        self.assertEqual(
+            ad.estimate_transcription_wav_bytes(download),
+            math.ceil(14400.5 * ad.TRANSCRIPTION_WAV_BYTES_PER_SECOND),
+        )
+
+        class LiveProc:
+            stdout = iter(["MDLP_DURATION null\n"])
+
+        manager._consume_ytdlp_output(download, LiveProc(), {"at": 0.0})
+        self.assertEqual(
+            ad.estimate_transcription_wav_bytes(download),
+            ad.TRANSCRIPTION_FALLBACK_DURATION_SECONDS
+            * ad.TRANSCRIPTION_WAV_BYTES_PER_SECOND,
+        )
+
+    def test_the_staging_label_names_the_volume_in_a_disk_failure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            failure = ad.check_download_disk_space(
+                tmpdir, 2 ** 62, label="staging"
+            )
+        self.assertEqual(failure["error_code"], "insufficient-disk-space")
+        self.assertIn("staging volume", failure["error"])
+
     def test_whisper_progress_is_parsed_and_clamped(self):
         self.assertEqual(ad.parse_whisper_progress("progress = 37%"), 37.0)
         self.assertEqual(ad.parse_whisper_progress("progress: 120%"), 100.0)
@@ -8000,7 +8044,7 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
                     super().__init__(args, **kwargs)
 
             def check(path, required, **kwargs):
-                checks.append((Path(path), required, Path(kwargs["staging_path"])))
+                checks.append((Path(path), required, kwargs))
                 return None
 
             with mock.patch.object(ad, "INSTALL_DIR", root / "install"), \
@@ -8015,7 +8059,11 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
                 self.assertTrue(manager._run_local_subtitles(download, config))
                 staging = manager._download_intermediate_dir(download)
 
-            self.assertEqual(checks, [(root, checks[0][1], staging)])
+            # The WAV goes to staging only. The video's folder just gets the
+            # small SRT, so it isn't asked for the WAV's size.
+            self.assertEqual(
+                checks, [(staging, checks[0][1], {"label": "staging"})]
+            )
             self.assertEqual(
                 checks[0][1],
                 ad.TRANSCRIPTION_FALLBACK_DURATION_SECONDS
