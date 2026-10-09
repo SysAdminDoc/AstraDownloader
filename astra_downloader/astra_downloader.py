@@ -5031,24 +5031,50 @@ def _revoke_native_messaging_host(manifest_path, registry_key):
     unregister_native_host_registry_value(registry_key, manifest_path)
 
 
+def _cmd_file_path_argument(path):
+    """Quote a path for a line of a .cmd file.
+
+    Inside double quotes cmd.exe takes ``&``, ``^``, ``|``, ``<``, ``>`` and
+    parentheses literally, and delayed expansion is turned off, so only ``%``
+    still expands and gets doubled. A Windows path can't hold a double quote.
+    """
+    text = str(Path(path))
+    if any(char in text for char in '"\r\n'):
+        raise ValueError(f"A cmd launcher can't hold the path {text!r}.")
+    return '"' + text.replace('%', '%%') + '"'
+
+
 def write_native_host_launcher(python_exe, script_path, dest):
     """Write a Windows cmd wrapper so source runs can be native-messaging hosts.
 
     Chrome's host manifest has a path and no argv. A frozen install points that
     path at the exe; a source run has to launch Python with this file and
     ``--native-host`` instead.
+
+    cmd.exe reads a batch file in the console code page, so a path like
+    ``C:\\Users\\José`` only survives after ``chcp 65001``, and cmd re-reads
+    each line after that in UTF-8. Nothing may reach stdout: it carries the
+    native-messaging frames.
     """
     dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    command = subprocess.list2cmdline([
-        str(Path(python_exe)),
+    command = " ".join((
+        _cmd_file_path_argument(python_exe),
         "-u",
-        str(Path(script_path)),
+        _cmd_file_path_argument(script_path),
         "--native-host",
-    ])
-    body = "@echo off\r\n" + command + " %*\r\n"
+        "%*",
+    ))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    body = "\r\n".join((
+        "@echo off",
+        "setlocal DisableDelayedExpansion",
+        "chcp 65001 >nul 2>&1",
+        command,
+        "",
+    ))
     tmp = dest.with_name(dest.name + ".tmp")
-    tmp.write_text(body, encoding="utf-8")
+    # Bytes, not text mode, so the CRLFs aren't doubled into CR CR LF.
+    tmp.write_bytes(body.encode("utf-8"))
     tmp.replace(dest)
     return dest
 

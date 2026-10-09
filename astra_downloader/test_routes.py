@@ -5669,6 +5669,74 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
             )
             self.assertEqual(Path(chrome_manifest["path"]), launcher)
 
+    def test_the_launcher_text_quotes_paths_for_cmd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = ad.write_native_host_launcher(
+                "C:\\py & ^ %TEMP%\\python.exe",
+                "C:\\a&b^c %PATH% José 日本\\astra.py",
+                Path(tmp) / "host.cmd",
+            )
+            raw = launcher.read_bytes()
+            with self.assertRaises(ValueError):
+                ad.write_native_host_launcher(
+                    'C:\\x"y\\python.exe', "C:\\a.py", Path(tmp) / "new" / "x.cmd"
+                )
+            self.assertFalse((Path(tmp) / "new").exists(), "refused before touching the disk")
+        self.assertFalse(raw.startswith(b"\xef\xbb\xbf"), "a BOM would garble @echo off")
+        self.assertNotIn(b"\r\r\n", raw)
+        lines = raw.decode("utf-8").split("\r\n")
+        self.assertEqual(lines[:3], [
+            "@echo off", "setlocal DisableDelayedExpansion", "chcp 65001 >nul 2>&1",
+        ])
+        self.assertEqual(
+            lines[3],
+            '"C:\\py & ^ %%TEMP%%\\python.exe" -u '
+            '"C:\\a&b^c %%PATH%% José 日本\\astra.py" --native-host %*',
+        )
+
+    @unittest.skipUnless(sys.platform == "win32", "cmd.exe runs the launcher")
+    def test_the_launcher_starts_python_with_the_exact_paths(self):
+        import _winapi
+
+        base = Path(tempfile.mkdtemp(prefix="astra-launcher-"))
+        self.addCleanup(shutil.rmtree, base, True)
+        folder = base / "a&b^c %PATH% d José 日本"
+        folder.mkdir()
+        script = folder / "probe host.py"
+        script.write_text(
+            "import json, os, sys\n"
+            "with open(os.environ['ASTRA_LAUNCHER_PROBE'], 'w', encoding='utf-8') as f:\n"
+            "    json.dump({'exe': sys.executable, 'argv': sys.argv}, f)\n",
+            encoding="utf-8",
+        )
+        # The interpreter path gets the same characters through a junction to
+        # the real install, which needs no admin rights.
+        interpreter = getattr(sys, "_base_executable", sys.executable)
+        junction = base / "py & ^ %TEMP% Ж"
+        try:
+            _winapi.CreateJunction(os.path.dirname(interpreter), str(junction))
+        except OSError as error:
+            self.skipTest(f"couldn't create a junction: {error}")
+        # Registered after rmtree, so it runs first and rmtree never sees it.
+        self.addCleanup(os.rmdir, junction)
+        python_exe = junction / os.path.basename(interpreter)
+        launcher = ad.write_native_host_launcher(python_exe, script, base / "host.cmd")
+        probe_file = base / "probe.json"
+        result = subprocess.run(
+            f'cmd.exe /d /s /c ""{launcher}" chrome-extension://abc/"',
+            env=dict(os.environ, ASTRA_LAUNCHER_PROBE=str(probe_file)),
+            capture_output=True,
+            timeout=60,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, b"", "stdout carries native-messaging frames")
+        probe = json.loads(probe_file.read_text(encoding="utf-8"))
+        self.assertEqual(
+            probe["argv"], [str(script), "--native-host", "chrome-extension://abc/"]
+        )
+        self.assertTrue(os.path.samefile(probe["exe"], python_exe))
+
 
 class ExtensionPairingTests(unittest.TestCase):
     """Loopback pairing so Astra Deck can register its Chrome ID itself."""
