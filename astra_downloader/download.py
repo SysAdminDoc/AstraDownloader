@@ -6145,18 +6145,36 @@ class DownloadManagerCore:
             return True
 
         model_path = Path(self._dependencies['WHISPER_MODEL_PATH']())
-        model_state = self._dependencies['managed_binary_state'](
-            model_path, self._dependencies['WHISPER_MODEL_MIN_BYTES']()
-        )
-        if model_state != 'ok':
-            self._mark_transcription_failure(
-                dl,
-                'transcription-model-missing',
-                'Local subtitle generation needs the Whisper model, but the '
-                'model is missing or damaged.',
+        # Hold the model open until whisper-cli is done with it. Saving another
+        # model in Settings retires this one as soon as the new one verifies,
+        # which can land during the audio step, before whisper-cli opens it.
+        # Windows refuses to delete an open file, so the retirement leaves it
+        # for the next setup run, as it already does for a locked model.
+        try:
+            model_hold = open(model_path, 'rb')
+        except OSError:
+            model_hold = None
+        try:
+            model_state = self._dependencies['managed_binary_state'](
+                model_path, self._dependencies['WHISPER_MODEL_MIN_BYTES']()
             )
-            return False
+            if model_hold is None or model_state != 'ok':
+                self._mark_transcription_failure(
+                    dl,
+                    'transcription-model-missing',
+                    'Local subtitle generation needs the Whisper model, but the '
+                    'model is missing or damaged.',
+                )
+                return False
+            return self._transcribe_with_held_model(
+                dl, effective_config, model_path
+            )
+        finally:
+            if model_hold is not None:
+                model_hold.close()
 
+    def _transcribe_with_held_model(self, dl, effective_config, model_path):
+        """Prepare the audio and run whisper-cli with a model kept open."""
         whisper_path = Path(self._dependencies['WHISPER_BIN_PATH']())
         runtime = self._dependencies['probe_whisper_runtime'](
             whisper_path, self._dependencies['WHISPER_BIN_MIN_BYTES']()

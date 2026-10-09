@@ -7940,6 +7940,46 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             self.assertEqual(list(root.glob(".clip*")), [])
             self.assertEqual(list((root / "install").rglob("*.srt")), [])
 
+    @unittest.skipUnless(sys.platform == "win32", "relies on Windows refusing to delete an open file")
+    def test_switching_the_model_mid_transcription_keeps_the_one_in_use(self):
+        # Saving another model in Settings retires the old one as soon as the
+        # new one verifies. Landing during the audio step, it deleted the
+        # model this transcription had picked before whisper-cli opened it.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "clip.mp4"
+            media.write_bytes(b"media")
+            model = root / "ggml-tiny-q5_1.bin"
+            model.write_bytes(b"model")
+            (root / ad.WHISPER_MODELS["base"]["name"]).write_bytes(b"new model")
+            whisper = root / "whisper-cli.exe"
+            whisper.write_bytes(b"runtime")
+            config, download = self._download(media)
+            manager = ad.DownloadManager(config=FakeConfig(config), history=FakeHistory())
+            model_present_for_whisper = []
+
+            class SwitchingProcess(self._TranscriptProcess):
+                def __init__(inner_self, args, **kwargs):
+                    if "-c:a" in args:
+                        ad._retire_other_whisper_models("base")
+                    elif "-osrt" in args:
+                        model_present_for_whisper.append(
+                            Path(args[args.index("-m") + 1]).is_file()
+                        )
+                    super().__init__(args, **kwargs)
+
+            with mock.patch.object(ad, "WHISPER_MODEL_PATH", model), \
+                    mock.patch.object(ad, "WHISPER_MODEL_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "WHISPER_BIN_PATH", whisper), \
+                    mock.patch.object(ad, "WHISPER_BIN_MIN_BYTES", 1), \
+                    mock.patch.object(ad, "probe_whisper_runtime", return_value={"usable": True}), \
+                    mock.patch.object(ad, "FFMPEG_PATH", root / "ffmpeg.exe"), \
+                    mock.patch.object(ad, "spawn_media_process", SwitchingProcess):
+                self.assertTrue(manager._run_local_subtitles(download, config))
+
+            self.assertEqual(model_present_for_whisper, [True])
+            self.assertEqual(download.status, "complete")
+
     def test_transcription_preflights_wav_space_and_stages_beside_install(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
