@@ -1805,6 +1805,8 @@ def _register_system_routes(api, context, dependencies):
         """Let Astra Deck introduce its Chrome/Edge ID over loopback.
 
         Native messaging cannot start until that ID is in the host manifest.
+        The published Astra Deck ID pairs on its own; any other ID pairs only
+        while the user has extension pairing open in the companion.
         This route does not echo the session token to an extension; it retries
         the native channel after a successful pair. The userscript is the one
         exception: it has neither channel, so during a pairing window the user
@@ -1855,6 +1857,11 @@ def _register_system_routes(api, context, dependencies):
         if not reflected:
             return cors_response(invalid_origin, 403)
         result = pair_browser_extension(origin, requested_id)
+        if result.get("code") == "extension-pairing-closed":
+            result["error"] = (
+                "Open Astra Downloader, choose Allow extension pairing on the "
+                "Browser extension page, then try again within two minutes."
+            )
         status = 200 if result.get("ok") else 403
         if "token" in result:
             result = {k: v for k, v in result.items() if k != "token"}

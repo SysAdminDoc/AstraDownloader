@@ -1651,6 +1651,18 @@
       <translation>The userscript is paired. Its download buttons work now.</translation>
     </message>
     <message>
+      <source>Waiting for an extension, {time} left. Press a download button in Astra Deck now.</source>
+      <translation>Waiting for an extension, {time} left. Press a download button in Astra Deck now.</translation>
+    </message>
+    <message>
+      <source>Paired extension {id}. If that isn't the ID chrome://extensions shows for Astra Deck, remove it here and choose Register.</source>
+      <translation>Paired extension {id}. If that isn't the ID chrome://extensions shows for Astra Deck, remove it here and choose Register.</translation>
+    </message>
+    <message>
+      <source>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</source>
+      <translation>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</translation>
+    </message>
+    <message>
       <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
       <translation>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</translation>
     </message>
@@ -3075,6 +3087,10 @@
       <translation>Register</translation>
     </message>
     <message>
+      <source>Allow extension pairing</source>
+      <translation>Allow extension pairing</translation>
+    </message>
+    <message>
       <source>Pair userscript</source>
       <translation>Pair userscript</translation>
     </message>
@@ -3123,8 +3139,8 @@
       <translation>Chrome and Edge pairing</translation>
     </message>
     <message>
-      <source>Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.</source>
-      <translation>Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.</translation>
+      <source>Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.</source>
+      <translation>Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.</translation>
     </message>
     <message>
       <source>32-letter extension ID. Separate multiple IDs with commas.</source>
@@ -3137,6 +3153,10 @@
     <message>
       <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
       <translation>Write the Chrome and Edge native-messaging registration for these IDs.</translation>
+    </message>
+    <message>
+      <source>Let one Chrome or Edge extension pair in the next two minutes.</source>
+      <translation>Let one Chrome or Edge extension pair in the next two minutes.</translation>
     </message>
     <message>
       <source>Chrome pairing status</source>

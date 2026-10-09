@@ -2542,8 +2542,8 @@ CATALOGS["de"].update({
         "Entfernt. Diese Kopie registriert keine Browser-Hosts.",
     "Register": "Registrieren",
     "Chrome and Edge pairing": "Kopplung mit Chrome und Edge",
-    "Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.":
-        "Firefox wird automatisch registriert. Chrome und Edge koppeln sich selbst, sobald in Astra Deck ein Download-Button verwendet wird. Die ID von chrome://extensions kann weiterhin hier eingefügt werden.",
+    "Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.":
+        "Firefox wird automatisch registriert. Die veröffentlichte Version von Astra Deck koppelt sich selbst, sobald Sie zum ersten Mal einen Download-Button verwenden. Eine entpackt geladene Kopie braucht zuerst „Erweiterungskopplung erlauben“, oder Sie fügen ihre ID von chrome://extensions hier ein.",
     "32-letter extension ID. Separate multiple IDs with commas.":
         "Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.",
     "Chrome and Edge extension IDs": "Erweiterungs-IDs für Chrome und Edge",
@@ -2563,6 +2563,15 @@ CATALOGS["de"].update({
         "Das Userscript ist gekoppelt. Seine Download-Buttons funktionieren jetzt.",
     "Two minutes passed without a request from the userscript. Choose Pair userscript and try again.":
         "Zwei Minuten sind ohne Anfrage vom Userscript vergangen. Wählen Sie „Userscript koppeln“ und versuchen Sie es erneut.",
+    "Allow extension pairing": "Erweiterungskopplung erlauben",
+    "Let one Chrome or Edge extension pair in the next two minutes.":
+        "Eine Chrome- oder Edge-Erweiterung darf sich in den nächsten zwei Minuten koppeln.",
+    "Waiting for an extension, {time} left. Press a download button in Astra Deck now.":
+        "Warten auf eine Erweiterung, noch {time}. Drücken Sie jetzt in Astra Deck einen Download-Button.",
+    "Paired extension {id}. If that isn't the ID chrome://extensions shows for Astra Deck, remove it here and choose Register.":
+        "Erweiterung {id} ist gekoppelt. Wenn chrome://extensions für Astra Deck eine andere ID zeigt, entfernen Sie diese hier und wählen Sie „Registrieren“.",
+    "Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.":
+        "Zwei Minuten sind ohne Anfrage einer Erweiterung vergangen. Wählen Sie „Erweiterungskopplung erlauben“ und versuchen Sie es erneut.",
 })
 
 

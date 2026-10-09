@@ -22,6 +22,10 @@ repository's git log.
 - Importing a settings bundle that would push you past 32 site profiles is refused before anything touches the disk. It used to create each imported profile's download folder first, then refuse, leaving empty folders behind.
 - Ticking Highlight or Chapter in the SponsorBlock settings while the action was Remove made every YouTube download fail, because those two can only be marked. They're now left out of a remove list, and if they're all you ticked, nothing is removed. A category list with only unknown names, like a typo in an imported settings file, used to turn into "every category". It now falls back to the default ones. The new Hook or greeting category is available too.
 
+### Security
+
+- Any Chrome or Edge extension on the PC could pair itself with Astra and from then on read its private token. Now only the published Astra Deck release pairs on its own. Any other extension, including an Astra Deck copy you loaded unpacked, pairs only after you choose Allow extension pairing on the Browser extension page, and only within the next two minutes. That window lets one extension in, and the page names the ID that paired so you can spot one you don't recognize. IDs you've already paired, or pasted in by hand, keep working.
+
 ## [2.17.0] (2026-10-07)
 
 ### Added

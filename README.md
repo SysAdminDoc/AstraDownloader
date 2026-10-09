@@ -16,7 +16,7 @@
 
 Save videos and audio without building a command line. Astra Downloader puts yt-dlp in a Windows desktop app, with format choices, a persistent queue and searchable download history.
 
-Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdminDoc/Astra-Deck) can also send links from your browser, and so can its userscript once you pair it on the Browser extension page.
+Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdminDoc/Astra-Deck) can also send links from your browser, and so can its userscript once you pair it on the Browser extension page. The released extension pairs on its own. A copy you loaded unpacked needs Allow extension pairing on that page first.
 
 ![Astra Downloader's dark Download page with an example queue and format controls](assets/screenshots/downloads.png)
 

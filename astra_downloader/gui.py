@@ -934,6 +934,7 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     'parse_native_extension_ids',
     'refresh_native_messaging_registration',
     'userscript_pairing',
+    'extension_pairing',
     'detect_system_proxy',
     'normalize_download_section',
     'normalize_output_name',
@@ -8328,6 +8329,53 @@ class MainWindowCore(
         self.userscript_pairing_status.setVisible(bool(message))
         set_status_tone(self.userscript_pairing_status, tone)
         repolish(self.userscript_pairing_status)
+
+    def _open_extension_pairing(self):
+        """Let one Chrome or Edge extension ID pair over loopback, for two minutes."""
+        self._dependencies["extension_pairing"]().open()
+        self._append_log("Extension pairing is open for two minutes.")
+        timer = getattr(self, "_extension_pairing_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setInterval(1000)
+            timer.timeout.connect(self._refresh_extension_pairing)
+            self._extension_pairing_timer = timer
+        timer.start()
+        self._refresh_extension_pairing()
+
+    def _refresh_extension_pairing(self):
+        pairing = self._dependencies["extension_pairing"]()
+        state = pairing.state()
+        if state == 'open':
+            remaining = pairing.remaining()
+            self._show_native_pairing_status(tr_format(
+                "Waiting for an extension, {time} left. Press a download "
+                "button in Astra Deck now.",
+                time=f"{remaining // 60}:{remaining % 60:02d}",
+            ), "warning")
+            return
+        timer = getattr(self, "_extension_pairing_timer", None)
+        if timer is not None:
+            timer.stop()
+        if state == 'paired':
+            extension_id = pairing.client()
+            # The route saved the ID on its own thread; show what it holds now.
+            self.cfg_native_chrome_ids.setText(
+                str(self.config.get("NativeChromeExtensionIds", "") or "")
+            )
+            # Named so a stranger that won the race is easy to spot and remove.
+            self._show_native_pairing_status(tr_format(
+                "Paired extension {id}. If that isn't the ID chrome://extensions "
+                "shows for Astra Deck, remove it here and choose Register.",
+                id=extension_id,
+            ), "success")
+            self._append_log(f"Paired browser extension {extension_id}.")
+        elif state == 'expired':
+            self._show_native_pairing_status(
+                "Two minutes passed without a request from an extension. "
+                "Choose Allow extension pairing and try again.",
+                "error",
+            )
 
     def _apply_native_chrome_ids(self):
         """Save the Chrome/Edge extension IDs and re-register the native host.

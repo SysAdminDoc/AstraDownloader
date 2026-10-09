@@ -1651,6 +1651,18 @@
       <translation>Das Userscript ist gekoppelt. Seine Download-Buttons funktionieren jetzt.</translation>
     </message>
     <message>
+      <source>Waiting for an extension, {time} left. Press a download button in Astra Deck now.</source>
+      <translation>Warten auf eine Erweiterung, noch {time}. Drücken Sie jetzt in Astra Deck einen Download-Button.</translation>
+    </message>
+    <message>
+      <source>Paired extension {id}. If that isn't the ID chrome://extensions shows for Astra Deck, remove it here and choose Register.</source>
+      <translation>Erweiterung {id} ist gekoppelt. Wenn chrome://extensions für Astra Deck eine andere ID zeigt, entfernen Sie diese hier und wählen Sie „Registrieren“.</translation>
+    </message>
+    <message>
+      <source>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</source>
+      <translation>Zwei Minuten sind ohne Anfrage einer Erweiterung vergangen. Wählen Sie „Erweiterungskopplung erlauben“ und versuchen Sie es erneut.</translation>
+    </message>
+    <message>
       <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
       <translation>Gespeichert. Diese portable Kopie registriert keine Browser-Hosts. Koppeln Sie über eine installierte Kopie.</translation>
     </message>
@@ -3075,6 +3087,10 @@
       <translation>Registrieren</translation>
     </message>
     <message>
+      <source>Allow extension pairing</source>
+      <translation>Erweiterungskopplung erlauben</translation>
+    </message>
+    <message>
       <source>Pair userscript</source>
       <translation>Userscript koppeln</translation>
     </message>
@@ -3123,8 +3139,8 @@
       <translation>Kopplung mit Chrome und Edge</translation>
     </message>
     <message>
-      <source>Firefox is registered automatically. Chrome and Edge pair themselves the first time you use a download button in Astra Deck. You can also paste the ID from chrome://extensions here.</source>
-      <translation>Firefox wird automatisch registriert. Chrome und Edge koppeln sich selbst, sobald in Astra Deck ein Download-Button verwendet wird. Die ID von chrome://extensions kann weiterhin hier eingefügt werden.</translation>
+      <source>Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.</source>
+      <translation>Firefox wird automatisch registriert. Die veröffentlichte Version von Astra Deck koppelt sich selbst, sobald Sie zum ersten Mal einen Download-Button verwenden. Eine entpackt geladene Kopie braucht zuerst „Erweiterungskopplung erlauben“, oder Sie fügen ihre ID von chrome://extensions hier ein.</translation>
     </message>
     <message>
       <source>32-letter extension ID. Separate multiple IDs with commas.</source>
@@ -3137,6 +3153,10 @@
     <message>
       <source>Write the Chrome and Edge native-messaging registration for these IDs.</source>
       <translation>Die Native-Messaging-Registrierung für Chrome und Edge für diese IDs schreiben.</translation>
+    </message>
+    <message>
+      <source>Let one Chrome or Edge extension pair in the next two minutes.</source>
+      <translation>Eine Chrome- oder Edge-Erweiterung darf sich in den nächsten zwei Minuten koppeln.</translation>
     </message>
     <message>
       <source>Chrome pairing status</source>

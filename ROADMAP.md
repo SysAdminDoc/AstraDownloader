@@ -30,10 +30,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: the language check accepts any 2 or 3 letters, so Subtitle languages `all` (saved as `all,-live_chat`) becomes `-l all`, and `eng`, `iw` and `und` get through the same way. whisper.cpp stops on a language it doesn't know, and the user sees "completed without producing an SRT sidecar".
   Acceptance: WHEN the configured subtitle language isn't one whisper.cpp knows, transcription SHALL run with `-l auto`.
   Where: `astra_downloader/download.py` `subtitle_language_for_transcription` (around 2595).
-- [ ] P1 | AD-145 | Any installed Chromium extension can pair and read the session token
-  Why: any `chrome-extension://<id>` origin can POST `/pair-extension` and its ID is saved with no consent. From then on it can call `get-token` over the native host, or read the token from the `/health` echo, without even the nativeMessaging permission. The tests pin auto-pairing as intended.
-  Acceptance: WHEN an extension ID that isn't a published Astra Deck ID asks to pair, the pairing SHALL wait for the user to approve it in a window the user opened (as `UserscriptPairingWindow` does), and an unapproved ID SHALL get no token.
-  Where: `astra_downloader/routes.py` around 1855, `astra_downloader/astra_downloader.py` around 5106. Needs the published Astra Deck IDs (Astra Deck repository manifest `key`).
 
 ### P2
 

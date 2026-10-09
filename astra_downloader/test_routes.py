@@ -1036,7 +1036,7 @@ class ApiSecurityTests(unittest.TestCase):
         # dead-ended here: pairing succeeded but /health kept withholding the
         # token, so every download failed with "not installed".
         token = "b" * 32
-        ext_id = "abcdefghijklmnopabcdefghijklmnop"
+        ext_id = ad.PUBLISHED_CHROME_EXTENSION_IDS[0]
         origin = f"chrome-extension://{ext_id}"
         config = FakeConfig({"ServerToken": token, "LegacyHealthTokenEcho": False})
         manager = ad.DownloadManager(config, FakeHistory())
@@ -1049,7 +1049,8 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertFalse(before["paired"])
         self.assertTrue(before["nativeChannelRequired"])
 
-        paired = client.post("/pair-extension", json={"id": ext_id}, headers=headers).get_json()
+        with mock.patch.object(ad, "refresh_native_messaging_registration", return_value=True):
+            paired = client.post("/pair-extension", json={"id": ext_id}, headers=headers).get_json()
         self.assertTrue(paired["paired"])
 
         after = client.get("/health", headers=headers).get_json()
@@ -5278,6 +5279,49 @@ class NativeChromePairingUiTests(unittest.TestCase):
         )
         self.assertEqual(window.native_pairing_status.properties["tone"], "warning")
 
+    def test_extension_pairing_counts_down_then_names_the_id_it_paired(self):
+        clock = [1000.0]
+        pairing = ad.UserscriptPairingWindow(clock=lambda: clock[0])
+        pairing.open(120)
+        clock[0] += 15
+        config = self._Config({"NativeChromeExtensionIds": ""})
+        window = self._window(config)
+        window._dependencies["extension_pairing"] = lambda: pairing
+        window._extension_pairing_timer = mock.Mock()
+        window._refresh_extension_pairing = types.MethodType(
+            gui_module_for_tests().MainWindowCore._refresh_extension_pairing, window
+        )
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._refresh_extension_pairing()
+            self.assertIn("1:45", window.native_pairing_status.text())
+            self.assertEqual(window.native_pairing_status.properties["tone"], "warning")
+            window._extension_pairing_timer.stop.assert_not_called()
+
+            chrome_id = "abcdefghijklmnopabcdefghijklmnop"
+            self.assertTrue(pairing.consume(chrome_id))
+            config.update({"NativeChromeExtensionIds": chrome_id})
+            window._refresh_extension_pairing()
+        self.assertIn(chrome_id, window.native_pairing_status.text())
+        self.assertEqual(window.native_pairing_status.properties["tone"], "success")
+        self.assertEqual(window.cfg_native_chrome_ids.text(), chrome_id)
+        window._extension_pairing_timer.stop.assert_called_once_with()
+
+    def test_an_expired_extension_pairing_says_to_try_again(self):
+        clock = [1000.0]
+        pairing = ad.UserscriptPairingWindow(clock=lambda: clock[0])
+        pairing.open(120)
+        clock[0] += 121
+        window = self._window(self._Config({"NativeChromeExtensionIds": ""}))
+        window._dependencies["extension_pairing"] = lambda: pairing
+        window._extension_pairing_timer = mock.Mock()
+        window._refresh_extension_pairing = types.MethodType(
+            gui_module_for_tests().MainWindowCore._refresh_extension_pairing, window
+        )
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._refresh_extension_pairing()
+        self.assertIn("Allow extension pairing", window.native_pairing_status.text())
+        self.assertEqual(window.native_pairing_status.properties["tone"], "danger")
+
 
 class NativeMessagingBootstrapTests(unittest.TestCase):
     """Token bootstrap over the browser-pinned native-messaging stdio channel."""
@@ -5536,22 +5580,121 @@ class NativeMessagingBootstrapTests(unittest.TestCase):
 class ExtensionPairingTests(unittest.TestCase):
     """Loopback pairing so Astra Deck can register its Chrome ID itself."""
 
+    def setUp(self):
+        ad.EXTENSION_PAIRING.close()
+        self.addCleanup(ad.EXTENSION_PAIRING.close)
+
     def test_pair_persists_a_chrome_id_bound_to_origin(self):
         chrome_id = "abcdefghijklmnopabcdefghijklmnop"
         config = FakeConfig({"NativeChromeExtensionIds": ""})
         refresh = mock.Mock(return_value=True)
+        window = ad.UserscriptPairingWindow()
+        window.open()
         result = ad.pair_browser_extension(
             config,
             f"chrome-extension://{chrome_id}",
             chrome_id,
             refresh=refresh,
+            window=window,
         )
         self.assertTrue(result["ok"])
         self.assertTrue(result["paired"])
         self.assertFalse(result["alreadyPaired"])
         self.assertNotIn("token", result)
         self.assertEqual(config.get("NativeChromeExtensionIds"), chrome_id)
+        self.assertEqual(window.state(), "paired")
+        self.assertEqual(window.client(), chrome_id)
         refresh.assert_called_once_with()
+
+    def test_an_unknown_extension_id_needs_the_user_to_open_pairing(self):
+        # Any installed extension can send this request, and a paired ID can
+        # read the session token. Without the window it gets nothing saved.
+        stranger = "ponmlkjihgfedcbaponmlkjihgfedcba"
+        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        refresh = mock.Mock(return_value=True)
+        closed = ad.UserscriptPairingWindow()
+        result = ad.pair_browser_extension(
+            config, f"chrome-extension://{stranger}", stranger,
+            refresh=refresh, window=closed,
+        )
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["paired"])
+        self.assertEqual(result["code"], "extension-pairing-closed")
+        self.assertNotIn("token", result)
+        self.assertEqual(config.get("NativeChromeExtensionIds"), "")
+        refresh.assert_not_called()
+
+    def test_the_window_pairs_one_id_then_closes(self):
+        first = "abcdefghijklmnopabcdefghijklmnop"
+        second = "ponmlkjihgfedcbaponmlkjihgfedcba"
+        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        refresh = mock.Mock(return_value=True)
+        window = ad.UserscriptPairingWindow()
+        window.open()
+        self.assertTrue(ad.pair_browser_extension(
+            config, f"chrome-extension://{first}", first,
+            refresh=refresh, window=window,
+        )["ok"])
+        late = ad.pair_browser_extension(
+            config, f"chrome-extension://{second}", second,
+            refresh=refresh, window=window,
+        )
+        self.assertEqual(late["code"], "extension-pairing-closed")
+        self.assertEqual(config.get("NativeChromeExtensionIds"), first)
+        self.assertEqual(window.client(), first)
+
+    def test_published_and_already_paired_ids_skip_the_window(self):
+        published = ad.PUBLISHED_CHROME_EXTENSION_IDS[0]
+        paired = "abcdefghijklmnopabcdefghijklmnop"
+        config = FakeConfig({"NativeChromeExtensionIds": paired})
+        refresh = mock.Mock(return_value=True)
+        closed = ad.UserscriptPairingWindow()
+        again = ad.pair_browser_extension(
+            config, f"chrome-extension://{paired}", paired,
+            refresh=refresh, window=closed,
+        )
+        self.assertTrue(again["ok"])
+        self.assertTrue(again["alreadyPaired"])
+        release = ad.pair_browser_extension(
+            config, f"chrome-extension://{published}", published,
+            refresh=refresh, window=closed,
+        )
+        self.assertTrue(release["ok"])
+        self.assertFalse(release["alreadyPaired"])
+        self.assertEqual(
+            config.get("NativeChromeExtensionIds"), f"{paired}, {published}"
+        )
+        self.assertEqual(closed.state(), "idle", "neither one spent the window")
+
+    def test_published_ids_are_valid_chrome_ids(self):
+        for chrome_id in ad.PUBLISHED_CHROME_EXTENSION_IDS:
+            with self.subTest(chrome_id=chrome_id):
+                self.assertTrue(ad.is_valid_native_extension_id(chrome_id, "chrome"))
+
+    def test_a_refused_extension_gets_no_token_from_health_either(self):
+        token = "b" * 32
+        stranger = "ponmlkjihgfedcbaponmlkjihgfedcba"
+        origin = f"chrome-extension://{stranger}"
+        config = FakeConfig({
+            "ServerToken": token,
+            "NativeChromeExtensionIds": "",
+            "LegacyHealthTokenEcho": False,
+        })
+        manager = ad.DownloadManager(config, FakeHistory())
+        headers = {"Origin": origin, "X-MDL-Client": "MediaDL"}
+        with mock.patch.object(ad, "refresh_native_messaging_registration", return_value=True) as refresh:
+            client = ad.create_api(config, manager, FakeHistory()).test_client()
+            resp = client.post("/pair-extension", json={"id": stranger}, headers=headers)
+            health = client.get("/health", headers=headers).get_json()
+        self.assertEqual(resp.status_code, 403)
+        body = resp.get_json()
+        self.assertEqual(body["code"], "extension-pairing-closed")
+        self.assertIn("Allow extension pairing", body["error"])
+        self.assertNotIn("token", body)
+        self.assertNotIn("token", health)
+        self.assertFalse(health["paired"])
+        self.assertEqual(config.get("NativeChromeExtensionIds"), "")
+        refresh.assert_not_called()
 
     def test_pair_rejects_mismatched_chrome_id_and_youtube_origin(self):
         chrome_id = "abcdefghijklmnopabcdefghijklmnop"
@@ -5583,6 +5726,7 @@ class ExtensionPairingTests(unittest.TestCase):
             "LegacyHealthTokenEcho": False,
         })
         manager = ad.DownloadManager(config, FakeHistory())
+        ad.EXTENSION_PAIRING.open()
         with mock.patch.object(ad, "refresh_native_messaging_registration", return_value=True):
             api = ad.create_api(config, manager, FakeHistory())
             resp = api.test_client().post(

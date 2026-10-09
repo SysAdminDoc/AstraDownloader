@@ -104,9 +104,10 @@ class ExtensionPageMixin:
         pairing_header.setSpacing(12)
         pairing_header.addWidget(make_label("Chrome and Edge pairing", "panelTitle"))
         pairing_header.addWidget(make_label(
-            "Firefox is registered automatically. Chrome and Edge pair "
-            "themselves the first time you use a download button in Astra "
-            "Deck. You can also paste the ID from chrome://extensions here.",
+            "Firefox is registered automatically. The Astra Deck release "
+            "pairs itself the first time you use a download button. A copy "
+            "loaded unpacked needs Allow extension pairing first, or paste "
+            "its ID from chrome://extensions here.",
             "fieldHint",
             word_wrap=True,
         ), 1)
@@ -127,6 +128,14 @@ class ExtensionPageMixin:
         )
         self.btn_register_chrome_host.clicked.connect(self._apply_native_chrome_ids)
         chrome_row.addWidget(self.btn_register_chrome_host)
+        self.btn_allow_extension_pairing = self._make_tool_button(
+            "Allow extension pairing", "secondary"
+        )
+        self.btn_allow_extension_pairing.setToolTip(
+            tr("Let one Chrome or Edge extension pair in the next two minutes.")
+        )
+        self.btn_allow_extension_pairing.clicked.connect(self._open_extension_pairing)
+        chrome_row.addWidget(self.btn_allow_extension_pairing)
         layout.addLayout(chrome_row)
         self.native_pairing_status = make_label("", "fieldHint", word_wrap=True, status=True)
         self.native_pairing_status.setAccessibleName(tr("Chrome pairing status"))

@@ -639,6 +639,10 @@ DENO_DIR = INSTALL_DIR / 'deno'
 DENO_PATH = DENO_DIR / 'deno.exe'
 NATIVE_HOST_DIR = INSTALL_DIR / 'native-hosts'
 DEFAULT_FIREFOX_EXTENSION_IDS = ("ytkit@sysadmindoc.github.io",)
+# The Chrome ID Astra Deck releases are signed for (its signing-keys doc). It
+# pairs over loopback on its own; any other ID, including an unpacked install
+# whose ID comes from its folder, needs the user to open extension pairing.
+PUBLISHED_CHROME_EXTENSION_IDS = ("lgbiefafhjdbplelniclnflbbilennlg",)
 # Chromium-family browsers all read a Chrome-style ``allowed_origins`` host
 # manifest, but each browser has its own per-user HKCU registry root.
 CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS = (
@@ -5090,12 +5094,17 @@ def refresh_native_messaging_registration(config=None):
     return True
 
 
-def pair_browser_extension(config, origin, requested_id="", refresh=None):
+def pair_browser_extension(config, origin, requested_id="", refresh=None, window=None):
     """Persist a loopback extension identity and refresh native-host registration.
 
     Returns a dict. Never includes the session token. Chrome Origins bind the
     ID (the host *is* the 32-letter ID). Firefox Origins use a profile UUID, so
     the body must name the known Astra Deck Gecko ID.
+
+    A paired Chrome ID can read the session token, and any installed
+    extension can send this request. So a Chrome ID that isn't published and
+    isn't already paired is saved only while the user has extension pairing
+    open on the Browser extension page, and that window pairs one ID.
     """
     normalized_origin = normalize_extension_origin(origin)
     if not normalized_origin or not is_extension_origin_shape(origin):
@@ -5128,6 +5137,16 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None):
 
     existing = parse_native_extension_ids(config.get(key, ""), browser=browser)
     already = extension_id in existing
+    if (browser == "chrome" and not already
+            and extension_id not in PUBLISHED_CHROME_EXTENSION_IDS):
+        window = EXTENSION_PAIRING if window is None else window
+        if not window.consume(extension_id):
+            return {
+                "ok": False,
+                "paired": False,
+                "code": "extension-pairing-closed",
+                "id": extension_id,
+            }
     if not already:
         joined = ", ".join(existing + [extension_id])
         update = getattr(config, "update", None)
@@ -5175,7 +5194,8 @@ class UserscriptPairingWindow:
     any other extension or userscript allowed to reach 127.0.0.1 could send
     too. The window is what turns "some local client asked" into "the user
     asked for this, just now": it opens only from the companion itself and
-    closes on the first pairing it grants.
+    closes on the first pairing it grants. `EXTENSION_PAIRING` is a second
+    one, for a Chrome extension ID that isn't a published Astra Deck ID.
     """
 
     def __init__(self, clock=time.monotonic):
@@ -5183,17 +5203,25 @@ class UserscriptPairingWindow:
         self._lock = threading.Lock()
         self._until = 0.0
         self._granted = False
+        self._client = ""
 
     def open(self, seconds=USERSCRIPT_PAIRING_WINDOW_SECONDS):
         with self._lock:
             self._until = self._clock() + max(1, int(seconds))
             self._granted = False
+            self._client = ""
         return self.remaining()
 
     def close(self):
         with self._lock:
             self._until = 0.0
             self._granted = False
+            self._client = ""
+
+    def client(self):
+        """Who the grant went to (an extension ID), so the page can name it."""
+        with self._lock:
+            return self._client if self._granted else ""
 
     def state(self):
         """'idle', 'open', 'paired' or 'expired', for the Browser extension page."""
@@ -5208,16 +5236,18 @@ class UserscriptPairingWindow:
         with self._lock:
             return max(0, int(round(self._until - self._clock())))
 
-    def consume(self):
+    def consume(self, client=""):
         with self._lock:
             if self._clock() >= self._until:
                 return False
             self._until = 0.0
             self._granted = True
+            self._client = str(client or "")
             return True
 
 
 USERSCRIPT_PAIRING = UserscriptPairingWindow()
+EXTENSION_PAIRING = UserscriptPairingWindow()
 
 
 def pair_userscript(config, origin="", window=None):
@@ -6122,6 +6152,7 @@ class DownloadManager(DownloadManagerCore):
                 'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
                 'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
                 'userscript_pairing': lambda: USERSCRIPT_PAIRING,
+                'extension_pairing': lambda: EXTENSION_PAIRING,
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
@@ -6783,6 +6814,7 @@ class MainWindow(MainWindowCore):
                 'parse_native_extension_ids': lambda *args, **kwargs: parse_native_extension_ids(*args, **kwargs),
                 'refresh_native_messaging_registration': lambda: refresh_native_messaging_registration(),
                 'userscript_pairing': lambda: USERSCRIPT_PAIRING,
+                'extension_pairing': lambda: EXTENSION_PAIRING,
                 'normalize_sponsorblock_categories': lambda *args, **kwargs: normalize_sponsorblock_categories(*args, **kwargs),
                 'normalize_download_section': lambda *args, **kwargs: normalize_download_section(*args, **kwargs),
                 'detect_system_proxy': lambda: detect_system_proxy(),
