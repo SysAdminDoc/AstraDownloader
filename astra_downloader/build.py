@@ -577,6 +577,17 @@ def run_pyinstaller(mode):
     validate_native_origins(ast.literal_eval(analysis.read_text(encoding="utf-8")))
 
 
+def publish_release_exe(staged_exe):
+    """Move the checked exe to its release path with its sidecar, as the last step."""
+    OUT_EXE.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(staged_exe, OUT_EXE)
+    try:
+        write_sha256_sidecar(OUT_EXE, OUT_SHA256)
+    except BaseException:
+        OUT_EXE.unlink(missing_ok=True)
+        raise
+
+
 def build():
     preflight()
     prepare_translations()
@@ -594,20 +605,23 @@ def build():
     onefile_analysis_snapshot = BUILD_DIR / "AstraDownloader-onefile-Analysis-00.toc"
     shutil.copy2(onefile_analysis, onefile_analysis_snapshot)
 
-    OUT_EXE.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(built, OUT_EXE)
+    # Held under build/ until every later step has passed. Copying it to the
+    # release path here left an exe with no .sha256 there whenever the
+    # one-folder build or the metadata step failed.
+    staged_exe = BUILD_DIR / "release-candidate" / OUT_EXE.name
+    staged_exe.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(built, staged_exe)
 
     run_pyinstaller("onedir")
     built_onedir = DIST_DIR / "AstraDownloader"
-    write_build_metadata(OUT_EXE, analysis_toc=onefile_analysis_snapshot)
+    write_build_metadata(staged_exe, analysis_toc=onefile_analysis_snapshot)
     write_onedir_archive(
         built_onedir,
         OUT_ONEDIR_ZIP,
         metadata_path=BUILD_METADATA,
     )
-
-    write_sha256_sidecar(OUT_EXE, OUT_SHA256)
     write_sha256_sidecar(OUT_ONEDIR_ZIP, OUT_ONEDIR_SHA256)
+    publish_release_exe(staged_exe)
     size_mb = OUT_EXE.stat().st_size / (1024 * 1024)
     print(f"OK: {OUT_EXE} ({size_mb:.1f} MB)")
     print(f"SHA-256 sidecar: {OUT_SHA256}")

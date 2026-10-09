@@ -28,6 +28,7 @@ repository's git log.
 - A title with U+FFFE or U+FFFF in it (two rare invisible characters) no longer produces an NFO that Kodi and Jellyfin refuse to read. A broken or extremely deeply nested info.json is now just skipped, and the rest of the download's NFOs are still written.
 - Running Astra from source, the browser helper didn't start when the Python or Astra folder path had `&`, `^` or `%` in it, or letters outside your system's old code page, like `C:\Users\José`. Those paths now work. The installed app wasn't affected.
 - A release build run the documented way, with the venv's Python and no activation, couldn't find Qt's translation compiler. It fell back to the existing translation files with only a warning, so a release could ship with new on-screen text left untranslated. The build now finds the compiler beside that Python, and stops if there's none.
+- When a release build failed after the one-file step, it still left `AstraDownloader.exe` at the release path with no checksum file beside it. The exe now waits in the build folder and is moved into place last, together with its checksum.
 
 ### Security
 

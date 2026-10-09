@@ -182,6 +182,48 @@ class ReleaseConstraintsTests(unittest.TestCase):
             self.assertFalse(dist_dir.exists())
             self.assertTrue(all(not artifact.exists() for artifact in artifacts))
 
+    def test_a_failed_later_step_leaves_no_exe_at_the_release_path(self):
+        for step in ('onedir', 'metadata', 'archive'):
+            with self.subTest(step=step), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                build_dir = root / 'astra_downloader' / 'build'
+                dist_dir = root / 'astra_downloader' / 'dist'
+                exe = root / 'AstraDownloader.exe'
+
+                def fake_pyinstaller(mode):
+                    if mode == 'onedir' and step == 'onedir':
+                        raise SystemExit('onedir failed')
+                    analysis = build_dir / 'AstraDownloader' / 'Analysis-00.toc'
+                    analysis.parent.mkdir(parents=True, exist_ok=True)
+                    analysis.write_text(mode, encoding='utf-8')
+                    dist_dir.mkdir(parents=True, exist_ok=True)
+                    (dist_dir / 'AstraDownloader.exe').write_bytes(b'MZ' + b'app')
+
+                def fake_metadata(_exe_path, analysis_toc=None):
+                    if step == 'metadata':
+                        raise SystemExit('metadata failed')
+
+                def fake_archive(_source, _archive_path, metadata_path=None):
+                    raise SystemExit('archive failed')
+
+                with mock.patch.object(build, 'preflight'), \
+                        mock.patch.object(build, 'prepare_translations'), \
+                        mock.patch.object(build, 'clean'), \
+                        mock.patch.object(build, 'BUILD_DIR', build_dir), \
+                        mock.patch.object(build, 'DIST_DIR', dist_dir), \
+                        mock.patch.object(build, 'SPEC_DIR', build_dir / 'spec'), \
+                        mock.patch.object(build, 'OUT_EXE', exe), \
+                        mock.patch.object(build, 'OUT_SHA256', root / 'AstraDownloader.exe.sha256'), \
+                        mock.patch.object(build, 'OUT_ONEDIR_ZIP', root / 'AstraDownloader-onedir.zip'), \
+                        mock.patch.object(build, 'OUT_ONEDIR_SHA256', root / 'AstraDownloader-onedir.zip.sha256'), \
+                        mock.patch.object(build, 'run_pyinstaller', side_effect=fake_pyinstaller), \
+                        mock.patch.object(build, 'write_build_metadata', side_effect=fake_metadata), \
+                        mock.patch.object(build, 'write_onedir_archive', side_effect=fake_archive):
+                    with self.assertRaises(SystemExit):
+                        build.build()
+                self.assertFalse(exe.exists())
+                self.assertFalse((root / 'AstraDownloader.exe.sha256').exists())
+
     def test_build_keeps_the_onefile_analysis_for_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -233,6 +275,10 @@ class ReleaseConstraintsTests(unittest.TestCase):
 
             self.assertEqual(len(metadata_calls), 1)
             self.assertEqual(metadata_calls[0][1].read_text(encoding='utf-8'), 'onefile')
+            # Published last, with the bytes the metadata described.
+            self.assertEqual(metadata_calls[0][0].name, outputs['exe'].name)
+            self.assertEqual(outputs['exe'].read_bytes(), b'MZ' + b'app')
+            self.assertIn('AstraDownloader.exe', outputs['exe_sha'].read_text(encoding='utf-8'))
 
     def test_build_metadata_records_the_onefile_analysis_identity(self):
         class Metadata:

@@ -55,10 +55,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: it checks each pinned package's version but not that it runs in `.release-venv`, that nothing extra is installed, or that `PYTHONPATH` and `PYTHONHOME` are unset, so a global Python with the pins plus an optional import would bundle a package the license inventory never lists. The venv is clean today. (Plausible.)
   Acceptance: WHEN build.py runs outside `.release-venv`, with a package missing from the constraints, or with `PYTHONPATH` or `PYTHONHOME` set, it SHALL refuse.
   Where: `astra_downloader/build.py` around 95 to 183.
-- [ ] P3 | AD-158 | build.py leaves an exe at the release path when a later step fails
-  Why: `AstraDownloader.exe` is copied to its release name before the one-folder build and the metadata step, so a failure there exits non-zero but leaves an exe with no .sha256 where the release expects one.
-  Acceptance: WHEN any step after the onefile build fails, no new exe SHALL be left at the release path.
-  Where: `astra_downloader/build.py` around 584.
 - [ ] P3 | AD-140 | SponsorBlock category labels are never translated
   Why: the Settings page builds the category checkboxes from a dict and calls `tr()` on its values, so the string extractor never sees "Self-promotion", "Recap or preview" and the rest, and the German interface shows them in English. Same shape as the readiness row labels fixed in 9bd60f8.
   Where: `astra_downloader/gui_settings_page.py` `category_labels`, `scripts/build-companion-translations.py`. Make the labels extractable (literal `tr()` calls or the 9bd60f8 approach), add German, re-run the build script.
