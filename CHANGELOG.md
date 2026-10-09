@@ -34,7 +34,8 @@ repository's git log.
 
 ### Security
 
-- Any Chrome or Edge extension on the PC could pair itself with Astra and from then on read its private token. Now only the published Astra Deck release pairs on its own. Any other extension, including an Astra Deck copy you loaded unpacked, pairs only after you choose Allow extension pairing on the Browser extension page, and only within the next two minutes. That window lets one extension in, and the page names the ID that paired so you can spot one you don't recognize. IDs you've already paired, or pasted in by hand, keep working.
+- Any Chrome or Edge extension on the PC could pair itself with Astra and from then on read its private token. Now only the signed Astra Deck .crx build pairs on its own. Any other extension, including Astra Deck loaded unpacked from its release zip, pairs only after you choose Allow extension pairing on the Browser extension page, and only within the next two minutes. That window lets one extension in, and the page names the ID that paired so you can spot one you don't recognize. If saving the ID fails, the page says so instead of reporting a pairing. IDs you've already paired, or pasted in by hand, keep working, so it's worth a look at the Chrome and Edge extension IDs list. Remove any you don't recognize.
+- Pair userscript has the same kind of window, and any extension could claim it. The page now names the extension the userscript paired through, which should be your userscript manager. If it isn't, choose Regenerate next to the private token in Settings.
 
 ## [2.17.0] (2026-10-07)
 

@@ -2544,8 +2544,8 @@ CATALOGS["de"].update({
         "Entfernt. Diese Kopie registriert keine Browser-Hosts.",
     "Register": "Registrieren",
     "Chrome and Edge pairing": "Kopplung mit Chrome und Edge",
-    "Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.":
-        "Firefox wird automatisch registriert. Die veröffentlichte Version von Astra Deck koppelt sich selbst, sobald Sie zum ersten Mal einen Download-Button verwenden. Eine entpackt geladene Kopie braucht zuerst „Erweiterungskopplung erlauben“, oder Sie fügen ihre ID von chrome://extensions hier ein.",
+    "Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.":
+        "Firefox wird automatisch registriert. Für Chrome oder Edge wählen Sie „Erweiterungskopplung erlauben“ und drücken dann innerhalb von zwei Minuten einen Download-Button in Astra Deck, oder Sie fügen die ID von chrome://extensions hier ein. Nur der signierte .crx-Build koppelt sich selbst.",
     "32-letter extension ID. Separate multiple IDs with commas.":
         "Erweiterungs-ID aus 32 Buchstaben. Trennen Sie mehrere IDs durch Kommas.",
     "Chrome and Edge extension IDs": "Erweiterungs-IDs für Chrome und Edge",
@@ -2574,6 +2574,12 @@ CATALOGS["de"].update({
         "Erweiterung {id} ist gekoppelt. Wenn chrome://extensions für Astra Deck eine andere ID zeigt, entfernen Sie diese hier und wählen Sie „Registrieren“.",
     "Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.":
         "Zwei Minuten sind ohne Anfrage einer Erweiterung vergangen. Wählen Sie „Erweiterungskopplung erlauben“ und versuchen Sie es erneut.",
+    "Extension {id} asked to pair, but its ID couldn't be saved. Choose Allow extension pairing and try again.":
+        "Die Erweiterung {id} wollte sich koppeln, aber ihre ID konnte nicht gespeichert werden. Wählen Sie „Erweiterungskopplung erlauben“ und versuchen Sie es erneut.",
+    "The userscript is paired through {origin}. That should be your userscript manager. If it isn't, choose Regenerate next to the private token in Settings.":
+        "Das Userscript ist über {origin} gekoppelt. Das sollte Ihr Userscript-Manager sein. Falls nicht, wählen Sie in den Einstellungen neben dem privaten Token „Neu erzeugen“.",
+    "The userscript asked, but Astra had no token to give it. Start the server, then choose Pair userscript again.":
+        "Das Userscript hat angefragt, aber Astra hatte kein Token dafür. Starten Sie den Server und wählen Sie dann erneut „Userscript koppeln“.",
     # SponsorBlock category checkboxes on the Settings page.
     "Sponsor": "Sponsor",
     "Intro": "Intro",

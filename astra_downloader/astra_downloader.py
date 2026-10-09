@@ -5393,6 +5393,7 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
 
     existing = parse_native_extension_ids(config.get(key, ""), browser=browser)
     already = extension_id in existing
+    consumed = None
     if (browser == "chrome" and not already
             and extension_id not in PUBLISHED_CHROME_EXTENSION_IDS):
         window = EXTENSION_PAIRING if window is None else window
@@ -5403,6 +5404,7 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
                 "code": "extension-pairing-closed",
                 "id": extension_id,
             }
+        consumed = window
     if not already:
         joined = ", ".join(existing + [extension_id])
         update = getattr(config, "update", None)
@@ -5410,11 +5412,13 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
             saved = bool(update({key: joined}))
         else:
             setter = getattr(config, "set", None)
-            if not callable(setter):
-                return {"ok": False, "paired": False, "code": "save-failed"}
-            setter(key, joined)
-            saved = True
+            if callable(setter):
+                setter(key, joined)
+            saved = callable(setter)
         if not saved:
+            # The page would otherwise report a pairing that didn't stick.
+            if consumed is not None:
+                consumed.fail()
             return {"ok": False, "paired": False, "code": "save-failed"}
 
     refresh_fn = refresh_native_messaging_registration if refresh is None else refresh
@@ -5459,12 +5463,14 @@ class UserscriptPairingWindow:
         self._lock = threading.Lock()
         self._until = 0.0
         self._granted = False
+        self._failed = False
         self._client = ""
 
     def open(self, seconds=USERSCRIPT_PAIRING_WINDOW_SECONDS):
         with self._lock:
             self._until = self._clock() + max(1, int(seconds))
             self._granted = False
+            self._failed = False
             self._client = ""
         return self.remaining()
 
@@ -5472,18 +5478,28 @@ class UserscriptPairingWindow:
         with self._lock:
             self._until = 0.0
             self._granted = False
+            self._failed = False
             self._client = ""
 
     def client(self):
-        """Who the grant went to (an extension ID), so the page can name it."""
+        """Who the grant went to (an extension ID or Origin), so the page can name it."""
         with self._lock:
-            return self._client if self._granted else ""
+            return self._client if self._granted or self._failed else ""
+
+    def fail(self):
+        """The grant was taken but didn't stick (the ID couldn't be saved)."""
+        with self._lock:
+            if self._granted:
+                self._granted = False
+                self._failed = True
 
     def state(self):
-        """'idle', 'open', 'paired' or 'expired', for the Browser extension page."""
+        """'idle', 'open', 'paired', 'failed' or 'expired', for the Browser extension page."""
         with self._lock:
             if self._granted:
                 return 'paired'
+            if self._failed:
+                return 'failed'
             if not self._until:
                 return 'idle'
             return 'open' if self._clock() < self._until else 'expired'
@@ -5519,12 +5535,20 @@ def pair_userscript(config, origin="", window=None):
     origin = str(origin or "").strip()
     if origin and not is_extension_origin_shape(origin):
         return {"ok": False, "paired": False, "code": "invalid-origin"}
-    if not window.consume():
+    # Any extension can claim the window, so the page names the Origin that
+    # took it: a manager's own ID is expected, anything else isn't.
+    through = normalize_extension_origin(origin) if origin else ""
+    if not window.consume(through):
         return {"ok": False, "paired": False, "code": "userscript-pairing-closed"}
     token = str(config.get("ServerToken") or "")
     if not token:
+        window.fail()
         return {"ok": False, "paired": False, "code": "token-unavailable"}
-    write_persistent_log("Paired the Astra Deck userscript. Regenerate the token in Settings to unpair it.")
+    write_persistent_log(
+        "Paired the Astra Deck userscript"
+        + (f" through {through}" if through else "")
+        + ". Regenerate the token in Settings to unpair it."
+    )
     return {
         "ok": True,
         "paired": True,

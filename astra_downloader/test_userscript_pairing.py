@@ -106,8 +106,26 @@ class PairUserscriptTests(unittest.TestCase):
         self.assertEqual(result["code"], "userscript-pairing-closed")
         self.assertNotIn("token", result)
 
-        result = ad.pair_userscript(FakeConfig({"ServerToken": ""}), "", window=self._open_window())
+        window = self._open_window()
+        result = ad.pair_userscript(FakeConfig({"ServerToken": ""}), "", window=window)
         self.assertEqual(result["code"], "token-unavailable")
+        # Spent, but nothing was handed over, so the page mustn't say paired.
+        self.assertEqual(window.state(), "failed")
+
+    def test_the_window_remembers_which_extension_took_it(self):
+        # Any installed extension can claim the window, so the page names it.
+        window = self._open_window()
+        ad.pair_userscript(
+            FakeConfig({"ServerToken": TOKEN}),
+            "chrome-extension://dhdgffkkebhmkfjojejmpbldmpobfkfo/",
+            window=window,
+        )
+        self.assertEqual(
+            window.client(), "chrome-extension://dhdgffkkebhmkfjojejmpbldmpobfkfo"
+        )
+        window = self._open_window()
+        ad.pair_userscript(FakeConfig({"ServerToken": TOKEN}), "", window=window)
+        self.assertEqual(window.client(), "")
 
 
 class UserscriptPairingRouteTests(unittest.TestCase):
@@ -274,6 +292,27 @@ class UserscriptPairingPageTests(unittest.TestCase):
         clock.now += 121
         status = self._refresh(self._window(pairing))
         self.assertIn("Pair userscript", status.value)
+        self.assertEqual(status.properties["tone"], "danger")
+
+    def test_names_the_extension_the_userscript_paired_through(self):
+        pairing = ad.UserscriptPairingWindow(clock=_Clock())
+        pairing.open(120)
+        origin = "chrome-extension://dhdgffkkebhmkfjojejmpbldmpobfkfo"
+        pairing.consume(origin)
+        window = self._window(pairing)
+        status = self._refresh(window)
+        self.assertIn(origin, status.value)
+        self.assertIn("Regenerate", status.value)
+        self.assertEqual(status.properties["tone"], "success")
+        self.assertIn(f"Paired the Astra Deck userscript through {origin}.", window.logs)
+
+    def test_a_pairing_with_no_token_to_give_is_an_error(self):
+        pairing = ad.UserscriptPairingWindow(clock=_Clock())
+        pairing.open(120)
+        pairing.consume()
+        pairing.fail()
+        status = self._refresh(self._window(pairing))
+        self.assertIn("no token", status.value)
         self.assertEqual(status.properties["tone"], "danger")
 
 

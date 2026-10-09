@@ -1647,20 +1647,12 @@
       <translation>Video link staged. Open Downloads to review it before adding it to the queue.</translation>
     </message>
     <message>
-      <source>The userscript is paired. Its download buttons work now.</source>
-      <translation>The userscript is paired. Its download buttons work now.</translation>
-    </message>
-    <message>
       <source>Waiting for an extension, {time} left. Press a download button in Astra Deck now.</source>
       <translation>Waiting for an extension, {time} left. Press a download button in Astra Deck now.</translation>
     </message>
     <message>
       <source>Paired extension {id}. If that isn't the ID chrome://extensions shows for Astra Deck, remove it here and choose Register.</source>
       <translation>Paired extension {id}. If that isn't the ID chrome://extensions shows for Astra Deck, remove it here and choose Register.</translation>
-    </message>
-    <message>
-      <source>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</source>
-      <translation>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</translation>
     </message>
     <message>
       <source>Saved. This portable copy registers no browser hosts. Pair from an installed copy.</source>
@@ -2075,8 +2067,24 @@
       <translation>At most about {size} for this choice</translation>
     </message>
     <message>
-      <source>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</source>
-      <translation>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</translation>
+      <source>The userscript is paired through {origin}. That should be your userscript manager. If it isn't, choose Regenerate next to the private token in Settings.</source>
+      <translation>The userscript is paired through {origin}. That should be your userscript manager. If it isn't, choose Regenerate next to the private token in Settings.</translation>
+    </message>
+    <message>
+      <source>The userscript is paired. Its download buttons work now.</source>
+      <translation>The userscript is paired. Its download buttons work now.</translation>
+    </message>
+    <message>
+      <source>The userscript asked, but Astra had no token to give it. Start the server, then choose Pair userscript again.</source>
+      <translation>The userscript asked, but Astra had no token to give it. Start the server, then choose Pair userscript again.</translation>
+    </message>
+    <message>
+      <source>Extension {id} asked to pair, but its ID couldn't be saved. Choose Allow extension pairing and try again.</source>
+      <translation>Extension {id} asked to pair, but its ID couldn't be saved. Choose Allow extension pairing and try again.</translation>
+    </message>
+    <message>
+      <source>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</source>
+      <translation>Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.</translation>
     </message>
     <message>
       <source>Chrome and Edge pairing cleared.</source>
@@ -2241,6 +2249,10 @@
     <message>
       <source>Preview: {path} ({length} characters).</source>
       <translation>Preview: {path} ({length} characters).</translation>
+    </message>
+    <message>
+      <source>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</source>
+      <translation>Two minutes passed without a request from the userscript. Choose Pair userscript and try again.</translation>
     </message>
     <message>
       <source>Closing now will cancel {count} active downloads.</source>
@@ -3139,8 +3151,8 @@
       <translation>Chrome and Edge pairing</translation>
     </message>
     <message>
-      <source>Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.</source>
-      <translation>Firefox is registered automatically. The Astra Deck release pairs itself the first time you use a download button. A copy loaded unpacked needs Allow extension pairing first, or paste its ID from chrome://extensions here.</translation>
+      <source>Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.</source>
+      <translation>Firefox is registered automatically. For Chrome or Edge, choose Allow extension pairing, then press a download button in Astra Deck within two minutes, or paste its ID from chrome://extensions here. Only the signed .crx build pairs on its own.</translation>
     </message>
     <message>
       <source>32-letter extension ID. Separate multiple IDs with commas.</source>

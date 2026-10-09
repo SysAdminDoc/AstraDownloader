@@ -104,10 +104,10 @@ class ExtensionPageMixin:
         pairing_header.setSpacing(12)
         pairing_header.addWidget(make_label("Chrome and Edge pairing", "panelTitle"))
         pairing_header.addWidget(make_label(
-            "Firefox is registered automatically. The Astra Deck release "
-            "pairs itself the first time you use a download button. A copy "
-            "loaded unpacked needs Allow extension pairing first, or paste "
-            "its ID from chrome://extensions here.",
+            "Firefox is registered automatically. For Chrome or Edge, choose "
+            "Allow extension pairing, then press a download button in Astra "
+            "Deck within two minutes, or paste its ID from chrome://extensions "
+            "here. Only the signed .crx build pairs on its own.",
             "fieldHint",
             word_wrap=True,
         ), 1)

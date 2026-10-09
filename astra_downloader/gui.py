@@ -8321,9 +8321,27 @@ class MainWindowCore(
             if timer is not None:
                 timer.stop()
             if state == 'paired':
-                message = tr("The userscript is paired. Its download buttons work now.")
+                through = pairing.client()
+                if through:
+                    # Any extension can claim the window, so name the one that
+                    # did. Firefox managers send no Origin and there's nothing to name.
+                    message = tr_format(
+                        "The userscript is paired through {origin}. That should "
+                        "be your userscript manager. If it isn't, choose "
+                        "Regenerate next to the private token in Settings.",
+                        origin=through,
+                    )
+                    self._append_log(f"Paired the Astra Deck userscript through {through}.")
+                else:
+                    message = tr("The userscript is paired. Its download buttons work now.")
+                    self._append_log("Paired the Astra Deck userscript.")
                 tone = "success"
-                self._append_log("Paired the Astra Deck userscript.")
+            elif state == 'failed':
+                message = tr(
+                    "The userscript asked, but Astra had no token to give it. "
+                    "Start the server, then choose Pair userscript again."
+                )
+                tone = "error"
             elif state == 'expired':
                 message = tr(
                     "Two minutes passed without a request from the userscript. "
@@ -8340,6 +8358,10 @@ class MainWindowCore(
 
     def _open_extension_pairing(self):
         """Let one Chrome or Edge extension ID pair over loopback, for two minutes."""
+        # The request comes in over the local server; with it stopped the
+        # window would only run out.
+        if not self.server_running and not self._setup_running:
+            self._start_server()
         self._dependencies["extension_pairing"]().open()
         self._append_log("Extension pairing is open for two minutes.")
         timer = getattr(self, "_extension_pairing_timer", None)
@@ -8378,6 +8400,12 @@ class MainWindowCore(
                 id=extension_id,
             ), "success")
             self._append_log(f"Paired browser extension {extension_id}.")
+        elif state == 'failed':
+            self._show_native_pairing_status(tr_format(
+                "Extension {id} asked to pair, but its ID couldn't be saved. "
+                "Choose Allow extension pairing and try again.",
+                id=pairing.client(),
+            ), "error")
         elif state == 'expired':
             self._show_native_pairing_status(
                 "Two minutes passed without a request from an extension. "

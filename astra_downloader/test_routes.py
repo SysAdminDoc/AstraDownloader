@@ -5329,6 +5329,25 @@ class NativeChromePairingUiTests(unittest.TestCase):
         self.assertIn("Allow extension pairing", window.native_pairing_status.text())
         self.assertEqual(window.native_pairing_status.properties["tone"], "danger")
 
+    def test_a_failed_extension_save_shows_as_an_error(self):
+        chrome_id = "abcdefghijklmnopabcdefghijklmnop"
+        pairing = ad.UserscriptPairingWindow()
+        pairing.open()
+        self.assertTrue(pairing.consume(chrome_id))
+        pairing.fail()
+        window = self._window(self._Config({"NativeChromeExtensionIds": ""}))
+        window._dependencies["extension_pairing"] = lambda: pairing
+        window._extension_pairing_timer = mock.Mock()
+        window._refresh_extension_pairing = types.MethodType(
+            gui_module_for_tests().MainWindowCore._refresh_extension_pairing, window
+        )
+        with mock.patch.object(gui_module_for_tests(), "repolish"):
+            window._refresh_extension_pairing()
+        self.assertIn(chrome_id, window.native_pairing_status.text())
+        self.assertIn("couldn't be saved", window.native_pairing_status.text())
+        self.assertEqual(window.native_pairing_status.properties["tone"], "danger")
+        window._extension_pairing_timer.stop.assert_called_once_with()
+
 
 class NativeMessagingBootstrapTests(unittest.TestCase):
     """Token bootstrap over the browser-pinned native-messaging stdio channel."""
@@ -5766,6 +5785,26 @@ class ExtensionPairingTests(unittest.TestCase):
         self.assertEqual(window.state(), "paired")
         self.assertEqual(window.client(), chrome_id)
         refresh.assert_called_once_with()
+
+    def test_a_pairing_that_could_not_be_saved_is_not_reported_as_paired(self):
+        # The window was spent before the save, and the page read `paired`
+        # as success while the route answered save-failed.
+        chrome_id = "abcdefghijklmnopabcdefghijklmnop"
+        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        config.update = mock.Mock(return_value=False)
+        window = ad.UserscriptPairingWindow()
+        window.open()
+        result = ad.pair_browser_extension(
+            config, f"chrome-extension://{chrome_id}", chrome_id,
+            refresh=mock.Mock(return_value=True), window=window,
+        )
+        self.assertEqual(result["code"], "save-failed")
+        self.assertEqual(window.state(), "failed")
+        self.assertEqual(window.client(), chrome_id)
+        # Opening it again starts clean.
+        window.open()
+        self.assertEqual(window.state(), "open")
+        self.assertEqual(window.client(), "")
 
     def test_an_unknown_extension_id_needs_the_user_to_open_pairing(self):
         # Any installed extension can send this request, and a paired ID can
