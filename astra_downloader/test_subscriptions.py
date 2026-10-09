@@ -2595,28 +2595,28 @@ class SubscriptionFilterTests(unittest.TestCase):
             return conn[0]
 
         with mock.patch.object(worker, "_connection", side_effect=connection):
-            for _ in range(2):
+            for title in ("a", "b"):
                 with self.assertRaises(timeout):
-                    worker.search("slow", "title", 1.0)
+                    worker.search("slow", title, 1.0)
             # An answer in between starts the count again.
             conn[0] = AnsweringConn()
-            self.assertTrue(worker.search("slow", "title", 1.0))
+            self.assertTrue(worker.search("slow", "c", 1.0))
             conn[0] = SilentConn()
-            for _ in range(3):
+            for title in ("d", "e", "f"):
                 with self.assertRaises(timeout):
-                    worker.search("slow", "title", 1.0)
+                    worker.search("slow", title, 1.0)
             self.assertEqual(len(starts), 6)
             # Three in a row: later titles fail fast and never reach the worker.
-            for _ in range(5):
+            for title in ("g", "h", "i", "j", "k"):
                 with self.assertRaises(timeout):
-                    worker.search("slow", "title", 1.0)
+                    worker.search("slow", title, 1.0)
             self.assertEqual(len(starts), 6)
             # Even while another title holds the worker.
             outcome = []
 
             def blocked_search():
                 try:
-                    worker.search("slow", "title", 1.0)
+                    worker.search("slow", "g", 1.0)
                 except timeout:
                     outcome.append("filter-timeout")
 
@@ -2630,12 +2630,65 @@ class SubscriptionFilterTests(unittest.TestCase):
             self.assertEqual(len(starts), 6)
             # Another pattern still runs.
             conn[0] = AnsweringConn()
-            self.assertTrue(worker.search("other", "title", 1.0))
+            self.assertTrue(worker.search("other", "a", 1.0))
             self.assertEqual(len(starts), 7)
             # Once the cooldown ends, the pattern is tried for real again.
             now[0] += config_module._TITLE_FILTER_COOLDOWN_SECONDS
-            self.assertTrue(worker.search("slow", "title", 1.0))
+            self.assertTrue(worker.search("slow", "g", 1.0))
             self.assertEqual(len(starts), 8)
+
+    def test_titles_after_three_slow_ones_are_still_decided_next_scan(self):
+        # A channel lists its videos in the same order every scan. Three slow
+        # titles near the top tripped the cooldown every time, so nothing
+        # after them was ever decided.
+        module = subscriptions_module()
+        config_module = sys.modules[module.compile_title_filter.__module__]
+        timeout = config_module.TitleFilterTimeout
+        slow = {"one", "two", "three"}
+        listing = ("one", "two", "three", "four", "five")
+        sent = []
+
+        class Conn:
+            title = None
+
+            def send(self, item):
+                self.title = item[1]
+                sent.append(self.title)
+
+            def poll(self, _budget):
+                return self.title not in slow
+
+            def recv(self):
+                return ("ok", True)
+
+        now = [1000.0]
+        worker = config_module._TitleFilterWorker(clock=lambda: now[0])
+
+        def scan():
+            decided = []
+            for title in listing:
+                try:
+                    worker.search("pattern", title, 1.0)
+                except timeout:
+                    continue
+                decided.append(title)
+            return decided
+
+        with mock.patch.object(worker, "_connection", side_effect=Conn):
+            self.assertEqual(scan(), [])
+            self.assertEqual(sent, ["one", "two", "three"])
+            # Next scan: the known slow titles fail fast without counting
+            # again, so the rest are decided.
+            now[0] += config_module._TITLE_FILTER_COOLDOWN_SECONDS
+            sent.clear()
+            self.assertEqual(scan(), ["four", "five"])
+            self.assertEqual(sent, ["four", "five"])
+            # A day on, each slow title gets one real try, and those repeat
+            # timeouts still don't hold up the rest.
+            now[0] += config_module._TITLE_FILTER_SLOW_RETRY_SECONDS
+            sent.clear()
+            self.assertEqual(scan(), ["four", "five"])
+            self.assertEqual(sent, list(listing))
 
     def test_a_worker_that_cannot_start_is_not_retried_on_every_title(self):
         # A start that hangs costs up to a minute; paying it per title made a
