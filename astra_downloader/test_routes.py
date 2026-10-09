@@ -67,7 +67,10 @@ class MediaServerSidecarTests(unittest.TestCase):
 
     def test_channel_download_writes_item_show_and_season_nfo(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir) / "Channel & Co"
+            # The channel folder sits inside the download folder, as yt-dlp's
+            # playlist template puts it.
+            downloads = Path(tmpdir)
+            root = downloads / "Channel & Co"
             season = root / "Season 01"
             season.mkdir(parents=True)
             records = []
@@ -89,7 +92,7 @@ class MediaServerSidecarTests(unittest.TestCase):
                 records.append((media, info))
 
             written = ad.write_media_server_sidecars(
-                root, media_paths=[media for media, _info in records]
+                downloads, media_paths=[media for media, _info in records]
             )
 
             self.assertEqual(

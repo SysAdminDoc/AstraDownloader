@@ -5353,6 +5353,32 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
                 {path.name for path in written}, {"Ep 2.nfo", "season.nfo"}
             )
 
+    def test_nfo_step_writes_no_show_nfo_into_the_download_folder(self):
+        # A renamed playlist row or a template with no folder puts episodes
+        # straight into the download folder (or a Season folder right under
+        # it). A tvshow.nfo there turns the whole folder into one show.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            delivered = [root / "Ep 1.mp4", root / "Season 02" / "Ep 2.mp4"]
+            for index, media in enumerate(delivered, start=1):
+                self._write_yt_dlp_item(media, {
+                    "id": f"ep-{index}",
+                    "title": f"Ep {index}",
+                    "playlist_title": "My Show",
+                    "playlist_id": "PL123",
+                    "playlist_index": index,
+                })
+
+            written = ad.write_media_server_sidecars(
+                root, media_paths=[str(media) for media in delivered]
+            )
+
+            self.assertEqual(
+                sorted(path.name for path in written), ["Ep 1.nfo", "Ep 2.nfo"]
+            )
+            self.assertFalse((root / "tvshow.nfo").exists())
+            self.assertFalse((root / "season.nfo").exists())
+
     def test_non_youtube_playlist_url_still_downloads_the_collection(self):
         argv = self._argv_for("https://soundcloud.com/artist/sets/my-set",
                               with_cookies=False)

@@ -685,7 +685,10 @@ def write_media_server_sidecars(output_root, media_paths=()):
         if not _nfo_show_context(metadata):
             continue
         show_directory = _nfo_show_directory(media.parent)
-        if not _nfo_resolved_inside(show_directory, root):
+        # Media written straight into the download folder has no show folder
+        # of its own. A tvshow.nfo there makes the media server treat the
+        # whole download folder as one show.
+        if show_directory == root or not _nfo_resolved_inside(show_directory, root):
             continue
         grouped.setdefault(show_directory, []).append((media, metadata))
     for show_directory, group in sorted(grouped.items(), key=lambda item: str(item[0]).casefold()):
