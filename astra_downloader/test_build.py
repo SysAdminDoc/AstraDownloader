@@ -1,3 +1,4 @@
+import contextlib
 import importlib.util
 import os
 import tempfile
@@ -456,18 +457,31 @@ if __name__ == '__main__':
 class UninstallCleanupTests(unittest.TestCase):
     def test_uninstall_removes_app_owned_artifacts_but_keeps_downloads(self):
         deleted = []
+        host_values = {}
 
         def delete_key(_root, path):
             deleted.append(path)
 
+        def query_value(key_path, _name):
+            if key_path not in host_values:
+                raise FileNotFoundError(key_path)
+            return host_values[key_path], 1
+
         fake_winreg = types.SimpleNamespace(
             HKEY_CURRENT_USER="HKCU",
             DeleteKey=delete_key,
+            OpenKey=lambda _root, key_path: contextlib.nullcontext(key_path),
+            QueryValueEx=query_value,
         )
+        chrome_key = f"{ad.CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS[0]}\\{ad.NATIVE_HOST_NAME}"
+        other_key = f"{ad.CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS[1]}\\{ad.NATIVE_HOST_NAME}"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             install = root / "AstraDownloader"
             native = root / "native-host"
+            host_values[chrome_key] = str(native / f"{ad.NATIVE_HOST_NAME}.chrome.json")
+            # Another program that registered under the same host name.
+            host_values[other_key] = "C:\\Program Files\\Other\\host.json"
             desktop = root / "Desktop"
             start_menu = root / "Start Menu"
             downloads = root / "Videos"
@@ -501,6 +515,11 @@ class UninstallCleanupTests(unittest.TestCase):
             self.assertFalse((start_menu / ad.SHORTCUT_NAME).exists())
             self.assertTrue(downloaded.exists(), "uninstall must not remove downloads")
             self.assertIn(ad.INTEGRATIONS_STAMP_KEY, deleted)
+            self.assertIn(chrome_key, deleted)
+            self.assertFalse(
+                [path for path in deleted if path.startswith(other_key)],
+                "uninstall removed another program's native host key",
+            )
 
     def test_portable_state_sweep_covers_rotations_quarantine_and_orphans(self):
         with tempfile.TemporaryDirectory() as tmp:

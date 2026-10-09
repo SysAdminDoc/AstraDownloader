@@ -5173,32 +5173,31 @@ def _is_astra_native_host_manifest(value, manifest_path):
     )
 
 
-def unregister_native_host_registry_value(key_path, manifest_path=None):
+def unregister_native_host_registry_value(key_path, manifest_path):
     """Remove a native-host registry pointer when its allowlist is cleared.
 
-    With `manifest_path`, the key goes only if its default value still points
-    at an Astra manifest; another program that took the host name keeps its
+    The key goes only if its default value still points at an Astra
+    manifest; another program that took the host name keeps its
     registration.
     """
     import winreg
-    if manifest_path is not None:
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                current, _kind = winreg.QueryValueEx(key, '')
-        except FileNotFoundError:
-            # reason: no key, or a key with no default value, isn't Astra's to remove
-            return
-        except OSError as error:
-            write_persistent_log(
-                f"Native messaging host registry check failed for {key_path}: {error}"
-            )
-            return
-        if not _is_astra_native_host_manifest(current, manifest_path):
-            write_persistent_log(
-                f"Left native messaging host key {key_path} in place: it points at "
-                f"{current!r}, not an Astra manifest."
-            )
-            return
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            current, _kind = winreg.QueryValueEx(key, '')
+    except FileNotFoundError:
+        # reason: no key, or a key with no default value, isn't Astra's to remove
+        return
+    except OSError as error:
+        write_persistent_log(
+            f"Native messaging host registry check failed for {key_path}: {error}"
+        )
+        return
+    if not _is_astra_native_host_manifest(current, manifest_path):
+        write_persistent_log(
+            f"Left native messaging host key {key_path} in place: it points at "
+            f"{current!r}, not an Astra manifest."
+        )
+        return
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
     except FileNotFoundError:
@@ -6823,12 +6822,6 @@ def run_uninstall():
             'Software\\Classes\\mediadl',
             'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AstraDownloader',
             INTEGRATIONS_STAMP_KEY,
-        ] + [
-            f'{root}\\{NATIVE_HOST_NAME}'
-            for root in (
-                *CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS,
-                FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT,
-            )
         ]:
             try:
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, path + '\\shell\\open\\command')
@@ -6853,6 +6846,24 @@ def run_uninstall():
     except Exception:
         # reason: uninstall continues even when registry cleanup is unavailable
         pass
+
+    # Host keys go through the same check as clearing the IDs: another
+    # program registered under this host name keeps its registration.
+    native_hosts = [
+        (f'{root}\\{NATIVE_HOST_NAME}', NATIVE_HOST_DIR / f'{NATIVE_HOST_NAME}.chrome.json')
+        for root in CHROMIUM_NATIVE_MESSAGING_REGISTRY_ROOTS
+    ] + [(
+        f'{FIREFOX_NATIVE_MESSAGING_REGISTRY_ROOT}\\{NATIVE_HOST_NAME}',
+        NATIVE_HOST_DIR / f'{NATIVE_HOST_NAME}.firefox.json',
+    )]
+    for registry_key, manifest in native_hosts:
+        try:
+            unregister_native_host_registry_value(registry_key, manifest)
+        except Exception as error:
+            # reason: uninstall continues even when registry cleanup is unavailable
+            write_persistent_log(
+                f"Native messaging host cleanup failed for {registry_key}: {error}"
+            )
 
     if NATIVE_HOST_DIR.exists():
         shutil.rmtree(NATIVE_HOST_DIR, ignore_errors=True)
