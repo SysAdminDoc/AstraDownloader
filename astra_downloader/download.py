@@ -2613,6 +2613,35 @@ def local_subtitle_sidecar_exists(media_path):
     return False
 
 
+# The `g_lang` table in whisper.cpp v1.9.2 (src/whisper.cpp). whisper-cli
+# prints "unknown language" and exits 0 for anything else, so an unlisted
+# code reached the user as "completed without producing an SRT sidecar".
+WHISPER_LANGUAGE_CODES = frozenset({
+    'en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca',
+    'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi', 'he', 'uk', 'el', 'ms',
+    'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la',
+    'mi', 'ml', 'cy', 'sk', 'te', 'fa', 'lv', 'bn', 'sr', 'az', 'sl', 'kn',
+    'et', 'mk', 'br', 'eu', 'is', 'hy', 'ne', 'mn', 'bs', 'kk', 'sq', 'sw',
+    'gl', 'mr', 'pa', 'si', 'km', 'sn', 'yo', 'so', 'af', 'oc', 'ka', 'be',
+    'tg', 'sd', 'gu', 'am', 'yi', 'lo', 'uz', 'fo', 'ht', 'ps', 'tk', 'nn',
+    'mt', 'sa', 'lb', 'my', 'bo', 'tl', 'mg', 'as', 'tt', 'haw', 'ln', 'ha',
+    'ba', 'jw', 'su', 'yue',
+})
+# Codes YouTube and ISO still use for a language whisper.cpp knows under
+# another name: the retired ISO 639-1 codes, Javanese's real code against
+# whisper.cpp's `jw`, Bokmal, and English's three-letter form.
+WHISPER_LANGUAGE_ALIASES = {
+    'iw': 'he', 'in': 'id', 'ji': 'yi', 'jv': 'jw', 'nb': 'no', 'eng': 'en',
+}
+
+
+def _whisper_language_code(value):
+    """Return the whisper.cpp code for one language, or None if it has none."""
+    code = str(value or '').strip().lower()
+    code = WHISPER_LANGUAGE_ALIASES.get(code, code)
+    return code if code in WHISPER_LANGUAGE_CODES else None
+
+
 def subtitle_language_for_transcription(config):
     """Choose the first configured language Whisper should transcribe."""
     read = getattr(config, 'get', None)
@@ -2623,9 +2652,10 @@ def subtitle_language_for_transcription(config):
             continue
         # Whisper's filter accepts ISO language codes, not yt-dlp's regional
         # subtitle variants. The base code is the useful, deterministic
-        # interpretation for values such as ``zh-Hans``.
-        base = code.split('-', 1)[0]
-        if re.fullmatch(r'[a-z]{2,3}', base):
+        # interpretation for values such as ``zh-Hans``. `all`, `und` and
+        # yt-dlp's `-live_chat` exclusion are not languages and fall through.
+        base = _whisper_language_code(code.split('-', 1)[0])
+        if base:
             return base
     return 'auto'
 
@@ -2677,9 +2707,7 @@ def build_whisper_transcription_args(whisper_path, model_path, audio_path,
                                      output_base, language='auto',
                                      threads=None, max_len=42):
     """Build a word-aligned whisper.cpp SRT invocation."""
-    language = str(language or 'auto').strip().lower()
-    if not re.fullmatch(r'[a-z]{2,3}', language) and language != 'auto':
-        language = 'auto'
+    language = _whisper_language_code(language) or 'auto'
     if threads is None:
         threads = whisper_thread_count()
     else:

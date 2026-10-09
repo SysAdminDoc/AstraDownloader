@@ -7756,6 +7756,31 @@ class LocalSubtitleGenerationTests(unittest.TestCase):
             "auto",
         )
 
+    def test_a_language_whisper_cpp_does_not_know_falls_back_to_auto(self):
+        # whisper-cli exits 0 with no SRT on an unknown -l value, so "all"
+        # (saved as "all,-live_chat") and "und" made every transcription fail.
+        for raw in ("all,-live_chat", "und", "xx", "-live_chat"):
+            with self.subTest(raw=raw):
+                self.assertEqual(
+                    ad.subtitle_language_for_transcription({"SubLangs": raw}),
+                    "auto",
+                )
+        self.assertEqual(
+            ad.subtitle_language_for_transcription({"SubLangs": "und,fr"}), "fr"
+        )
+        # Codes YouTube still uses map to whisper.cpp's own names.
+        for raw, expected in (("eng", "en"), ("iw", "he"), ("jv", "jw"), ("yue", "yue")):
+            with self.subTest(raw=raw):
+                self.assertEqual(
+                    ad.subtitle_language_for_transcription({"SubLangs": raw}),
+                    expected,
+                )
+        args = ad.build_whisper_transcription_args(
+            "whisper-cli.exe", "model.bin", "audio.wav", "captions",
+            language="all", threads=1,
+        )
+        self.assertEqual(args[args.index("-l") + 1], "auto")
+
     def test_transcription_wav_estimate_uses_clip_duration_and_safe_fallback(self):
         clipped = types.SimpleNamespace(section={"start": 2.5, "end": 5.0})
         self.assertEqual(
