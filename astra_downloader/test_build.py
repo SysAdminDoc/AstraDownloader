@@ -331,28 +331,43 @@ class ReleaseConstraintsTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'Release environment drift'):
             self._verify_fixture(app_version='1.1')
 
-    def test_prepare_translations_fails_on_stale_qm_without_compiler(self):
-        expected = (
+    def _write_catalogues(self, translations):
+        for locale in (
             'ar', 'de', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'pt_BR', 'ru',
             'zh_CN',
-        )
+        ):
+            (translations / f'astra_downloader_{locale}.ts').write_text('<TS/>', encoding='utf-8')
+            (translations / f'astra_downloader_{locale}.qm').write_bytes(b'compiled')
+
+    def test_prepare_translations_fails_without_a_compiler_even_with_fresh_qm(self):
+        # Fresh-looking .qm files used to pass with a warning, but a UI string
+        # missing from both .ts and .qm doesn't show up in their times.
         with tempfile.TemporaryDirectory() as tmp:
             translations = Path(tmp)
-            for locale in expected:
-                ts = translations / f'astra_downloader_{locale}.ts'
-                qm = translations / f'astra_downloader_{locale}.qm'
-                ts.write_text('<TS/>', encoding='utf-8')
-                qm.write_bytes(b'compiled')
-
-            stale_ts = translations / 'astra_downloader_en.ts'
-            stale_qm = translations / 'astra_downloader_en.qm'
-            os.utime(stale_qm, ns=(1_000_000_000, 1_000_000_000))
-            os.utime(stale_ts, ns=(2_000_000_000, 2_000_000_000))
-
+            self._write_catalogues(translations)
             with mock.patch.object(build, 'TRANSLATIONS_DIR', translations), \
-                 mock.patch.object(build.shutil, 'which', return_value=None):
-                with self.assertRaisesRegex(SystemExit, r'stale \.qm catalogues.*en'):
+                 mock.patch.object(build, 'find_translation_compiler', return_value=None), \
+                 mock.patch.object(build.subprocess, 'check_call') as run:
+                with self.assertRaisesRegex(SystemExit, 'translation compiler not found'):
                     build.prepare_translations()
+            run.assert_not_called()
+
+    def test_the_compiler_beside_an_unactivated_venv_python_is_found_and_passed_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scripts = Path(tmp) / 'Scripts'
+            scripts.mkdir()
+            compiler = scripts / 'pyside6-lrelease.exe'
+            compiler.write_bytes(b'MZ')
+            translations = Path(tmp) / 'translations'
+            translations.mkdir()
+            self._write_catalogues(translations)
+            with mock.patch.object(build.sysconfig, 'get_path', return_value=str(scripts)), \
+                 mock.patch.object(build.shutil, 'which', return_value=None):
+                self.assertEqual(build.find_translation_compiler(), str(compiler))
+                with mock.patch.object(build, 'TRANSLATIONS_DIR', translations), \
+                     mock.patch.object(build.subprocess, 'check_call') as run:
+                    build.prepare_translations()
+            self.assertEqual(run.call_args.kwargs['env']['ASTRA_LRELEASE'], str(compiler))
 
 
 if __name__ == '__main__':

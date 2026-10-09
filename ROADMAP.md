@@ -41,10 +41,6 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: the runtime check never returns a version, so the version probe is empty and Roll back always fails with "retained-copy-unverified"; the rollback copy lives inside the `whisper` folder the next install swaps out; a working runtime is never replaced, so raising `WHISPER_BIN_VERSION` never reaches existing installs.
   Acceptance: WHEN `WHISPER_BIN_VERSION` changes, an existing runtime SHALL be replaced on the next setup, and Roll back SHALL restore a verified previous copy kept outside the swapped folder.
   Where: `astra_downloader/astra_downloader.py` around 1576, 2229 and 2526.
-- [ ] P2 | AD-151 | A release build can ship stale translations
-  Why: the documented build runs `.release-venv\Scripts\python.exe` without activating the venv, so `pyside6-lrelease.exe` isn't on PATH. The build falls back to comparing .qm and .ts times, which can't see new UI strings, and ships stale catalogues with only a warning.
-  Acceptance: WHEN build.py runs, it SHALL find `pyside6-lrelease` next to the running interpreter, and a release build SHALL fail if it can't compile the catalogues.
-  Where: `astra_downloader/build.py` around 442 to 482.
 - [ ] P2 | AD-152 | The transcription disk check assumes an hour of audio
   Why: no download carries a duration, so every one is sized as one hour (about 115 MB). A 4 hour video writes about 460 MB to the install drive after passing a 147 MB check. The check also wants that space in the output folder, which only gets the small SRT. (Plausible; confirm first.)
   Acceptance: WHEN the duration is known (yt-dlp's info or an ffprobe), the WAV estimate SHALL use it, and the free-space check SHALL be against the temp folder's drive.

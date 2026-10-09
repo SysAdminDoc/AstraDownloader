@@ -12,7 +12,7 @@ py -3.13 -m venv .release-venv
 .\.release-venv\Scripts\python.exe astra_downloader/build.py
 ```
 
-The constraints file lists the exact reviewed graph. The builder checks installed versions and active dependency edges against it before producing anything. It builds both `AstraDownloader.exe` and `AstraDownloader-onedir.zip`, with separate SHA-256 sidecars. Existing build outputs are cleaned first.
+The constraints file lists the exact reviewed graph. The builder checks installed versions and active dependency edges against it before producing anything. It builds both `AstraDownloader.exe` and `AstraDownloader-onedir.zip`, with separate SHA-256 sidecars. Existing build outputs are cleaned first. The translation catalogues are compiled on every build with the `pyside6-lrelease.exe` that PySide6 installs beside the venv's Python, so the venv doesn't need activating. If the builder can't find it, the build stops rather than ship catalogues it didn't compile.
 
 The build subprocess uses only the active Python environment and Windows system directories for its executable search path. Native-library origins are checked after collection. This prevents an unrelated tool's DLL from entering a release merely because its folder appeared on the caller's PATH.
 

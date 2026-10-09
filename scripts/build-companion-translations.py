@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Generate Qt Linguist sources and compile companion translation catalogues."""
 
+import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -2620,6 +2622,16 @@ def write_ts(locale, translations):
 
 
 def find_lrelease():
+    # build.py passes the one it found. Run on its own, look beside this
+    # interpreter first: an unactivated venv's Scripts folder isn't on PATH.
+    named = os.environ.get("ASTRA_LRELEASE", "").strip()
+    if named and Path(named).is_file():
+        return named
+    for folder in dict.fromkeys((sysconfig.get_path("scripts"), str(Path(sys.executable).parent))):
+        for name in ("pyside6-lrelease", "lrelease", "lrelease-qt6"):
+            candidate = Path(folder) / f"{name}.exe"
+            if folder and candidate.is_file():
+                return str(candidate)
     for name in ("pyside6-lrelease", "lrelease", "lrelease-qt6"):
         found = shutil.which(name)
         if found:

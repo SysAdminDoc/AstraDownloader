@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import zipfile
 from pathlib import Path
 
@@ -437,18 +438,48 @@ def preflight():
     verify_release_environment()
 
 
+LRELEASE_NAMES = ("pyside6-lrelease", "lrelease", "lrelease-qt6")
+
+
+def find_translation_compiler():
+    """Find Qt's lrelease beside this interpreter first, then on PATH.
+
+    The documented build runs ``.release-venv\\Scripts\\python.exe`` without
+    activating the venv, so the venv's Scripts folder, where PySide6 puts
+    ``pyside6-lrelease.exe``, isn't on PATH.
+    """
+    folders = []
+    for folder in (sysconfig.get_path("scripts"), Path(sys.executable).parent):
+        if folder and Path(folder) not in folders:
+            folders.append(Path(folder))
+    for folder in folders:
+        for name in LRELEASE_NAMES:
+            candidate = folder / f"{name}.exe"
+            if candidate.is_file():
+                return str(candidate)
+    for name in LRELEASE_NAMES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
 def prepare_translations():
-    """Refresh Qt catalogues when tooling exists, then fail closed on gaps."""
-    compiler = next(
-        (
-            shutil.which(name)
-            for name in ("pyside6-lrelease", "lrelease", "lrelease-qt6")
-            if shutil.which(name)
-        ),
-        None,
-    )
-    if compiler:
-        subprocess.check_call([sys.executable, str(TRANSLATION_BUILD_SCRIPT)])
+    """Compile the Qt catalogues; a release never ships ones it didn't compile.
+
+    Comparing .qm and .ts times can't see a UI string missing from both, so
+    there's no fallback to the existing .qm files.
+    """
+    compiler = find_translation_compiler()
+    if not compiler:
+        raise SystemExit(
+            "Qt translation compiler not found next to "
+            f"{sys.executable} or on PATH (tried {', '.join(LRELEASE_NAMES)}). "
+            "Install the release requirements into this environment."
+        )
+    environment = dict(os.environ)
+    environment["ASTRA_LRELEASE"] = compiler
+    subprocess.check_call([sys.executable, str(TRANSLATION_BUILD_SCRIPT)], env=environment)
     expected = (
         "ar", "de", "en", "es", "fr", "it", "ja", "ko", "pt_BR", "ru",
         "zh_CN",
@@ -462,23 +493,6 @@ def prepare_translations():
     if missing:
         raise SystemExit(
             "Missing companion translation catalogues: " + ", ".join(missing)
-        )
-    if not compiler:
-        stale = [
-            locale
-            for locale in expected
-            if (TRANSLATIONS_DIR / f"astra_downloader_{locale}.qm").stat().st_mtime_ns
-            < (TRANSLATIONS_DIR / f"astra_downloader_{locale}.ts").stat().st_mtime_ns
-        ]
-        if stale:
-            raise SystemExit(
-                "Qt translation compiler unavailable (tried pyside6-lrelease, "
-                "lrelease, lrelease-qt6); stale .qm catalogues for: "
-                + ", ".join(stale)
-            )
-        print(
-            "WARNING: Qt translation compiler unavailable (tried "
-            "pyside6-lrelease, lrelease, lrelease-qt6); using existing .qm catalogues."
         )
 
 
