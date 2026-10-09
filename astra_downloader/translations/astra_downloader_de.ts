@@ -3611,6 +3611,50 @@
       <translation>Segmente markieren</translation>
     </message>
     <message>
+      <source>Sponsor</source>
+      <translation>Sponsor</translation>
+    </message>
+    <message>
+      <source>Intro</source>
+      <translation>Intro</translation>
+    </message>
+    <message>
+      <source>Outro</source>
+      <translation>Abspann</translation>
+    </message>
+    <message>
+      <source>Self-promotion</source>
+      <translation>Eigenwerbung</translation>
+    </message>
+    <message>
+      <source>Recap or preview</source>
+      <translation>Rückblick oder Vorschau</translation>
+    </message>
+    <message>
+      <source>Filler</source>
+      <translation>Füllmaterial</translation>
+    </message>
+    <message>
+      <source>Interaction reminder</source>
+      <translation>Interaktionserinnerung</translation>
+    </message>
+    <message>
+      <source>Non-music section</source>
+      <translation>Abschnitt ohne Musik</translation>
+    </message>
+    <message>
+      <source>Hook or greeting</source>
+      <translation>Aufhänger oder Begrüßung</translation>
+    </message>
+    <message>
+      <source>Highlight</source>
+      <translation>Highlight</translation>
+    </message>
+    <message>
+      <source>Chapter</source>
+      <translation>Kapitel</translation>
+    </message>
+    <message>
       <source>With nothing ticked, every category is acted on.</source>
       <translation>Ohne Auswahl werden alle Kategorien berücksichtigt.</translation>
     </message>

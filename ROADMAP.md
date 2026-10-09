@@ -51,8 +51,5 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: the progress bar sits at 0% through the audio step because ffmpeg's `progress=continue` lines never match the parser. Closing the app during setup stops the setup thread after 5 s and can leave half-downloaded model files and `.whisper.*.zip` or `.extract` leftovers in the install dir that nothing cleans up.
   Acceptance: WHEN ffmpeg reports progress, the bar SHALL move during the audio step, and WHEN the app starts, setup leftovers SHALL be removed.
   Where: `astra_downloader/download.py` `parse_whisper_progress` and the audio step, `astra_downloader/astra_downloader.py` provisioning.
-- [ ] P3 | AD-140 | SponsorBlock category labels are never translated
-  Why: the Settings page builds the category checkboxes from a dict and calls `tr()` on its values, so the string extractor never sees "Self-promotion", "Recap or preview" and the rest, and the German interface shows them in English. Same shape as the readiness row labels fixed in 9bd60f8.
-  Where: `astra_downloader/gui_settings_page.py` `category_labels`, `scripts/build-companion-translations.py`. Make the labels extractable (literal `tr()` calls or the 9bd60f8 approach), add German, re-run the build script.
 
 

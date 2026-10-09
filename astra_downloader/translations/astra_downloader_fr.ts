@@ -3611,6 +3611,50 @@
       <translation>Mark segments</translation>
     </message>
     <message>
+      <source>Sponsor</source>
+      <translation>Sponsor</translation>
+    </message>
+    <message>
+      <source>Intro</source>
+      <translation>Intro</translation>
+    </message>
+    <message>
+      <source>Outro</source>
+      <translation>Outro</translation>
+    </message>
+    <message>
+      <source>Self-promotion</source>
+      <translation>Self-promotion</translation>
+    </message>
+    <message>
+      <source>Recap or preview</source>
+      <translation>Recap or preview</translation>
+    </message>
+    <message>
+      <source>Filler</source>
+      <translation>Filler</translation>
+    </message>
+    <message>
+      <source>Interaction reminder</source>
+      <translation>Interaction reminder</translation>
+    </message>
+    <message>
+      <source>Non-music section</source>
+      <translation>Non-music section</translation>
+    </message>
+    <message>
+      <source>Hook or greeting</source>
+      <translation>Hook or greeting</translation>
+    </message>
+    <message>
+      <source>Highlight</source>
+      <translation>Highlight</translation>
+    </message>
+    <message>
+      <source>Chapter</source>
+      <translation>Chapter</translation>
+    </message>
+    <message>
       <source>With nothing ticked, every category is acted on.</source>
       <translation>With nothing ticked, every category is acted on.</translation>
     </message>

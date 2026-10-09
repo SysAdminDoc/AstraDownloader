@@ -653,12 +653,14 @@ class SettingsPageMixin:
                 self.config.get("SponsorBlockCategories", "")
             ).split(",")
         )
+        # Literal tr() calls, so the string extractor sees every label. It
+        # can't follow a dict read through .get(), and these stayed English.
         category_labels = {
-            "sponsor": "Sponsor", "intro": "Intro", "outro": "Outro",
-            "selfpromo": "Self-promotion", "preview": "Recap or preview",
-            "filler": "Filler", "interaction": "Interaction reminder",
-            "music_offtopic": "Non-music section", "hook": "Hook or greeting",
-            "poi_highlight": "Highlight", "chapter": "Chapter",
+            "sponsor": tr("Sponsor"), "intro": tr("Intro"), "outro": tr("Outro"),
+            "selfpromo": tr("Self-promotion"), "preview": tr("Recap or preview"),
+            "filler": tr("Filler"), "interaction": tr("Interaction reminder"),
+            "music_offtopic": tr("Non-music section"), "hook": tr("Hook or greeting"),
+            "poi_highlight": tr("Highlight"), "chapter": tr("Chapter"),
         }
         category_grid = QVBoxLayout()
         category_grid.setSpacing(0)
@@ -668,7 +670,7 @@ class SettingsPageMixin:
             line.setSpacing(10)
             line.addSpacing(28)
             for name in names[start:start + 3]:
-                box = QCheckBox(tr(category_labels.get(name, name)))
+                box = QCheckBox(category_labels.get(name, name))
                 box.setChecked(name in selected)
                 box.setEnabled(self.cfg_sponsorblock.isChecked())
                 self.cfg_sponsorblock.toggled.connect(box.setEnabled)

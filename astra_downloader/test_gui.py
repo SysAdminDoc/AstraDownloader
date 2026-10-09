@@ -2776,6 +2776,22 @@ class TranslationCoverageTests(unittest.TestCase):
         for tool in ("yt-dlp", "FFmpeg"):
             self.assertNotIn(tool, builder.SOURCE_STRINGS, "tool names stay as named")
 
+    def test_every_sponsorblock_category_label_reaches_german(self):
+        # The Settings page reads its category labels from a dict with
+        # .get(name, name), which the extractor can't follow, so the labels
+        # stayed English in German until they became literal tr() calls.
+        import gui_settings_page
+
+        builder = self._builder()
+        source = inspect.getsource(gui_settings_page)
+        labels = re.findall(r'"[a-z_]+": tr\("([^"]+)"\)', source)
+        self.assertEqual(len(labels), len(ad.SPONSORBLOCK_CATEGORIES))
+        for label in labels:
+            with self.subTest(label=label):
+                self.assertIn(label, builder.SOURCE_STRINGS)
+                self.assertIn(label, builder.CATALOGS["de"])
+        self.assertEqual(builder.CATALOGS["de"]["Chapter"], "Kapitel")
+
     def test_an_undeclared_string_is_not_counted_as_translated(self):
         # The measurement itself: the builder writes a missing entry out as
         # its own English source, so only a declared key is coverage.

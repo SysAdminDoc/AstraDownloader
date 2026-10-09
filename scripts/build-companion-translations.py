@@ -2574,6 +2574,18 @@ CATALOGS["de"].update({
         "Erweiterung {id} ist gekoppelt. Wenn chrome://extensions für Astra Deck eine andere ID zeigt, entfernen Sie diese hier und wählen Sie „Registrieren“.",
     "Two minutes passed without a request from an extension. Choose Allow extension pairing and try again.":
         "Zwei Minuten sind ohne Anfrage einer Erweiterung vergangen. Wählen Sie „Erweiterungskopplung erlauben“ und versuchen Sie es erneut.",
+    # SponsorBlock category checkboxes on the Settings page.
+    "Sponsor": "Sponsor",
+    "Intro": "Intro",
+    "Outro": "Abspann",
+    "Self-promotion": "Eigenwerbung",
+    "Recap or preview": "Rückblick oder Vorschau",
+    "Filler": "Füllmaterial",
+    "Interaction reminder": "Interaktionserinnerung",
+    "Non-music section": "Abschnitt ohne Musik",
+    "Hook or greeting": "Aufhänger oder Begrüßung",
+    "Highlight": "Highlight",
+    "Chapter": "Kapitel",
 })
 
 

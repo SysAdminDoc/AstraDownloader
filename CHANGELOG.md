@@ -30,6 +30,7 @@ repository's git log.
 - A release build run the documented way, with the venv's Python and no activation, couldn't find Qt's translation compiler. It fell back to the existing translation files with only a warning, so a release could ship with new on-screen text left untranslated. The build now finds the compiler beside that Python, and stops if there's none.
 - When a release build failed after the one-file step, it still left `AstraDownloader.exe` at the release path with no checksum file beside it. The exe now waits in the build folder and is moved into place last, together with its checksum.
 - The release builder checked that each reviewed package was installed at its pinned version, but not what else was there. A global Python with the pins plus one extra package, or a `PYTHONPATH` folder, could put code in the exe that the license inventory never listed. It now refuses to build outside `.release-venv`, with an unreviewed package installed, or with `PYTHONPATH` or `PYTHONHOME` set.
+- The SponsorBlock category names in Settings, like Self-promotion and Recap or preview, stayed in English in the German interface. They're translated now.
 
 ### Security
 
