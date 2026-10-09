@@ -1,4 +1,4 @@
-# Building and checking Astra Downloader v2.18.0
+# Building and checking Astra Downloader v2.18.1
 
 [Back to the project](../README.md)
 
@@ -28,6 +28,10 @@ These builds aren't Authenticode-signed. Do not describe a checksum as a publish
 
 ## Local checks
 
+The one-file setup path verifies a staged copy before replacing the installed executable. Shutdown first uses the installed app's control channel, then a bounded fallback for processes whose paths, ownership and process identities match that installation. It never terminates processes by executable name alone. After replacement, setup refreshes shortcuts and browser registrations and launches the installed version. `--install` remains silent and relaunches in the background only when replacing a running instance. Portable one-file and one-folder launches bypass managed setup.
+
+Setup preserves application state and downloaded media. Active jobs are interrupted, and unfinished queue entries return paused. Installer tests cover the file transaction, rollback and process selection with controlled fixtures. The progress-dialog tests run offscreen. These checks don't replace a packaged first-run and upgrade check.
+
 Use a Git checkout with tags for the full gate. Node 22+ and Python 3.13 must be available. The tools the gates need are declared as dependency groups in `pyproject.toml`, so a clean environment needs one install command (pip 25.1 or newer reads `--group`). Install the `check` group. It's the `test` group (the pytest plugins) plus pip-audit for the dependency audit:
 
 ```powershell
@@ -41,7 +45,7 @@ While a virtual environment is active, `npm run check` runs the Python gates and
 
 ```powershell
 npm test
-py -3.13 -m pytest -rs       # 1501 tests collected; the gate verifies this count
+py -3.13 -m pytest -rs       # 1581 tests collected; the gate verifies this count
 npm run check
 npm run smoke:gui
 ```
@@ -62,7 +66,7 @@ The packaged app supports a bounded capture run:
 
 Choose a directory that doesn't exist. The mode creates its own profile, forces Qt's offscreen backend before Qt loads, captures real widgets, writes `review.json` and exits. Seeded queue entries are labeled as examples in the report. No tools are downloaded, no media transfer starts, no API listens, and no browser or system integration is registered. It doesn't read the system clipboard.
 
-Run this on each distribution layout. Review the images, not just the process exit code. A source-window render doesn't establish that the executable contains every required module.
+Run this on each distribution layout. The review also exercises setup progress, success and error handling, with two setup captures. Review the images, not just the process exit code. A source-window render doesn't establish that the executable contains every required module.
 
 The larger `smoke:gui` suite covers 90 fixture states, including small layouts and translated pages. It writes under `build/companion-ui-smoke`. Preserve earlier captures before regenerating them if they are part of a review record.
 

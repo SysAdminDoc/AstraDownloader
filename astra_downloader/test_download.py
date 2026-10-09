@@ -20,6 +20,7 @@ import time
 import types
 import unittest
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from unittest import mock
 from pathlib import Path
@@ -75,12 +76,20 @@ class InstalledExecutableTests(unittest.TestCase):
         target.parent.mkdir(parents=True)
         return current, target
 
-    def _frozen_patches(self, current, target, *, installed_version):
-        return mock.patch.object(ad, "is_frozen_app", return_value=True), \
-            mock.patch.object(ad, "current_executable_path", return_value=current), \
-            mock.patch.object(ad, "install_target_exe", return_value=target), \
-            mock.patch.object(ad, "_probe_companion_version", return_value=installed_version), \
-            mock.patch.object(ad, "write_persistent_log")
+    @contextmanager
+    def _frozen_patches(self, current, target, *, installed_version="2.4.0"):
+        with mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                mock.patch.object(ad, "is_portable_mode", return_value=False), \
+                mock.patch.object(ad, "is_onedir_build", return_value=False), \
+                mock.patch.object(ad, "current_executable_path", return_value=current), \
+                mock.patch.object(ad, "install_target_exe", return_value=target), \
+                mock.patch.object(ad, "_probe_companion_version", return_value=installed_version), \
+                mock.patch.object(ad, "probe_companion_update_binary", return_value=True), \
+                mock.patch.object(ad, "stop_existing_installation", return_value=False) as stop, \
+                mock.patch.object(ad, "record_last_installed_update_sha256") as record, \
+                mock.patch.object(ad, "_launch_managed_executable") as launch, \
+                mock.patch.object(ad, "write_persistent_log"):
+            yield stop, record, launch
 
     def test_adjacent_release_sidecar_accepts_absence_and_matching_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -154,38 +163,144 @@ class InstalledExecutableTests(unittest.TestCase):
             target.write_bytes(b"managed-newer")
             # Unreachably newer, so this stays "newer than the running
             # build" across every future version bump.
-            patches = self._frozen_patches(current, target, installed_version="999.0.0")
-            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            with self._frozen_patches(current, target, installed_version="999.0.0") as boundaries:
                 result = ad.ensure_installed_executable()
 
             self.assertEqual(result, target)
             self.assertEqual(target.read_bytes(), b"managed-newer")
+            boundaries[0].assert_not_called()
+            boundaries[1].assert_not_called()
 
     def test_older_managed_exe_is_replaced_by_a_verified_copy(self):
         with tempfile.TemporaryDirectory() as tmp:
             current, target = self._paths(tmp)
             current.write_bytes(b"running-newer")
             target.write_bytes(b"managed-older")
-            patches = self._frozen_patches(current, target, installed_version="2.4.0")
-            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            with self._frozen_patches(current, target) as boundaries:
                 result = ad.ensure_installed_executable()
 
             self.assertEqual(result, target)
             self.assertEqual(target.read_bytes(), b"running-newer")
+            boundaries[0].assert_called_once()
+            self.assertEqual(boundaries[0].call_args.args, (target,))
+            self.assertEqual(
+                boundaries[0].call_args.kwargs["control_port"],
+                ad.INSTANCE_CONTROL_PORT,
+            )
+            boundaries[1].assert_called_once_with(hashlib.sha256(b"running-newer").hexdigest())
 
     def test_failed_verified_copy_keeps_the_previous_managed_exe(self):
         with tempfile.TemporaryDirectory() as tmp:
             current, target = self._paths(tmp)
             current.write_bytes(b"running-newer")
             target.write_bytes(b"managed-still-good")
-            patches = self._frozen_patches(current, target, installed_version="2.4.0")
-            with patches[0], patches[1], patches[2], patches[3], patches[4], \
+            with self._frozen_patches(current, target) as boundaries, \
                     mock.patch.object(ad, "atomic_copy_verified",
                                        side_effect=OSError("disk full")):
-                result = ad.ensure_installed_executable()
+                with self.assertRaisesRegex(ad.InstallationError, "disk full"):
+                    ad.ensure_installed_executable()
 
-            self.assertEqual(result, current)
             self.assertEqual(target.read_bytes(), b"managed-still-good")
+            for boundary in boundaries:
+                boundary.assert_not_called()
+
+    def test_install_returns_the_result_after_registering_the_verified_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"new-release")
+            target.write_bytes(b"old-release")
+            registered = []
+
+            def register(executable, args, *, force):
+                self.assertEqual(target.read_bytes(), b"new-release")
+                registered.append((executable, args, force))
+
+            with self._frozen_patches(current, target) as boundaries, \
+                    mock.patch.object(ad, "_register_system_integrations", side_effect=register):
+                boundaries[0].return_value = True
+                result = ad.install_managed_application()
+
+            self.assertEqual(result, ad.InstallResult(target, True, True, "2.4.0"))
+            self.assertEqual(registered, [(str(target), [], True)])
+            boundaries[2].assert_not_called()
+
+    def test_failed_install_does_not_register_the_downloaded_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"new-release")
+            with self._frozen_patches(current, target), \
+                    mock.patch.object(ad, "atomic_copy_verified", side_effect=OSError("disk full")), \
+                    mock.patch.object(ad, "_register_system_integrations") as register:
+                with self.assertRaisesRegex(ad.InstallationError, "disk full"):
+                    ad.install_managed_application()
+            register.assert_not_called()
+            self.assertFalse(target.exists())
+
+    def test_main_hands_a_downloaded_background_copy_to_the_install_before_instance_routing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"downloaded-release")
+            args = ["--background", "--pair-userscript"]
+            with self._frozen_patches(current, target) as boundaries, \
+                    mock.patch.object(ad.sys, "argv", [str(current), *args]), \
+                    mock.patch.object(ad, "REVIEW_ROOT", None), \
+                    mock.patch.object(ad, "install_managed_application", return_value=ad.InstallResult(target, True)) as install, \
+                    mock.patch.object(ad, "check_single_instance") as instance, \
+                    mock.patch.object(ad, "QApplication") as application, \
+                    mock.patch.object(ad, "seed_log_ring") as seed:
+                with self.assertRaises(SystemExit) as raised:
+                    ad.main()
+
+            self.assertEqual(raised.exception.code, 0)
+            install.assert_called_once_with()
+            boundaries[2].assert_called_once_with(target, args)
+            instance.assert_not_called()
+            application.assert_not_called()
+            seed.assert_not_called()
+
+    def test_main_hands_a_visible_download_to_setup_before_instance_routing(self):
+        import setup_dialog
+
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"downloaded-release")
+            args = ["ytdl://https%3A%2F%2Fexample.test%2Fvideo"]
+            with self._frozen_patches(current, target) as boundaries, \
+                    mock.patch.object(ad.sys, "argv", [str(current), *args]), \
+                    mock.patch.object(ad, "REVIEW_ROOT", None), \
+                    mock.patch.object(setup_dialog, "run_setup_dialog", return_value=ad.InstallResult(target, True)) as setup, \
+                    mock.patch.object(ad, "check_single_instance") as instance, \
+                    mock.patch.object(ad, "QApplication") as application:
+                with self.assertRaises(SystemExit) as raised:
+                    ad.main()
+
+            self.assertEqual(raised.exception.code, 0)
+            self.assertIs(setup.call_args.args[0], ad.install_managed_application)
+            self.assertEqual(setup.call_args.kwargs["title"], "Installing Astra Downloader")
+            self.assertEqual(setup.call_args.kwargs["version"], ad.APP_VERSION)
+            boundaries[2].assert_called_once_with(target, args)
+            instance.assert_not_called()
+            application.assert_not_called()
+
+    def test_main_setup_failure_never_launches_or_delegates_the_download(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current, target = self._paths(tmp)
+            current.write_bytes(b"downloaded-release")
+            with self._frozen_patches(current, target) as boundaries, \
+                    mock.patch.object(ad.sys, "argv", [str(current), "--background"]), \
+                    mock.patch.object(ad, "REVIEW_ROOT", None), \
+                    mock.patch.object(ad, "install_managed_application", side_effect=ad.InstallationError("disk full")), \
+                    mock.patch.object(ad, "check_single_instance") as instance, \
+                    mock.patch.object(ad, "QApplication") as application, \
+                    mock.patch.object(ad, "write_cli_output") as output:
+                with self.assertRaises(SystemExit) as raised:
+                    ad.main()
+
+            self.assertEqual(raised.exception.code, 1)
+            self.assertIn("disk full", output.call_args.args[0])
+            boundaries[2].assert_not_called()
+            instance.assert_not_called()
+            application.assert_not_called()
 
 
 class QuarantinedStateFileTests(unittest.TestCase):
@@ -2792,11 +2907,7 @@ class SetupChecksumTests(unittest.TestCase):
                     mock.patch.object(ad, '_run_ytdlp_self_update', return_value={
                         'ok': True, 'version_after': '2026.07.05',
                     }) as update, \
-                    mock.patch.object(ad, '_set_integrations_stamp'), \
-                    mock.patch.object(ad, 'register_desktop_shortcut'), \
-                    mock.patch.object(ad, 'register_startup_task'), \
-                    mock.patch.object(ad, 'register_protocol_handlers'), \
-                    mock.patch.object(ad, 'register_uninstall_entry'):
+                    mock.patch.object(ad, 'ensure_system_integrations'):
                 worker = ad.SetupWorker(config=config)
                 worker.run()
 

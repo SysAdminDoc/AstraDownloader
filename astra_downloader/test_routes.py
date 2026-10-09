@@ -3926,7 +3926,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # decides who gets a 426, and it stays where it was.
         self.assertEqual(ad.SERVICE_API_MINIMUM_CLIENT, 1)
 
-    def test_app_version_bumped_to_2_18_0(self):
+    def test_app_version_bumped_to_2_18_1(self):
         # v2.16.0: the Astra Deck userscript pairs through a two-minute,
         # single-use window opened from the Browser extension page or with
         # --pair-userscript, since a userscript manager sends no Origin and
@@ -3984,7 +3984,7 @@ class HealthDenoRuntimeSurfaceTests(unittest.TestCase):
         # queue progress under an explicit app identity, settings and
         # subscriptions export to a portable bundle, and the UI strings are
         # extracted from the source rather than listed by hand.
-        self.assertEqual(ad.APP_VERSION, "2.18.0")
+        self.assertEqual(ad.APP_VERSION, "2.18.1")
 
     def test_v1_8_0_any_site_download_surface_is_still_present(self):
         # v1.8.0 any-site downloads: the YouTube-only URL allowlist became a

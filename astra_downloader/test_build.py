@@ -710,6 +710,25 @@ class UninstallCleanupTests(unittest.TestCase):
 
 
 class PortableModeTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def _isolated_integrations(self, root):
+        names = (
+            "register_desktop_shortcut", "register_start_menu_shortcut",
+            "register_startup_task", "register_protocol_handlers",
+            "register_uninstall_entry", "register_native_messaging_hosts",
+            "_set_integrations_stamp",
+        )
+        with contextlib.ExitStack() as patches:
+            patches.enter_context(mock.patch.object(ad, "INSTALL_DIR", root))
+            patches.enter_context(mock.patch.object(ad, "CONFIG_PATH", root / "config.json"))
+            patches.enter_context(mock.patch.object(ad, "write_persistent_log"))
+            config = patches.enter_context(mock.patch.object(ad, "Config", wraps=ad.Config))
+            registrars = {
+                name: patches.enter_context(mock.patch.object(ad, name))
+                for name in names
+            }
+            yield config, registrars
+
     def test_portable_mode_requested_by_flag_or_environment(self):
         self.assertTrue(ad.portable_mode_requested(["--portable"]))
         self.assertFalse(ad.portable_mode_requested(["--background"]))
@@ -942,11 +961,127 @@ class PortableModeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "AstraDownloader.exe"
             target.write_bytes(b"installed")
+            result = ad.InstallResult(target, changed=True)
+            events = []
+
+            def install(*, progress):
+                events.append("installed")
+                return result
+
+            def register(*_args, **_kwargs):
+                events.append("registered")
+
             with mock.patch.object(ad, "PORTABLE_MODE", False), \
                  mock.patch.object(ad, "is_frozen_app", return_value=True), \
-                 mock.patch.object(ad, "install_target_exe", return_value=target), \
-                 mock.patch.object(ad, "ensure_installed_executable", return_value=target), \
-                 mock.patch.object(ad, "ensure_system_integrations") as integrations, \
-                 mock.patch.object(ad.sys, "stdout", io.StringIO()):
+                 mock.patch.object(ad, "is_onedir_build", return_value=False), \
+                 mock.patch.object(ad, "_install_managed_executable", side_effect=install), \
+                 mock.patch.object(ad, "_register_system_integrations", side_effect=register) as integrations, \
+                 mock.patch.object(ad, "write_persistent_log"), \
+                 mock.patch.object(ad, "_launch_managed_executable") as launch, \
+                 mock.patch.object(ad, "write_cli_output"):
                 self.assertEqual(ad.companion_install_exit_code(["--install"]), 0)
-        integrations.assert_called_once_with(prefer_installed=True, force=True)
+        self.assertEqual(events, ["installed", "registered"])
+        integrations.assert_called_once_with(str(target), [], force=True)
+        launch.assert_not_called()
+
+    def test_main_silent_install_only_relaunches_when_an_old_process_was_stopped(self):
+        for stopped in (False, True):
+            with self.subTest(stopped=stopped), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                downloaded = root / "Downloads" / "AstraDownloader.exe"
+                downloaded.parent.mkdir()
+                downloaded.write_bytes(b"downloaded")
+                target = root / "Installed" / "AstraDownloader.exe"
+                result = ad.InstallResult(target, changed=True, stopped=stopped)
+                with mock.patch.object(ad, "PORTABLE_MODE", False), \
+                     mock.patch.object(ad, "is_frozen_app", return_value=True), \
+                     mock.patch.object(ad, "is_onedir_build", return_value=False), \
+                     mock.patch.object(ad, "current_executable_path", return_value=downloaded), \
+                     mock.patch.object(ad, "install_target_exe", return_value=target), \
+                     mock.patch.object(ad.sys, "argv", [str(downloaded), "--install"]), \
+                     mock.patch.object(ad, "REVIEW_ROOT", None), \
+                     mock.patch.object(ad, "install_managed_application", return_value=result) as install, \
+                     mock.patch.object(ad, "_launch_managed_executable") as launch, \
+                     mock.patch.object(ad, "managed_install_startup_exit_code") as visible_setup, \
+                     mock.patch.object(ad, "check_single_instance") as instance, \
+                     mock.patch.object(ad, "QApplication") as application, \
+                     mock.patch.object(ad, "write_cli_output") as output:
+                    with self.assertRaises(SystemExit) as raised:
+                        ad.main()
+
+                self.assertEqual(raised.exception.code, 0)
+                install.assert_called_once_with()
+                if stopped:
+                    launch.assert_called_once_with(target, ["--background"])
+                else:
+                    launch.assert_not_called()
+                visible_setup.assert_not_called()
+                instance.assert_not_called()
+                application.assert_not_called()
+                self.assertIn(str(target), output.call_args.args[0])
+
+    def test_silent_install_failure_returns_an_error_without_launching(self):
+        with mock.patch.object(ad, "PORTABLE_MODE", False), \
+             mock.patch.object(ad, "is_frozen_app", return_value=True), \
+             mock.patch.object(ad, "is_onedir_build", return_value=False), \
+             mock.patch.object(ad, "install_managed_application", side_effect=ad.InstallationError("disk full")), \
+             mock.patch.object(ad, "_launch_managed_executable") as launch, \
+             mock.patch.object(ad, "write_persistent_log"), \
+             mock.patch.object(ad, "write_cli_output") as output:
+            self.assertEqual(ad.companion_install_exit_code(["--install"]), 1)
+        self.assertIn("disk full", output.call_args.args[0])
+        launch.assert_not_called()
+
+    def test_registration_keeps_the_first_run_checkpoint_and_uses_one_config(self):
+        for existing_checkpoint in (None, True, False):
+            with self.subTest(existing_checkpoint=existing_checkpoint), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path = root / "config.json"
+                if existing_checkpoint is not None:
+                    path.write_text(json.dumps({"FirstRunComplete": existing_checkpoint}), encoding="utf-8")
+                target = str(root / "AstraDownloader.exe")
+                with self._isolated_integrations(root) as (config_factory, registrars):
+                    result = ad._register_system_integrations(target, [], force=True)
+
+                self.assertEqual(result, (target, []))
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["FirstRunComplete"],
+                                 existing_checkpoint if existing_checkpoint is not None else False)
+                config_factory.assert_called_once_with()
+                config = registrars["register_native_messaging_hosts"].call_args.args[2]
+                self.assertEqual(config.get("FirstRunComplete"), bool(existing_checkpoint))
+                for name, register in registrars.items():
+                    if name == "register_native_messaging_hosts":
+                        register.assert_called_once_with(target, [], config)
+                    elif name == "_set_integrations_stamp":
+                        register.assert_called_once_with()
+                    else:
+                        register.assert_called_once_with(target, [])
+
+    def test_registration_stops_if_the_first_run_checkpoint_cannot_be_saved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = mock.Mock()
+            config.update.return_value = False
+            with self._isolated_integrations(root) as (_, registrars), \
+                    mock.patch.object(ad, "Config", return_value=config):
+                with self.assertRaisesRegex(RuntimeError, "first-run settings"):
+                    ad._register_system_integrations(str(root / "AstraDownloader.exe"), [], force=True)
+            config.update.assert_called_once_with({"FirstRunComplete": False})
+            for register in registrars.values():
+                register.assert_not_called()
+
+    def test_integration_failure_restarts_only_an_installation_that_was_stopped(self):
+        for stopped in (False, True):
+            with self.subTest(stopped=stopped), tempfile.TemporaryDirectory() as tmp:
+                target = Path(tmp) / "AstraDownloader.exe"
+                result = ad.InstallResult(target, changed=True, stopped=stopped)
+                with mock.patch.object(ad, "_install_managed_executable", return_value=result), \
+                     mock.patch.object(ad, "_register_system_integrations", side_effect=OSError("shortcut denied")), \
+                     mock.patch.object(ad, "_launch_managed_executable") as launch, \
+                     mock.patch.object(ad, "write_persistent_log"):
+                    with self.assertRaisesRegex(OSError, "shortcut denied"):
+                        ad.install_managed_application()
+                if stopped:
+                    launch.assert_called_once_with(target, ["--background"])
+                else:
+                    launch.assert_not_called()

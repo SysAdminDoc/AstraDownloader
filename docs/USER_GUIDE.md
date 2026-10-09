@@ -1,4 +1,4 @@
-# Using Astra Downloader v2.18.0
+# Using Astra Downloader v2.18.1
 
 [Back to the download page](../README.md)
 
@@ -64,13 +64,23 @@ The Astra Deck userscript can't use native messaging, so it pairs once by hand. 
 
 ## Installation and portable storage
 
-Running the one-file executable normally installs it under `%LOCALAPPDATA%\AstraDownloader` and registers per-user integrations. `--install` performs installation without opening the window.
+Run the downloaded one-file executable to install or update Astra. A small progress window verifies the new copy before replacing the app under `%LOCALAPPDATA%\AstraDownloader`. Setup refreshes desktop and Start Menu shortcuts and browser registrations, then opens the installed version. No separate installer is needed.
+
+For an upgrade, setup asks the running installed copy to close. If a current or older copy doesn't respond within the shutdown timeout, setup closes only processes verified to belong to that installation. It doesn't close unrelated programs or portable copies just because they share the same executable name.
+
+![Update progress while the new app is verified](../assets/screenshots/setup-update.png)
+
+If replacement fails, setup restores the previous verified app. Shortcut or browser registration failures stay visible with instructions, and a later launch retries incomplete registrations.
+
+Your settings, queue, history, subscriptions, sign-ins and downloaded files stay in place. Running downloads are interrupted during the upgrade. Unfinished queue entries return paused so you can resume them when you're ready.
+
+Use `--install` for a silent installation without the progress window. It exits after installation. If it replaced a running instance, it relaunches Astra in the background. Otherwise the installed app stays closed.
 
 ```powershell
 .\AstraDownloader.exe --install
 ```
 
-The portable ZIP has a marker beside its executable. Extract the whole archive to a writable folder and run it there. New portable copies store settings, history, queue, subscriptions, sign-ins and managed helpers under `data`. Portable mode doesn't create desktop, Start Menu, protocol, logon-task or browser native-messaging registrations. Existing older copies with loose state beside the executable retain that layout.
+The portable ZIP has a marker beside its executable. Extract the whole archive to a writable folder and run it there. New portable copies store settings, history, queue, subscriptions, sign-ins and managed helpers under `data`. Portable mode stays separate from the per-user installation and doesn't upgrade it. It doesn't create desktop, Start Menu, protocol, logon-task or browser native-messaging registrations. Existing older copies with loose state beside the executable retain that layout.
 
 A one-file copy can also be run with `--portable`. Don't combine it with `--install`.
 
@@ -80,7 +90,7 @@ A one-file copy can also be run with `--portable`. Don't combine it with `--inst
 
 The portable one-folder build cannot update itself by replacing only its executable. Extract the next complete ZIP while retaining its data folder. Keep a backup before replacing an existing installation.
 
-The [Scoop manifest](../packaging/scoop/astra-downloader.json) uses the portable layout and persists the entire `data` folder. It is an alternative for people already using Scoop; the README's direct downloads don't require a package manager.
+The [Scoop manifest](../packaging/scoop/astra-downloader.json) uses the portable layout and persists the entire `data` folder. It is an alternative for people already using Scoop. The README's direct downloads don't require a package manager.
 
 ```powershell
 scoop install https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/main/packaging/scoop/astra-downloader.json

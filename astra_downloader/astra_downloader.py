@@ -76,6 +76,8 @@ except ImportError as exc:
     raise ImportError(source_dependency_error(exc)) from exc
 
 try:
+    from .installer import InstallationError, InstallResult, install_verified_copy
+    from .install_processes import stop_existing_installation
     from .routes import (
         RateLimiter, _ServerAdapter, _build_wsgi_server,
         create_api as _owned_create_api,
@@ -232,6 +234,8 @@ try:
         set_gui_theme, set_line_icon, repolish,
     )
 except ImportError:  # Direct script / flat source-path compatibility.
+    from installer import InstallationError, InstallResult, install_verified_copy
+    from install_processes import stop_existing_installation
     from routes import (
         RateLimiter, _ServerAdapter, _build_wsgi_server,
         create_api as _owned_create_api,
@@ -392,7 +396,7 @@ except ImportError:  # Direct script / flat source-path compatibility.
 # CONSTANTS
 # ══════════════════════════════════════════════════════════════
 APP_NAME = "Astra Downloader"
-APP_VERSION = "2.18.0"
+APP_VERSION = "2.18.1"
 PORTABLE_MARKER_NAME = ".astradownloader-portable"
 INSTANCE_CONTROL_PORT_DEFAULT = 9752
 INSTANCE_LOCK_PORT_DEFAULT = 9753
@@ -3785,6 +3789,9 @@ param(
     [string] $PreviousVersion
 )
 $ErrorActionPreference = 'Stop'
+# A parent shell can prepend incompatible modules to PSModulePath.
+Import-Module "$PSHOME\Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1" -Force
+Import-Module "$PSHOME\Modules\CimCmdlets\CimCmdlets.psd1" -Force
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -3873,39 +3880,240 @@ function Write-RecoveryState([string] $Status, [string] $ActiveVersion, [string]
     Move-Replace $temp $StatePath
 }
 
+function Get-OwnedProcess($Process, [long] $ExpectedStartTicks = -1, [string] $ExpectedPath = '') {
+    try {
+        if ($Process.HasExited -or $Process.Id -eq $PID -or $Process.SessionId -ne $helperSession) { return $null }
+        $path = [IO.Path]::GetFullPath($Process.Path)
+        if ($ExpectedPath -and -not [string]::Equals($path, $ExpectedPath, [StringComparison]::OrdinalIgnoreCase)) { return $null }
+        # Keep the process handle open so a reused PID cannot redirect Kill().
+        $null = $Process.Handle
+        $started = $Process.StartTime.ToUniversalTime().Ticks
+        if ($ExpectedStartTicks -ge 0 -and $started -ne $ExpectedStartTicks) { return $null }
+        $record = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($Process.Id)" -ErrorAction Stop
+        $owner = Invoke-CimMethod -InputObject $record -MethodName GetOwnerSid -ErrorAction Stop
+        if ($owner.ReturnValue -ne 0 -or $owner.Sid -ne $helperOwner) { return $null }
+        if ($Process.HasExited) { return $null }
+        return [pscustomobject]@{
+            Process = $Process; StartTicks = $started; Path = $path
+            ParentId = [int] $record.ParentProcessId; Depth = 0
+        }
+    } catch {
+        # Exited, inaccessible, or unidentifiable processes are never force-stopped.
+        return $null
+    }
+}
+
+function Get-OwnedTargetProcess($Process, [long] $ExpectedStartTicks = -1) {
+    return Get-OwnedProcess $Process $ExpectedStartTicks $targetFullPath
+}
+
+function Get-TargetProcesses {
+    foreach ($candidate in (Get-Process)) {
+        $owned = Get-OwnedTargetProcess $candidate
+        if ($null -ne $owned) { $owned } else { $candidate.Dispose() }
+    }
+}
+
+function Update-CompanionProcesses([hashtable] $Tracked) {
+    foreach ($root in (Get-TargetProcesses)) {
+        $key = "$($root.Process.Id):$($root.StartTicks)"
+        if ($Tracked.ContainsKey($key)) { $root.Process.Dispose() } else { $Tracked[$key] = $root }
+    }
+    $pending = New-Object Collections.Queue
+    foreach ($known in $Tracked.Values) { $pending.Enqueue($known) }
+    $visited = @{}
+    $runtimeNames = @('yt-dlp.exe', 'ffmpeg.exe', 'ffprobe.exe', 'deno.exe', 'node.exe',
+        'quickjs.exe', 'qjs.exe', 'whisper-cli.exe', 'python.exe', 'pythonw.exe')
+    while ($pending.Count -gt 0) {
+        $parent = $pending.Dequeue()
+        $parentKey = "$($parent.Process.Id):$($parent.StartTicks)"
+        if ($visited.ContainsKey($parentKey)) { continue }
+        $visited[$parentKey] = $true
+        $children = Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId = $($parent.Process.Id)" -ErrorAction Stop
+        foreach ($record in $children) {
+            $child = Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
+            if ($null -eq $child) { continue }
+            $owned = Get-OwnedProcess $child
+            $isCompanion = [string]::Equals($parent.Path, $targetFullPath, [StringComparison]::OrdinalIgnoreCase)
+            if ($null -eq $owned -or $owned.ParentId -ne $parent.Process.Id -or $owned.StartTicks -lt $parent.StartTicks -or
+                ($parent.Process.HasExited -and $owned.StartTicks -gt $parent.Process.ExitTime.ToUniversalTime().Ticks) -or
+                ($isCompanion -and $runtimeNames -notcontains [IO.Path]::GetFileName($owned.Path).ToLowerInvariant() -and
+                    -not [string]::Equals($owned.Path, $targetFullPath, [StringComparison]::OrdinalIgnoreCase))) {
+                $child.Dispose()
+                continue
+            }
+            # Retain identities after a parent exits. Its exit time bounds
+            # child creation and prevents a reused parent PID joining this tree.
+            $key = "$($child.Id):$($owned.StartTicks)"
+            if ($Tracked.ContainsKey($key)) {
+                $child.Dispose()
+                $owned = $Tracked[$key]
+            } else {
+                $Tracked[$key] = $owned
+            }
+            $owned.Depth = [Math]::Max($owned.Depth, $parent.Depth + 1)
+            $pending.Enqueue($owned)
+        }
+    }
+}
+
+function Wait-CompanionExit([double] $GraceSeconds = 45) {
+    $initiator = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    $deadline = [DateTime]::UtcNow.AddSeconds($GraceSeconds)
+    $tracked = @{}
+    try {
+        do {
+            Update-CompanionProcesses $tracked
+            $remaining = @($tracked.Values | Where-Object { -not $_.Process.HasExited })
+            $initiatorRunning = $null -ne $initiator -and -not $initiator.HasExited
+            if ($remaining.Count -eq 0 -and -not $initiatorRunning) { return }
+            if ([DateTime]::UtcNow -ge $deadline) { break }
+            Start-Sleep -Milliseconds 250
+        } while ($true)
+        $forceDeadline = [DateTime]::UtcNow.AddSeconds(15)
+        for ($attempt = 0; $attempt -lt 3; $attempt++) {
+            Update-CompanionProcesses $tracked
+            foreach ($snapshot in ($tracked.Values | Sort-Object Depth -Descending)) {
+                if ($snapshot.Process.HasExited) { continue }
+                if ([DateTime]::UtcNow -ge $forceDeadline) { throw 'Companion child shutdown timed out' }
+                $live = Get-Process -Id $snapshot.Process.Id -ErrorAction SilentlyContinue
+                if ($null -eq $live) { continue }
+                try {
+                    $verified = Get-OwnedProcess $live $snapshot.StartTicks $snapshot.Path
+                    if ($null -eq $verified -or $verified.ParentId -ne $snapshot.ParentId) {
+                        if ($snapshot.Process.HasExited) { continue }
+                        throw 'Companion process identity changed before shutdown'
+                    }
+                    try { $verified.Process.Kill() } catch {
+                        if ($verified.Process.HasExited) { continue }
+                        throw
+                    }
+                    if (-not $verified.Process.WaitForExit(5000)) { throw 'Companion process did not exit after shutdown' }
+                } finally { $live.Dispose() }
+            }
+            Update-CompanionProcesses $tracked
+            if (@($tracked.Values | Where-Object { -not $_.Process.HasExited }).Count -eq 0) { break }
+        }
+        if (@($tracked.Values | Where-Object { -not $_.Process.HasExited }).Count -gt 0 -or
+            ($null -ne $initiator -and -not $initiator.HasExited)) {
+            throw 'Companion processes are still running; executable was not replaced'
+        }
+    } finally {
+        foreach ($snapshot in $tracked.Values) { $snapshot.Process.Dispose() }
+        if ($null -ne $initiator) { $initiator.Dispose() }
+    }
+}
+
+function Enter-InstallLock([double] $TimeoutSeconds = 90) {
+    $lockPath = Join-Path ([IO.Path]::GetDirectoryName($TargetPath)) '.AstraDownloader.install.lock'
+    $stream = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::ReadWrite)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    try {
+        do {
+            try {
+                if ($stream.Length -eq 0) {
+                    $stream.WriteByte(0)
+                    $stream.Flush($true)
+                }
+                $stream.Lock(0, 1)
+                return $stream
+            } catch [IO.IOException] {
+                if ([DateTime]::UtcNow -ge $deadline) { throw 'Another Astra Downloader installation is still running' }
+                Start-Sleep -Milliseconds 250
+            }
+        } while ($true)
+    } catch {
+        $stream.Dispose()
+        throw
+    }
+}
+
+function Write-TargetSidecar([string] $Digest) {
+    if (-not $refreshSidecar) { return }
+    $expectedText = "$Digest  $([IO.Path]::GetFileName($TargetPath))"
+    if ([IO.File]::ReadAllText($targetSidecar).Trim() -eq $expectedText) { return }
+    $temp = "$targetSidecar.$([Guid]::NewGuid().ToString('N')).tmp"
+    $bytes = [Text.Encoding]::ASCII.GetBytes($expectedText + "`n")
+    $stream = [IO.File]::Open($temp, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally {
+        $stream.Dispose()
+    }
+    try { Move-Replace $temp $targetSidecar }
+    finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+}
+
+$targetFullPath = [IO.Path]::GetFullPath($TargetPath)
+$helperSession = (Get-Process -Id $PID).SessionId
+$helperOwner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$targetSidecar = "$TargetPath.sha256"
+$refreshSidecar = $false
+$installLock = $null
 $activated = $false
+$stopped = $false
+$restartVerified = $false
+$failureCode = 'staged-health-failed'
 try {
-    try { Wait-Process -Id $ProcessId -Timeout 45 } catch { Start-Sleep -Seconds 2 }
+    $installLock = Enter-InstallLock
+    $refreshSidecar = Test-Path -LiteralPath $targetSidecar -PathType Leaf
     $sourceHash = (Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash.ToLower()
     if ($sourceHash -ne $ExpectedSHA256.ToLower()) { throw 'Staged update digest changed before activation' }
     if (-not (Test-Companion $SourcePath $ExpectedVersion)) { throw 'Staged update health check failed' }
     if (-not (Test-Path -LiteralPath $TargetPath)) { throw 'Managed companion target is missing' }
+    $failureCode = 'installed-version-changed'
+    if (-not (Test-Companion $TargetPath $PreviousVersion)) { throw 'Installed companion changed while the update waited' }
+    $failureCode = 'process-shutdown-failed'
+    Wait-CompanionExit
+    $stopped = $true
+    $failureCode = 'backup-verification-failed'
     $rollbackHash = Copy-Verified $TargetPath $BackupPath
+    $failureCode = 'activation-failed'
     Move-Replace $SourcePath $TargetPath
     $activated = $true
     $targetHash = (Get-FileHash -LiteralPath $TargetPath -Algorithm SHA256).Hash.ToLower()
     if ($targetHash -ne $ExpectedSHA256.ToLower() -or -not (Test-Companion $TargetPath $ExpectedVersion)) {
         throw 'Post-update companion health check failed'
     }
+    Write-TargetSidecar $targetHash
+    $restartVerified = $true
     Write-RecoveryState 'active' $ExpectedVersion $PreviousVersion ''
 } catch {
-    if ($activated -and (Test-Path -LiteralPath $BackupPath)) {
+    $restartVerified = $false
+    # Never overwrite shared recovery state while another installer holds it.
+    if ($null -eq $installLock) { throw }
+    if ($activated) {
         try {
-            Copy-Verified $BackupPath $TargetPath | Out-Null
+            if (-not (Test-Path -LiteralPath $BackupPath)) { throw 'Companion rollback backup is missing' }
+            $restoredHash = Copy-Verified $BackupPath $TargetPath
             if (-not (Test-Companion $TargetPath $PreviousVersion)) { throw 'Restored companion health check failed' }
+            Write-TargetSidecar $restoredHash
+            $restartVerified = $true
             Write-RecoveryState 'rolled-back' $PreviousVersion $PreviousVersion 'post-update-health-failed'
         } catch {
+            $restartVerified = $false
             Write-RecoveryState 'rollback-failed' '' $PreviousVersion 'rollback-verification-failed'
         }
     } else {
-        Write-RecoveryState 'activation-failed' $PreviousVersion $PreviousVersion 'staged-health-failed'
+        # A failed copy can leave the unchanged old executable healthy.
+        if ($stopped -and (Test-Path -LiteralPath $TargetPath)) {
+            $restartVerified = Test-Companion $TargetPath $PreviousVersion
+        }
+        Write-RecoveryState 'activation-failed' $PreviousVersion $PreviousVersion $failureCode
     }
 } finally {
-    if (Test-Path -LiteralPath $TargetPath) {
-        Start-Process -FilePath $TargetPath -ArgumentList $RestartArgs -WindowStyle Hidden
+    try {
+        if ($restartVerified) {
+            Start-Process -FilePath $TargetPath -ArgumentList $RestartArgs -WindowStyle Hidden
+        }
+    } finally {
+        if ($null -ne $installLock) {
+            try { $installLock.Unlock(0, 1) } finally { $installLock.Dispose() }
+        }
+        Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }
 '''.lstrip(), encoding='utf-8')
         args = [
@@ -4790,41 +4998,93 @@ def _probe_companion_version(path, timeout=15):
     return ''
 
 
-def ensure_installed_executable(*, allow_downgrade=False):
-    """Install the running frozen exe without silently replacing a newer one.
-
-    ``allow_downgrade`` is deliberately explicit for a future repair or user
-    initiated rollback path. Ordinary launches always preserve a newer managed
-    binary and use the byte-verified copy primitive for replacement.
-    """
+def _install_managed_executable(*, allow_downgrade=False, progress=None):
+    """Replace an older managed app only after verification and shutdown."""
     current = current_executable_path()
     if not is_frozen_app() or is_portable_mode() or is_onedir_build():
-        return current
-
-    target = install_target_exe()
+        return InstallResult(current)
+    target = install_target_exe().resolve()
+    report = progress or write_persistent_log
     try:
-        if current == target.resolve():
-            return target
-    except Exception:
-        # reason: an unavailable target path only disables the same-file fast path
-        pass
+        result = install_verified_copy(
+            current, target, APP_VERSION,
+            probe_version=_probe_companion_version, compare_versions=_compare_semver,
+            health_check=probe_companion_update_binary, copy_verified=atomic_copy_verified,
+            digest=_compute_sha256, allow_downgrade=allow_downgrade, progress=report,
+            stop_running=lambda: stop_existing_installation(
+                target, control_port=INSTANCE_CONTROL_PORT, timeout=20,
+                request_shutdown=lambda: send_instance_command('shutdown', attempts=2, delay=0.1),
+                progress=report,
+            ),
+        )
+        if result.changed:
+            record_last_installed_update_sha256(_compute_sha256(target))
+            write_persistent_log(f'Installed executable updated: {target}')
+        return result
+    except InstallationError as error:
+        write_persistent_log(f'Installation failed: {error}')
+        if error.restart_previous:
+            _launch_managed_executable(target, ['--background'])
+        raise
 
+
+def ensure_installed_executable(*, allow_downgrade=False):
+    """Return a verified managed path; never register a failed download copy."""
+    return _install_managed_executable(allow_downgrade=allow_downgrade).target
+
+
+def _launch_managed_executable(target, args):
+    subprocess.Popen(
+        [str(target), *args], cwd=str(Path(target).parent),
+        creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
+    )
+
+
+def install_managed_application(progress=None):
+    report = progress or write_persistent_log
+    result = _install_managed_executable(progress=report)
+    if not result.previous_version or _compare_semver(result.previous_version, APP_VERSION) <= 0:
+        report('Updating shortcuts and browser connections...')
+        try:
+            _register_system_integrations(str(result.target), [], force=True)
+        except Exception:
+            if result.stopped:
+                _launch_managed_executable(result.target, ['--background'])
+            raise
+    return result
+
+
+def managed_install_startup_exit_code(argv=None):
+    """Downloaded one-file releases finish setup before normal instance routing."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if (not is_frozen_app() or is_portable_mode() or is_onedir_build()
+            or '--visual-smoke' in args
+            or current_executable_path() == install_target_exe().resolve()):
+        return None
+    background = any(arg in ('-Background', '--background', '--start-server') for arg in args)
     try:
-        INSTALL_DIR.mkdir(parents=True, exist_ok=True)
-        if target.exists() and not allow_downgrade:
-            installed_version = _probe_companion_version(target)
-            if installed_version and _compare_semver(installed_version, APP_VERSION) > 0:
-                write_persistent_log(
-                    f"Kept newer installed executable {installed_version}; "
-                    f"running copy is {APP_VERSION}."
-                )
-                return target
-        atomic_copy_verified(current, target)
-        write_persistent_log(f"Installed executable updated: {target}")
-        return target
-    except Exception as e:
-        write_persistent_log(f"Could not update installed executable from {current}: {e}")
-        return current
+        if background:
+            result = install_managed_application()
+        else:
+            try:
+                from .setup_dialog import run_setup_dialog
+            except ImportError:
+                from setup_dialog import run_setup_dialog
+            result = run_setup_dialog(
+                install_managed_application,
+                title='Updating Astra Downloader' if install_target_exe().exists() else 'Installing Astra Downloader',
+                version=APP_VERSION,
+                icon_path=ICON_PATH if ICON_PATH.exists() else (
+                    Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+                    / 'AstraDownloader.ico'
+                ),
+            )
+        _launch_managed_executable(result.target, args)
+        return 0
+    except Exception as error:
+        write_persistent_log(f'Setup could not finish: {error}')
+        write_cli_output(f'Setup could not finish: {error}\n')
+        return 1
 
 
 def launch_command_parts(prefer_installed=True):
@@ -4979,13 +5239,16 @@ def build_shortcut_command(lnk_path, target, base_args, description=SHORTCUT_DES
 def _write_shortcut(lnk_path, target, base_args, label):
     lnk_path = Path(lnk_path)
     lnk_path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    result = subprocess.run(
         [system32_command('powershell'), '-NoProfile', '-Command',
-         build_shortcut_command(lnk_path, target, base_args)],
+         "$ErrorActionPreference = 'Stop'; " + build_shortcut_command(lnk_path, target, base_args)],
         capture_output=True,
         creationflags=CREATE_NO_WINDOW,
         timeout=60,
     )
+    if result.returncode != 0:
+        detail = result.stderr.decode(errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr or '')
+        raise RuntimeError(f'{label} shortcut could not be updated. {detail.strip()}')
     if not lnk_path.exists():
         write_persistent_log(f"{label} shortcut was not created at {lnk_path}")
         return False
@@ -4997,10 +5260,11 @@ def _write_shortcut(lnk_path, target, base_args, label):
 
 def register_desktop_shortcut(target, base_args):
     try:
-        _write_shortcut(Path.home() / "Desktop" / SHORTCUT_NAME,
-                        target, base_args, "Desktop")
+        return _write_shortcut(Path.home() / "Desktop" / SHORTCUT_NAME,
+                               target, base_args, "Desktop")
     except Exception as e:
         write_persistent_log(f"Shortcut registration failed: {e}")
+        return False
 
 
 def register_start_menu_shortcut(target, base_args):
@@ -5012,21 +5276,28 @@ def register_start_menu_shortcut(target, base_args):
     which means an upgrade refreshes the target automatically.
     """
     try:
-        _write_shortcut(start_menu_programs_dir() / SHORTCUT_NAME,
-                        target, base_args, "Start Menu")
+        return _write_shortcut(start_menu_programs_dir() / SHORTCUT_NAME,
+                               target, base_args, "Start Menu")
     except Exception as e:
         write_persistent_log(f"Start Menu registration failed: {e}")
+        return False
 
 
 def register_startup_task(target, base_args):
     try:
         task_cmd = command_line([target] + list(base_args) + ['-Background'])
-        subprocess.run([
+        result = subprocess.run([
             system32_command('schtasks'), '/Create', '/TN', 'AstraDownloader',
             '/TR', task_cmd, '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F'
         ], capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=60)
+        if result.returncode != 0:
+            detail = result.stderr.decode(errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr or '')
+            write_persistent_log(f'Startup task registration failed: {detail.strip() or result.returncode}')
+            return False
+        return True
     except Exception as e:
         write_persistent_log(f"Startup task registration failed: {e}")
+        return False
 
 
 def register_protocol_handlers(target, base_args):
@@ -5035,14 +5306,20 @@ def register_protocol_handlers(target, base_args):
         open_cmd = command_line([target] + list(base_args)) + ' "%1"'
         for proto in ('ytdl', 'mediadl'):
             key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, f'Software\\Classes\\{proto}', 0, winreg.KEY_WRITE)
-            winreg.SetValueEx(key, '', 0, winreg.REG_SZ, f'URL:{proto} Protocol')
-            winreg.SetValueEx(key, 'URL Protocol', 0, winreg.REG_SZ, '')
-            winreg.CloseKey(key)
+            try:
+                winreg.SetValueEx(key, '', 0, winreg.REG_SZ, f'URL:{proto} Protocol')
+                winreg.SetValueEx(key, 'URL Protocol', 0, winreg.REG_SZ, '')
+            finally:
+                winreg.CloseKey(key)
             cmd_key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, f'Software\\Classes\\{proto}\\shell\\open\\command', 0, winreg.KEY_WRITE)
-            winreg.SetValueEx(cmd_key, '', 0, winreg.REG_SZ, open_cmd)
-            winreg.CloseKey(cmd_key)
+            try:
+                winreg.SetValueEx(cmd_key, '', 0, winreg.REG_SZ, open_cmd)
+            finally:
+                winreg.CloseKey(cmd_key)
+        return True
     except Exception as e:
         write_persistent_log(f"Protocol registration failed: {e}")
+        return False
 
 
 def register_uninstall_entry(target, base_args):
@@ -5050,18 +5327,22 @@ def register_uninstall_entry(target, base_args):
         import winreg
         uninstall_cmd = command_line([target] + list(base_args) + ['--uninstall'])
         key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AstraDownloader', 0, winreg.KEY_WRITE)
-        winreg.SetValueEx(key, 'DisplayName', 0, winreg.REG_SZ, APP_NAME)
-        winreg.SetValueEx(key, 'DisplayVersion', 0, winreg.REG_SZ, APP_VERSION)
-        winreg.SetValueEx(key, 'Publisher', 0, winreg.REG_SZ, 'SysAdminDoc')
-        winreg.SetValueEx(key, 'InstallLocation', 0, winreg.REG_SZ, str(INSTALL_DIR))
-        if ICON_PATH.exists():
-            winreg.SetValueEx(key, 'DisplayIcon', 0, winreg.REG_SZ, f'{ICON_PATH},0')
-        winreg.SetValueEx(key, 'UninstallString', 0, winreg.REG_SZ, uninstall_cmd)
-        winreg.SetValueEx(key, 'NoModify', 0, winreg.REG_DWORD, 1)
-        winreg.SetValueEx(key, 'NoRepair', 0, winreg.REG_DWORD, 1)
-        winreg.CloseKey(key)
+        try:
+            winreg.SetValueEx(key, 'DisplayName', 0, winreg.REG_SZ, APP_NAME)
+            winreg.SetValueEx(key, 'DisplayVersion', 0, winreg.REG_SZ, APP_VERSION)
+            winreg.SetValueEx(key, 'Publisher', 0, winreg.REG_SZ, 'SysAdminDoc')
+            winreg.SetValueEx(key, 'InstallLocation', 0, winreg.REG_SZ, str(INSTALL_DIR))
+            if ICON_PATH.exists():
+                winreg.SetValueEx(key, 'DisplayIcon', 0, winreg.REG_SZ, f'{ICON_PATH},0')
+            winreg.SetValueEx(key, 'UninstallString', 0, winreg.REG_SZ, uninstall_cmd)
+            winreg.SetValueEx(key, 'NoModify', 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(key, 'NoRepair', 0, winreg.REG_DWORD, 1)
+        finally:
+            winreg.CloseKey(key)
+        return True
     except Exception as e:
         write_persistent_log(f"Uninstall registration failed: {e}")
+        return False
 
 
 def normalize_extension_origin(origin):
@@ -5188,18 +5469,18 @@ def unregister_native_host_registry_value(key_path, manifest_path):
             current, _kind = winreg.QueryValueEx(key, '')
     except FileNotFoundError:
         # reason: no key, or a key with no default value, isn't Astra's to remove
-        return
+        return True
     except OSError as error:
         write_persistent_log(
             f"Native messaging host registry check failed for {key_path}: {error}"
         )
-        return
+        return False
     if not _is_astra_native_host_manifest(current, manifest_path):
         write_persistent_log(
             f"Left native messaging host key {key_path} in place: it points at "
             f"{current!r}, not an Astra manifest."
         )
-        return
+        return True
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
     except FileNotFoundError:
@@ -5209,16 +5490,20 @@ def unregister_native_host_registry_value(key_path, manifest_path):
         write_persistent_log(
             f"Native messaging host registry cleanup failed for {key_path}: {error}"
         )
+        return False
+    return True
 
 
 def _revoke_native_messaging_host(manifest_path, registry_key):
+    removed = True
     try:
         Path(manifest_path).unlink(missing_ok=True)
     except OSError as error:
         write_persistent_log(
             f"Native messaging manifest cleanup failed for {manifest_path}: {error}"
         )
-    unregister_native_host_registry_value(registry_key, manifest_path)
+        removed = False
+    return unregister_native_host_registry_value(registry_key, manifest_path) is not False and removed
 
 
 def _cmd_file_path_argument(path):
@@ -5293,7 +5578,7 @@ def native_host_executable(target, base_args):
 
 def register_native_messaging_hosts(target, base_args, config):
     if sys.platform != 'win32':
-        return
+        return True
     chrome_ids = parse_native_extension_ids(
         config.get("NativeChromeExtensionIds", ""), browser="chrome"
     )
@@ -5311,29 +5596,33 @@ def register_native_messaging_hosts(target, base_args, config):
     )
 
     def revoke_chromium_host():
+        removed = True
         try:
             chrome_manifest.unlink(missing_ok=True)
         except OSError as error:
             write_persistent_log(
                 f"Native messaging manifest cleanup failed for {chrome_manifest}: {error}"
             )
+            removed = False
         for registry_key in chrome_registry_keys:
-            unregister_native_host_registry_value(registry_key, chrome_manifest)
+            removed = unregister_native_host_registry_value(registry_key, chrome_manifest) is not False and removed
+        return removed
 
     if not chrome_ids and not firefox_ids:
-        revoke_chromium_host()
-        _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
+        chromium_ok = revoke_chromium_host()
+        firefox_ok = _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
         write_persistent_log("Native messaging host registration disabled: no extension IDs configured.")
-        return
+        return chromium_ok and firefox_ok
     try:
         NATIVE_HOST_DIR.mkdir(parents=True, exist_ok=True)
         host_path = native_host_executable(target, base_args)
+        chromium_ok = firefox_ok = True
         if chrome_ids:
             atomic_write_json(chrome_manifest, build_native_host_manifest(host_path, chrome_ids, browser="chrome"))
             for registry_key in chrome_registry_keys:
                 register_native_host_registry_value(registry_key, chrome_manifest)
         else:
-            revoke_chromium_host()
+            chromium_ok = revoke_chromium_host()
         if firefox_ids:
             atomic_write_json(firefox_manifest, build_native_host_manifest(host_path, firefox_ids, browser="firefox"))
             register_native_host_registry_value(
@@ -5341,9 +5630,11 @@ def register_native_messaging_hosts(target, base_args, config):
                 firefox_manifest,
             )
         else:
-            _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
+            firefox_ok = _revoke_native_messaging_host(firefox_manifest, firefox_registry_key)
+        return chromium_ok and firefox_ok
     except Exception as e:
         write_persistent_log(f"Native messaging host registration failed: {e}")
+        return False
 
 
 def refresh_native_messaging_registration(config=None):
@@ -5588,16 +5879,57 @@ def ensure_system_integrations(prefer_installed=True, force=False):
         # make an otherwise movable folder depend on this machine.
         return launch_command_parts(prefer_installed=False)
     target, base_args = launch_command_parts(prefer_installed=prefer_installed)
-    if not force and _get_integrations_stamp() == APP_VERSION:
-        register_native_messaging_hosts(target, base_args, Config())
-        return target, base_args
-    register_desktop_shortcut(target, base_args)
-    register_start_menu_shortcut(target, base_args)
-    register_startup_task(target, base_args)
-    register_protocol_handlers(target, base_args)
-    register_uninstall_entry(target, base_args)
-    register_native_messaging_hosts(target, base_args, Config())
-    _set_integrations_stamp()
+    return _register_system_integrations(target, base_args, force=force)
+
+
+def _register_system_integrations(target, base_args, force=False):
+    """Register only the executable selected by the completed install step."""
+    first_launch = not CONFIG_PATH.exists()
+    config = Config()
+    if first_launch and not config.update({'FirstRunComplete': False}):
+        raise RuntimeError('Could not save first-run settings. Check the installation folder permissions and retry.')
+    failures = []
+    startup_ok = True
+    needs_registration = force or _get_integrations_stamp() != APP_VERSION
+    if needs_registration:
+        for label, register in (
+            ('desktop shortcut', register_desktop_shortcut),
+            ('Start Menu shortcut', register_start_menu_shortcut),
+            ('video link handlers', register_protocol_handlers),
+            ('Apps & Features entry', register_uninstall_entry),
+        ):
+            if register(target, base_args) is False:
+                failures.append(label)
+        # Task Scheduler can deny a standard user. It is optional and must
+        # not turn an otherwise usable per-user installation into a failure.
+        startup_ok = register_startup_task(target, base_args) is not False
+    if register_native_messaging_hosts(target, base_args, config) is False:
+        failures.append('browser connections')
+    if failures or not startup_ok:
+        # A forced repair may have started with a current stamp. Clear it so
+        # the next normal launch retries every incomplete integration.
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, INTEGRATIONS_STAMP_KEY, 0, winreg.KEY_WRITE)
+            try:
+                winreg.DeleteValue(key, INTEGRATIONS_STAMP_VALUE)
+            finally:
+                winreg.CloseKey(key)
+        except FileNotFoundError:
+            # reason: an absent stamp already requests a retry on next launch
+            pass
+        except (ImportError, OSError) as error:
+            write_persistent_log(f'Could not clear incomplete integrations stamp: {error}')
+        if failures:
+            message = (
+                'Astra was installed, but setup could not register ' + ', '.join(failures)
+                + '. Check access to your user folders and Windows user registry, then run setup again.'
+            )
+            write_persistent_log(message)
+            if force:
+                raise RuntimeError(message)
+    elif needs_registration:
+        _set_integrations_stamp()
     return target, base_args
 
 # ── Dark theme stylesheet ──
@@ -6722,8 +7054,8 @@ class SetupWorker(SetupWorkerCore):
                 'YTDLP_SHA256_ASSET': lambda: YTDLP_SHA256_ASSET,
                 'YTDLP_SHA256_URL': lambda: YTDLP_SHA256_URL,
                 'YTDLP_URL': lambda: YTDLP_URL,
-                '_set_integrations_stamp': lambda *args, **kwargs: _set_integrations_stamp(*args, **kwargs),
                 'download_file_atomic': lambda *args, **kwargs: download_file_atomic(*args, **kwargs),
+                'ensure_system_integrations': lambda *args, **kwargs: ensure_system_integrations(*args, **kwargs),
                 'extract_archive_executable_atomic': lambda *args, **kwargs: extract_archive_executable_atomic(*args, **kwargs),
                 'fetch_expected_sha256': lambda *args, **kwargs: fetch_expected_sha256(*args, **kwargs),
                 'get_ffmpeg_version': lambda *args, **kwargs: get_ffmpeg_version(*args, **kwargs),
@@ -6731,7 +7063,6 @@ class SetupWorker(SetupWorkerCore):
                 'managed_binary_pin_for': lambda *args, **kwargs: managed_binary_pin_for(*args, **kwargs),
                 'retain_managed_binary_rollback': lambda *args, **kwargs: retain_managed_binary_rollback(*args, **kwargs),
                 'http_get': lambda *args, **kwargs: first_party_http_get(*args, **kwargs),
-                'launch_command_parts': lambda *args, **kwargs: launch_command_parts(*args, **kwargs),
                 'log_crash': lambda *args, **kwargs: log_crash(*args, **kwargs),
                 'probe_javascript_runtime': lambda *args, **kwargs: probe_javascript_runtime(*args, **kwargs),
                 'provision_deno': lambda *args, **kwargs: provision_deno(*args, **kwargs),
@@ -6748,10 +7079,6 @@ class SetupWorker(SetupWorkerCore):
                 'read_settings_bundle': lambda *args, **kwargs: read_settings_bundle(*args, **kwargs),
                 'describe_bundle_changes': lambda *args, **kwargs: describe_bundle_changes(*args, **kwargs),
                 'TaskbarProgress': TaskbarProgress,
-                'register_desktop_shortcut': lambda *args, **kwargs: register_desktop_shortcut(*args, **kwargs),
-                'register_protocol_handlers': lambda *args, **kwargs: register_protocol_handlers(*args, **kwargs),
-                'register_startup_task': lambda *args, **kwargs: register_startup_task(*args, **kwargs),
-                'register_uninstall_entry': lambda *args, **kwargs: register_uninstall_entry(*args, **kwargs),
                 'run_ytdlp_self_update': lambda *args, **kwargs: _run_ytdlp_self_update(*args, **kwargs),
                 'verify_file_sha256': lambda *args, **kwargs: verify_file_sha256(*args, **kwargs),
                 'write_persistent_log': lambda *args, **kwargs: write_persistent_log(*args, **kwargs),
@@ -8214,23 +8541,15 @@ def companion_install_exit_code(argv=None):
             "The one-folder build is already self-contained; use the one-file executable for --install."
         )
         return 2
-    target = install_target_exe().resolve()
-    installed = ensure_installed_executable()
     try:
-        installed_path = Path(installed).resolve()
-    except (OSError, TypeError, ValueError):
-        installed_path = Path(installed)
-    if installed_path != target or not target.is_file():
-        write_persistent_log(
-            f"Silent install did not produce the managed executable at {target}."
-        )
-        return 1
-    try:
-        ensure_system_integrations(prefer_installed=True, force=True)
+        result = install_managed_application()
+        if result.stopped:
+            _launch_managed_executable(result.target, ['--background'])
     except Exception as error:  # noqa: BLE001 - a CLI path must return a code
-        write_persistent_log(f"Silent install integration setup failed: {error}")
+        write_persistent_log(f"Silent install failed: {error}")
+        write_cli_output(f'Setup could not finish: {error}\n')
         return 1
-    write_cli_output(f"{APP_NAME} installed to {target}\n")
+    write_cli_output(f"{APP_NAME} installed to {result.target}\n")
     return 0
 
 
@@ -8265,6 +8584,10 @@ def main():
     if '--uninstall' in sys.argv:
         run_uninstall()
         return
+
+    setup_exit = managed_install_startup_exit_code(sys.argv[1:])
+    if setup_exit is not None:
+        raise SystemExit(setup_exit)
 
     visual_smoke = '--visual-smoke' in sys.argv
     startup_command = startup_command_from_argv()

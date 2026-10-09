@@ -404,14 +404,13 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'YTDLP_SHA256_ASSET',
     'YTDLP_SHA256_URL',
     'YTDLP_URL',
-    '_set_integrations_stamp',
     'download_file_atomic',
+    'ensure_system_integrations',
     'extract_archive_executable_atomic',
     'fetch_expected_sha256',
     'get_ffmpeg_version',
     'get_ytdlp_version',
     'http_get',
-    'launch_command_parts',
     'log_crash',
     'probe_javascript_runtime',
     'provision_deno',
@@ -419,10 +418,6 @@ _REQUIRED_SETUP_DEPENDENCIES = frozenset({
     'provision_whisper_model',
     'provision_whisper_runtime',
     'probe_whisper_runtime',
-    'register_desktop_shortcut',
-    'register_protocol_handlers',
-    'register_startup_task',
-    'register_uninstall_entry',
     'run_ytdlp_self_update',
     'verify_file_sha256',
     'write_persistent_log',
@@ -790,29 +785,9 @@ class SetupWorkerCore(QThread):
                 )
                 self.progress.emit(95)
             else:
-                # Desktop shortcut
-                self.log.emit("Creating desktop shortcut...")
-                self._create_shortcut()
-                self.progress.emit(80)
-
-                # Startup task
-                self.log.emit("Registering startup task...")
-                self._register_startup()
-                self.progress.emit(85)
-
-                # Protocol handlers
-                self.log.emit("Registering protocol handlers...")
-                self._register_protocols()
-                self.progress.emit(90)
-
-                # Add/Remove Programs
-                self.log.emit("Registering in Apps & Features...")
-                self._register_uninstall()
+                self.log.emit("Updating shortcuts and browser connections...")
+                self._dependencies['ensure_system_integrations'](force=True)
                 self.progress.emit(95)
-
-                # Persist the integrations stamp so subsequent launches skip
-                # the registration pass (v1.2.0 idempotency).
-                self._dependencies['_set_integrations_stamp']()
 
             # Verify/update yt-dlp through the staged health-check + rollback
             # path. Setup remains successful if this optional maintenance step
@@ -846,22 +821,6 @@ class SetupWorkerCore(QThread):
         except Exception as e:
             self._dependencies['log_crash']("Setup worker")
             self.finished_err.emit(str(e))
-
-    def _create_shortcut(self):
-        target, base_args = self._dependencies['launch_command_parts'](prefer_installed=True)
-        self._dependencies['register_desktop_shortcut'](target, base_args)
-
-    def _register_startup(self):
-        target, base_args = self._dependencies['launch_command_parts'](prefer_installed=True)
-        self._dependencies['register_startup_task'](target, base_args)
-
-    def _register_protocols(self):
-        target, base_args = self._dependencies['launch_command_parts'](prefer_installed=True)
-        self._dependencies['register_protocol_handlers'](target, base_args)
-
-    def _register_uninstall(self):
-        target, base_args = self._dependencies['launch_command_parts'](prefer_installed=True)
-        self._dependencies['register_uninstall_entry'](target, base_args)
 
 SetupWorker = SetupWorkerCore
 

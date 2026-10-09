@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import threading
+import time
 import traceback
 
 
@@ -213,6 +215,7 @@ def run_review(ad, root):
               'no server or instance listener started')
         check(subscriptions._thread is None, 'subscription scheduler remains stopped')
         check(not ad.YTDLP_PATH.exists() and not ad.FFMPEG_PATH.exists(), 'no helpers downloaded')
+        _capture_setup(app, ad, root, report, check)
         report['passed'] = True
     except Exception:
         # reason: a failed review must leave diagnostics and return a nonzero exit code
@@ -224,3 +227,59 @@ def run_review(ad, root):
         ad.flush_all_persistence()
         (root / 'review.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     return 0 if report['passed'] else 1
+
+
+def _capture_setup(app, ad, root, report, check):
+    try:
+        from .setup_dialog import SetupDialog
+    except ImportError:
+        from setup_dialog import SetupDialog
+
+    def wait_until(predicate):
+        deadline = time.monotonic() + 10
+        while not predicate() and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.01)
+        check(predicate(), 'setup event loop completed')
+
+    def save(dialog, name):
+        app.processEvents()
+        output = root / (name + '.png')
+        frame = dialog.grab().toImage()
+        check(frame.save(str(output), 'PNG'), name + ' PNG saved')
+        report['captures'].append({'file': output.name, 'width': frame.width(),
+                                   'height': frame.height(),
+                                   'sha256': hashlib.sha256(output.read_bytes()).hexdigest()})
+
+    release = threading.Event()
+
+    def operation(progress):
+        progress('Verifying the new app...')
+        if not release.wait(15):
+            raise RuntimeError('Setup review timed out')
+        return True
+
+    dialog = SetupDialog(operation, title='Updating Astra Downloader',
+                         version=ad.APP_VERSION, icon_path=ad.ICON_PATH)
+    dialog.show()
+    try:
+        wait_until(lambda: dialog.status.text() == 'Verifying the new app...')
+        dialog.close()
+        check(dialog.isVisible(), 'active setup survives close attempt')
+        save(dialog, 'setup-update')
+    finally:
+        release.set()
+        wait_until(lambda: dialog._complete)
+    check(dialog.operation_result is True and not dialog.isVisible(), 'successful setup closes')
+
+    def failure(progress):
+        raise PermissionError('The app folder is read-only. Check its permissions, then run setup again.')
+
+    dialog = SetupDialog(failure, title='Updating Astra Downloader',
+                         version=ad.APP_VERSION, icon_path=ad.ICON_PATH)
+    dialog.show()
+    wait_until(lambda: dialog._complete)
+    check(dialog.isVisible() and dialog.close_button.isVisible(), 'setup failure stays visible')
+    save(dialog, 'setup-error')
+    dialog.close_button.click()
+    check(not dialog.isVisible(), 'setup failure closes on request')

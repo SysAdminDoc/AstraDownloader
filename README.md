@@ -1,8 +1,8 @@
 ![Astra Downloader for Windows with the Download queue and format controls](assets/marketing/social-card-dark.png)
 
-# Astra Downloader v2.18.0
+# Astra Downloader v2.18.1
 
-[![version](https://img.shields.io/badge/version-2.18.0-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.18.0) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows_10%2B_x64-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
+[![version](https://img.shields.io/badge/version-2.18.1-ff6552)](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.18.1) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows_10%2B_x64-0078d4)](https://github.com/SysAdminDoc/AstraDownloader/releases/latest)
 
 <p align="center">
   <a href="https://ko-fi.com/X8K126YVER">
@@ -26,16 +26,18 @@ Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdm
 
 ## Download
 
-Choose a Windows x64 package from the [v2.18.0 release](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.18.0).
+Choose a Windows x64 package from the [v2.18.1 release](https://github.com/SysAdminDoc/AstraDownloader/releases/tag/v2.18.1).
 
 | Package | Use it when |
 | --- | --- |
-| [AstraDownloader.exe](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.18.0/AstraDownloader.exe) | You want a per-user installation with desktop and Start Menu entries. No separate installer. |
-| [AstraDownloader-onedir.zip](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.18.0/AstraDownloader-onedir.zip) | You want a portable folder. Extract it somewhere writable, then run the executable inside. |
+| [AstraDownloader.exe](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.18.1/AstraDownloader.exe) | You want a per-user installation with desktop and Start Menu entries. No separate installer. |
+| [AstraDownloader-onedir.zip](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.18.1/AstraDownloader-onedir.zip) | You want a portable folder. Extract it somewhere writable, then run the executable inside. |
 
-The app downloads its managed yt-dlp and FFmpeg tools during first-run setup. YouTube may also need a JavaScript runtime. Internet access is required; neither download includes an offline-ready tool bundle.
+Run the downloaded EXE to install or update Astra. A small progress window verifies the new copy, replaces the existing per-user app and opens the updated version. Settings, queue, history, sign-ins and downloaded files stay in place. Running downloads are interrupted during an upgrade, and unfinished queue entries return paused. See the [installation guide](docs/USER_GUIDE.md#installation-and-portable-storage) for silent and portable use.
 
-These Windows builds are unsigned. Check the SHA-256 against the matching sidecar on the release page **before running the file**. A matching hash checks the downloaded bytes; it isn't a publisher signature.
+The app downloads its managed yt-dlp and FFmpeg tools during first-run setup. YouTube may also need a JavaScript runtime. Internet access is required. Neither download includes an offline-ready tool bundle.
+
+These Windows builds are unsigned. Check the SHA-256 against the matching sidecar on the release page **before running the file**. A matching hash checks the downloaded bytes. It isn't a publisher signature.
 
 ```powershell
 Get-FileHash .\AstraDownloader.exe -Algorithm SHA256

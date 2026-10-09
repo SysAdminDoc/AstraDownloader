@@ -1,6 +1,7 @@
 """Tests for the window, its pages and what they render."""
 
 import ast
+import contextlib
 import hashlib
 import inspect
 import io
@@ -2678,6 +2679,7 @@ class TranslationCoverageTests(unittest.TestCase):
                 "health.py",
                 "sites.py",
                 "config.py",
+                "setup_dialog.py",
             },
         )
         strings = set(extractor.extract_all())
@@ -5714,6 +5716,89 @@ class QuickJsProvisioningTests(unittest.TestCase):
         self.assertTrue(self.path.exists())
         self.assertTrue(self.path.read_bytes().startswith(b"previous runtime"))
         self.assertEqual(list(self.path.parent.glob(".qjs.exe.*.verified")), [])
+
+
+class SetupIntegrationTests(unittest.TestCase):
+    def _run_worker(self, *, portable=False, failing_registration=None):
+        registrar_names = (
+            "register_desktop_shortcut", "register_start_menu_shortcut",
+            "register_startup_task", "register_protocol_handlers",
+            "register_uninstall_entry", "register_native_messaging_hosts",
+        )
+        with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as patches:
+            root = Path(tmp)
+            icon = root / "icon.ico"
+            icon.write_bytes(b"icon")
+            config_path = root / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            for name, value in {
+                "INSTALL_DIR": root, "CONFIG_PATH": config_path,
+                "ICON_PATH": icon, "YTDLP_PATH": root / "yt-dlp.exe",
+                "FFMPEG_PATH": root / "ffmpeg.exe",
+            }.items():
+                patches.enter_context(mock.patch.object(ad, name, value))
+            patches.enter_context(mock.patch.dict(ad.DEFAULT_CONFIG, {"DownloadPath": str(root / "downloads")}))
+            for name, value in {
+                "is_portable_mode": portable, "managed_binary_state": "ok",
+                "managed_binary_pin_for": "", "check_ffmpeg_capabilities": {"current": True},
+                "get_ytdlp_version": "2026.07.04", "ytdlp_needs_external_runtime": False,
+                "launch_command_parts": (str(root / "AstraDownloader.exe"), []),
+                "Config": FakeConfig(),
+            }.items():
+                patches.enter_context(mock.patch.object(ad, name, return_value=value))
+            patches.enter_context(mock.patch.object(ad, "write_persistent_log"))
+            crash = patches.enter_context(mock.patch.object(ad, "log_crash"))
+            stamp = patches.enter_context(mock.patch.object(ad, "_set_integrations_stamp"))
+            registry = mock.Mock()
+            patches.enter_context(mock.patch.dict(sys.modules, {"winreg": registry}))
+            registrars = {
+                name: patches.enter_context(mock.patch.object(ad, name, return_value=name != failing_registration))
+                for name in registrar_names
+            }
+            integration = patches.enter_context(mock.patch.object(ad, "ensure_system_integrations", wraps=ad.ensure_system_integrations))
+            worker = ad.SetupWorker(auto_update_ytdlp=False, config=FakeConfig())
+            completed, errors, progress = [], [], []
+            worker.finished_ok.connect(lambda: completed.append(True))
+            worker.finished_err.connect(errors.append)
+            worker.progress.connect(progress.append)
+            worker.run()
+        return types.SimpleNamespace(
+            completed=completed, errors=errors, progress=progress,
+            integration=integration, registrars=registrars, stamp=stamp,
+            registry=registry, crash=crash,
+        )
+
+    def test_setup_uses_the_complete_verified_integration_path(self):
+        result = self._run_worker()
+        result.integration.assert_called_once_with(force=True)
+        for register in result.registrars.values():
+            register.assert_called_once()
+        result.stamp.assert_called_once_with()
+        result.crash.assert_not_called()
+        self.assertEqual(result.completed, [True])
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.progress[-1], 100)
+
+    def test_required_registration_failure_emits_error_without_success_stamp(self):
+        result = self._run_worker(failing_registration="register_desktop_shortcut")
+        result.integration.assert_called_once_with(force=True)
+        result.stamp.assert_not_called()
+        result.registry.DeleteValue.assert_called_once()
+        result.crash.assert_called_once_with("Setup worker")
+        self.assertEqual(result.completed, [])
+        self.assertEqual(len(result.errors), 1)
+        self.assertIn("desktop shortcut", result.errors[0])
+        self.assertNotIn(100, result.progress)
+
+    def test_portable_setup_does_not_register_or_stamp_integrations(self):
+        result = self._run_worker(portable=True)
+        result.integration.assert_not_called()
+        for register in result.registrars.values():
+            register.assert_not_called()
+        result.stamp.assert_not_called()
+        result.registry.DeleteValue.assert_not_called()
+        self.assertEqual(result.completed, [True])
+        self.assertEqual(result.errors, [])
 
 
 class QuickJsSetupFallbackTests(unittest.TestCase):

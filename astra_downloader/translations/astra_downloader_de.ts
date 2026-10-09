@@ -4275,6 +4275,74 @@
       <translation>Untertitelsprache</translation>
     </message>
     <message>
+      <source>Installing Astra Downloader</source>
+      <translation>Astra Downloader wird installiert</translation>
+    </message>
+    <message>
+      <source>Updating Astra Downloader</source>
+      <translation>Astra Downloader wird aktualisiert</translation>
+    </message>
+    <message>
+      <source>Preparing setup…</source>
+      <translation>Installation wird vorbereitet…</translation>
+    </message>
+    <message>
+      <source>Setup progress</source>
+      <translation>Installationsfortschritt</translation>
+    </message>
+    <message>
+      <source>This window closes when setup finishes.</source>
+      <translation>Dieses Fenster schließt sich nach Abschluss der Installation.</translation>
+    </message>
+    <message>
+      <source>Setup error details</source>
+      <translation>Details zum Installationsfehler</translation>
+    </message>
+    <message>
+      <source>Checking the installed version...</source>
+      <translation>Installierte Version wird geprüft...</translation>
+    </message>
+    <message>
+      <source>Verifying the new app...</source>
+      <translation>Neue Anwendung wird überprüft...</translation>
+    </message>
+    <message>
+      <source>Closing the running downloader...</source>
+      <translation>Laufender Downloader wird geschlossen...</translation>
+    </message>
+    <message>
+      <source>Installing the update...</source>
+      <translation>Update wird installiert...</translation>
+    </message>
+    <message>
+      <source>Installing Astra Downloader...</source>
+      <translation>Astra Downloader wird installiert...</translation>
+    </message>
+    <message>
+      <source>Restoring the previous version...</source>
+      <translation>Vorherige Version wird wiederhergestellt...</translation>
+    </message>
+    <message>
+      <source>Updating shortcuts and browser connections...</source>
+      <translation>Verknüpfungen und Browser-Verbindungen werden aktualisiert...</translation>
+    </message>
+    <message>
+      <source>Closing Astra Downloader...</source>
+      <translation>Astra Downloader wird geschlossen...</translation>
+    </message>
+    <message>
+      <source>Astra Downloader is not responding. Closing it now...</source>
+      <translation>Astra Downloader reagiert nicht und wird jetzt geschlossen...</translation>
+    </message>
+    <message>
+      <source>Setup couldn't finish.</source>
+      <translation>Die Installation konnte nicht abgeschlossen werden.</translation>
+    </message>
+    <message>
+      <source>Version {version}</source>
+      <translation>Version {version}</translation>
+    </message>
+    <message>
       <source>That address is on a private, loopback, or link-local network. Astra Downloader only downloads from public sites.</source>
       <translation>Diese Adresse liegt in einem privaten, Loopback- oder Link-Local-Netzwerk. Astra Downloader lädt nur von öffentlichen Websites herunter.</translation>
     </message>

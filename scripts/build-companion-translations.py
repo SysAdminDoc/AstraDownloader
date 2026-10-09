@@ -2606,6 +2606,28 @@ CATALOGS["de"].update({
 })
 
 
+# Installation and update progress.
+CATALOGS["de"].update({
+    "Checking the installed version...": "Installierte Version wird geprüft...",
+    "Closing Astra Downloader...": "Astra Downloader wird geschlossen...",
+    "Closing the running downloader...": "Laufender Downloader wird geschlossen...",
+    "Installing Astra Downloader": "Astra Downloader wird installiert",
+    "Installing Astra Downloader...": "Astra Downloader wird installiert...",
+    "Installing the update...": "Update wird installiert...",
+    "Preparing setup…": "Installation wird vorbereitet…",
+    "Restoring the previous version...": "Vorherige Version wird wiederhergestellt...",
+    "Setup couldn't finish.": "Die Installation konnte nicht abgeschlossen werden.",
+    "Setup error details": "Details zum Installationsfehler",
+    "Setup progress": "Installationsfortschritt",
+    "Astra Downloader is not responding. Closing it now...": "Astra Downloader reagiert nicht und wird jetzt geschlossen...",
+    "This window closes when setup finishes.": "Dieses Fenster schließt sich nach Abschluss der Installation.",
+    "Updating Astra Downloader": "Astra Downloader wird aktualisiert",
+    "Updating shortcuts and browser connections...": "Verknüpfungen und Browser-Verbindungen werden aktualisiert...",
+    "Verifying the new app...": "Neue Anwendung wird überprüft...",
+    "Version {version}": "Version {version}",
+})
+
+
 def catalogue_coverage():
     """Report how many source strings each catalogue actually declares.
 

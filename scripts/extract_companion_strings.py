@@ -44,6 +44,7 @@ SOURCE_FILES = (
     ROOT / "astra_downloader" / "gui_subscriptions_page.py",
     ROOT / "astra_downloader" / "gui_extension_page.py",
     ROOT / "astra_downloader" / "gui_settings_page.py",
+    ROOT / "astra_downloader" / "setup_dialog.py",
     ROOT / "astra_downloader" / "download.py",
     ROOT / "astra_downloader" / "health.py",
     ROOT / "astra_downloader" / "sites.py",

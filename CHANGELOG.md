@@ -12,6 +12,15 @@ repository's git log.
 
 ## Unreleased
 
+## [2.18.1] - 2026-10-09
+
+### Changed
+
+- Opening a downloaded EXE now shows installation or update progress, verifies the new copy and upgrades the existing per-user installation. Setup refreshes shortcuts and browser connections, then opens the installed version.
+- Upgrades close the running installed copy, including older versions, with a bounded fallback limited to verified processes. Settings, queue, history, sign-ins and downloaded files are preserved. Running downloads stop, and unfinished queue entries return paused.
+- Silent `--install` exits after setup and relaunches in the background only when it replaced a running instance. Portable copies remain separate from the managed installation.
+- Setup reports shortcut or browser registration failures and retries them on a later launch. A failed update restores the previous verified app. The in-app updater also waits for the old app and its download helpers before replacing files.
+
 ## [2.18.0] - 2026-10-09
 
 ### Changed
