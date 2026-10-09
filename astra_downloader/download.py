@@ -665,8 +665,9 @@ def _nfo_write_guarded(write, target, log):
 def write_media_server_sidecars(output_root, media_paths=(), *, log=None):
     """Write item, show and season NFO files for the media one download delivered.
 
-    Only the `<stem>.info.json` beside each delivered file is read: yt-dlp
-    names both from one template, so the stem is the pairing. Walking the
+    Only the `.info.json` yt-dlp named after each delivered file is read
+    (`<stem>.info.json`, or `<name>.info.json`): it names both from one
+    template, so the file name is the pairing. Walking the
     whole folder instead gave other videos this download's metadata and
     rewrote NFO files this download never made. ``log`` hears about each NFO
     that couldn't be written.
@@ -694,9 +695,13 @@ def write_media_server_sidecars(output_root, media_paths=(), *, log=None):
         ):
             continue
         seen_media.add(key)
-        metadata = _nfo_load_metadata(
-            media.with_name(f'{media.stem}{NFO_INFO_JSON_SUFFIX}')
-        )
+        # yt-dlp swaps the media's extension for .info.json, but appends it
+        # when the name's last extension isn't the media's own, as with a
+        # template ending in a fixed `.mp4`: `Clip [webm].mp4.info.json`.
+        info_path = media.with_name(f'{media.name}{NFO_INFO_JSON_SUFFIX}')
+        if not info_path.is_file():
+            info_path = media.with_name(f'{media.stem}{NFO_INFO_JSON_SUFFIX}')
+        metadata = _nfo_load_metadata(info_path)
         if metadata is None:
             continue
         records.append((media, metadata))

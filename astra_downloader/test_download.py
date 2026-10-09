@@ -5418,6 +5418,24 @@ class AnySiteDownloadArgvTests(unittest.TestCase):
             self.assertEqual([path.name for path in written], ["Good.nfo"])
             self.assertFalse((root / "Nested.nfo").exists())
 
+    def test_nfo_step_finds_the_info_json_yt_dlp_appended_to_the_name(self):
+        # A template ending in a fixed extension leaves the media's own one
+        # mid-name, so yt-dlp appends .info.json instead of swapping it in.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            media = root / "Clip [webm].mp4"
+            media.write_bytes(b"media")
+            (root / "Clip [webm].mp4.info.json").write_text(
+                json.dumps({"id": "c", "title": "Clip"}), encoding="utf-8"
+            )
+
+            written = ad.write_media_server_sidecars(root, media_paths=[str(media)])
+
+            self.assertEqual([path.name for path in written], ["Clip [webm].nfo"])
+            self.assertEqual(
+                ET.parse(root / "Clip [webm].nfo").getroot().findtext("title"), "Clip"
+            )
+
     def test_nfo_runtime_is_left_out_for_an_infinite_duration(self):
         # json.load reads `Infinity`, and rounding it to minutes raised
         # OverflowError, which stopped every NFO after that item.
