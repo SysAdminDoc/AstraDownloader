@@ -1618,6 +1618,39 @@ class GuiSmokeTests(unittest.TestCase):
                 # by Qt itself; application shutdown performs final disposal.
                 self._retained_windows.append(window)
 
+    def test_exit_ends_the_app_while_the_window_is_hidden_in_the_tray(self):
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QApplication
+
+        application = QApplication.instance()
+        manager = ad.DownloadManager(FakeConfig(), FakeHistory())
+        with mock.patch.object(ad, "get_ytdlp_version", return_value="2026.07.04"), \
+                mock.patch.object(ad, "get_ffmpeg_version", return_value="8.1.2"), \
+                mock.patch.object(ad.MainWindow, "_start_instance_command_listener"), \
+                mock.patch.object(ad.MainWindow, "_start_readiness_probe"), \
+                mock.patch.object(ad.QSystemTrayIcon, "show"):
+            window = ad.MainWindow(FakeConfig(), manager, FakeHistory())
+            still_running = QTimer()
+            still_running.setSingleShot(True)
+            still_running.timeout.connect(lambda: application.exit(7))
+            try:
+                # The state a sign-in start leaves the app in: never shown.
+                self.assertFalse(window.isVisible())
+                # The tray's Exit, the installer's shutdown command and a
+                # finished self-update all end the app through _force_close.
+                QTimer.singleShot(0, window._force_close)
+                still_running.start(3000)
+                code = application.exec()
+            finally:
+                still_running.stop()
+                window.update_timer.stop()
+                window.cleanup_timer.stop()
+                window.tray.hide()
+                QApplication.processEvents()
+                self._retained_windows.append(window)
+        self.assertTrue(window._force_exit)
+        self.assertEqual(code, 0, "the event loop was still running 3 s after the forced close")
+
     def test_download_progress_patches_one_card_and_preserves_scroll_and_focus(self):
         from PySide6.QtWidgets import QApplication, QProgressBar, QPushButton
 
@@ -6561,6 +6594,35 @@ class DownloadPageFeedbackTests(unittest.TestCase):
 
 class WindowTeardownTests(unittest.TestCase):
     """Nothing the window scheduled outlives it."""
+
+    def test_stopping_the_command_listener_logs_no_rejected_command(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        persistent = []
+        window_log = []
+        values = {"INSTANCE_CONTROL_HOST": "127.0.0.1", "INSTANCE_CONTROL_PORT": port}
+        window = types.SimpleNamespace(
+            _instance_command_thread=None,
+            _instance_command_stop=threading.Event(),
+            INSTANCE_COMMAND_READ_SECONDS=0.5,
+            _value=values.__getitem__,
+            _dependencies={"write_persistent_log": persistent.append},
+            config=FakeConfig({"ServerToken": "a" * 32}),
+            log_message=types.SimpleNamespace(emit=window_log.append),
+            instance_command=types.SimpleNamespace(emit=window_log.append),
+        )
+
+        ad.MainWindow._start_instance_command_listener(window)
+        deadline = time.monotonic() + 3
+        while not persistent and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(len(persistent), 1, window_log)
+        self.assertIn("listener started", persistent[0])
+        ad.MainWindow._stop_instance_command_listener(window)
+
+        self.assertIsNone(window._instance_command_thread)
+        self.assertEqual(window_log, [])
 
     def test_force_close_persists_state_cancels_work_and_accepts_event(self):
         class Event:

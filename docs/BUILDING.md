@@ -45,7 +45,7 @@ While a virtual environment is active, `npm run check` runs the Python gates and
 
 ```powershell
 npm test
-py -3.13 -m pytest -rs       # 1620 tests collected; the gate verifies this count
+py -3.13 -m pytest -rs       # 1622 tests collected; the gate verifies this count
 npm run check
 npm run smoke:gui
 ```

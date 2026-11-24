@@ -24,6 +24,8 @@ repository's git log.
 ### Fixed
 
 - Astra couldn't find its own updates, and neither could the Update button in Astra Deck. The check read the version number out of a source file on GitHub and stopped at 256 KB, a size that file passed in 2.9.0, so every check since then gave up. The version now comes from the release's tag. Builds up to 2.18.1 still can't update on their own, so this one has to be installed by hand once.
+- Exit in the tray menu didn't close Astra while its window was hidden. The icon went away and the server stopped, but the program kept running. The same thing slowed updates down: installing over a running copy, or taking an update from the tray, waited 15 to 45 seconds for Astra to close and then ended it by force. It closes right away now.
+- Every time Astra closed, the log said it had rejected a command without a valid token. Nothing had sent one. The line is gone.
 - After a normal install the log and the health report said the active version was unknown. They name it now.
 - Opening an older downloaded copy could replace a newer installed one. Setup read the installed version by running the installed app, and when that took too long it gave up and treated the app as replaceable. Setup now reads the version from the file and from the last recorded update, and refuses when its own version is older. That check runs in the copy you open, so a download of 2.18.1 or older still behaves the old way. Delete old downloads once you're on a newer build.
 - An old copy that started by itself, such as a leftover download, could take over the browser link handlers and the sign-in start until the next version change. The installed app now checks both at every start and points them back at itself.

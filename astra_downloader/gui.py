@@ -8938,6 +8938,12 @@ class MainWindowCore(
                             if self._instance_command_stop.is_set():
                                 break
                             raise
+                        if self._instance_command_stop.is_set():
+                            # This window's own wake-up connection on the way
+                            # out. Reading it logged a rejected command on
+                            # every exit, as though something had tried one.
+                            conn.close()
+                            break
                         with conn:
                             try:
                                 conn.settimeout(self.INSTANCE_COMMAND_READ_SECONDS)
@@ -9089,7 +9095,16 @@ class MainWindowCore(
 
     def _force_close(self):
         self._force_exit = True
-        self.close()
+        if not self.close():
+            return
+        # Qt ends the event loop by itself only when the window it closes was
+        # visible. From the tray the window is hidden, so an accepted close
+        # used to leave the process running with no icon and no server: Exit
+        # in the tray menu never ended the app, and an install or update over
+        # the top waited out its grace period and then killed it.
+        application = QApplication.instance()
+        if application is not None:
+            application.quit()
 
     def _downloads_that_will_be_cancelled(self):
         """Count running and pending work before ``cancel_all`` is called."""
