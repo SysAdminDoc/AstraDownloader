@@ -37,3 +37,11 @@ ID scheme: `AD-nn`, continue sequentially from the highest below.
   Why: Register on the Browser extension page writes the ID field outside `_EXTENSION_ID_SAVE_LOCK`, so it can drop an ID a route just paired; `write_native_host_launcher` uses a fixed `.tmp` name; unticking every SponsorBlock box saves "" (every category), so there's no way to pick none.
   Acceptance: each fixed, with a test.
   Where: `astra_downloader/gui.py` `_apply_native_chrome_ids`, `astra_downloader/astra_downloader.py` `write_native_host_launcher`, the SponsorBlock save in `gui.py`.
+- [ ] P3 | AD-168 | Say when a format's size is an estimate
+  Why: `/formats` folds yt-dlp's `filesize_approx` into `filesize`, so Astra Deck's "approximate" marker never shows and an estimated size reads as exact.
+  Acceptance: WHEN a format has only `filesize_approx`, `/formats` SHALL say so in its own field while `filesize` keeps its current value for older clients. The app's own format list should mark it the same way.
+  Where: `astra_downloader/download.py` around 3243 (the format row builder); Astra Deck reads it in `extension/features/download-ui/index.js` around 237.
+- [ ] P3 | AD-169 | A copy of 2.18.1 or older can still replace a newer install
+  Why: the downgrade check runs in the copy that was opened, so the fail-closed check added after 2.18.1 doesn't protect against an old download whose own probe times out. The installed app can't veto it today.
+  Acceptance: an installed build newer than the copy asking it to close for setup SHALL refuse that request, or the old copy's replacement SHALL fail safely, with a test that drives the 2.18.1 shutdown request.
+  Where: `astra_downloader/astra_downloader.py` instance command listener (`shutdown`), `astra_downloader/install_processes.py`.
