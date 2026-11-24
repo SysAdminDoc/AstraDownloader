@@ -23,7 +23,7 @@ repository's git log.
 
 ### Fixed
 
-- Opening an older downloaded copy could replace a newer installed one. Setup read the installed version by running the installed app, and when that took too long it gave up and treated the app as replaceable. The version is now read from the file and from the last recorded update, so an older copy is refused.
+- Opening an older downloaded copy could replace a newer installed one. Setup read the installed version by running the installed app, and when that took too long it gave up and treated the app as replaceable. Setup now reads the version from the file and from the last recorded update, and refuses when its own version is older. That check runs in the copy you open, so a download of 2.18.1 or older still behaves the old way. Delete old downloads once you're on a newer build.
 - An old copy that started by itself, such as a leftover download, could take over the browser link handlers and the sign-in start until the next version change. The installed app now checks both at every start and points them back at itself.
 - Astra Deck's history panel sent its token in a form the downloader didn't accept, so the panel always showed an authorization error. The downloader accepts both.
 - With many YouTube tabs open, the extension's status checks shared one request limit and used it up. Every tab then showed the downloader as stopped. Each extension has its own limit now.
