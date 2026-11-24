@@ -4438,40 +4438,34 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
         def json(self):
             return self._payload
 
-    def _release_and_source(self, source_response, tag='v9.9.9'):
-        """Return a fake http get that answers the release API then the source."""
-        calls = []
-
-        def get(url, *_args, **_kwargs):
-            calls.append(url)
-            if url == ad.COMPANION_UPDATE_RELEASE_API_URL:
-                return self._ReleaseResponse({'tag_name': tag})
-            return source_response
-        return get, calls
-
     def test_parse_companion_release_tag_rejects_anything_but_a_release_tag(self):
         self.assertEqual(ad.parse_companion_release_tag({'tag_name': 'v4.50.7'}), 'v4.50.7')
         # Draft/prerelease builds are not installable updates.
         self.assertEqual(ad.parse_companion_release_tag({'tag_name': 'v1.0.0', 'draft': True}), '')
         self.assertEqual(ad.parse_companion_release_tag({'tag_name': 'v1.0.0', 'prerelease': True}), '')
-        # The tag is interpolated into a URL, so its shape is enforced.
+        # The tag becomes the version an update is checked against, so its
+        # shape is enforced.
         for tag in ('main', '../../etc', 'v1.2', 'v1.2.3-rc1', ''):
             self.assertEqual(ad.parse_companion_release_tag({'tag_name': tag}), '', tag)
         self.assertEqual(ad.parse_companion_release_tag(None), '')
 
-    def test_version_check_reads_the_tagged_release_not_a_branch(self):
+    def test_version_check_takes_the_version_from_the_release_tag_alone(self):
         # A version bump on main with no published release must not advertise
         # an update: the binary can only come from a Release asset.
-        response = self._VersionSourceResponse([b'APP_VERSION = "9.9.9"\n'])
-        get, calls = self._release_and_source(response, tag='v9.9.9')
+        #
+        # The check used to fetch astra_downloader.py at the tag as well and
+        # read APP_VERSION from it under a 256 KiB cap. That file passed the
+        # cap in 2.9.0, so every check through 2.18.1 failed. Any second
+        # request here is that fetch coming back.
+        calls = []
+
+        def get(url, *_args, **_kwargs):
+            calls.append(url)
+            self.assertEqual(url, ad.COMPANION_UPDATE_RELEASE_API_URL)
+            return self._ReleaseResponse({'tag_name': 'v9.9.9'})
         with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
             self.assertEqual(ad.fetch_latest_companion_version(), '9.9.9')
-        self.assertEqual(calls[0], ad.COMPANION_UPDATE_RELEASE_API_URL)
-        self.assertEqual(
-            calls[1],
-            ad.COMPANION_UPDATE_VERSION_URL_TEMPLATE.format(tag='v9.9.9'),
-        )
-        self.assertNotIn('/main/', calls[1])
+        self.assertEqual(calls, [ad.COMPANION_UPDATE_RELEASE_API_URL])
 
     def test_version_check_fails_closed_when_no_release_is_published(self):
         def get(url, *_args, **_kwargs):
@@ -4479,59 +4473,6 @@ class CompanionUpdateEndpointTests(unittest.TestCase):
             return self._ReleaseResponse({'tag_name': 'v1.0.0', 'draft': True})
         with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
             with self.assertRaisesRegex(RuntimeError, 'No published'):
-                ad.fetch_latest_companion_version()
-
-    def test_parse_companion_version_source_extracts_app_version(self):
-        self.assertEqual(
-            ad.parse_companion_version_source('APP_VERSION = "1.2.3"\n'),
-            "1.2.3",
-        )
-        self.assertEqual(ad.parse_companion_version_source("no version"), "")
-
-    class _VersionSourceResponse:
-        def __init__(self, chunks, headers=None):
-            self._chunks = list(chunks)
-            self.headers = headers or {}
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return False
-
-        def raise_for_status(self):
-            return None
-
-        def iter_content(self, _chunk_size):
-            return iter(self._chunks)
-
-    def test_version_source_fetch_is_streamed_and_size_limited(self):
-        response = self._VersionSourceResponse([
-            b'header\nAPP_VER', b'SION = "9.9.9"\n',
-        ])
-        get, _calls = self._release_and_source(response)
-        with mock.patch.object(ad, 'first_party_http_get', side_effect=get) as patched:
-            self.assertEqual(ad.fetch_latest_companion_version(), '9.9.9')
-        self.assertTrue(patched.call_args.kwargs['stream'])
-
-        oversized = self._VersionSourceResponse([
-            b'x' * (ad.COMPANION_VERSION_SOURCE_MAX_BYTES + 1),
-        ])
-        get, _calls = self._release_and_source(oversized)
-        with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
-            with self.assertRaisesRegex(RuntimeError, 'size limit'):
-                ad.fetch_latest_companion_version()
-
-    def test_version_source_rejects_oversized_content_length_without_reading(self):
-        response = self._VersionSourceResponse(
-            [b'APP_VERSION = "9.9.9"\n'],
-            headers={
-                'content-length': str(ad.COMPANION_VERSION_SOURCE_MAX_BYTES + 1),
-            },
-        )
-        get, _calls = self._release_and_source(response)
-        with mock.patch.object(ad, 'first_party_http_get', side_effect=get):
-            with self.assertRaisesRegex(RuntimeError, 'size limit'):
                 ad.fetch_latest_companion_version()
 
     def test_unauthenticated_request_is_rejected(self):

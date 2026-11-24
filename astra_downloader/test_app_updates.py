@@ -112,6 +112,18 @@ class InstalledVersionEvidenceTests(unittest.TestCase):
         state = json.loads((self.root / 'companion-update-state.json').read_text(encoding='utf-8'))
         self.assertEqual(state['app_version'], ad.APP_VERSION)
 
+    def test_a_plain_install_reports_its_version_as_the_active_one(self):
+        # An install records app_version and never runs the activation helper
+        # that writes active_version, so the log and /health read "unknown".
+        ad.record_last_installed_update_sha256(self.digest)
+        self.assertEqual(ad.read_update_recovery_status()['companion']['activeVersion'], ad.APP_VERSION)
+        # A scheduled update is not active yet, so its version is not claimed.
+        ad.record_last_installed_update_sha256('b' * 64, status='activation-pending', app_version='9.9.9')
+        self.assertNotIn('activeVersion', ad.read_update_recovery_status()['companion'])
+        # The activation helper's own field still wins.
+        self.write_state(status='active', app_version='9.9.9', active_version='9.9.8')
+        self.assertEqual(ad.read_update_recovery_status()['companion']['activeVersion'], '9.9.8')
+
     def test_a_timed_out_probe_no_longer_lets_an_old_download_replace_the_install(self):
         # The 2026-11-23 sequence: stale v2.16.0 in Downloads, v2.18.1 installed,
         # its --version probe times out under load.

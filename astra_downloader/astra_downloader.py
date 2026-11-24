@@ -696,8 +696,8 @@ ICON_URL = "https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/main/A
 # The published Release is the only thing an update can actually install, so it
 # is also what decides whether one is available. Reading `main` meant a version
 # bump with no published release drove the update logic (branch trust).
+# The release's tag is its version; nothing else is fetched to learn it.
 COMPANION_UPDATE_RELEASE_API_URL = "https://api.github.com/repos/SysAdminDoc/AstraDownloader/releases/latest"
-COMPANION_UPDATE_VERSION_URL_TEMPLATE = "https://raw.githubusercontent.com/SysAdminDoc/AstraDownloader/{tag}/astra_downloader/astra_downloader.py"
 COMPANION_UPDATE_EXE_URL = "https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe"
 COMPANION_UPDATE_SHA256_URL = "https://github.com/SysAdminDoc/AstraDownloader/releases/latest/download/AstraDownloader.exe.sha256"
 # The release check already talks to GitHub anonymously. Keep the most recent
@@ -712,7 +712,6 @@ _GITHUB_API_BUDGET = {
 }
 COMPANION_UPDATE_TIMEOUT_SECONDS = 120
 COMPANION_UPDATE_MIN_BYTES = 1024
-COMPANION_VERSION_SOURCE_MAX_BYTES = 256 * 1024
 YTDLP_ROLLBACK_FILENAME = '.yt-dlp.last-known-good.exe'
 COMPANION_ROLLBACK_FILENAME = '.AstraDownloader.last-known-good.exe'
 # Hard ceiling for any single helper download (companion exe, yt-dlp, ffmpeg
@@ -3132,6 +3131,13 @@ def read_update_recovery_status():
             value = state.get(source)
             if isinstance(value, str) and value:
                 public[target] = value[:80]
+        # A plain install records the build as app_version and never runs the
+        # activation helper that writes active_version, which left the log and
+        # /health saying the active version was unknown.
+        recorded = state.get('app_version')
+        if ('activeVersion' not in public and state.get('status') == 'active'
+                and isinstance(recorded, str) and recorded):
+            public['activeVersion'] = recorded[:80]
         if public:
             result[wire_name] = public
     return result
@@ -3505,19 +3511,12 @@ def maybe_auto_update_ytdlp(config, active_count_fn=None):
 
 
 # ── v4.47.0 NF6: companion self-update helpers ──
-def parse_companion_version_source(source_text):
-    """Extract APP_VERSION from the raw astra_downloader.py source."""
-    if not isinstance(source_text, str):
-        return ''
-    m = re.search(r'^APP_VERSION\s*=\s*["\']([^"\']{1,32})["\']', source_text, re.MULTILINE)
-    return m.group(1).strip() if m else ''
-
-
 def parse_companion_release_tag(payload):
     """Return the release tag from a GitHub release payload, or ''.
 
-    The tag is pasted into a raw.githubusercontent URL, so it is validated
-    against the repository's own tag shape rather than trusted verbatim.
+    The tag names the version an update is checked against, so it is
+    validated against the repository's own tag shape rather than trusted
+    verbatim.
     """
     if not isinstance(payload, dict):
         return ''
@@ -3624,33 +3623,19 @@ def fetch_latest_companion_release_tag(timeout=15):
 
 
 def fetch_latest_companion_version(timeout=15):
-    """Read the companion APP_VERSION from the newest published Release.
+    """Return the version of the newest published Release, read from its tag.
 
-    Sourced from the release tag, never from a branch: the update installs a
-    Release asset, so a bump that has not been released must not advertise one.
+    Releases are tagged ``v<APP_VERSION>``, and a downloaded update has to
+    report this exact version in its staged health check before it replaces
+    anything, so a tag that misnames its asset fails closed there.
+
+    This used to read APP_VERSION out of this file at the tag, capped at
+    256 KiB. The file passed that size in 2.9.0, so from then through 2.18.1
+    every check ended in "exceeded its size limit" and no build could find
+    an update. Never from a branch either: a bump that has not been released
+    must not advertise one.
     """
-    tag = fetch_latest_companion_release_tag(timeout=timeout)
-    with first_party_http_get(
-        COMPANION_UPDATE_VERSION_URL_TEMPLATE.format(tag=tag), stream=True, timeout=timeout,
-    ) as response:
-        response.raise_for_status()
-        try:
-            advertised = int(response.headers.get('content-length', '') or 0)
-        except (TypeError, ValueError):
-            advertised = 0
-        if advertised > COMPANION_VERSION_SOURCE_MAX_BYTES:
-            raise RuntimeError('Companion version source exceeded its size limit.')
-        source = bytearray()
-        for chunk in response.iter_content(8192):
-            if not chunk:
-                continue
-            source.extend(chunk)
-            if len(source) > COMPANION_VERSION_SOURCE_MAX_BYTES:
-                raise RuntimeError('Companion version source exceeded its size limit.')
-    version = parse_companion_version_source(source.decode('utf-8', errors='replace'))
-    if not version:
-        raise RuntimeError('Could not read APP_VERSION from the update manifest.')
-    return version
+    return fetch_latest_companion_release_tag(timeout=timeout)[1:]
 
 
 def validate_companion_update_binary(path):

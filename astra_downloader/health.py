@@ -38,7 +38,7 @@ __all__ = (
     "maybe_auto_update_ytdlp", "_run_ytdlp_self_update",
     "read_update_recovery_status", "atomic_copy_verified",
     "DownloadedExecutableIntegrityError", "verify_adjacent_release_sidecar",
-    "parse_companion_version_source", "fetch_latest_companion_version",
+    "fetch_latest_companion_version",
     "validate_companion_update_binary", "probe_companion_update_binary",
     "read_last_installed_update_sha256", "record_last_installed_update_sha256",
     "schedule_companion_update_restart", "schedule_companion_process_exit",
