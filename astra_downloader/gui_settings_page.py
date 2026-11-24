@@ -302,6 +302,19 @@ class SettingsPageMixin:
         conn_l.addLayout(token_row)
         conn_l.addWidget(make_divider())
 
+        self.cfg_open_pairing = QCheckBox(tr("Let browser extensions connect without asking"))
+        self.cfg_open_pairing.setChecked(bool(self.config.get("OpenExtensionPairing", True)))
+        conn_l.addWidget(self.cfg_open_pairing)
+        open_pairing_hint = make_label(
+            "Any copy of Astra Deck, in any browser or profile on this computer, connects "
+            "on its own. Turn this off to approve each new extension from the Browser "
+            "extension page. Websites can't connect either way.",
+            "fieldHint", word_wrap=True,
+        )
+        open_pairing_hint.setContentsMargins(26, 0, 0, 8)
+        conn_l.addWidget(open_pairing_hint)
+        conn_l.addWidget(make_divider())
+
         force_ip_row = QHBoxLayout()
         force_ip_copy = QVBoxLayout()
         force_ip_copy.setSpacing(2)
@@ -1382,6 +1395,32 @@ class SettingsPageMixin:
 
         # Tools — v1.2.0 downloader-maintenance actions
         tools_card, tools_l = self._make_settings_group("Maintenance")
+        tools_l.addWidget(make_label("Astra Downloader", "fieldLabel"))
+        self.cfg_autoupdate_app = QCheckBox(tr("Keep Astra Downloader up to date automatically"))
+        self.cfg_autoupdate_app.setChecked(bool(self.config.get("AutoUpdateApp", True)))
+        self.cfg_autoupdate_app.setToolTip(tr(
+            "Checks GitHub a minute after start and every six hours. A new "
+            "release installs over this one when no downloads are running, "
+            "and settings, history and the queue stay as they are."
+        ))
+        tools_l.addWidget(self.cfg_autoupdate_app)
+        app_update_row = QHBoxLayout()
+        app_update_row.setSpacing(8)
+        self.btn_check_app_update = self._make_tool_button("Check for app updates")
+        self.btn_check_app_update.setToolTip(
+            tr("Check GitHub now and install a newer release if there is one.")
+        )
+        self.btn_check_app_update.clicked.connect(
+            lambda _checked=False: self._check_app_update_in_background(manual=True)
+        )
+        app_update_row.addWidget(self.btn_check_app_update)
+        app_update_row.addStretch()
+        tools_l.addLayout(app_update_row)
+        installed_version = tr_format("Version {version}", version=self._value('APP_VERSION'))
+        self.app_update_status = make_label(installed_version, "fieldHint", word_wrap=True, status=True)
+        self.app_update_status.setAccessibleName(tr("App update status"))
+        tools_l.addWidget(self.app_update_status)
+        tools_l.addWidget(make_divider())
         self.cfg_autoupdate = QCheckBox(tr("Keep yt-dlp up to date automatically"))
         self.cfg_autoupdate.setChecked(self.config.get("AutoUpdateYtDlp", True))
         # The real cadence: throttled to once per 12 hours, checked when the

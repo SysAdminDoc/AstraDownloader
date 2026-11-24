@@ -12,6 +12,23 @@ repository's git log.
 
 ## Unreleased
 
+### Added
+
+- Astra Downloader updates itself from GitHub. It checks for a new release a minute after it starts and every six hours, then installs it over the running copy once no downloads are active. Your settings and queue aren't touched. Settings has a checkbox to turn this off under Maintenance, next to a Check for app updates button.
+- Any copy of Astra Deck on the same computer connects without a pairing step, and so does the userscript. An unpacked extension gets a new ID for each folder it's loaded from, so every browser profile or reinstall used to need the pairing window opened again. Websites still can't connect. To approve each extension by hand, turn off "Let browser extensions connect without asking" in Settings.
+
+### Changed
+
+- Starting at sign-in now uses your account's Run list instead of a scheduled task. It needs no administrator rights and it starts on battery. Task Manager's Startup apps page can switch it off. Astra removes the old task when Windows allows it. If an administrator created that task, the log gives the one command that removes it.
+
+### Fixed
+
+- Opening an older downloaded copy could replace a newer installed one. Setup read the installed version by running the installed app, and when that took too long it gave up and treated the app as replaceable. The version is now read from the file and from the last recorded update, so an older copy is refused.
+- An old copy that started by itself, such as a leftover download, could take over the browser link handlers and the sign-in start until the next version change. The installed app now checks both at every start and points them back at itself.
+- Astra Deck's history panel sent its token in a form the downloader didn't accept, so the panel always showed an authorization error. The downloader accepts both.
+- With many YouTube tabs open, the extension's status checks shared one request limit and used it up. Every tab then showed the downloader as stopped. Each extension has its own limit now.
+- Uninstalling removes the sign-in start entry.
+
 ## [2.18.1] - 2026-10-09
 
 ### Changed

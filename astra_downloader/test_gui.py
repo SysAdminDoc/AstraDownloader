@@ -583,6 +583,8 @@ class CompanionGuiPolicyTests(unittest.TestCase):
         window.cfg_sleep_requests = NumberField(0)
         window.cfg_maxsize = NumberField(0)
         window.cfg_autoupdate = CheckField()
+        window.cfg_autoupdate_app = CheckField(True)
+        window.cfg_open_pairing = CheckField(True)
         window.cfg_closetotray = CheckField()
         window.cfg_startmin = CheckField()
         window.cfg_notify = CheckField()

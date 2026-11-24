@@ -2193,7 +2193,7 @@ for forbidden in (
         # Every balloon in the window goes through that helper.
         source = (Path(ad.__file__).resolve().parent / "gui.py").read_text(encoding="utf-8")
         self.assertNotIn("tray.showMessage(", source)
-        self.assertEqual(source.count("show_tray_message("), 6)
+        self.assertEqual(source.count("show_tray_message("), 7)
         self.assertIn("self.tray_announcer = QLabel(self)", source)
 
     def test_repeating_the_same_status_says_nothing(self):
@@ -5875,7 +5875,7 @@ class ExtensionPairingTests(unittest.TestCase):
         # Any installed extension can send this request, and a paired ID can
         # read the session token. Without the window it gets nothing saved.
         stranger = "ponmlkjihgfedcbaponmlkjihgfedcba"
-        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        config = FakeConfig({"NativeChromeExtensionIds": "", "OpenExtensionPairing": False})
         refresh = mock.Mock(return_value=True)
         closed = ad.UserscriptPairingWindow()
         result = ad.pair_browser_extension(
@@ -5892,7 +5892,7 @@ class ExtensionPairingTests(unittest.TestCase):
     def test_the_window_pairs_one_id_then_closes(self):
         first = "abcdefghijklmnopabcdefghijklmnop"
         second = "ponmlkjihgfedcbaponmlkjihgfedcba"
-        config = FakeConfig({"NativeChromeExtensionIds": ""})
+        config = FakeConfig({"NativeChromeExtensionIds": "", "OpenExtensionPairing": False})
         refresh = mock.Mock(return_value=True)
         window = ad.UserscriptPairingWindow()
         window.open()
@@ -5944,6 +5944,7 @@ class ExtensionPairingTests(unittest.TestCase):
             "ServerToken": token,
             "NativeChromeExtensionIds": "",
             "LegacyHealthTokenEcho": False,
+            "OpenExtensionPairing": False,
         })
         manager = ad.DownloadManager(config, FakeHistory())
         headers = {"Origin": origin, "X-MDL-Client": "MediaDL"}

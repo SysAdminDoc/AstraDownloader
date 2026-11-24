@@ -77,8 +77,14 @@ def installation_lock(directory, timeout=90):
 
 def install_verified_copy(source, target, version, *, probe_version, compare_versions,
                           health_check, copy_verified, digest, stop_running,
-                          progress=lambda _message: None, allow_downgrade=False):
-    """Verify first, stop only this installation, then replace or restore it."""
+                          progress=lambda _message: None, allow_downgrade=False,
+                          version_floor=lambda: ''):
+    """Verify first, stop only this installation, then replace or restore it.
+
+    ``version_floor`` names the newest version this installation is known to
+    have held. It stands in for the installed version when that can't be read,
+    so a slow or failed probe never lets an older copy replace a newer one.
+    """
     source, target = Path(source).resolve(), Path(target).resolve()
     if source == target:
         return InstallResult(target)
@@ -86,9 +92,12 @@ def install_verified_copy(source, target, version, *, probe_version, compare_ver
     progress('Checking the installed version...')
     with installation_lock(target.parent):
         previous_version = probe_version(target) if target.is_file() else ''
-        if (previous_version and not allow_downgrade
-                and compare_versions(previous_version, version) > 0):
-            return InstallResult(target, previous_version=previous_version)
+        guard_version = previous_version
+        if target.is_file() and not guard_version:
+            guard_version = str(version_floor() or '')
+        if (guard_version and not allow_downgrade
+                and compare_versions(guard_version, version) > 0):
+            return InstallResult(target, previous_version=guard_version)
         incoming_hash = digest(source)
         if not incoming_hash:
             raise InstallationError('The downloaded app could not be read. Download it again and retry.')

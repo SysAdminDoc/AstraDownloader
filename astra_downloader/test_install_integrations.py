@@ -70,6 +70,7 @@ class InstallIntegrationTests(unittest.TestCase):
         self.root = Path(self.context.enter_context(tempfile.TemporaryDirectory()))
         self.registry = Registry()
         self.shortcut_code = self.task_code = 0
+        self.task_stderr = b'ERROR: The system cannot find the file specified.'
         self.write_shortcut = True
         self.shell_calls = []
         self.config = {
@@ -100,7 +101,8 @@ class InstallIntegrationTests(unittest.TestCase):
             match = re.search(r"CreateShortcut\('((?:[^']|'')*)'\)", args[-1])
             self.assertIsNotNone(match)
             Path(match[1].replace("''", "'")).write_bytes(b'new shortcut')
-        return subprocess.CompletedProcess(args, code, b'', b'Access denied' if code else b'')
+        denied = self.task_stderr if task else b'Access denied'
+        return subprocess.CompletedProcess(args, code, b'', denied if code else b'')
 
     def register(self, force=True):
         return ad._register_system_integrations(str(self.root / 'AstraDownloader.exe'), [], force=force)
@@ -144,14 +146,67 @@ class InstallIntegrationTests(unittest.TestCase):
                 self.assertIsNone(self.stamp())
                 self.assertTrue(any(path in key for key in self.registry.closed))
 
-    def test_schtasks_denial_does_not_fail_standard_user_setup_or_stamp_success(self):
+    def run_value(self):
+        return self.registry.values.get(ad.STARTUP_RUN_KEY, {}).get(ad.STARTUP_RUN_VALUE, (None,))[0]
+
+    def task_calls(self):
+        return [call for call in self.shell_calls if Path(call[0]).stem.lower() == 'schtasks']
+
+    def test_sign_in_start_is_a_run_key_value_that_needs_no_elevation(self):
+        target = str(self.root / 'AstraDownloader.exe')
+        self.register()
+        self.assertEqual(self.run_value(), ad.startup_command(target, []))
+        self.assertTrue(self.run_value().endswith(' -Background'))
+        # The task older versions created is only ever removed, never created.
+        self.assertEqual([call[1] for call in self.task_calls()], ['/Delete'])
+        self.assertEqual(self.stamp()[0], ad.APP_VERSION)
+
+    def test_an_old_startup_task_only_an_administrator_can_remove_is_reported_not_fatal(self):
+        self.task_code = 1
+        self.task_stderr = b'ERROR: Access is denied.'
+        self.register()
+        self.assertEqual(self.stamp()[0], ad.APP_VERSION)
+        self.assertTrue(self.run_value())
+        self.assertIn('schtasks /Delete /TN AstraDownloader /F', str(self.log.call_args_list))
+
+    def test_a_missing_old_startup_task_is_not_logged_as_a_problem(self):
         self.task_code = 1
         self.register()
+        self.assertEqual(self.stamp()[0], ad.APP_VERSION)
+        self.assertNotIn('administrator', str(self.log.call_args_list))
+
+    def test_a_refused_run_key_does_not_fail_setup_and_is_retried(self):
+        self.registry.fail_path = r'CurrentVersion\Run'
+        self.register()
         self.assertIsNone(self.stamp())
-        self.assertIn('Startup task registration failed: Access denied', str(self.log.call_args_list))
-        self.task_code = 0
+        self.assertIn('Startup registration failed', str(self.log.call_args_list))
+        self.registry.fail_path = ''
         self.register(force=False)
         self.assertEqual(self.stamp()[0], ad.APP_VERSION)
+        self.assertTrue(self.run_value())
+
+    def test_another_copy_that_took_over_startup_and_links_is_repaired_on_next_launch(self):
+        target = str(self.root / 'AstraDownloader.exe')
+        self.register()
+        stale = r'"C:\Users\someone\Downloads\AstraDownloader.exe"'
+        handler = r'Software\Classes\mediadl\shell\open\command'
+        kind = self.registry.REG_SZ
+        self.registry.values[handler][''] = (stale + ' "%1"', kind)
+        self.registry.values[ad.STARTUP_RUN_KEY][ad.STARTUP_RUN_VALUE] = (stale + ' -Background', kind)
+        self.assertEqual(ad.integration_drift(target, []), ['startup', 'video link handlers'])
+        self.register(force=False)
+        self.assertEqual(ad.integration_drift(target, []), [])
+        self.assertEqual(self.run_value(), ad.startup_command(target, []))
+        self.assertIn(target, self.registry.values[handler][''][0])
+        self.assertIn('Repairing integrations that point elsewhere: startup, video link handlers',
+                      str(self.log.call_args_list))
+
+    def test_an_older_version_left_in_apps_and_features_counts_as_drift(self):
+        target = str(self.root / 'AstraDownloader.exe')
+        self.register()
+        entry = r'Software\Microsoft\Windows\CurrentVersion\Uninstall\AstraDownloader'
+        self.registry.values[entry]['DisplayVersion'] = ('2.16.0', self.registry.REG_SZ)
+        self.assertEqual(ad.integration_drift(target, []), ['Apps & Features entry'])
 
     def test_normal_startup_logs_failure_and_retries_after_permissions_recover(self):
         self.registry.fail_path = 'NativeMessagingHosts'

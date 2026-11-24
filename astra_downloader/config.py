@@ -350,6 +350,12 @@ DEFAULT_CONFIG = {
     # for itself, which is yt-dlp's own priority order.
     "JavaScriptRuntime": "auto",
     "AutoUpdateYtDlp": True,
+    # Install new Astra Downloader releases from GitHub when the queue is
+    # idle. Off still checks, and only offers the update.
+    "AutoUpdateApp": True,
+    # Any browser extension or userscript manager on this PC may pair without
+    # opening a pairing window first. Web pages can never pair either way.
+    "OpenExtensionPairing": True,
     # yt-dlp release channel the self-updater tracks. Nightly is yt-dlp's own
     # recommendation for regular users: the monthly stable channel lags YouTube
     # breakage by weeks, while nightly ships same-day extractor fixes.
@@ -3179,8 +3185,8 @@ def sanitize_config(raw):
         "WindowsFilenames",
         "KeepIntermediateFiles", "VerifyFormats",
         "PreferOriginalOverUpscaled",
-        "SponsorBlock", "AutoUpdateYtDlp", "StartMinimized", "CloseToTray",
-        "UseSystemProxy",
+        "SponsorBlock", "AutoUpdateYtDlp", "AutoUpdateApp", "StartMinimized", "CloseToTray",
+        "OpenExtensionPairing", "UseSystemProxy",
         "NotifyOnComplete", "NotifyOnFailure", "ClipboardLinkGrabber",
         "WindowMaximized",
         "FirstRunComplete", "LegacyHealthTokenEcho",

@@ -871,6 +871,12 @@ _REQUIRED_MAIN_WINDOW_DEPENDENCIES = frozenset({
     '_build_wsgi_server',
     '_ffmpeg_version_probe',
     '_run_ytdlp_self_update',
+    '_run_companion_self_update',
+    'check_companion_update',
+    'companion_self_update_supported',
+    'APP_UPDATE_FIRST_CHECK_DELAY_SECONDS',
+    'APP_UPDATE_CHECK_INTERVAL_SECONDS',
+    'APP_UPDATE_RETRY_SECONDS',
     'build_diagnostics_bundle',
     'check_download_disk_space',
     'clamp_int',
@@ -1689,6 +1695,8 @@ class MainWindowCore(
     log_message = Signal(str)
     instance_command = Signal(str)
     tools_update_finished = Signal(dict)
+    app_update_checked = Signal(dict)
+    app_update_finished = Signal(dict)
     tools_status_text_ready = Signal(str)
     server_start_finished = Signal(object)
     site_login_finished = Signal(dict)
@@ -1745,6 +1753,8 @@ class MainWindowCore(
         self.log_message.connect(self._append_log)
         self.instance_command.connect(self._handle_instance_command)
         self.tools_update_finished.connect(self._finish_ytdlp_update)
+        self.app_update_checked.connect(self._on_app_update_checked)
+        self.app_update_finished.connect(self._finish_app_update)
         self.tools_status_text_ready.connect(self._set_tools_status_text)
         self.server_start_finished.connect(self._finish_server_start)
         self.site_login_finished.connect(self._finish_site_login_import)
@@ -1966,6 +1976,17 @@ class MainWindowCore(
         self.cleanup_timer = QTimer(self)
         self.cleanup_timer.timeout.connect(dl_manager.cleanup_old)
         self.cleanup_timer.start(60000)
+
+        # App updates from GitHub: a first check shortly after start, then a
+        # steady interval. Only copies that can replace themselves schedule
+        # anything, so source runs and tests never reach the network here.
+        self._app_update_busy = False
+        self._app_update_offered = ""
+        self.app_update_timer = QTimer(self)
+        self.app_update_timer.setSingleShot(True)
+        self.app_update_timer.timeout.connect(self._check_app_update_in_background)
+        if self._value('companion_self_update_supported'):
+            self.app_update_timer.start(int(self._value('APP_UPDATE_FIRST_CHECK_DELAY_SECONDS')) * 1000)
 
         # Connect signals. yt-dlp emits a progress line per output line, each
         # of which reaches this on the GUI thread, on top of the 500 ms timer.
@@ -5849,6 +5870,8 @@ class MainWindowCore(
         ("cfg_verify_formats", "VerifyFormats", "check"),
         ("cfg_sponsorblock", "SponsorBlock", "check"),
         ("cfg_autoupdate", "AutoUpdateYtDlp", "check"),
+        ("cfg_autoupdate_app", "AutoUpdateApp", "check"),
+        ("cfg_open_pairing", "OpenExtensionPairing", "check"),
         ("cfg_closetotray", "CloseToTray", "check"),
         ("cfg_startmin", "StartMinimized", "check"),
         ("cfg_notify", "NotifyOnComplete", "check"),
@@ -7406,6 +7429,168 @@ class MainWindowCore(
             "danger",
         )
 
+    def _schedule_app_update_check(self, seconds):
+        if self._value('companion_self_update_supported'):
+            self.app_update_timer.start(int(seconds) * 1000)
+
+    def _set_app_update_status(self, message, tone="neutral"):
+        label = getattr(self, 'app_update_status', None)
+        if label is not None:
+            label.setText(tr(message) if message else "")
+            label.setProperty("tone", tone)
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    def _check_app_update_in_background(self, manual=False):
+        """Ask GitHub whether a newer Astra Downloader is out."""
+        if self._app_update_busy:
+            return
+        self._app_update_busy = True
+        button = getattr(self, 'btn_check_app_update', None)
+        if manual and button is not None:
+            button.setEnabled(False)
+            self._set_control_label(button, tr("Checking…"))
+            self._set_app_update_status("Checking GitHub for a newer version…")
+
+        def run():
+            try:
+                result = dict(self._dependencies['check_companion_update']())
+            except Exception as error:  # noqa: BLE001
+                result = {'ok': False, 'error': str(error)}
+            result['manual'] = bool(manual)
+            self.app_update_checked.emit(result)
+
+        threading.Thread(target=run, name='app-update-check', daemon=True).start()
+
+    def _on_app_update_checked(self, result):
+        self._app_update_busy = False
+        manual = bool(result.get('manual'))
+        button = getattr(self, 'btn_check_app_update', None)
+        if button is not None:
+            button.setEnabled(True)
+            self._set_control_label(button, tr("Check for app updates"))
+        interval = int(self._value('APP_UPDATE_CHECK_INTERVAL_SECONDS'))
+        if not result.get('ok'):
+            self._append_log("Astra Downloader update check failed; will try again later.")
+            if manual:
+                self._set_app_update_status(
+                    "Couldn't reach GitHub to check for updates. Check your connection and try again.",
+                    "warning",
+                )
+            self._schedule_app_update_check(int(self._value('APP_UPDATE_RETRY_SECONDS')) * 6)
+            return
+        latest = str(result.get('latest_version') or '')
+        if not result.get('update_available'):
+            if manual:
+                self._set_app_update_status(
+                    tr_format("Astra Downloader {version} is the newest version.",
+                              version=self._value('APP_VERSION')),
+                    "success",
+                )
+            self._schedule_app_update_check(interval)
+            return
+        supported = bool(self._value('companion_self_update_supported'))
+        automatic = bool(self.config.get("AutoUpdateApp", True))
+        if not supported:
+            self._set_app_update_status(
+                tr_format("Astra Downloader {version} is out. Download it from the GitHub releases page.",
+                          version=latest),
+                "warning",
+            )
+            return
+        if not (manual or automatic):
+            self._set_app_update_status(
+                tr_format("Astra Downloader {version} is ready. Choose Check for app updates to install it.",
+                          version=latest),
+                "warning",
+            )
+            if self._app_update_offered != latest:
+                self._app_update_offered = latest
+                try:
+                    show_tray_message(
+                        self, tr("Update available"),
+                        tr_format("Astra Downloader {version} is ready to install from Settings.",
+                                  version=latest),
+                        QSystemTrayIcon.MessageIcon.Information, 6000,
+                    )
+                except Exception:
+                    # reason: the tray balloon is a courtesy; the Settings status carries the message
+                    pass
+            self._schedule_app_update_check(interval)
+            return
+        active = self.dl_manager.active_count()
+        if active:
+            self._append_log(
+                f"Astra Downloader {latest} will install when the {active} active download(s) finish."
+            )
+            self._set_app_update_status(
+                tr_format("Astra Downloader {version} installs as soon as the current downloads finish.",
+                          version=latest),
+                "warning",
+            )
+            self._schedule_app_update_check(int(self._value('APP_UPDATE_RETRY_SECONDS')))
+            return
+        self._install_app_update(latest, manual)
+
+    def _install_app_update(self, latest, manual):
+        self._app_update_busy = True
+        button = getattr(self, 'btn_check_app_update', None)
+        if button is not None:
+            button.setEnabled(False)
+        self._append_log(f"Installing Astra Downloader {latest} from GitHub…")
+        self._set_app_update_status(
+            tr_format("Downloading Astra Downloader {version}. The app restarts when it's ready.",
+                      version=latest),
+            "warning",
+        )
+        # A manual update reopens the window; an automatic one comes back the
+        # way the app was running, in the tray.
+        restart_args = [] if (manual and self.isVisible()) else None
+
+        def run():
+            try:
+                result = self._dependencies['_run_companion_self_update'](
+                    restart=False, dl_manager=self.dl_manager, restart_args=restart_args,
+                )
+            except Exception as error:  # noqa: BLE001
+                result = {'ok': False, 'error': f'Unexpected update error: {error}'}
+            result = dict(result or {})
+            result['manual'] = bool(manual)
+            self.app_update_finished.emit(result)
+
+        threading.Thread(target=run, name='app-update-install', daemon=True).start()
+
+    def _finish_app_update(self, result):
+        self._app_update_busy = False
+        button = getattr(self, 'btn_check_app_update', None)
+        if button is not None:
+            button.setEnabled(True)
+            self._set_control_label(button, tr("Check for app updates"))
+        status = result.get('status')
+        if result.get('ok') and status == 'restart_scheduled':
+            self._append_log(
+                f"Astra Downloader {result.get('latest_version')} verified. Restarting to finish the update."
+            )
+            self._set_app_update_status("Restarting to finish the update…", "success")
+            self._force_close()
+            return
+        if result.get('ok'):
+            # 'current' or 'release-pending': the release asset isn't newer yet.
+            self._schedule_app_update_check(int(self._value('APP_UPDATE_CHECK_INTERVAL_SECONDS')))
+            if result.get('manual'):
+                self._set_app_update_status(
+                    "The new release isn't fully published yet. Astra Downloader will try again later.",
+                    "neutral",
+                )
+            return
+        error = str(result.get('error') or 'Unknown update error.')
+        self._append_log(f"Astra Downloader update failed: {error.rstrip('.')}. The current version was kept.")
+        self._set_app_update_status(
+            "The update didn't install. The current version was kept; check the log for details.",
+            "danger",
+        )
+        self._schedule_app_update_check(int(self._value('APP_UPDATE_RETRY_SECONDS')) * 6)
+
     def _reinstall_ffmpeg(self):
         """Stage and verify a fresh ffmpeg before replacing the live binary."""
         if self._setup_running:
@@ -7836,6 +8021,8 @@ class MainWindowCore(
                 else old_theme
             ),
             "AutoUpdateYtDlp": self.cfg_autoupdate.isChecked(),
+            "AutoUpdateApp": self.cfg_autoupdate_app.isChecked(),
+            "OpenExtensionPairing": self.cfg_open_pairing.isChecked(),
             "CloseToTray": self.cfg_closetotray.isChecked(),
             "StartMinimized": self.cfg_startmin.isChecked(),
             "NotifyOnComplete": self.cfg_notify.isChecked(),

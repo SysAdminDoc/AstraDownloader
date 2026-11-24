@@ -648,8 +648,10 @@ DENO_PATH = DENO_DIR / 'deno.exe'
 NATIVE_HOST_DIR = INSTALL_DIR / 'native-hosts'
 DEFAULT_FIREFOX_EXTENSION_IDS = ("ytkit@sysadmindoc.github.io",)
 # The Chrome ID Astra Deck releases are signed for (its signing-keys doc). It
-# pairs over loopback on its own; any other ID, including an unpacked install
-# whose ID comes from its folder, needs the user to open extension pairing.
+# pairs over loopback on its own whatever the settings say. Any other ID,
+# including an unpacked install whose ID comes from its folder, pairs on its
+# own only while OpenExtensionPairing is on (the default); with it off the
+# user has to open extension pairing first.
 PUBLISHED_CHROME_EXTENSION_IDS = ("lgbiefafhjdbplelniclnflbbilennlg",)
 # Pairing requests run on the API's threads and each rewrites the saved list.
 _EXTENSION_ID_SAVE_LOCK = threading.Lock()
@@ -3713,14 +3715,16 @@ def read_last_installed_update_sha256():
     return None
 
 
-def record_last_installed_update_sha256(digest, *, status='active'):
+def record_last_installed_update_sha256(digest, *, status='active', app_version=None):
     """Persist an update digest with an explicit activation status.
 
     The detached helper changes ``activation-pending`` to ``active`` only
     after replacement and a post-activation health probe. Recording the
     verified digest before detaching keeps one state writer in the normal
     production path without making a merely scheduled update suppress a
-    retry.
+    retry. ``app_version`` names the build that digest belongs to; the
+    downgrade guard reads the pair, so a self-update passes the release's
+    version rather than the running one.
     """
     try:
         _write_update_state(
@@ -3728,7 +3732,7 @@ def record_last_installed_update_sha256(digest, *, status='active'):
             sha256=str(digest).strip().lower(),
             status=str(status or 'active').strip().lower(),
             recorded_at=_utc_timestamp(),
-            app_version=APP_VERSION,
+            app_version=str(app_version or APP_VERSION),
         )
     except Exception as e:  # noqa: BLE001
         write_persistent_log(f"Could not persist companion update state: {e}")
@@ -3760,7 +3764,9 @@ def schedule_companion_update_restart(
     restores the backup before relaunch if post-activation health fails.
     """
     update, target = _safe_update_paths(update_path, target_path)
-    restart_args = list(restart_args or ['--start-server'])
+    # An empty list is a real choice (relaunch with the window open); only
+    # None means the background default.
+    restart_args = ['--start-server'] if restart_args is None else list(restart_args)
     current_pid = int(pid or os.getpid())
     expected_digest = str(expected_sha256 or '').strip().lower()
     expected_version = str(expected_version or '').strip()[:32]
@@ -4264,7 +4270,49 @@ def schedule_companion_process_exit(delay=0.6):
     threading.Thread(target=_exit_later, daemon=True, name='AstraDownloaderSelfUpdateExit').start()
 
 
-def _run_companion_self_update(restart=True, dl_manager=None):
+APP_UPDATE_FIRST_CHECK_DELAY_SECONDS = 90
+APP_UPDATE_CHECK_INTERVAL_SECONDS = 6 * 60 * 60
+APP_UPDATE_RETRY_SECONDS = 5 * 60
+
+
+def companion_self_update_supported():
+    """Whether this copy can replace itself with a GitHub release.
+
+    True for the installed one-file app and a portable one-file copy. A source
+    run has no exe to replace, a portable one-folder build has to be
+    re-extracted, and a downloaded copy installs itself instead.
+    """
+    if not is_frozen_app():
+        return False
+    if is_onedir_build():
+        return False
+    if is_portable_mode():
+        return True
+    try:
+        return current_executable_path() == install_target_exe().resolve()
+    except OSError:
+        return False
+
+
+def check_companion_update(timeout=15):
+    """Ask GitHub for the newest release without downloading it."""
+    try:
+        latest = fetch_latest_companion_version(timeout=timeout)
+    except Exception as error:  # noqa: BLE001
+        write_persistent_log(f'App update check failed: {error}')
+        return {
+            'ok': False, 'update_available': False,
+            'current_version': APP_VERSION, 'latest_version': '',
+        }
+    return {
+        'ok': True,
+        'update_available': _compare_semver(latest, APP_VERSION) > 0,
+        'current_version': APP_VERSION,
+        'latest_version': latest,
+    }
+
+
+def _run_companion_self_update(restart=True, dl_manager=None, restart_args=None):
     if not _COMPANION_UPDATE_LOCK.acquire(blocking=False):
         return {
             'ok': False,
@@ -4292,7 +4340,9 @@ def _run_companion_self_update(restart=True, dl_manager=None):
                     'relying on the pre-restart in-flight re-check.'
                 )
     try:
-        result = _run_companion_self_update_unlocked(restart=restart, dl_manager=dl_manager)
+        result = _run_companion_self_update_unlocked(
+            restart=restart, dl_manager=dl_manager, restart_args=restart_args,
+        )
         if (intake_paused_here and restart and result.get('ok')
                 and result.get('status') == 'restart_scheduled'):
             # This process is about to os._exit(0): keep the live intake pause
@@ -4313,7 +4363,7 @@ def _run_companion_self_update(restart=True, dl_manager=None):
             _COMPANION_UPDATE_LOCK.release()
 
 
-def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
+def _run_companion_self_update_unlocked(restart=True, dl_manager=None, restart_args=None):
     current_version = APP_VERSION
     if is_portable_mode() and is_onedir_build():
         return {
@@ -4471,8 +4521,8 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
             active_version=current_version, rollback_version=current_version,
             active_sha256='', rollback_sha256='', error_code='',
         )
-        restart_args = ['--start-server']
-        if is_portable_mode():
+        restart_args = ['--start-server'] if restart_args is None else list(restart_args)
+        if is_portable_mode() and '--portable' not in restart_args:
             restart_args.append('--portable')
         try:
             schedule = schedule_companion_update_restart(
@@ -4486,7 +4536,8 @@ def _run_companion_self_update_unlocked(restart=True, dl_manager=None):
             # before it exits so an interrupted handoff is diagnosable and
             # cannot be mistaken for an already-installed release.
             record_last_installed_update_sha256(
-                downloaded_digest, status='activation-pending'
+                downloaded_digest, status='activation-pending',
+                app_version=latest_version,
             )
             if restart:
                 schedule_companion_process_exit()
@@ -4998,6 +5049,102 @@ def _probe_companion_version(path, timeout=15):
     return ''
 
 
+_SEMVER_PATTERN = r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?'
+
+
+def _read_exe_version_resource(path):
+    """ProductVersion from an exe's Windows version resource, without running it.
+
+    Builds after 2.18.1 carry one (build.py writes it). Older builds don't,
+    and the answer is then '' so the caller falls back to other evidence.
+    """
+    if os.name != 'nt':
+        return ''
+    try:
+        import ctypes
+        from ctypes import wintypes
+        library = ctypes.WinDLL('version')
+        size_fn = library.GetFileVersionInfoSizeW
+        size_fn.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
+        size_fn.restype = wintypes.DWORD
+        info_fn = library.GetFileVersionInfoW
+        info_fn.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p]
+        info_fn.restype = wintypes.BOOL
+        query_fn = library.VerQueryValueW
+        query_fn.argtypes = [
+            ctypes.c_void_p, wintypes.LPCWSTR,
+            ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.UINT),
+        ]
+        query_fn.restype = wintypes.BOOL
+        ignored = wintypes.DWORD(0)
+        size = size_fn(str(path), ctypes.byref(ignored))
+        if not size:
+            return ''
+        buffer = ctypes.create_string_buffer(size)
+        if not info_fn(str(path), 0, size, buffer):
+            return ''
+        pointer = ctypes.c_void_p()
+        length = wintypes.UINT(0)
+        tables = []
+        if query_fn(buffer, '\\VarFileInfo\\Translation', ctypes.byref(pointer), ctypes.byref(length)):
+            words = ctypes.cast(pointer, ctypes.POINTER(ctypes.c_ushort))
+            for index in range(0, length.value // 2 - 1, 2):
+                tables.append(f'{words[index]:04x}{words[index + 1]:04x}')
+        tables.append('040904b0')
+        for table in tables:
+            key = f'\\StringFileInfo\\{table}\\ProductVersion'
+            if query_fn(buffer, key, ctypes.byref(pointer), ctypes.byref(length)) and length.value:
+                value = ctypes.wstring_at(pointer, length.value).rstrip(chr(0)).strip()
+                if re.fullmatch(_SEMVER_PATTERN, value):
+                    return value
+    except (OSError, AttributeError, ValueError):
+        return ''
+    return ''
+
+
+def _recorded_install_versions():
+    """(version, sha256) pairs the update state says this installation held."""
+    state = _read_update_state(_companion_update_state_path())
+    pairs = []
+    for version_key, digest_key in (('app_version', 'sha256'), ('active_version', 'active_sha256')):
+        version = str(state.get(version_key) or '').strip()
+        digest = str(state.get(digest_key) or '').strip().lower()
+        if re.fullmatch(_SEMVER_PATTERN, version):
+            pairs.append((version, digest))
+    return pairs
+
+
+def _installed_version_floor():
+    """Newest version the update state records for this installation, or ''."""
+    versions = [version for version, _digest in _recorded_install_versions()]
+    if not versions:
+        return ''
+    newest = versions[0]
+    for version in versions[1:]:
+        if _compare_semver(version, newest) > 0:
+            newest = version
+    return newest
+
+
+def _installed_companion_version(path):
+    """The installed app's version for the downgrade guard.
+
+    A ``--version`` probe has to unpack a one-file build first and can time out
+    under load; on 2026-11-23 that empty answer let a stale v2.16.0 download
+    replace v2.18.1. Static evidence comes first: the version resource, then
+    the update state when its digest matches the file on disk.
+    """
+    version = _read_exe_version_resource(path)
+    if version:
+        return version
+    digest = _compute_sha256(path)
+    if digest:
+        for recorded, recorded_digest in _recorded_install_versions():
+            if recorded_digest == digest:
+                return recorded
+    return _probe_companion_version(path) or _probe_companion_version(path, timeout=60)
+
+
 def _install_managed_executable(*, allow_downgrade=False, progress=None):
     """Replace an older managed app only after verification and shutdown."""
     current = current_executable_path()
@@ -5008,9 +5155,10 @@ def _install_managed_executable(*, allow_downgrade=False, progress=None):
     try:
         result = install_verified_copy(
             current, target, APP_VERSION,
-            probe_version=_probe_companion_version, compare_versions=_compare_semver,
+            probe_version=_installed_companion_version, compare_versions=_compare_semver,
             health_check=probe_companion_update_binary, copy_verified=atomic_copy_verified,
             digest=_compute_sha256, allow_downgrade=allow_downgrade, progress=report,
+            version_floor=_installed_version_floor,
             stop_running=lambda: stop_existing_installation(
                 target, control_port=INSTANCE_CONTROL_PORT, timeout=20,
                 request_shutdown=lambda: send_instance_command('shutdown', attempts=2, delay=0.1),
@@ -5283,21 +5431,104 @@ def register_start_menu_shortcut(target, base_args):
         return False
 
 
-def register_startup_task(target, base_args):
+STARTUP_RUN_KEY = 'Software\\Microsoft\\Windows\\CurrentVersion\\Run'
+STARTUP_RUN_VALUE = 'AstraDownloader'
+LEGACY_STARTUP_TASK = 'AstraDownloader'
+
+
+def startup_command(target, base_args):
+    return command_line([target] + list(base_args) + ['-Background'])
+
+
+def remove_legacy_startup_task():
+    """Delete the logon task 2.18.1 and older created, when Windows allows it.
+
+    A task created from an elevated process can't be changed or removed by the
+    user's normal token, and it kept launching whichever copy it was created
+    from. Returns False only when the task exists and couldn't be removed.
+    """
     try:
-        task_cmd = command_line([target] + list(base_args) + ['-Background'])
-        result = subprocess.run([
-            system32_command('schtasks'), '/Create', '/TN', 'AstraDownloader',
-            '/TR', task_cmd, '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F'
-        ], capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=60)
-        if result.returncode != 0:
-            detail = result.stderr.decode(errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr or '')
-            write_persistent_log(f'Startup task registration failed: {detail.strip() or result.returncode}')
-            return False
-        return True
-    except Exception as e:
-        write_persistent_log(f"Startup task registration failed: {e}")
+        result = subprocess.run(
+            [system32_command('schtasks'), '/Delete', '/TN', LEGACY_STARTUP_TASK, '/F'],
+            capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=60,
+        )
+    except Exception as error:
+        write_persistent_log(f'Could not remove the old startup task: {error}')
         return False
+    if result.returncode == 0:
+        write_persistent_log('Removed the startup task left by an older version.')
+        return True
+    detail = result.stderr.decode(errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr or '')
+    if 'access is denied' in detail.lower():
+        write_persistent_log(
+            'The startup task left by an older version could not be removed without '
+            'administrator rights. It may start an old copy at sign-in. Remove it from an '
+            f'administrator prompt with: schtasks /Delete /TN {LEGACY_STARTUP_TASK} /F'
+        )
+        return False
+    # reason: any other refusal means there is no such task to remove
+    return True
+
+
+def register_startup_task(target, base_args):
+    """Start the installed app at sign-in through the per-user Run key.
+
+    The Run key needs no elevation and has no battery conditions, and Task
+    Manager's Startup apps page can switch it off without this app's help.
+    """
+    try:
+        import winreg
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, STARTUP_RUN_KEY, 0, winreg.KEY_WRITE)
+        try:
+            winreg.SetValueEx(key, STARTUP_RUN_VALUE, 0, winreg.REG_SZ, startup_command(target, base_args))
+        finally:
+            winreg.CloseKey(key)
+    except Exception as e:
+        write_persistent_log(f"Startup registration failed: {e}")
+        return False
+    remove_legacy_startup_task()
+    return True
+
+
+def _read_hkcu_value(path, name=''):
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, path)
+        try:
+            value, _kind = winreg.QueryValueEx(key, name)
+        finally:
+            winreg.CloseKey(key)
+    except (ImportError, OSError):
+        return None
+    return value if isinstance(value, str) else None
+
+
+def integration_drift(target, base_args):
+    """Names of registered integrations that point at another copy or version.
+
+    Registration is stamped per version, so an older copy that re-registered
+    itself (a stale download, a portable folder) would otherwise keep the
+    browser link handlers and sign-in start until the next version change.
+    Registry reads only: this runs on every launch of the installed app.
+    """
+    if sys.platform != 'win32':
+        return []
+    expected_open = command_line([target] + list(base_args)) + ' "%1"'
+    checks = [
+        ('startup', STARTUP_RUN_KEY, STARTUP_RUN_VALUE, startup_command(target, base_args)),
+        ('video link handlers', 'Software\\Classes\\mediadl\\shell\\open\\command', '', expected_open),
+        ('video link handlers', 'Software\\Classes\\ytdl\\shell\\open\\command', '', expected_open),
+        ('Apps & Features entry', 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AstraDownloader',
+         'UninstallString', command_line([target] + list(base_args) + ['--uninstall'])),
+        ('Apps & Features entry', 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AstraDownloader',
+         'DisplayVersion', APP_VERSION),
+    ]
+    drift = []
+    for label, path, name, expected in checks:
+        actual = _read_hkcu_value(path, name)
+        if (actual or '').strip().casefold() != expected.strip().casefold() and label not in drift:
+            drift.append(label)
+    return drift
 
 
 def register_protocol_handlers(target, base_args):
@@ -5653,6 +5884,36 @@ def refresh_native_messaging_registration(config=None):
     return True
 
 
+MAX_PAIRED_CHROME_EXTENSION_IDS = 24
+
+
+def open_pairing_enabled(config):
+    """Whether any local extension or userscript may pair without a window.
+
+    On by default: an unpacked Astra Deck gets an ID from its folder, so every
+    copy, every browser profile and every reinstall is a new ID. Web pages
+    can't pair either way; they send an http(s) Origin, which is refused.
+    """
+    try:
+        return coerce_bool(config.get("OpenExtensionPairing", True), True)
+    except Exception:
+        # reason: a config that can't be read keeps the stricter behavior
+        return False
+
+
+def _trim_paired_chrome_ids(ids, keep):
+    """Newest IDs win once the list is full; published IDs always stay.
+
+    Native messaging needs every ID listed in the host manifest, and with
+    open pairing a test harness or a reinstall adds one each time.
+    """
+    published = [value for value in ids if value in PUBLISHED_CHROME_EXTENSION_IDS]
+    others = [value for value in ids if value not in PUBLISHED_CHROME_EXTENSION_IDS]
+    room = max(0, keep - len(published))
+    kept = set(published) | set(others[-room:] if room else [])
+    return [value for value in ids if value in kept]
+
+
 def pair_browser_extension(config, origin, requested_id="", refresh=None, window=None):
     """Persist a loopback extension identity and refresh native-host registration.
 
@@ -5661,9 +5922,11 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
     the body must name the known Astra Deck Gecko ID.
 
     A paired Chrome ID can read the session token, and any installed
-    extension can send this request. So a Chrome ID that isn't published and
-    isn't already paired is saved only while the user has extension pairing
-    open on the Browser extension page, and that window pairs one ID.
+    extension can send this request. With ``OpenExtensionPairing`` off, a
+    Chrome ID that isn't published and isn't already paired is saved only
+    while the user has extension pairing open on the Browser extension page,
+    and that window pairs one ID. With it on (the default) any extension
+    Origin pairs, because an unpacked copy's ID changes with its folder.
     """
     normalized_origin = normalize_extension_origin(origin)
     if not normalized_origin or not is_extension_origin_shape(origin):
@@ -5688,7 +5951,7 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
             fallback=DEFAULT_FIREFOX_EXTENSION_IDS,
             browser="firefox",
         ))
-        if claimed not in allowed:
+        if claimed not in allowed and not open_pairing_enabled(config):
             return {"ok": False, "paired": False, "code": "unknown-firefox-id"}
         extension_id = claimed
         key = "NativeFirefoxExtensionIds"
@@ -5703,16 +5966,23 @@ def pair_browser_extension(config, origin, requested_id="", refresh=None, window
         if (browser == "chrome" and not already
                 and extension_id not in PUBLISHED_CHROME_EXTENSION_IDS):
             window = EXTENSION_PAIRING if window is None else window
-            if not window.consume(extension_id):
+            # An open window is spent either way, so the Browser extension
+            # page names the ID that paired. Open pairing only stops a closed
+            # one from being a refusal.
+            if window.consume(extension_id):
+                consumed = window
+            elif not open_pairing_enabled(config):
                 return {
                     "ok": False,
                     "paired": False,
                     "code": "extension-pairing-closed",
                     "id": extension_id,
                 }
-            consumed = window
         if not already:
-            joined = ", ".join(existing + [extension_id])
+            updated = existing + [extension_id]
+            if browser == "chrome":
+                updated = _trim_paired_chrome_ids(updated, MAX_PAIRED_CHROME_EXTENSION_IDS)
+            joined = ", ".join(updated)
             update = getattr(config, "update", None)
             if callable(update):
                 saved = bool(update({key: joined}))
@@ -5844,7 +6114,9 @@ def pair_userscript(config, origin="", window=None):
     # Any extension can claim the window, so the page names the Origin that
     # took it: a manager's own ID is expected, anything else isn't.
     through = normalize_extension_origin(origin) if origin else ""
-    if not window.consume(through):
+    # With open pairing the window is still consumed when it's open, so the
+    # Browser extension page reports who paired.
+    if not window.consume(through) and not open_pairing_enabled(config):
         return {"ok": False, "paired": False, "code": "userscript-pairing-closed"}
     token = str(config.get("ServerToken") or "")
     if not token:
@@ -5891,6 +6163,11 @@ def _register_system_integrations(target, base_args, force=False):
     failures = []
     startup_ok = True
     needs_registration = force or _get_integrations_stamp() != APP_VERSION
+    if not needs_registration:
+        drifted = integration_drift(target, base_args)
+        if drifted:
+            write_persistent_log('Repairing integrations that point elsewhere: ' + ', '.join(drifted))
+            needs_registration = True
     if needs_registration:
         for label, register in (
             ('desktop shortcut', register_desktop_shortcut),
@@ -5900,8 +6177,8 @@ def _register_system_integrations(target, base_args, force=False):
         ):
             if register(target, base_args) is False:
                 failures.append(label)
-        # Task Scheduler can deny a standard user. It is optional and must
-        # not turn an otherwise usable per-user installation into a failure.
+        # Starting at sign-in is optional and must not turn an otherwise
+        # usable per-user installation into a failure.
         startup_ok = register_startup_task(target, base_args) is not False
     if register_native_messaging_hosts(target, base_args, config) is False:
         failures.append('browser connections')
@@ -7207,13 +7484,22 @@ def run_uninstall():
         print(message)
         sys.exit(0)
 
-    # Remove scheduled task
-    subprocess.run([system32_command('schtasks'), '/Delete', '/TN', 'AstraDownloader', '/F'],
-                   capture_output=True, creationflags=CREATE_NO_WINDOW, timeout=60)
+    # Remove the sign-in start (Run key, and the task older versions used)
+    remove_legacy_startup_task()
 
     # Remove registry entries
     try:
         import winreg
+        try:
+            run_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, STARTUP_RUN_KEY, 0, winreg.KEY_WRITE)
+            try:
+                winreg.DeleteValue(run_key, STARTUP_RUN_VALUE)
+            finally:
+                winreg.CloseKey(run_key)
+        except Exception:
+            # reason: the Run value is absent on installs that predate it, and a
+            # failure here must not skip the keys removed below
+            pass
         for path in [
             'Software\\Classes\\ytdl',
             'Software\\Classes\\mediadl',
@@ -7449,6 +7735,12 @@ class MainWindow(MainWindowCore):
                 '_build_wsgi_server': lambda *args, **kwargs: _build_wsgi_server(*args, **kwargs),
                 '_ffmpeg_version_probe': lambda: _ffmpeg_version_probe,
                 '_run_ytdlp_self_update': lambda *args, **kwargs: _run_ytdlp_self_update(*args, **kwargs),
+                '_run_companion_self_update': lambda *args, **kwargs: _run_companion_self_update(*args, **kwargs),
+                'check_companion_update': lambda *args, **kwargs: check_companion_update(*args, **kwargs),
+                'companion_self_update_supported': lambda: companion_self_update_supported(),
+                'APP_UPDATE_FIRST_CHECK_DELAY_SECONDS': lambda: APP_UPDATE_FIRST_CHECK_DELAY_SECONDS,
+                'APP_UPDATE_CHECK_INTERVAL_SECONDS': lambda: APP_UPDATE_CHECK_INTERVAL_SECONDS,
+                'APP_UPDATE_RETRY_SECONDS': lambda: APP_UPDATE_RETRY_SECONDS,
                 'build_diagnostics_bundle': lambda *args, **kwargs: build_diagnostics_bundle(*args, **kwargs),
                 'check_download_disk_space': lambda *args, **kwargs: check_download_disk_space(*args, **kwargs),
                 'clamp_int': lambda *args, **kwargs: clamp_int(*args, **kwargs),

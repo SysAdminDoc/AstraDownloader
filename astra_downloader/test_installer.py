@@ -137,6 +137,36 @@ class InstallerTests(unittest.TestCase):
         self.stop.assert_not_called()
         self.assertTrue(self.install(probe_version=lambda _path: '3.0.0', allow_downgrade=True).changed)
 
+    def test_unreadable_installed_version_falls_back_to_the_recorded_floor(self):
+        # A probe that times out answers ''. That used to mean "nothing to
+        # protect", and an older download replaced a newer installed app.
+        unknown = {'probe_version': lambda _path: ''}
+        result = self.install(**unknown, version_floor=lambda: '3.0.0')
+        self.assertFalse(result.changed)
+        self.assertEqual(result.previous_version, '3.0.0')
+        self.stop.assert_not_called()
+        self.copy.assert_not_called()
+        self.assertEqual(self.target.read_bytes(), b'old executable')
+        self.assertTrue(self.install(**unknown, version_floor=lambda: '3.0.0', allow_downgrade=True).changed)
+
+    def test_unreadable_installed_version_without_a_floor_is_repaired(self):
+        result = self.install(probe_version=lambda _path: '')
+        self.assertTrue(result.changed)
+        self.assertEqual(self.target.read_bytes(), b'new executable')
+        self.target.write_bytes(b'old executable')
+        self.assertTrue(self.install(probe_version=lambda _path: '', version_floor=lambda: '1.5.0').changed)
+
+    def test_a_known_installed_version_does_not_consult_the_floor(self):
+        floor = mock.Mock(return_value='9.0.0')
+        self.assertTrue(self.install(version_floor=floor).changed)
+        floor.assert_not_called()
+
+    def test_a_fresh_install_ignores_a_leftover_floor(self):
+        self.target.unlink()
+        floor = mock.Mock(return_value='9.0.0')
+        self.assertTrue(self.install(version_floor=floor).changed)
+        floor.assert_not_called()
+
     def test_user_data_is_untouched(self):
         names = ['config.json', 'queue.json', 'history.json', 'site_logins.json', 'downloads/video.mp4']
         for name in names:

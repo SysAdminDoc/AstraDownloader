@@ -538,6 +538,59 @@ def prepare_translations():
         )
 
 
+VERSION_RESOURCE = SPEC_DIR / "version_info.txt"
+
+
+def read_app_version():
+    source = SCRIPT.read_text(encoding="utf-8")
+    match = re.search(r'^APP_VERSION\s*=\s*["\']([^"\']+)["\']', source, re.MULTILINE)
+    if not match:
+        raise SystemExit(f"Could not read APP_VERSION from {SCRIPT}")
+    return match.group(1)
+
+
+def version_resource_text(version):
+    """PyInstaller version-file source for the exe's Windows version resource.
+
+    The installer reads ProductVersion from it to decide whether a copy is
+    older than the installed one without running the installed exe.
+    """
+    numbers = [int(part) for part in re.findall(r"\d+", re.split(r"[-+]", version, maxsplit=1)[0])][:4]
+    numbers += [0] * (4 - len(numbers))
+    fixed = "(" + ", ".join(str(n) for n in numbers) + ")"
+    strings = (
+        ("CompanyName", "SysAdminDoc"),
+        ("FileDescription", "Astra Downloader"),
+        ("FileVersion", version),
+        ("InternalName", "AstraDownloader"),
+        ("LegalCopyright", "MIT License"),
+        ("OriginalFilename", "AstraDownloader.exe"),
+        ("ProductName", "Astra Downloader"),
+        ("ProductVersion", version),
+    )
+    table = ",\n".join(f"        StringStruct({name!r}, {value!r})" for name, value in strings)
+    return (
+        "VSVersionInfo(\n"
+        f"  ffi=FixedFileInfo(filevers={fixed}, prodvers={fixed}, mask=0x3f, flags=0x0,\n"
+        "                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),\n"
+        "  kids=[\n"
+        "    StringFileInfo([\n"
+        "      StringTable('040904B0', [\n"
+        f"{table}\n"
+        "      ])\n"
+        "    ]),\n"
+        "    VarFileInfo([VarStruct('Translation', [1033, 1200])])\n"
+        "  ]\n"
+        ")\n"
+    )
+
+
+def write_version_resource():
+    SPEC_DIR.mkdir(parents=True, exist_ok=True)
+    VERSION_RESOURCE.write_text(version_resource_text(read_app_version()), encoding="utf-8")
+    return VERSION_RESOURCE
+
+
 def pyinstaller_args(mode):
     if mode not in ("onefile", "onedir"):
         raise ValueError(f"Unsupported PyInstaller mode: {mode}")
@@ -550,6 +603,7 @@ def pyinstaller_args(mode):
         "--runtime-hook", str(HERE / "runtime_hook_mp.py"),
         "--name", "AstraDownloader",
         "--icon", str(ICON),
+        "--version-file", str(VERSION_RESOURCE),
         "--add-data", str(ICON) + os.pathsep + ".",
         "--add-data", (
             str(TRANSLATIONS_DIR / "*.qm")
@@ -635,6 +689,7 @@ def build():
     prepare_translations()
     clean()
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
+    write_version_resource()
 
     run_pyinstaller("onefile")
     built = DIST_DIR / "AstraDownloader.exe"

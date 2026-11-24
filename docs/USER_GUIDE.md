@@ -60,7 +60,9 @@ Advanced options include IPv4 or IPv6 preference, a source address, geo-related 
 
 On Browser extension, **More options** reveals manual extension IDs, the local address and activity log. Connection and pairing actions stay visible above it.
 
-The Astra Deck userscript can't use native messaging, so it pairs once by hand. Open Browser extension, choose **Pair userscript**, then press a download button on YouTube within two minutes. The status line counts down and says when the userscript is paired. The window closes after the first request it answers. To unpair the userscript, regenerate the token in Settings. You can also open the window from a command line with `AstraDownloader.exe --pair-userscript`, which hands the request to the copy that's already running.
+In builds after 2.18.1, any copy of Astra Deck on the same computer connects by itself the first time it needs the downloader, and so does the userscript. That covers unpacked copies, whose ID changes with the folder they're loaded from. Websites can't connect. If you'd rather approve each one, turn off **Let browser extensions connect without asking** in Settings under Connection.
+
+With that setting off, and on 2.18.1, pairing is done by hand. Open Browser extension and choose **Allow extension pairing** or **Pair userscript**, then press a download button on YouTube within two minutes. The status line counts down and says what paired. The window closes after the first request it answers. To unpair the userscript, regenerate the token in Settings. You can also open the userscript window from a command line with `AstraDownloader.exe --pair-userscript`, which hands the request to the copy that's already running.
 
 ## Installation and portable storage
 
@@ -80,7 +82,15 @@ Use `--install` for a silent installation without the progress window. It exits 
 .\AstraDownloader.exe --install
 ```
 
-The portable ZIP has a marker beside its executable. Extract the whole archive to a writable folder and run it there. New portable copies store settings, history, queue, subscriptions, sign-ins and managed helpers under `data`. Portable mode stays separate from the per-user installation and doesn't upgrade it. It doesn't create desktop, Start Menu, protocol, logon-task or browser native-messaging registrations. Existing older copies with loose state beside the executable retain that layout.
+Builds after 2.18.1 update themselves. Astra checks GitHub for a new release a minute after it starts and again every six hours. When one is out and no downloads are running, it downloads the new executable, checks its SHA-256 against the release, starts it once to prove it runs and swaps it in. The app comes back the way it was running, and if anything fails the current version stays. **Check for app updates** in Settings under Maintenance does the same on demand. The checkbox above it turns automatic updates off.
+
+Starting at sign-in is an entry in your account's Run list, so Task Manager's Startup apps page can switch it off. Version 2.18.1 and older used a scheduled task. A newer build removes that task when Windows allows it. If an administrator created the task, remove it from an administrator prompt:
+
+```powershell
+schtasks /Delete /TN AstraDownloader /F
+```
+
+The portable ZIP has a marker beside its executable. Extract the whole archive to a writable folder and run it there. New portable copies store settings, history, queue, subscriptions, sign-ins and managed helpers under `data`. Portable mode stays separate from the per-user installation and doesn't upgrade it. It doesn't create desktop, Start Menu, protocol, sign-in start or browser native-messaging registrations. Existing older copies with loose state beside the executable retain that layout.
 
 A one-file copy can also be run with `--portable`. Don't combine it with `--install`.
 

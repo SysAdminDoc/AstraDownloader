@@ -102,7 +102,9 @@ class PairUserscriptTests(unittest.TestCase):
 
     def test_closed_window_and_missing_token_are_refused(self):
         closed = ad.UserscriptPairingWindow(clock=_Clock())
-        result = ad.pair_userscript(FakeConfig({"ServerToken": TOKEN}), "", window=closed)
+        result = ad.pair_userscript(
+            FakeConfig({"ServerToken": TOKEN, "OpenExtensionPairing": False}), "", window=closed,
+        )
         self.assertEqual(result["code"], "userscript-pairing-closed")
         self.assertNotIn("token", result)
 
@@ -132,7 +134,9 @@ class UserscriptPairingRouteTests(unittest.TestCase):
     def setUp(self):
         ad.USERSCRIPT_PAIRING.close()
         self.addCleanup(ad.USERSCRIPT_PAIRING.close)
-        self.config = FakeConfig({"ServerToken": TOKEN, "LegacyHealthTokenEcho": False})
+        self.config = FakeConfig({
+            "ServerToken": TOKEN, "LegacyHealthTokenEcho": False, "OpenExtensionPairing": False,
+        })
         manager = ad.DownloadManager(self.config, FakeHistory())
         self.client = ad.create_api(self.config, manager, FakeHistory()).test_client()
 

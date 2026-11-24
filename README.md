@@ -18,7 +18,7 @@ Save videos and audio without building a command line. Astra Downloader puts yt-
 
 The seven pages keep common actions in view. Open More options for advanced download choices, or use Settings categories and search to find a default.
 
-Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdminDoc/Astra-Deck) can also send links from your browser, and so can its userscript once you pair it on the Browser extension page. For Chrome or Edge, choose Allow extension pairing on that page once, then press a download button in Astra Deck within two minutes. The signed .crx build skips that step.
+Use it on its own. The optional [Astra Deck extension](https://github.com/SysAdminDoc/Astra-Deck) can also send links from your browser, and so can its userscript. Builds after 2.18.1 let any copy of Astra Deck on the same computer connect by itself. On 2.18.1, choose Allow extension pairing (or Pair userscript) on the Browser extension page once, then press a download button in Astra Deck within two minutes. The signed .crx build skips that step.
 
 ![Astra Downloader's dark Download page with an example queue and format controls](assets/screenshots/downloads.png)
 
@@ -34,6 +34,8 @@ Choose a Windows x64 package from the [v2.18.1 release](https://github.com/SysAd
 | [AstraDownloader-onedir.zip](https://github.com/SysAdminDoc/AstraDownloader/releases/download/v2.18.1/AstraDownloader-onedir.zip) | You want a portable folder. Extract it somewhere writable, then run the executable inside. |
 
 Run the downloaded EXE to install or update Astra. A small progress window verifies the new copy, replaces the existing per-user app and opens the updated version. Settings, queue, history, sign-ins and downloaded files stay in place. Running downloads are interrupted during an upgrade, and unfinished queue entries return paused. See the [installation guide](docs/USER_GUIDE.md#installation-and-portable-storage) for silent and portable use.
+
+Builds after 2.18.1 also keep themselves current. Astra checks GitHub for a new release shortly after it starts and every six hours, then installs it over the running copy when no downloads are active. You can turn that off in Settings under Maintenance.
 
 The app downloads its managed yt-dlp and FFmpeg tools during first-run setup. YouTube may also need a JavaScript runtime. Internet access is required. Neither download includes an offline-ready tool bundle.
 

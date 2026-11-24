@@ -388,6 +388,12 @@ def create_api(config, dl_manager, history, *, dependencies):
 
     def check_auth():
         provided = request.headers.get("X-Auth-Token", "")
+        if not provided:
+            # Astra Deck 4.110 and older sent the token for /history only as a
+            # bearer credential, so that panel always answered 401.
+            scheme, _, credential = request.headers.get("Authorization", "").partition(" ")
+            if scheme.lower() == "bearer":
+                provided = credential.strip()
         token = config.get("ServerToken")
         return bool(token and provided and hmac.compare_digest(str(provided), str(token)))
 
@@ -1631,7 +1637,12 @@ def _register_system_routes(api, context, dependencies):
         # or a browser that has not reloaded the host manifest yet).
         paired_origin = is_paired_extension_origin(request.headers.get("Origin", ""))
         token_reachable = legacy_health_token_echo or paired_origin
-        allowed, retry_after = health_rate_limiter.allow('health')
+        # One bucket per caller: with a single shared bucket a dozen open
+        # YouTube tabs used it up, and every caller then read the 429 as a
+        # stopped downloader.
+        allowed, retry_after = health_rate_limiter.allow(
+            'health:' + (normalize_extension_origin(request.headers.get("Origin", "")) or 'no-origin')
+        )
         if not allowed:
             return cors_response(
                 {"error": "Too many health requests in a short period. Please wait a moment."},

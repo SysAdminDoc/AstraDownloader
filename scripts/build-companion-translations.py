@@ -2628,6 +2628,42 @@ CATALOGS["de"].update({
 })
 
 
+# App updates from GitHub and open extension pairing.
+CATALOGS["de"].update({
+    "Astra Downloader": "Astra Downloader",
+    "Keep Astra Downloader up to date automatically": "Astra Downloader automatisch aktuell halten",
+    "Checks GitHub a minute after start and every six hours. A new release installs over this one when no downloads are running, and settings, history and the queue stay as they are.":
+        "Prüft GitHub eine Minute nach dem Start und danach alle sechs Stunden. Eine neue Version wird über diese installiert, wenn keine Downloads laufen. Einstellungen, Verlauf und Warteschlange bleiben unverändert.",
+    "Check for app updates": "Nach App-Updates suchen",
+    "Check GitHub now and install a newer release if there is one.":
+        "GitHub jetzt prüfen und eine neuere Version installieren, falls es eine gibt.",
+    "App update status": "Status des App-Updates",
+    "Checking GitHub for a newer version…": "GitHub wird auf eine neuere Version geprüft…",
+    "Couldn't reach GitHub to check for updates. Check your connection and try again.":
+        "GitHub war für die Update-Suche nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "Astra Downloader {version} is the newest version.": "Astra Downloader {version} ist die neueste Version.",
+    "Astra Downloader {version} is out. Download it from the GitHub releases page.":
+        "Astra Downloader {version} ist erschienen. Laden Sie die Version von der GitHub-Releases-Seite herunter.",
+    "Astra Downloader {version} is ready. Choose Check for app updates to install it.":
+        "Astra Downloader {version} ist verfügbar. Wählen Sie „Nach App-Updates suchen“, um die Version zu installieren.",
+    "Astra Downloader {version} is ready to install from Settings.":
+        "Astra Downloader {version} kann in den Einstellungen installiert werden.",
+    "Astra Downloader {version} installs as soon as the current downloads finish.":
+        "Astra Downloader {version} wird installiert, sobald die laufenden Downloads abgeschlossen sind.",
+    "Downloading Astra Downloader {version}. The app restarts when it's ready.":
+        "Astra Downloader {version} wird heruntergeladen. Die App startet neu, sobald das Update bereit ist.",
+    "Restarting to finish the update…": "Neustart, um das Update abzuschließen…",
+    "The new release isn't fully published yet. Astra Downloader will try again later.":
+        "Die neue Version ist noch nicht vollständig veröffentlicht. Astra Downloader versucht es später erneut.",
+    "The update didn't install. The current version was kept; check the log for details.":
+        "Das Update wurde nicht installiert. Die aktuelle Version wurde beibehalten; prüfen Sie das Protokoll.",
+    "Update available": "Update verfügbar",
+    "Let browser extensions connect without asking": "Browser-Erweiterungen ohne Nachfrage verbinden lassen",
+    "Any copy of Astra Deck, in any browser or profile on this computer, connects on its own. Turn this off to approve each new extension from the Browser extension page. Websites can't connect either way.":
+        "Jede Kopie von Astra Deck in jedem Browser oder Profil auf diesem Computer verbindet sich von selbst. Schalten Sie dies aus, um jede neue Erweiterung auf der Seite „Browser-Erweiterung“ einzeln freizugeben. Websites können sich in keinem Fall verbinden.",
+})
+
+
 def catalogue_coverage():
     """Report how many source strings each catalogue actually declares.
 

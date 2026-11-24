@@ -135,6 +135,10 @@
       <translation>yt-dlp update failed. The previous working copy was kept; check the log for details.</translation>
     </message>
     <message>
+      <source>The update didn't install. The current version was kept; check the log for details.</source>
+      <translation>The update didn't install. The current version was kept; check the log for details.</translation>
+    </message>
+    <message>
       <source>Refreshing ffmpeg. The current verified copy stays available until replacement succeeds.</source>
       <translation>Refreshing ffmpeg. The current verified copy stays available until replacement succeeds.</translation>
     </message>
@@ -899,6 +903,18 @@
       <translation>Check for yt-dlp updates</translation>
     </message>
     <message>
+      <source>Checking GitHub for a newer version…</source>
+      <translation>Checking GitHub for a newer version…</translation>
+    </message>
+    <message>
+      <source>Downloading Astra Downloader {version}. The app restarts when it's ready.</source>
+      <translation>Downloading Astra Downloader {version}. The app restarts when it's ready.</translation>
+    </message>
+    <message>
+      <source>Restarting to finish the update…</source>
+      <translation>Restarting to finish the update…</translation>
+    </message>
+    <message>
       <source>Setup is already running.</source>
       <translation>Setup is already running.</translation>
     </message>
@@ -1591,6 +1607,30 @@
       <translation>yt-dlp {version} is ready.</translation>
     </message>
     <message>
+      <source>Check for app updates</source>
+      <translation>Check for app updates</translation>
+    </message>
+    <message>
+      <source>Couldn't reach GitHub to check for updates. Check your connection and try again.</source>
+      <translation>Couldn't reach GitHub to check for updates. Check your connection and try again.</translation>
+    </message>
+    <message>
+      <source>Astra Downloader {version} is out. Download it from the GitHub releases page.</source>
+      <translation>Astra Downloader {version} is out. Download it from the GitHub releases page.</translation>
+    </message>
+    <message>
+      <source>Astra Downloader {version} is ready. Choose Check for app updates to install it.</source>
+      <translation>Astra Downloader {version} is ready. Choose Check for app updates to install it.</translation>
+    </message>
+    <message>
+      <source>Astra Downloader {version} installs as soon as the current downloads finish.</source>
+      <translation>Astra Downloader {version} installs as soon as the current downloads finish.</translation>
+    </message>
+    <message>
+      <source>The new release isn't fully published yet. Astra Downloader will try again later.</source>
+      <translation>The new release isn't fully published yet. Astra Downloader will try again later.</translation>
+    </message>
+    <message>
       <source>Preview unavailable until the template is valid.</source>
       <translation>Preview unavailable until the template is valid.</translation>
     </message>
@@ -2059,6 +2099,10 @@
       <translation>Settings status: {message}</translation>
     </message>
     <message>
+      <source>Astra Downloader {version} is the newest version.</source>
+      <translation>Astra Downloader {version} is the newest version.</translation>
+    </message>
+    <message>
       <source>At most about {size} for this choice</source>
       <translation>At most about {size} for this choice</translation>
     </message>
@@ -2229,6 +2273,14 @@
     <message>
       <source>No current message</source>
       <translation>No current message</translation>
+    </message>
+    <message>
+      <source>Update available</source>
+      <translation>Update available</translation>
+    </message>
+    <message>
+      <source>Astra Downloader {version} is ready to install from Settings.</source>
+      <translation>Astra Downloader {version} is ready to install from Settings.</translation>
     </message>
     <message>
       <source>Reserved Windows name in preview: {name}.</source>
@@ -3331,6 +3383,10 @@
       <translation>Regenerate</translation>
     </message>
     <message>
+      <source>Any copy of Astra Deck, in any browser or profile on this computer, connects on its own. Turn this off to approve each new extension from the Browser extension page. Websites can't connect either way.</source>
+      <translation>Any copy of Astra Deck, in any browser or profile on this computer, connects on its own. Turn this off to approve each new extension from the Browser extension page. Websites can't connect either way.</translation>
+    </message>
+    <message>
       <source>Site profiles</source>
       <translation>Site profiles</translation>
     </message>
@@ -3421,6 +3477,10 @@
     <message>
       <source>Maintenance</source>
       <translation>Maintenance</translation>
+    </message>
+    <message>
+      <source>Version {version}</source>
+      <translation>Version {version}</translation>
     </message>
     <message>
       <source>Checking installed tools…</source>
@@ -3525,6 +3585,10 @@
     <message>
       <source>Private API token</source>
       <translation>Private API token</translation>
+    </message>
+    <message>
+      <source>Let browser extensions connect without asking</source>
+      <translation>Let browser extensions connect without asking</translation>
     </message>
     <message>
       <source>Force IP version</source>
@@ -4143,6 +4207,26 @@
       <translation>Optional. Astra Downloader posts a short JSON message here when a download finishes or fails and when a subscription captures a video. Leave it blank to turn this off. Local and private network addresses are refused, and the address stays out of settings exports.</translation>
     </message>
     <message>
+      <source>Astra Downloader</source>
+      <translation>Astra Downloader</translation>
+    </message>
+    <message>
+      <source>Keep Astra Downloader up to date automatically</source>
+      <translation>Keep Astra Downloader up to date automatically</translation>
+    </message>
+    <message>
+      <source>Checks GitHub a minute after start and every six hours. A new release installs over this one when no downloads are running, and settings, history and the queue stay as they are.</source>
+      <translation>Checks GitHub a minute after start and every six hours. A new release installs over this one when no downloads are running, and settings, history and the queue stay as they are.</translation>
+    </message>
+    <message>
+      <source>Check GitHub now and install a newer release if there is one.</source>
+      <translation>Check GitHub now and install a newer release if there is one.</translation>
+    </message>
+    <message>
+      <source>App update status</source>
+      <translation>App update status</translation>
+    </message>
+    <message>
       <source>Keep yt-dlp up to date automatically</source>
       <translation>Keep yt-dlp up to date automatically</translation>
     </message>
@@ -4337,10 +4421,6 @@
     <message>
       <source>Setup couldn't finish.</source>
       <translation>Setup couldn't finish.</translation>
-    </message>
-    <message>
-      <source>Version {version}</source>
-      <translation>Version {version}</translation>
     </message>
     <message>
       <source>That address is on a private, loopback, or link-local network. Astra Downloader only downloads from public sites.</source>
