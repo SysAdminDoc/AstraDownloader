@@ -123,11 +123,3 @@ Astra Downloader reporting a below-floor version, which
 **What is blocked:** checking them means a real interactive desktop: pinning the app, opening its jump list, letting Windows restart it after a crash or an update reboot, and finding a deleted file in the Recycle Bin. The build PC's display belongs to its user, and offscreen Qt can't show any of these shell surfaces.
 
 **To unblock:** a spare Windows desktop session or VM where the packaged EXE can be installed and driven. The browser extension half of the old AD-71 note lives in the Astra Deck repository (see AD-123).
-
-## AD-159 | Astra Deck should say how to pair an unpacked copy | follow-up to AD-145
-
-**State:** the downloader half is done. `/pair-extension` answers a Chrome ID that isn't published and isn't already paired with 403, code `extension-pairing-closed`, and an `error` that names Allow extension pairing on the Browser extension page.
-
-**What is blocked:** Astra Deck's `_pairWithCompanion` in `extension/features/download-ui/index.js` only logs a failed pair, so an unpacked install lands on the native-channel-required advice ("Update it with Download setup"), which won't fix it. That file had another session's uncommitted edits on 2026-10-09, and that session was still committing to Astra Deck later the same day, so it wasn't changed from here. This matters for most users: the documented install is the release zip loaded unpacked, which has no manifest `key`, so its ID comes from the folder path and never matches the published one.
-
-**To unblock:** in Astra Deck, map `extension-pairing-closed` to its own failure copy (open Astra Downloader, choose Allow extension pairing, then Check again) and show it in place of the native-channel advice. The published CRX ID `lgbiefafhjdbplelniclnflbbilennlg` in its signing-keys doc must stay in step with `PUBLISHED_CHROME_EXTENSION_IDS`. Better still, put the CRX public key in the zip build's manifest as `key` (the base64 SPKI the signing-keys doc derives the ID from). An unpacked copy then gets the published ID and pairs on its own, with no window. Check that the Firefox build drops or ignores the field.
